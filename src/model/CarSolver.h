@@ -56,11 +56,22 @@ protected:
 	}
     inline int GetLiteralId(const Lit &l);
 	inline int GetFrameFlag(int frameLevel);
-	inline Lit GetLit(int id);
+
+	inline Lit GetLit(int id)
+	{
+		if (id == 0)
+		{
+			//placeholder
+		}
+		int var = abs(id)-1;
+		while(var >= nVars()) newVar();
+		return ((id > 0)? mkLit(var):~mkLit(var));
+	};
+
 	inline int GetNewVar() {return m_maxFlag++;}
 
-    bool m_isForward = false;
-    int m_maxFlag;
+	bool m_isForward = false;
+	int m_maxFlag;
 	std::shared_ptr<AigerModel> m_model;
 	std::vector<int> m_frameFlags;
 	vec<Lit> m_assumptions;

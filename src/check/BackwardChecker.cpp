@@ -352,7 +352,7 @@ namespace car
 		return result;
 	}
 
-	int BackwardChecker::GetNewLevel(std::shared_ptr<State> state, int start = 0)
+	int BackwardChecker::GetNewLevel(std::shared_ptr<State> state, int start)
 	{
 		for (int i = start; i < m_overSequence->GetLength(); ++i)
 		{

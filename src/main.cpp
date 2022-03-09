@@ -80,6 +80,10 @@ Settings GetArgv(int argc, char** argv)
         {
             settings.propagation = true;
         }
+        else if (strcmp(argv[i], "-end") == 0)
+        {
+            settings.end = true;
+        }
         else if (strcmp(argv[i], "-debug") == 0)
         {
             settings.debug = true;

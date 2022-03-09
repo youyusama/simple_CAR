@@ -332,16 +332,6 @@ namespace  car
 	}
 
 #pragma region private
-	inline Lit CarSolver::GetLit(int id)
-	{
-		if (id == 0)
-		{
-			//placeholder
-		}
-		int var = abs(id)-1;
-		while(var >= nVars()) newVar();
-		return ((id > 0)? mkLit(var):~mkLit(var));
-	}
 
 
 	inline int CarSolver::GetFrameFlag(int frameLevel)
