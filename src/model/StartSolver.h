@@ -1,5 +1,5 @@
 #ifndef STARTSOLVER_H
-#define STARTSOVLER_H
+#define STARTSOLVER_H
 
 #include "CarSolver.h"
 #include "Solver.h"

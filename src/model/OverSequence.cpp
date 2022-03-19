@@ -57,6 +57,7 @@ namespace car
 		if (frameLevel >= m_sequence.size()) return;
 		out = m_sequence[frameLevel];
 	}
+	
 	bool OverSequence::IsBlockedByFrame(std::vector<int>& state, int frameLevel)
 	{
 		int index;

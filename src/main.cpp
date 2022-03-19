@@ -1,6 +1,7 @@
 #include <cstdio>
 #include "BackwardChecker.h"
 #include "ForwardChecker.h"
+#include "CleanCARCheckerF.h"
 #include "AigerModel.h"
 #include "Settings.h"
 #include <string.h>
@@ -20,7 +21,7 @@ int main(int argc, char** argv)
     BaseChecker* checker;
     if (settings.forward)
     {
-        checker = new ForwardChecker(settings, aigerModel);
+        checker = new CleanCARCheckerF(settings, aigerModel);
     }
     else
     {
