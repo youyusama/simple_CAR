@@ -125,6 +125,9 @@ namespace car
 			{
 				if (m_settings.timelimit > 0 && m_log->IsTimeout())
 				{
+					if (m_settings.Visualization) {
+						m_vis->OutputGML();
+					}
 					m_log->Timeout();
 				}
 				
