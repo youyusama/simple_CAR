@@ -46,6 +46,7 @@ void PrintUsage()
     printf ("       -debug          print debug info\n");
     printf ("       -depth          restart-depth mode\n");
     printf ("       -restart        active restart policy\n");
+    printf ("       -vis            output visualization\n");
     printf ("NOTE: -f and -b cannot be used together!\n");
     exit (0);
 }
@@ -100,6 +101,10 @@ Settings GetArgv(int argc, char** argv)
         else if (strcmp(argv[i], "-depth") == 0)
         {
             settings.condition = RestartCondition::Depth;
+        }
+        else if (strcmp(argv[i], "-vis") == 0)
+        {
+            settings.Visualization = true;
         }
         else if (!hasSetInputDir)
         {

@@ -31,6 +31,7 @@ struct Settings
     bool rotate = false;
     bool inputS = false;
     bool luby = false;
+    bool Visualization = false;
     float growthRate = 1.5;
     int threshold = 64;
     int timelimit = 0;

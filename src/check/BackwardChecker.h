@@ -12,6 +12,7 @@
 #include "InvSolver.h"
 #include "Task.h"
 #include "Log.h"
+#include "Vis.h"
 #include <assert.h>
 #include <memory>
 #include "restart.h"
@@ -166,6 +167,7 @@ private:
 	std::shared_ptr<IOverSequence> m_overSequence;
 	//IOverSequence* m_overSequence;
 	UnderSequence m_underSequence;
+	std::shared_ptr<Vis> m_vis;
 	Settings m_settings;
 	std::shared_ptr<Log> m_log;
 	std::shared_ptr<AigerModel> m_model;
