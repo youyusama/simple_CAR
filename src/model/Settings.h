@@ -39,6 +39,7 @@ struct Settings
     RestartBehaviour behaviour = RestartBehaviour::BackToInit; 
     std::string aigFilePath;
     std::string outputDir;
+    std::string cexFilePath;
 };
 
 

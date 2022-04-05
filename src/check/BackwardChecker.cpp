@@ -38,7 +38,7 @@ namespace car
 				m_log->PrintCounterExample(i);
 			}
 			if (m_settings.Visualization) {
-				m_vis->OutputGML();
+				m_vis->OutputGML(false);
 			}  
 			m_log->PrintStatistics();
 		}
@@ -126,7 +126,7 @@ namespace car
 				if (m_settings.timelimit > 0 && m_log->IsTimeout())
 				{
 					if (m_settings.Visualization) {
-						m_vis->OutputGML();
+						m_vis->OutputGML(true);
 					}
 					m_log->Timeout();
 				}
@@ -314,7 +314,7 @@ namespace car
 		m_underSequence = UnderSequence();
 		m_underSequence.push(m_initialState);
 		if (m_settings.Visualization) {
-			m_vis.reset(new Vis(m_settings));
+			m_vis.reset(new Vis(m_settings, m_model));
 			m_vis->addState(m_initialState);
 		}
 		m_mainSolver.reset(new MainSolver(m_model, false));

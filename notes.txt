@@ -64,3 +64,34 @@ newCar   car
 5
 4
 
+
+backward worse than abc 200x safe
+
+6s209b0
+//6s221rb14
+6s275rb318
+6s276rb342
+6s277rb292
+6s391rb379
+beemelev1f1
+bobsynth09neg
+eijks1196
+eijks1238
+eijks208o
+eijks713
+nusmvreactorp3
+pdtviscoherence4
+pdtvisns2p3
+pdtvisvending00
+pdtvisvsa16a27
+pdtvisvsar22
+pdtvsar8multip13
+pj2007
+viscoherencep2
+viscoherencep3
+//6s350rb46
+
+backward worse than abc 100x unsafe
+6s350rb35
+6s350rb46
+beemlmprt8f1

@@ -21,7 +21,7 @@ int main(int argc, char** argv)
     BaseChecker* checker;
     if (settings.forward)
     {
-        checker = new CleanCARCheckerF(settings, aigerModel);
+        checker = new ForwardChecker(settings, aigerModel);
     }
     else
     {
@@ -34,7 +34,7 @@ int main(int argc, char** argv)
 
 void PrintUsage()
 {
-    printf ("Usage: simplecar <-f|-b>  <-end> <-interation|-rotation|-interation -rotation> <aiger file> <output directory>\n");
+    printf ("Usage: simplecar [<-f|-b>]  [<-end>|<-interation|-rotation|-interation|-rotation>] <aiger file> <output directory> [<-vis> [counter-example file]]\n");
     printf ("       -timeout        set timeout\n");   
     printf ("       -f              forward checking (Default = backward checking)\n");
     printf ("       -b              backward checking \n");
@@ -55,6 +55,7 @@ Settings GetArgv(int argc, char** argv)
 {
     bool hasSetInputDir = false;
     bool hasSetOutputDir = false;
+    bool hasSetCexFile = false;
     Settings settings;
     for (int i = 1; i < argc; i ++)
     {
@@ -119,6 +120,11 @@ Settings GetArgv(int argc, char** argv)
                 settings.outputDir += "/";
             }
             hasSetOutputDir = true;
+        }
+        else if (settings.Visualization && !hasSetCexFile)
+        {
+            settings.cexFilePath = string (argv[i]);
+            hasSetCexFile = true;
         }
         else
         {

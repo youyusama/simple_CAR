@@ -38,6 +38,9 @@ namespace car
 			{
 				m_log->PrintCounterExample(i, true);
 			}
+			if (m_settings.Visualization) {
+				m_vis->OutputGML(false);
+			} 
 			m_log->PrintStatistics();
 		}
 		return true;
@@ -105,6 +108,9 @@ namespace car
 				{
 					if (m_settings.timelimit > 0 && m_log->IsTimeout())
 					{
+						if (m_settings.Visualization) {
+							m_vis->OutputGML(true);
+						}
 						m_log->Timeout();
 					}
 
@@ -153,7 +159,10 @@ namespace car
 							pair = m_mainSolver->GetAssignment();
 						}
 						std::shared_ptr<State> newState(new State (task.state, pair.first, pair.second, task.state->depth+1));
-						m_underSequence.push(newState);                                 
+						m_underSequence.push(newState);
+						if (m_settings.Visualization) {
+							m_vis->addState(newState);
+						}  
 						int newFrameLevel = GetNewLevel(newState);
 						workingStack.emplace(newState, newFrameLevel, true);
 						continue;
@@ -222,6 +231,10 @@ namespace car
 		else
 		{
 			m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
+		}
+		if (m_settings.Visualization) {
+			m_vis.reset(new Vis(m_settings, m_model));
+			m_vis->addState(m_initialState);
 		}
 		m_overSequence->isForward = true;
 		m_underSequence = UnderSequence();

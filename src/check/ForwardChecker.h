@@ -13,7 +13,7 @@
 #include "StartSolver.h"
 #include "Task.h"
 #include "Log.h"
-
+#include "Vis.h"
 #include <memory>
 
 namespace car
@@ -166,6 +166,7 @@ private:
 	//IOverSequence* m_overSequence;
 	UnderSequence m_underSequence;
 	Settings m_settings;
+	std::shared_ptr<Vis> m_vis;
 	std::shared_ptr<Log> m_log;
 	std::shared_ptr<AigerModel> m_model;
 	std::shared_ptr<State> m_initialState;
