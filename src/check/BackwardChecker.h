@@ -176,6 +176,7 @@ private:
 	std::shared_ptr<ISolver> m_invSolver;
 	std::vector<std::shared_ptr<std::vector<int> > > m_rotation;
 	std::shared_ptr<Restart> m_restart;
+	int m_repeat_state_num = 0;
 };
 
 }//namespace car

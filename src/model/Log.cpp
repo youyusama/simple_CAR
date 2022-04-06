@@ -2,6 +2,10 @@
 
 namespace car
 {
+    void Log::PrintSth(std::string s){
+        m_log<<s<<std::endl;
+    }
+
 
     void Log::PrintFramesInfo(IOverSequence* sequence)
     {

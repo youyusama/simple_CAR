@@ -25,5 +25,5 @@ arr=("6s209b0"
 for var in ${arr[@]}
 do
  echo $var
-  ./simplecar_minisat -b -end -inter -rotation ../cases/$var.aig ../output/abc_200x_safe/ -timeout 5 -vis
+  ./simplecar_minisat -b -end -inter -rotation ../cases/$var.aig ../output/abc_200x_safe/ -timeout 1 -vis
 done

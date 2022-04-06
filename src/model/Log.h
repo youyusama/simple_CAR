@@ -43,6 +43,7 @@ public:
         } 
     }
     
+    void PrintSth(std::string s);
 
     void PrintFramesInfo(IOverSequence* sequence);
 

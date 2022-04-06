@@ -19,7 +19,7 @@ namespace car{
     uint32_t tempi = 0;
     for (int l: latches){
       if (l>0) tempi = (tempi << 1) + 1;
-      else tempi << 1;
+      else tempi <<= 1;
       count++;
       if (count == 32 || l == latches[latches.size()-1]){
         node.emplace_back(tempi);
@@ -33,11 +33,16 @@ namespace car{
     uint temp_node_id = tempId ++;
     std::vector<uint32_t> temp_node;
     latches_vecotr_to_short_vector(temp_node, *state->latches);
-    int b_size = node_id_map.size();
     //add node
-    node_id_map.insert(std::pair<std::vector<uint32_t>, uint>(temp_node, temp_node_id));
-    if (b_size == node_id_map.size()){ // visit the same state repeatedly
+    auto z = node_id_map.insert(std::pair<std::vector<uint32_t>, uint>(temp_node, temp_node_id));
+    if (z.second == false){ // visit the same state repeatedly
+      // std::cout<<"vis repeat"<<std::endl;
       tempId--;
+      // std::cout<<z.first->second<<std::endl;
+      // for (int i=0; i<z.first->first.size(); i++) std::cout<<z.first->first[i];
+      // std::cout<<std::endl;
+      // for (int i=0; i<temp_node.size(); i++) std::cout<<temp_node[i];
+      // std::cout<<std::endl;
       std::map<std::vector<uint32_t>, uint>::iterator iter;
       iter = node_id_map.find(temp_node);
       if (iter != node_id_map.end()){
@@ -201,8 +206,8 @@ namespace car{
   std::ofstream visFile;
   visFile.open(outPath + "_vis.gml");
   //header
-  if (is_timeout) visFile<<"Creator\t"<<"\"car visualization\""<<std::endl;
-  else visFile<<"Creator\t"<<"\"car visualization (time out)\""<<std::endl;
+  if (is_timeout) visFile<<"Creator\t"<<"\"car visualization (time out)\""<<std::endl;
+  else visFile<<"Creator\t"<<"\"car visualization\""<<std::endl;
   visFile<<"Version\t"<<0.1<<std::endl;
   visFile<<"graph"<<std::endl;
   visFile<<"["<<std::endl;

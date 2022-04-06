@@ -39,7 +39,9 @@ namespace car
 			}
 			if (m_settings.Visualization) {
 				m_vis->OutputGML(false);
-			}  
+			}
+			std:string ps = "repeated states num: " + std::to_string(m_repeat_state_num);
+			m_log->PrintSth(ps);
 			m_log->PrintStatistics();
 		}
 		return true;
@@ -128,6 +130,9 @@ namespace car
 					if (m_settings.Visualization) {
 						m_vis->OutputGML(true);
 					}
+					std:string ps = "repeated states num: " + std::to_string(m_repeat_state_num);
+					m_log->PrintSth(ps);
+					m_log->PrintSth("time out!!!");
 					m_log->Timeout();
 				}
 				
@@ -236,6 +241,7 @@ namespace car
 						pair = m_mainSolver->GetAssignment();
 					}
 					std::shared_ptr<State> newState(new State (task.state, pair.first, pair.second, task.state->depth+1));
+					if (m_underSequence.isRepeatedState(newState)) m_repeat_state_num++;
 					m_underSequence.push(newState);   
 					if (m_settings.Visualization) {
 						m_vis->addState(newState);
@@ -321,6 +327,7 @@ namespace car
 		m_invSolver.reset(new InvSolver(m_model));
 		m_log->ResetClock();
 		m_restart.reset(new Restart(m_settings));
+		m_repeat_state_num = 0;
 	}
 
 	void BackwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int> > uc, int frameLevel)
