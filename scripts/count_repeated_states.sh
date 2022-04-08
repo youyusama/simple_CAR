@@ -140,17 +140,11 @@ done
 for var in ${arr[@]}
 do
  echo $var
-  ./simplecar_minisat -b -end -inter -rotation ../cases/$var.aig ../output/count_re_s_3/ -timeout 5
+  ./simplecar_minisat -b -end -inter -rotation ../cases/$var.aig ../output/count_re_s_5/ -timeout 5
 done
 
 for var in ${arr[@]}
 do
  echo $var
   ./simplecar_minisat -b -end -inter -rotation ../cases/$var.aig ../output/count_re_s_10/ -timeout 10
-done
-
-for var in ${arr[@]}
-do
- echo $var
-  ./simplecar_minisat -b -end -inter -rotation ../cases/$var.aig ../output/count_re_s_30/ -timeout 30
 done

@@ -241,7 +241,7 @@ namespace car
 						pair = m_mainSolver->GetAssignment();
 					}
 					std::shared_ptr<State> newState(new State (task.state, pair.first, pair.second, task.state->depth+1));
-					if (m_underSequence.isRepeatedState(newState)) m_repeat_state_num++;
+					// if (m_underSequence.isRepeatedState(newState)) m_repeat_state_num++;
 					m_underSequence.push(newState);   
 					if (m_settings.Visualization) {
 						m_vis->addState(newState);
