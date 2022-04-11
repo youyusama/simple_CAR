@@ -55,6 +55,7 @@ graph
 ] 
   */
   void OutputGML(bool is_timeout);
+  bool isEnoughNodesForVis();
 
 private:
   uint tempId;

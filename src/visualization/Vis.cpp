@@ -165,52 +165,52 @@ namespace car{
         is_cex_valid = false;
       }
 
-    // read the res
-    std::ifstream r_cex_file(m_settings.cexFilePath);
-    int step_num = 0;
-    if (r_cex_file.is_open()){
-      while (!r_cex_file.eof())
-      {
-        std::string t;
-        r_cex_file>>t;
-        if (t != "1" && t != "b0" && t != "." && t.length() != 0){
-          step_num ++;
+      // read the res
+      std::ifstream r_cex_file(m_settings.cexFilePath);
+      int step_num = 0;
+      if (r_cex_file.is_open()){
+        while (!r_cex_file.eof())
+        {
+          std::string t;
+          r_cex_file>>t;
+          if (t != "1" && t != "b0" && t != "." && t.length() != 0){
+            step_num ++;
 
-          if (t.length() != m_model->GetNumInputs() && t.length() != m_model->GetNumLatches()){
-            std::cout<<"illegal cex file [wrong inputs]"<<std::endl;
-            is_cex_valid = false;
+            if (t.length() != m_model->GetNumInputs() && t.length() != m_model->GetNumLatches()){
+              std::cout<<"illegal cex file [wrong inputs]"<<std::endl;
+              is_cex_valid = false;
+            }
           }
         }
       }
-    }
-    step_num --; //not count the initial line
+      step_num --; //not count the initial line
 
-    // call aigsim to fill cex_ss
-    uint32_t **cex_states = new uint32_t*[step_num];
-    int arrlen = m_model->GetNumLatches()%32==0?m_model->GetNumLatches()/32:m_model->GetNumLatches()/32+1;
-    for (int cex_i=0; cex_i<step_num; cex_i++){
-      cex_states[cex_i] = new uint32_t[arrlen];
+      // call aigsim to fill cex_ss
+      uint32_t **cex_states = new uint32_t*[step_num];
+      int arrlen = m_model->GetNumLatches()%32==0?m_model->GetNumLatches()/32:m_model->GetNumLatches()/32+1;
+      for (int cex_i=0; cex_i<step_num; cex_i++){
+        cex_states[cex_i] = new uint32_t[arrlen];
+      }
+      if (is_cex_valid) aigsim_for_vis(cex_states, m_settings.aigFilePath.c_str(), m_settings.cexFilePath.c_str(), step_num);
+      for (int i=0; i<step_num; i++){
+        // for (int j=0; j<arrlen; j++) std::cout<<cex_states[i][j];
+        // std::cout<<std::endl;
+        std::vector<uint32_t> temp_i(cex_states[i], cex_states[i]+arrlen);
+        cex_states_v.push_back(temp_i);
+      }
     }
-    if (is_cex_valid) aigsim_for_vis(cex_states, m_settings.aigFilePath.c_str(), m_settings.cexFilePath.c_str(), step_num);
-    for (int i=0; i<step_num; i++){
-      // for (int j=0; j<arrlen; j++) std::cout<<cex_states[i][j];
-      // std::cout<<std::endl;
-      std::vector<uint32_t> temp_i(cex_states[i], cex_states[i]+arrlen);
-      cex_states_v.push_back(temp_i);
-    }
-  }
 
 
-  //io
-  std::string outPath = m_settings.outputDir + GetFileName(m_settings.aigFilePath);
-  std::ofstream visFile;
-  visFile.open(outPath + "_vis.gml");
-  //header
-  if (is_timeout) visFile<<"Creator\t"<<"\"car visualization (time out)\""<<std::endl;
-  else visFile<<"Creator\t"<<"\"car visualization\""<<std::endl;
-  visFile<<"Version\t"<<0.1<<std::endl;
-  visFile<<"graph"<<std::endl;
-  visFile<<"["<<std::endl;
+    //io
+    std::string outPath = m_settings.outputDir + GetFileName(m_settings.aigFilePath);
+    std::ofstream visFile;
+    visFile.open(outPath + "_vis.gml");
+    //header
+    if (is_timeout) visFile<<"Creator\t"<<"\"car visualization (time out)\""<<std::endl;
+    else visFile<<"Creator\t"<<"\"car visualization\""<<std::endl;
+    visFile<<"Version\t"<<0.1<<std::endl;
+    visFile<<"graph"<<std::endl;
+    visFile<<"["<<std::endl;
     //graph info
     visFile<<"directed\t"<<1<<std::endl;
     //search nodes
@@ -260,4 +260,13 @@ namespace car{
     visFile<<"]"<<std::endl;
     visFile.close();
   }
+
+
+  bool Vis::isEnoughNodesForVis(){
+    if (node_id_map.size() >= 10000) return true;
+    else return false;
+  }
+
+
+
 }

@@ -125,7 +125,7 @@ namespace car
 			
 			while (!workingStack.empty())
 			{
-				if (m_settings.timelimit > 0 && m_log->IsTimeout())
+				if ( (m_settings.timelimit > 0 && m_log->IsTimeout()) || (m_settings.Visualization && m_vis->isEnoughNodesForVis()))
 				{
 					if (m_settings.Visualization) {
 						m_vis->OutputGML(true);
