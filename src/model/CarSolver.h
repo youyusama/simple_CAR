@@ -19,6 +19,9 @@ public:
 	void AddClause(const std::vector<int>& clause) override;
 	void AddUnsatisfiableCore(const std::vector<int>& clause, int frameLevel) override;
 	std::shared_ptr<std::vector<int> > GetUnsatisfiableCore() override;
+	std::shared_ptr<std::vector<int> > GetInnerUnsatisfiableCore();
+	void UpdateAssumption(std::shared_ptr<std::vector<int> > newAssumption);
+	void  ExtractMnimalUnsatisfiableCore(std::shared_ptr<std::vector<int> > muc) override;
 	void AddNewFrame(const std::vector<std::shared_ptr<std::vector<int> > >& frame, int frameLevel) override;
 	bool SolveWithAssumptionAndBad(std::vector<int>& assumption, int badId) override;
 	bool SolveWithAssumption() override;
@@ -32,6 +35,7 @@ public:
 	inline void AddConstraintOr(const std::vector<std::shared_ptr<std::vector<int> > > frame);
 	inline void AddConstraintAnd(const std::vector<std::shared_ptr<std::vector<int> > > frame);
 	inline void FlipLastConstrain();
+	inline void ClearAssumption () {m_assumptions.clear ();}
 
 	std::shared_ptr<std::vector<int> > GetModel()
 	{
@@ -71,6 +75,7 @@ protected:
 	inline int GetNewVar() {return m_maxFlag++;}
 
 	bool m_isForward = false;
+	bool m_extractMUC = false;
 	int m_maxFlag;
 	std::shared_ptr<AigerModel> m_model;
 	std::vector<int> m_frameFlags;

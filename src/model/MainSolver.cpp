@@ -2,9 +2,10 @@
 
 namespace car
 {
-    MainSolver::MainSolver(std::shared_ptr<AigerModel> model, bool isForward)
+    MainSolver::MainSolver(std::shared_ptr<AigerModel> model, bool isForward, bool extractMUC)
     {
         m_isForward = isForward;
+        m_extractMUC = extractMUC;
         m_model = model;
         m_maxFlag = model->GetMaxId()+1;
 		auto& clause = m_model->GetClause();

@@ -24,7 +24,9 @@ struct Settings
     bool debug = false;
     bool forward = false;
     bool propagation = false;
-    bool minimal_uc = false;
+    bool muc = false;
+    bool dead = false;
+    bool partial = false;
     bool restart = false;
     bool end = false;
     bool inter = false;

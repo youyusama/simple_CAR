@@ -323,7 +323,7 @@ namespace car
 			m_vis.reset(new Vis(m_settings, m_model));
 			m_vis->addState(m_initialState);
 		}
-		m_mainSolver.reset(new MainSolver(m_model, false));
+		m_mainSolver.reset(new MainSolver(m_model, false, m_settings.muc));
 		m_invSolver.reset(new InvSolver(m_model));
 		m_log->ResetClock();
 		m_restart.reset(new Restart(m_settings));

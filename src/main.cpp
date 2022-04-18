@@ -44,6 +44,9 @@ void PrintUsage()
     printf ("       -end            state numeration from end of the sequence\n");
     printf ("       -h              print help information\n");
     printf ("       -debug          print debug info\n");
+    printf ("       -muc            active the MUC extraction\n");
+    printf ("       -dead           active the dead-state detection\n");
+    printf ("       -partial        active the partial-state generation\n");
     printf ("       -depth          restart-depth mode\n");
     printf ("       -restart        active restart policy\n");
     printf ("       -vis            output visualization\n");
@@ -90,6 +93,18 @@ Settings GetArgv(int argc, char** argv)
         else if (strcmp(argv[i], "-debug") == 0)
         {
             settings.debug = true;
+        }
+        else if (strcmp(argv[i], "-muc") == 0)
+        {
+            settings.muc = true;
+        }
+        else if (strcmp(argv[i], "-dead") == 0)
+        {
+            settings.dead = true;
+        }
+        else if (strcmp(argv[i], "-partial") == 0)
+        {
+            settings.partial = true;
         }
         else if (strcmp(argv[i], "-restart") == 0)
         {

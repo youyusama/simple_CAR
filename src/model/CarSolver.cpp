@@ -222,12 +222,17 @@ namespace  car
 	{
 		std::shared_ptr<std::vector<int> > uc(new std::vector<int>());
 		uc->reserve(conflict.size());
+
+		std::shared_ptr<std::vector<int> > muc = GetInnerUnsatisfiableCore();
+		//need get MUC from conflict
+		if (m_extractMUC) ExtractMnimalUnsatisfiableCore(muc);
+		
 		int val;
 		if (m_isForward)
 		{
-			for (int i = 0; i < conflict.size(); ++i)
+			for (int i = 0; i < muc->size(); ++i)
 			{
-				val = -GetLiteralId(conflict[i]);
+				val = muc->at(i);
  				std::vector<int> ids = m_model->GetPrevious(val);
 				if (val > 0)
 				{
@@ -247,9 +252,9 @@ namespace  car
 		}
 		else
 		{
-			for (int i = 0; i < conflict.size(); ++i)
+			for (int i = 0; i < muc->size(); ++i)
 			{
-				val = -GetLiteralId(conflict[i]);
+				val = muc->at(i);
 				if (m_model->IsLatch(val))
 				{
 					uc->emplace_back(val);
@@ -259,6 +264,81 @@ namespace  car
 		
 		std::sort(uc->begin(), uc->end(), cmp);
 		return uc;
+	}
+
+	std::shared_ptr<std::vector<int> > CarSolver::GetInnerUnsatisfiableCore()
+	{
+		std::shared_ptr<std::vector<int> > InnerUc(new std::vector<int>());
+		InnerUc->reserve(conflict.size());
+		for (int i = 0; i<conflict.size(); i++)
+			InnerUc->push_back(-GetLiteralId(conflict[i]));
+		return InnerUc;
+	}
+
+	void CarSolver::UpdateAssumption(std::shared_ptr<std::vector<int> > newAssumption)
+	{
+		for(int i=0;i<newAssumption->size();i++)
+		{
+			m_assumptions.push(GetLit(newAssumption->at(i)));
+		}
+	}
+
+	void  CarSolver::ExtractMnimalUnsatisfiableCore(std::shared_ptr<std::vector<int> > muc)
+	{
+		/*************************************************
+		Description:  Extract a MUC from current UC (the confilict returned by SAT solver).
+					  The methodology is to drop literals in UC if droping it remains UNSAT.
+
+		Input:        a pointer of current conflict. Also is the output.                   
+		*****************************************/ 
+		std::shared_ptr<std::vector<int> > remainedMuc(new std::vector<int>());
+
+		ClearAssumption();                    
+		UpdateAssumption(muc);           
+		int longFlag = (muc->size() < 216) ? muc->size() : 0;
+		while(m_assumptions.size()>0 && longFlag>0)
+		{
+			longFlag--;
+			int popElement;
+			std::shared_ptr<std::vector<int> > tempAssumption(new std::vector<int>());
+			for(int i=0; i < m_assumptions.size(); i++)
+			{
+				if(i == 0) popElement = GetLiteralId(m_assumptions[i]);
+				else tempAssumption->push_back(GetLiteralId(m_assumptions[i]));
+			}
+			ClearAssumption();                    
+			UpdateAssumption(tempAssumption);
+			UpdateAssumption(remainedMuc);    //merge muc core with assumption
+
+			lbool result = solveLimited(m_assumptions);;
+			
+			for(int i=0;i<remainedMuc->size();i++)
+			{
+				m_assumptions.pop();       //remove mus core from assumption_
+			}
+			
+			if(result == l_True)                      //if sat,then the element being poped is a transition clause
+			{
+				remainedMuc->push_back(popElement);         //aad transition clause into mus core
+			}
+			else if (result == l_False)
+			{
+				std::shared_ptr<std::vector<int> > innerUc = GetInnerUnsatisfiableCore();
+				ClearAssumption();
+				for(int i=0;i<innerUc->size();i++)
+				{
+					if( std::find(remainedMuc->begin(),remainedMuc->end(),innerUc->at(i)) == remainedMuc->end())
+					{
+						m_assumptions.push(GetLit(innerUc->at(i)));   //update the assumption_ according to new reason
+					}
+				}
+			}
+			else
+			{
+				//undefind SAT result
+			}
+		}
+		if (! remainedMuc->empty()) muc = remainedMuc;
 	}
 
 

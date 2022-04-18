@@ -239,7 +239,7 @@ namespace car
 		m_overSequence->isForward = true;
 		m_underSequence = UnderSequence();
 		m_underSequence.push(m_initialState);
-		m_mainSolver.reset(new MainSolver(m_model, true));
+		m_mainSolver.reset(new MainSolver(m_model, true, m_settings.muc));
 		m_invSolver.reset(new InvSolver(m_model));
 		m_startSovler.reset(new StartSolver(m_model, badId));
 		m_log->ResetClock();

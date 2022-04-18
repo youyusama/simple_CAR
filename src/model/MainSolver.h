@@ -19,7 +19,7 @@ public:
 class MainSolver : public CarSolver
 {
 public:
-    MainSolver(std::shared_ptr<AigerModel> model, bool isForward);
+    MainSolver(std::shared_ptr<AigerModel> model, bool isForward, bool extractMUC = false);
 #endif
 
 private:
