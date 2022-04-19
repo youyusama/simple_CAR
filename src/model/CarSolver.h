@@ -25,6 +25,7 @@ public:
 	void AddNewFrame(const std::vector<std::shared_ptr<std::vector<int> > >& frame, int frameLevel) override;
 	bool SolveWithAssumptionAndBad(std::vector<int>& assumption, int badId) override;
 	bool SolveWithAssumption() override;
+	bool SolveWithAssumption(std::vector<int>& assumption) override;
 	inline void AddAssumption(int id) override {m_assumptions.push(GetLit(id));}
 	bool SolveWithAssumption(std::vector<int>& assumption, int frameLevel) override;
 
@@ -72,7 +73,7 @@ protected:
 		return ((id > 0)? mkLit(var):~mkLit(var));
 	};
 
-	inline int GetNewVar() {return m_maxFlag++;}
+	inline int GetNewVar() override {return m_maxFlag++;}
 
 	bool m_isForward = false;
 	bool m_extractMUC = false;

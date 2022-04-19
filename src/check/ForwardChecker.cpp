@@ -240,6 +240,7 @@ namespace car
 		m_underSequence = UnderSequence();
 		m_underSequence.push(m_initialState);
 		m_mainSolver.reset(new MainSolver(m_model, true, m_settings.muc));
+		m_partialSolver.reset(new MainSolver(m_model, true, m_settings.muc));
 		m_invSolver.reset(new InvSolver(m_model));
 		m_startSovler.reset(new StartSolver(m_model, badId));
 		m_log->ResetClock();
@@ -259,6 +260,63 @@ namespace car
 		if(frameLevel < m_minUpdateLevel)
 		{
 			m_minUpdateLevel = frameLevel;
+		}
+	}
+
+	void ForwardChecker::GetPartialState ( std::shared_ptr<std::vector<int> > predecessorAssignment, std::shared_ptr<State> successorState)
+	{
+		/****************************************
+		Description:  get the partial state from the predecessor assignment. The methodology is to 	
+					  add the negation of the successor state into the partialSolver, along with the 
+					  predecessor assignment as the assumption. Then the returned uc is a partial state.
+
+		Input:        predecessorAssignment can transit to successorState.                    
+		*****************************************/ 
+		std::vector<int> assumptions = *(predecessorAssignment);
+
+		if (successorState != nullptr)
+		{
+			std::vector<int> successorLatches = *(successorState->latches);
+			for(auto& literal: successorLatches)
+			{
+				literal = - m_model->GetPrime(literal);
+			}
+			int flag = m_partialSolver->GetNewVar();
+			successorLatches.push_back(flag);
+			m_partialSolver->AddClause(successorLatches);
+			assumptions.push_back(-flag);
+
+			bool result = m_partialSolver->SolveWithAssumption ();
+		
+			assert (!result);
+			bool constraint = false;
+			st = lift_->get_conflict (!forward_, minimal_uc_, constraint);
+			if (st.empty()){
+			//every state can reach s, thus make st the initial state.
+				st = init_->s();
+				return;
+			}
+			std::vector<int> flagClause;
+			flagClause.push_back(-flag);
+			m_partialSolver->AddClause(flagClause);
+		}
+		else{
+			assumption.push_back (-bad_);
+			//lift_->print_clauses();
+			bool ret = lift_->solve_with_assumption (assumption);
+			assert (!ret);
+			bool constraint = false;
+			st = lift_->get_conflict (!forward_, minimal_uc_, constraint);
+		
+			//remove -bad_
+			for (auto it = st.begin(); it != st.end(); ++it){
+				if (*it == -bad_){
+					st.erase (it);
+					break;
+				}
+			}
+			
+			assert (!st.empty());
 		}
 	}
 

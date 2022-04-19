@@ -38,7 +38,7 @@ private:
 
 	int GetNewLevel(std::shared_ptr<State> state, int start = 0);
 
-	
+	void GetPartialState ( std::shared_ptr<std::vector<int> > predecessorAssignment, std::shared_ptr<State> successorState = nullptr);
 
 	void GetPriority (std::shared_ptr<std::vector<int> > latches, const int frameLevel, std::vector<int>& res) 
 	{    
@@ -171,6 +171,7 @@ private:
 	std::shared_ptr<AigerModel> m_model;
 	std::shared_ptr<State> m_initialState;
 	std::shared_ptr<ISolver> m_mainSolver;
+	std::shared_ptr<ISolver> m_partialSolver;
 	std::shared_ptr<ISolver> m_invSolver;
     std::shared_ptr<StartSolver> m_startSovler;
 	std::vector<std::shared_ptr<std::vector<int> > > m_rotation;

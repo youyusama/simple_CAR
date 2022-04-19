@@ -21,9 +21,10 @@ public:
 	virtual void AddNewFrame(const std::vector<std::shared_ptr<std::vector<int> > >& frame, int frameLevel) = 0;
 	virtual bool SolveWithAssumptionAndBad(std::vector<int>& assumption, int badId) = 0;
 	virtual bool SolveWithAssumption() = 0;
+	virtual bool SolveWithAssumption(std::vector<int>& assumption) = 0;
 	virtual bool SolveWithAssumption(std::vector<int>& assumption, int frameLevel) = 0;
 	virtual std::pair<std::shared_ptr<std::vector<int> > , std::shared_ptr<std::vector<int> > > GetAssignment(std::ofstream& out) = 0;
-
+	virtual int GetNewVar() = 0;
 	virtual std::pair<std::shared_ptr<std::vector<int> > , std::shared_ptr<std::vector<int> > > GetAssignment() = 0;
 
 	inline virtual void AddConstraintOr(const std::vector<std::shared_ptr<std::vector<int> > > frame) = 0;

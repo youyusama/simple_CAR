@@ -28,6 +28,28 @@ namespace  car
 		}
 	}
 
+	 bool CarSolver::SolveWithAssumption(std::vector<int>& assumption)
+    {
+		m_assumptions.clear();
+		for(auto it = assumption.begin(); it != assumption.end(); ++it)
+		{
+			m_assumptions.push(GetLit(*it));
+		}
+		lbool result = solveLimited(m_assumptions);
+		if (result == l_True)
+		{
+			return true;
+		}
+		else if(result == l_False)
+		{
+			return false;
+		}
+		else // result == l_Undef
+		{
+			//placeholder
+		}
+    }
+
     bool CarSolver::SolveWithAssumption(std::vector<int>& assumption, int frameLevel)
     {
 		m_assumptions.clear();
@@ -285,7 +307,7 @@ namespace  car
 
 	void  CarSolver::ExtractMnimalUnsatisfiableCore(std::shared_ptr<std::vector<int> > muc)
 	{
-		/*************************************************
+		/****************************************
 		Description:  Extract a MUC from current UC (the confilict returned by SAT solver).
 					  The methodology is to drop literals in UC if droping it remains UNSAT.
 
