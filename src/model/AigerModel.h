@@ -44,6 +44,18 @@ public:
         }
     }
 
+    bool IsInput(int id)
+    {
+        if (abs(id) > 0 && abs(id) <= m_numInputs ) 
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
     int GetCarId(const unsigned id)
     {
         if (id == 0)

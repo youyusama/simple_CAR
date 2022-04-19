@@ -161,7 +161,12 @@ private:
         }
     }
 
+	void setCurrentBad (int bad) {currentBad = bad;}
+
+	int getCurrentBad () {return currentBad;}
+
 	int m_minUpdateLevel;
+	int currentBad;
 	std::shared_ptr<IOverSequence> m_overSequence;
 	//IOverSequence* m_overSequence;
 	UnderSequence m_underSequence;

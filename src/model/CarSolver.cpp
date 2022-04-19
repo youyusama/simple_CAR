@@ -288,6 +288,24 @@ namespace  car
 		return uc;
 	}
 
+	std::shared_ptr<std::vector<int> > CarSolver::GetParialStateUnsatisfiableCore()
+	{
+		std::shared_ptr<std::vector<int> > uc(new std::vector<int>());
+		uc->reserve(conflict.size());
+		std::shared_ptr<std::vector<int> > muc = GetInnerUnsatisfiableCore();
+		if (m_extractMUC) ExtractMnimalUnsatisfiableCore(muc);
+		int val;
+		for (int i = 0; i < muc->size(); ++i)
+			{
+				val = muc->at(i);
+				if (m_model->IsLatch(val))
+				{
+					uc->emplace_back(val);
+				}
+			}
+		return muc;
+	}
+
 	std::shared_ptr<std::vector<int> > CarSolver::GetInnerUnsatisfiableCore()
 	{
 		std::shared_ptr<std::vector<int> > InnerUc(new std::vector<int>());
@@ -361,6 +379,22 @@ namespace  car
 			}
 		}
 		if (! remainedMuc->empty()) muc = remainedMuc;
+	}
+
+	void CarSolver::shrinkToInputs(std::shared_ptr<std::vector<int> > assignment)
+	{
+		std::vector<int> collectInputs;
+		int val;
+		for (int i = 0; i < assignment->size(); ++i)
+		{
+			val = assignment->at(i);
+			if (m_model->IsInput(val))
+			{
+				collectInputs.push_back(val);
+			}
+		}
+		assignment->clear();
+		assignment->insert(collectInputs.begin(),collectInputs.end(),assignment->begin());
 	}
 
 

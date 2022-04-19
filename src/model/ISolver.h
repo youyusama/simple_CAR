@@ -17,6 +17,8 @@ public:
 	virtual void AddUnsatisfiableCore(const std::vector<int>& clause, int frameLevel) = 0;
 	virtual std::shared_ptr<std::vector<int> > GetUnsatisfiableCore() = 0;
 	virtual void  ExtractMnimalUnsatisfiableCore(std::shared_ptr<std::vector<int> > muc) = 0;
+	virtual std::shared_ptr<std::vector<int> > GetParialStateUnsatisfiableCore() = 0;
+	virtual void shrinkToInputs(std::shared_ptr<std::vector<int> > assignment) = 0;
 	inline virtual void AddAssumption(int id) = 0;
 	virtual void AddNewFrame(const std::vector<std::shared_ptr<std::vector<int> > >& frame, int frameLevel) = 0;
 	virtual bool SolveWithAssumptionAndBad(std::vector<int>& assumption, int badId) = 0;

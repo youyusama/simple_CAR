@@ -22,6 +22,8 @@ public:
 	std::shared_ptr<std::vector<int> > GetInnerUnsatisfiableCore();
 	void UpdateAssumption(std::shared_ptr<std::vector<int> > newAssumption);
 	void  ExtractMnimalUnsatisfiableCore(std::shared_ptr<std::vector<int> > muc) override;
+	std::shared_ptr<std::vector<int> > GetParialStateUnsatisfiableCore() override;
+	void shrinkToInputs(std::shared_ptr<std::vector<int> > assignment) override;
 	void AddNewFrame(const std::vector<std::shared_ptr<std::vector<int> > >& frame, int frameLevel) override;
 	bool SolveWithAssumptionAndBad(std::vector<int>& assumption, int badId) override;
 	bool SolveWithAssumption() override;

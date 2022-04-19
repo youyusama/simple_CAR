@@ -28,6 +28,7 @@ namespace car
 		for (int i = 0, maxI = m_model->GetOutputs().size(); i < maxI; ++i)
 		{
 			int badId = m_model->GetOutputs().at(i);
+			setCurrentBad(badId);
 			bool result = Check(badId);
 			//PrintUC();
 			if (result)
@@ -289,34 +290,37 @@ namespace car
 			bool result = m_partialSolver->SolveWithAssumption ();
 		
 			assert (!result);
-			bool constraint = false;
-			st = lift_->get_conflict (!forward_, minimal_uc_, constraint);
-			if (st.empty()){
-			//every state can reach s, thus make st the initial state.
-				st = init_->s();
-				return;
+			std::shared_ptr<std::vector<int> > partialUc(new std::vector<int>());
+			partialUc = m_partialSolver->GetParialStateUnsatisfiableCore();
+			if (partialUc->empty()){
+				partialUc->assign(m_initialState->latches->begin(),m_initialState->latches->end());
 			}
+			m_partialSolver->shrinkToInputs(predecessorAssignment);
+			predecessorAssignment->insert(partialUc->begin(),partialUc->end(),predecessorAssignment->end());
+
 			std::vector<int> flagClause;
 			flagClause.push_back(-flag);
 			m_partialSolver->AddClause(flagClause);
 		}
 		else{
-			assumption.push_back (-bad_);
+			int bad = getCurrentBad();
+			assumptions.push_back (-bad);
 			//lift_->print_clauses();
-			bool ret = lift_->solve_with_assumption (assumption);
-			assert (!ret);
-			bool constraint = false;
-			st = lift_->get_conflict (!forward_, minimal_uc_, constraint);
+			bool result = m_partialSolver->SolveWithAssumption ();
+			assert (!result);
+			std::shared_ptr<std::vector<int> > partialUc(new std::vector<int>());
+			partialUc = m_partialSolver->GetParialStateUnsatisfiableCore();
 		
-			//remove -bad_
-			for (auto it = st.begin(); it != st.end(); ++it){
-				if (*it == -bad_){
-					st.erase (it);
+			for (auto it = partialUc->begin(); it != partialUc->end(); ++it){
+				if (*it == -bad){
+					partialUc->erase (it);
 					break;
 				}
 			}
-			
-			assert (!st.empty());
+			assert (!partialUc->empty());
+			m_partialSolver->shrinkToInputs(predecessorAssignment);
+			predecessorAssignment->insert(partialUc->begin(),partialUc->end(),predecessorAssignment->end());
+
 		}
 	}
 
