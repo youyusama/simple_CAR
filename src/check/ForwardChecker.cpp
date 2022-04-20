@@ -159,6 +159,12 @@ namespace car
 						{
 							pair = m_mainSolver->GetAssignment();
 						}
+
+						if (m_settings.partial)
+						{
+							GetPartialState(pair,task.state);
+						}
+
 						std::shared_ptr<State> newState(new State (task.state, pair.first, pair.second, task.state->depth+1));
 						m_underSequence.push(newState);
 						if (m_settings.Visualization) {
@@ -264,7 +270,7 @@ namespace car
 		}
 	}
 
-	void ForwardChecker::GetPartialState ( std::shared_ptr<std::vector<int> > predecessorAssignment, std::shared_ptr<State> successorState)
+	void ForwardChecker::GetPartialState ( inputLatchPair predecessorAssignment, std::shared_ptr<State> successorState)
 	{
 		/****************************************
 		Description:  get the partial state from the predecessor assignment. The methodology is to 	
@@ -273,8 +279,8 @@ namespace car
 
 		Input:        predecessorAssignment can transit to successorState.                    
 		*****************************************/ 
-		std::vector<int> assumptions = *(predecessorAssignment);
-
+		std::vector<int> assumptions = *(predecessorAssignment.first);
+		assumptions.insert(predecessorAssignment.second->begin(),predecessorAssignment.second->end(),assumptions.end());
 		if (successorState != nullptr)
 		{
 			std::vector<int> successorLatches = *(successorState->latches);
@@ -295,9 +301,9 @@ namespace car
 			if (partialUc->empty()){
 				partialUc->assign(m_initialState->latches->begin(),m_initialState->latches->end());
 			}
-			m_partialSolver->shrinkToInputs(predecessorAssignment);
-			predecessorAssignment->insert(partialUc->begin(),partialUc->end(),predecessorAssignment->end());
-
+			predecessorAssignment.second->clear();
+			predecessorAssignment.second->insert(partialUc->begin(),partialUc->end(),predecessorAssignment.second->begin());
+			
 			std::vector<int> flagClause;
 			flagClause.push_back(-flag);
 			m_partialSolver->AddClause(flagClause);
@@ -305,7 +311,6 @@ namespace car
 		else{
 			int bad = getCurrentBad();
 			assumptions.push_back (-bad);
-			//lift_->print_clauses();
 			bool result = m_partialSolver->SolveWithAssumption ();
 			assert (!result);
 			std::shared_ptr<std::vector<int> > partialUc(new std::vector<int>());
@@ -318,9 +323,8 @@ namespace car
 				}
 			}
 			assert (!partialUc->empty());
-			m_partialSolver->shrinkToInputs(predecessorAssignment);
-			predecessorAssignment->insert(partialUc->begin(),partialUc->end(),predecessorAssignment->end());
-
+			predecessorAssignment.second->clear();
+			predecessorAssignment.second->insert(partialUc->begin(),partialUc->end(),predecessorAssignment.second->begin());
 		}
 	}
 
@@ -334,6 +338,25 @@ namespace car
 		bool result = m_mainSolver->SolveWithAssumptionAndBad(assumptions, badId);
 		return result;
 	}
+
+	std::shared_ptr<State> ForwardChecker::EnumerateStartState()
+    {
+        if (m_startSovler->SolveWithAssumption())
+        {
+			std::shared_ptr<State> badState = m_startSovler->GetStartState();
+			if (m_settings.partial)
+			{
+				inputLatchPair badPair(badState->inputs,badState->latches);
+				GetPartialState(badPair,nullptr);
+			}
+            return badState;
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
+
 
 	bool ForwardChecker::isInvExisted()
 	{

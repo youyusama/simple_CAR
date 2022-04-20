@@ -18,6 +18,7 @@
 
 namespace car
 {
+typedef std::pair<std::shared_ptr<std::vector<int> >, std::shared_ptr<std::vector<int> > > inputLatchPair;
 
 class ForwardChecker : public BaseChecker
 {
@@ -38,7 +39,9 @@ private:
 
 	int GetNewLevel(std::shared_ptr<State> state, int start = 0);
 
-	void GetPartialState ( std::shared_ptr<std::vector<int> > predecessorAssignment, std::shared_ptr<State> successorState = nullptr);
+	std::shared_ptr<State> EnumerateStartState();
+
+	void GetPartialState ( inputLatchPair predecessorAssignment, std::shared_ptr<State> successorState = nullptr);
 
 	void GetPriority (std::shared_ptr<std::vector<int> > latches, const int frameLevel, std::vector<int>& res) 
 	{    
@@ -148,18 +151,7 @@ private:
 			tmp.swap(unpropFrame);
 		}
 	}
-	
-    std::shared_ptr<State> EnumerateStartState()
-    {
-        if (m_startSovler->SolveWithAssumption())
-        {
-            return m_startSovler->GetStartState();
-        }
-        else
-        {
-            return nullptr;
-        }
-    }
+
 
 	void setCurrentBad (int bad) {currentBad = bad;}
 
