@@ -28,8 +28,8 @@ namespace  car
 		}
 	}
 
-    bool CarSolver::SolveWithAssumption(std::vector<int>& assumption, int frameLevel)
-    {
+	bool CarSolver::SolveWithAssumption(std::vector<int>& assumption, int frameLevel)
+	{
 		m_assumptions.clear();
 		m_assumptions.push(GetLit(GetFrameFlag(frameLevel)));
 		for(auto it = assumption.begin(); it != assumption.end(); ++it)
@@ -49,18 +49,18 @@ namespace  car
 		{
 			//placeholder
 		}
-    }
+	}
 
 	void CarSolver::AddClause(const std::vector<int>& clause)
-    {
-        vec<Lit> literals;
-        for (int i = 0; i < clause.size(); ++i)
-        {
-            literals.push(GetLit(clause[i]));
-        }
-        bool result = addClause(literals);
-        assert (result != false);
-    }
+	{
+		vec<Lit> literals;
+		for (int i = 0; i < clause.size(); ++i)
+		{
+				literals.push(GetLit(clause[i]));
+		}
+		bool result = addClause(literals);
+		assert (result != false);
+	}
 
 	void CarSolver::AddUnsatisfiableCore(const std::vector<int>& clause, int frameLevel)
 	{
@@ -81,16 +81,15 @@ namespace  car
 				literals.push(GetLit(-m_model->GetPrime(clause[i])));
 			}
 		}
-		
-        bool result = addClause(literals);
-        if (!result)
-        {
-            //placeholder
-        }
+		bool result = addClause(literals);
+		if (!result)
+		{
+				//placeholder
+		}
 	}
 
 
-    std::pair<std::shared_ptr<std::vector<int> >, std::shared_ptr<std::vector<int> > > CarSolver::GetAssignment(std::ofstream& out)
+	std::pair<std::shared_ptr<std::vector<int> >, std::shared_ptr<std::vector<int> > > CarSolver::GetAssignment(std::ofstream& out)
 	{
 		out<<"GetAssignment:"<<std::endl;
 		assert(m_model->GetNumInputs() < nVars());
@@ -151,6 +150,7 @@ namespace  car
 		//
 		return std::pair<std::shared_ptr<std::vector<int> >, std::shared_ptr<std::vector<int> > >(inputs, latches);
 	}
+
 	std::pair<std::shared_ptr<std::vector<int> >, std::shared_ptr<std::vector<int> > > CarSolver::GetAssignment()
 	{
 		assert(m_model->GetNumInputs() < nVars());
@@ -201,7 +201,7 @@ namespace  car
 	}
 
 
-    std::shared_ptr<std::vector<int> > CarSolver:: GetUnsatisfiableCoreFromBad(int badId)
+  std::shared_ptr<std::vector<int> > CarSolver:: GetUnsatisfiableCoreFromBad(int badId)
 	{
 		std::shared_ptr<std::vector<int> > uc(new std::vector<int>());
 		uc->reserve(conflict.size());
@@ -270,7 +270,7 @@ namespace  car
 		}
 	}
 
-    bool CarSolver::SolveWithAssumptionAndBad(std::vector<int>& assumption, int badId)
+  bool CarSolver::SolveWithAssumptionAndBad(std::vector<int>& assumption, int badId)
 	{
 		m_assumptions.clear();
 		m_assumptions.push(GetLit(badId));
@@ -347,7 +347,7 @@ namespace  car
 		return m_frameFlags[frameLevel];
 	}
 
-    inline int CarSolver::GetLiteralId(const Minisat::Lit &l)
+  inline int CarSolver::GetLiteralId(const Minisat::Lit &l)
 	{
 		return sign(l) ? -(var(l) + 1) : var(l) + 1;
 	}

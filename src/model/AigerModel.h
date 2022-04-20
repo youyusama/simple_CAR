@@ -10,6 +10,10 @@ extern "C"
 #include <unordered_set>
 #include <vector>
 #include <unordered_map>
+#include <memory>
+#include <iostream>
+#include <assert.h>
+#include <algorithm>
 
 typedef std::string string;
 
@@ -44,6 +48,18 @@ public:
         }
     }
 
+    bool IsInput(int id)
+    {
+        if (abs(id) > 0 && abs(id) <= m_numInputs) 
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
     int GetCarId(const unsigned id)
     {
         if (id == 0)
@@ -52,6 +68,8 @@ public:
         }
         return ((id % 2 == 0) ? (id / 2) : -(id / 2));
     }
+
+    std::shared_ptr<std::vector<int> > Get_next_latches_for_pine(std::vector<int>& current_latches);
 
 #pragma region get & set
     int GetNumInputs() {return m_numInputs;}
@@ -95,6 +113,8 @@ private:
     
     void CollectTrues (const aiger* aig);
 
+    void CollectTrues_RECUR (const aiger* aig);
+
     void CollectConstraints (const aiger* aig);
 
     void CollectOutputs (const aiger* aig);
@@ -119,7 +139,18 @@ private:
 
 	inline aiger_and* IsAndGate (const unsigned id, const aiger* aig);
 
- 
+    int ComputeAndGate_RECUR(aiger_and& aa, const aiger* aig);
+
+    void collect_and_gates_for_pine_r(const aiger_and* aa, const aiger* aig);
+
+    void Collect_and_gates_for_pine(const aiger* aig);
+
+    int compute_latch_r(int id, std::shared_ptr<std::unordered_map<int, int>> current_values);
+
+    static bool cmp(int a, int b)
+	{
+		return abs(a) < abs(b);
+	}
 
 #pragma endregion
 
@@ -134,6 +165,8 @@ private:
     int m_falseId;
     int m_outputsStart; //the index of cls_ to point the start position of outputs
     int m_latchesStart; //the index of cls_ to point the start position of latches
+    
+    std::unordered_map<int, std::pair<int, int>> m_ands_gates_for_pine;
 
     std::vector<int> m_initialState;   
 	std::vector<int> m_outputs; 

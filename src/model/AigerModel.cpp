@@ -38,6 +38,7 @@ void AigerModel::Init(aiger* aig)
     CollectInitialState(aig);
     CollectNextValueMapping(aig);
     CollectClauses(aig);
+    Collect_and_gates_for_pine(aig);
 }
 
 void AigerModel::CollectTrues(const aiger* aig)
@@ -61,6 +62,64 @@ void AigerModel::CollectTrues(const aiger* aig)
     }
 }
 
+void AigerModel::CollectTrues_RECUR(const aiger* aig)
+{
+    for (int i = 0; i < aig->num_ands; ++i)
+    {
+        aiger_and& aa = aig->ands[i];
+        //and gate is always an even number in aiger
+        if (aa.lhs % 2 != 0)
+        {
+            //placeholder
+        }
+        switch (ComputeAndGate_RECUR(aa, aig))
+        {
+            case 0://flase
+                m_trues.insert(aa.lhs + 1);
+                break;
+            case 1://true
+                m_trues.insert(aa.lhs);
+                break;
+            case 2://unkown value
+                // nothing to do
+                break;
+        }
+    }
+}
+
+
+int AigerModel::ComputeAndGate_RECUR(aiger_and& aa, const aiger* aig){
+    if (IsFalse(aa.rhs0) || IsFalse(aa.rhs1)) {
+        m_trues.insert(aa.lhs + 1);
+        return 0;
+    } else {
+        if (!IsTrue(aa.rhs0)){
+            aiger_and* aa0 = IsAndGate(aa.rhs0, aig);
+            if (aa0 != nullptr){
+                ComputeAndGate_RECUR(*aa0, aig);
+            }
+        }
+        if (!IsTrue(aa.rhs1)){
+            aiger_and* aa1 = IsAndGate(aa.rhs1, aig);
+            if (aa1 != nullptr){
+                ComputeAndGate_RECUR(*aa1, aig);
+            }
+        }
+        if (IsFalse(aa.rhs0) || IsFalse(aa.rhs1))
+        {
+            m_trues.insert(aa.lhs + 1);
+            return 0;
+        }
+        else if (IsTrue(aa.rhs0) && IsTrue(aa.rhs1))
+        {
+            m_trues.insert(aa.lhs);
+            return 1;
+        }
+        else return 2;
+    }
+}
+
+
 void AigerModel::CollectConstraints(const aiger* aig)
 {
     for (int i = 0; i < aig->num_constraints; ++i)
@@ -69,6 +128,66 @@ void AigerModel::CollectConstraints(const aiger* aig)
         m_constraints.push_back((id%2 == 0) ?(id/2) : -(id/2));
     }
 }
+
+
+int AigerModel::compute_latch_r(int id, std::shared_ptr<std::unordered_map<int, int>> current_values){
+    if (IsInput(id)) return 2;
+    if (current_values->count(abs(id)) > 0){
+        return current_values->at(abs(id));
+    }
+    if (id == GetTrueId() || id == -GetFalseId()){
+        current_values->insert(std::pair<int,int>(abs(id), 1));
+        return 1;
+    }
+    if (id == -GetTrueId() || id == GetFalseId()){
+        current_values->insert(std::pair<int,int>(abs(id), 0));
+        return 0;
+    }
+    if (m_ands_gates_for_pine.count(abs(id))>0){
+        int r0 = compute_latch_r(m_ands_gates_for_pine[abs(id)].first, current_values);
+        int r1 = compute_latch_r(m_ands_gates_for_pine[abs(id)].second, current_values);
+        if (r0==1 && r1==1){
+            current_values->insert(std::pair<int,int>(abs(id), 1));
+            if (id>0) return 1;
+            else return 0;
+        }
+        if (r0==0 || r1==0){
+            current_values->insert(std::pair<int,int>(abs(id), 1));
+            if (id>0) return 0;
+            else return 1;
+        }
+    }
+    current_values->insert(std::pair<int,int>(abs(id), 2));
+    return 2;
+}
+
+
+std::shared_ptr<std::vector<int> > AigerModel::Get_next_latches_for_pine(std::vector<int>& current_latches){
+    std::shared_ptr<std::vector<int> > next_latches(new std::vector<int>());
+    std::shared_ptr<std::unordered_map<int, int>> current_values(new std::unordered_map<int, int>());
+    for (auto l: current_latches)
+        current_values->insert(std::pair<int,int>(abs(l), l>0?1:0));
+    for (int i = GetNumInputs()+1, end = GetNumInputs()+GetNumLatches()+1; i<end; i++ ){
+        // std::cout<<i<<std::endl;
+        int v = compute_latch_r(GetPrime(i), current_values);
+        if (v == 1){
+            if (GetPrime(i)>0) next_latches->emplace_back(i);
+            else next_latches->emplace_back(-i);
+        }
+        if (v == 0){
+            if (GetPrime(i)>0) next_latches->emplace_back(-i);
+            else next_latches->emplace_back(i);
+        }
+    }
+    // std::cout<<"current values"<<std::endl;
+    // for (auto v: *current_values){
+    //     std::cout<<v<<" ";
+    // }
+    // std::cout<<std::endl;
+    // std::sort(next_latches->begin(), next_latches->end(), cmp);
+    return next_latches;
+}
+
 
 void AigerModel::CollectOutputs(const aiger* aig)
 {
@@ -135,7 +254,7 @@ void AigerModel::CollectNextValueMapping(const aiger* aig)
 void AigerModel::CollectClauses(const aiger* aig)
 {
     //contraints, outputs and latches gates are stored in order, 
-        //as the need for start solver construction
+    //as the need for start solver construction
     std::unordered_set<unsigned> exist_gates;
     std::vector<unsigned> gates;
     //gates.resize(max_id_ + 1, 0);
@@ -295,6 +414,32 @@ inline aiger_and* AigerModel::IsAndGate(const unsigned id, const aiger* aig)
         return aiger_is_and(const_cast<aiger*>(aig),(id % 2 == 0) ? id :(id-1));
     }
     return nullptr;
+}
+
+
+void AigerModel::collect_and_gates_for_pine_r(const aiger_and* aa, const aiger* aig){
+    if (aa != nullptr){
+        std::pair<int, int> andp (GetCarId(aa->rhs0), GetCarId(aa->rhs1));
+        auto r = m_ands_gates_for_pine.insert(std::pair<int , std::pair<int, int>>(GetCarId(aa->lhs), andp));
+        if (r.second == false) return;
+        aiger_and* aa1 = IsAndGate(aa->rhs0, aig);
+        collect_and_gates_for_pine_r(aa1, aig);
+        aiger_and* aa2 = IsAndGate(aa->rhs1, aig);
+        collect_and_gates_for_pine_r(aa2, aig);
+    }
+}
+
+// collect necessary and gates for pine optimization
+void AigerModel::Collect_and_gates_for_pine(const aiger* aig){
+    for (int i=0; i<GetNumLatches(); i++){
+        aiger_and* aa = IsAndGate(aig->latches[i].next, aig);
+        collect_and_gates_for_pine_r(aa, aig);
+    }
+
+    // for (auto iter = m_ands_gates_for_pine.begin(); iter!=m_ands_gates_for_pine.end(); iter++){
+    //     std::cout<<iter->first<<" "<<iter->second.first<<" "<<iter->second.second<<std::endl;
+    // }
+
 }
 
 
