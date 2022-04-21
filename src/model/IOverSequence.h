@@ -13,7 +13,7 @@ public:
 	
 	virtual void GetFrame(int frameLevel, std::vector<std::shared_ptr<std::vector<int> > >& out) = 0;
 	
-    virtual bool IsBlockedByFrame(std::vector<int>& state, int frameLevel) = 0;
+    virtual bool IsBlockedByFrame(std::vector<int>& state, int frameLevel, bool isPartial) = 0;
 	
 	virtual int GetLength() = 0;
 

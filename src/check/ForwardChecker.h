@@ -43,6 +43,8 @@ private:
 
 	void GetPartialState ( inputLatchPair predecessorAssignment, std::shared_ptr<State> successorState = nullptr);
 
+	void removeWrongElementsFromUc(std::shared_ptr<std::vector<int> > uc,std::shared_ptr<State> state,bool isPartial);
+
 	void GetPriority (std::shared_ptr<std::vector<int> > latches, const int frameLevel, std::vector<int>& res) 
 	{    
 		if (frameLevel+1 >= m_overSequence->GetLength())

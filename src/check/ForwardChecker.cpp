@@ -1,6 +1,7 @@
 #include "ForwardChecker.h"
 #include <stack>
 #include <string>
+#include "hash_set.h"
 
 namespace car
 {
@@ -187,6 +188,7 @@ namespace car
 							//placeholder, uc is empty => safe
 						}
 						m_log->Tick();
+						removeWrongElementsFromUc(uc,task.state,m_settings.partial);
 						AddUnsatisfiableCore(uc, task.frameLevel+1);
 						if (m_settings.debug)
 						{
@@ -328,6 +330,28 @@ namespace car
 		}
 	}
 
+	void ForwardChecker::removeWrongElementsFromUc(std::shared_ptr<std::vector<int> > uc,std::shared_ptr<State> state,bool isPartial)
+	{
+		std::shared_ptr<std::vector<int> > tempUc;
+		if (!isPartial){
+			int latchStart = m_model->GetNumInputs()+1;
+			for(auto it : *(uc)){
+				if (state->latches->at(abs(it)-latchStart) == it)
+					tempUc->push_back (it);
+			}
+		}
+		else{
+			hash_set<int> tempSet;
+			for (auto it : *(state->latches))
+				tempSet.insert (it);
+			for (auto it : *(uc)){
+				if (tempSet.find (it) != tempSet.end())
+					tempUc->push_back (it);
+			}
+		}
+		uc = tempUc;
+	}
+
 	bool ForwardChecker::ImmediateSatisfiable(int badId)
 	{
 		std::vector<int>& init = *(m_initialState->latches);
@@ -380,7 +404,7 @@ namespace car
 	{
 		for (int i = start; i < m_overSequence->GetLength(); ++i)
 		{
-			if (!m_overSequence->IsBlockedByFrame(*(state->latches), i))
+			if (!m_overSequence->IsBlockedByFrame(*(state->latches), i, m_settings.partial))
 			{
 				return i-1;
 			}

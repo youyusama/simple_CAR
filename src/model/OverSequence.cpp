@@ -58,28 +58,43 @@ namespace car
 		out = m_sequence[frameLevel];
 	}
 	
-	bool OverSequence::IsBlockedByFrame(std::vector<int>& state, int frameLevel)
+	bool OverSequence::IsBlockedByFrame(std::vector<int>& state, int frameLevel, bool isPartial)
 	{
-		int index;
-		for (int i = 0; i < m_sequence[frameLevel].size(); ++i)//for each uc
+		if(!isPartial)
 		{
-			bool isBlockedByUc = true;
-			for (int j = 0; j < m_sequence[frameLevel][i]->size(); ++j)//for each literal in uc
+			int index;
+			for (int i = 0; i < m_sequence[frameLevel].size(); ++i)//for each uc
 			{
-				index = abs((*m_sequence[frameLevel][i])[j]) - m_numInputs - 1;
-				if (state[index] != (*m_sequence[frameLevel][i])[j])
+				bool isBlockedByUc = true;
+				for (int j = 0; j < m_sequence[frameLevel][i]->size(); ++j)//for each literal in uc
 				{
-					isBlockedByUc = false;
-					break;
+					index = abs((*m_sequence[frameLevel][i])[j]) - m_numInputs - 1;
+					if (state[index] != (*m_sequence[frameLevel][i])[j])
+					{
+						isBlockedByUc = false;
+						break;
+					}
 				}
-			}
-			if (isBlockedByUc)
-			{
-				return true;
-			}
+				if (isBlockedByUc)
+				{
+					return true;
+				}
+			}	
 		}
+		else
+		{
+			for (int i = 0; i < m_sequence[frameLevel].size(); ++i)//for each uc
+			{	 
+				if (IsImply(state,*(m_sequence[frameLevel][i])))
+				{
+					return true;
+				}
+			}	
+		}
+		
 		return false;
 	}
+	
 	int OverSequence::GetLength()
 	{
 		return m_sequence.size();

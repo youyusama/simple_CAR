@@ -21,7 +21,7 @@ public:
 	
 	void GetFrame(int frameLevel, std::vector<std::shared_ptr<std::vector<int> > >& out) override;
 	
-	bool IsBlockedByFrame(std::vector<int>& state, int frameLevel) override;
+	bool IsBlockedByFrame(std::vector<int>& state, int frameLevel, bool isPartial) override;
 	
 	int GetLength() override;
 
