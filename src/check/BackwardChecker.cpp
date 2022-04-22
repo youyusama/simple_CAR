@@ -102,7 +102,6 @@ namespace car
 # pragma endregion 
 
 
-		bool first_flag = true;
 		//main stage
 		int frameStep = 0;
 		std::stack<Task> workingStack;
@@ -225,6 +224,8 @@ namespace car
 	
 				std::vector<int> assumption;
 				GetAssumption(task.state, task.frameLevel, assumption);
+				m_log->StatPine();
+				m_log->Tick();
 				if (m_settings.debug)
 				{
 					m_log->PrintSAT(assumption, task.frameLevel);
@@ -246,28 +247,37 @@ namespace car
 					std::shared_ptr<State> newState(new State (task.state, pair.first, pair.second, task.state->depth+1));
 					// if (m_underSequence.isRepeatedState(newState)) m_repeat_state_num++;
 					m_underSequence.push(newState);
-					if (first_flag){
-						std::shared_ptr<std::vector<int> > nextl = m_model->Get_next_latches_for_pine(*task.state->latches);
-						if (nextl->size()>0){
-							std::cout<<nextl->size()/(float)m_model->GetNumLatches()<<std::endl;
-							bool nextl_flag = true;
-							std::unordered_set<int> temp_set(newState->latches->begin(), newState->latches->end());
-							
-							// for (auto currl: *task.state->latches){
-							// 	std::cout<<currl<<" ";
-							// }
-							// std::cout<<std::endl;
-							for (auto l : *nextl){
-								if (temp_set.count(l) == 0) nextl_flag = false;
-								// std::cout<<l<<" ";
-							}
-							// std::cout<<std::endl;
-							// for (auto newsl: *newState->latches){
-							// 	std::cout<<newsl<<" ";
-							// }
-							assert(nextl_flag);
-						}
-					}
+					// if (first_flag){
+					// 	std::shared_ptr<std::vector<int> > nextl = m_model->Get_next_latches_for_pine(*task.state->latches);
+					// 	if (nextl->size()>0){
+					// 		bool nextl_flag = true;
+					// 		std::unordered_set<int> temp_set(newState->latches->begin(), newState->latches->end());
+					// 		for (auto l : *nextl){
+					// 			if (temp_set.count(l) == 0){
+					// 				nextl_flag = false;
+					// 				std::cout<<"wrong latch"<<l<<std::endl;
+					// 			}
+					// 		}
+					// 		if (m_settings.debug){
+					// 			string pine_debug = "";
+					// 			pine_debug += std::to_string(nextl->size()/(float)m_model->GetNumLatches()) + "\n";
+					// 			pine_debug += "current latches===============\n";
+					// 			for (auto l : *task.state->latches){
+					// 				pine_debug += std::to_string(l)+" ";
+					// 			}
+					// 			pine_debug += "\ncomputed next latches===============\n";
+					// 			for (auto l : *nextl){
+					// 				pine_debug += std::to_string(l)+" ";
+					// 			}
+					// 			pine_debug += "\nnext latches===============\n";
+					// 			for (auto l : *newState->latches){
+					// 				pine_debug += std::to_string(l)+" ";
+					// 			}
+					// 			m_log->PrintInDebug(pine_debug);
+					// 		}
+					// 		assert(nextl_flag);
+					// 	}
+					// }
 
 					if (m_settings.Visualization) {
 						m_vis->addState(newState);

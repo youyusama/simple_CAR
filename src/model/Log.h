@@ -45,6 +45,8 @@ public:
     
     void PrintSth(std::string s);
 
+    void PrintInDebug(std::string str);
+
     void PrintFramesInfo(IOverSequence* sequence);
 
     void PrintCounterExample(int badNo, bool isForward = false);
@@ -63,6 +65,7 @@ public:
         m_log<<"GetNewLevel Procedure takes:\t"<<m_getNewLevelTime<<" seconds"<<std::endl;
         m_log<<"Update uc takes:\t"<<m_updateUcTime<<" seconds"<<std::endl;
         m_log<<"Restart Times:\t"<<m_restartTimes<<std::endl;
+        m_log<<"Pine Times:\t"<<m_pineTime<<std::endl;
         m_log<<"Total Time:\t"<<static_cast<double>(clock()-m_begin)/CLOCKS_PER_SEC<<" seconds"<<std::endl;
     }
 
@@ -107,6 +110,11 @@ public:
         m_invSolverTime += static_cast<double>(clock() - m_tick)/CLOCKS_PER_SEC;
     }
 
+    void StatPine()
+    {
+        m_pineTime += static_cast<double>(clock() - m_tick)/CLOCKS_PER_SEC;
+    }
+
     void StatGetNewLevel()
     {
         m_getNewLevelTime += static_cast<double>(clock() - m_tick)/CLOCKS_PER_SEC;
@@ -148,6 +156,7 @@ private:
     double m_getNewLevelTime = 0;
     double m_updateUcTime = 0;
     double m_timelimit = 0;
+    double m_pineTime = 0;
     std::shared_ptr<AigerModel> m_model;
     clock_t m_tick;
     clock_t m_begin;

@@ -34,7 +34,7 @@ int main(int argc, char** argv)
 
 void PrintUsage()
 {
-    printf ("Usage: simplecar [<-f|-b>]  [<-end>|<-interation|-rotation|-interation|-rotation>] <aiger file> <output directory> [<-vis> [counter-example file]]\n");
+    printf ("Usage: simplecar [<-f|-b>]  [<-end>|<-interation|-rotation>|<-pine>] <aiger file> <output directory> [<-vis> [counter-example file]]\n");
     printf ("       -timeout        set timeout\n");   
     printf ("       -f              forward checking (Default = backward checking)\n");
     printf ("       -b              backward checking \n");
@@ -47,7 +47,9 @@ void PrintUsage()
     printf ("       -depth          restart-depth mode\n");
     printf ("       -restart        active restart policy\n");
     printf ("       -vis            output visualization\n");
+    printf ("       -pine           active pineapple\n");
     printf ("NOTE: -f and -b cannot be used together!\n");
+    printf ("NOTE: -inter|-rotation cannot be used with -pine!\n");
     exit (0);
 }
 
@@ -98,6 +100,10 @@ Settings GetArgv(int argc, char** argv)
         else if (strcmp(argv[i], "-luby") == 0)
         {
             settings.luby = true;
+        }
+        else if (strcmp(argv[i], "-pine") == 0)
+        {
+            settings.pine = true;
         }
         else if (strcmp(argv[i], "-depth") == 0)
         {

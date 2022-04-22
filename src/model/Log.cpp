@@ -76,6 +76,13 @@ namespace car
         m_res <<"0"<<std::endl<<"b"<<badNo<<std::endl<<"."<<std::endl;
     }
 
+
+    void Log::PrintInDebug(std::string str)
+    {
+        m_debug<<str;
+    }
+
+
     void Log::PrintUcNums(std::vector<int> &uc, IOverSequence* sequence)
     {
         m_debug<<"SAT调用结果，UNSAT"<<std::endl<<"新uc=";

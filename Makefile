@@ -10,10 +10,12 @@ OBJS = CarSolver.o CarSolver_cadical.o BackwardChecker.o ForwardChecker.o CleanC
 	Solver.o Options.o System.o
 
 # CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat -I./src/model -I./src/check -I./src/sat/cadical/src -D__STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -c -g -fpermissive -DNDEBUG -DQUIET -O3 -DCADICAL
-CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat -I./src/model -I./src/visualization -I./src/check -I./src/sat/cadical/src -D__STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -c -g -fpermissive -DNDEBUG -DQUIET -O3
+# CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat -I./src/model -I./src/visualization -I./src/check -I./src/sat/cadical/src -D__STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -c -g -fpermissive -DNDEBUG -DQUIET -O3
+CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat -I./src/model -I./src/visualization -I./src/check -I./src/sat/cadical/src -D__STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -c -g -fpermissive -DQUIET
 #CFLAG = -I../ -I./glucose -D__STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -c -g 
 
-LFLAG = -g -lz -lpthread -L./src/sat/cadical/build -L./ -lcadical -DNDEBUG -DQUIET
+# LFLAG = -g -lz -lpthread -L./src/sat/cadical/build -L./ -lcadical -DNDEBUG -DQUIET
+LFLAG = -g -lz -lpthread -L./src/sat/cadical/build -L./ -lcadical -DQUIET
 # LFLAG = -g -lz -lpthread -L./src/sat/cadical/build -L./ -DNDEBUG -DQUIET
 
 GCC = gcc

@@ -133,7 +133,9 @@ void AigerModel::CollectConstraints(const aiger* aig)
 int AigerModel::compute_latch_r(int id, std::shared_ptr<std::unordered_map<int, int>> current_values){
     if (IsInput(id)) return 2;
     if (current_values->count(abs(id)) > 0){
-        return current_values->at(abs(id));
+        if (current_values->at(abs(id))==2) return 2;
+        if (id>0) return current_values->at(abs(id));
+        else return 1-current_values->at(abs(id));
     }
     if (id == GetTrueId() || id == -GetFalseId()){
         current_values->insert(std::pair<int,int>(abs(id), 1));
@@ -152,7 +154,7 @@ int AigerModel::compute_latch_r(int id, std::shared_ptr<std::unordered_map<int, 
             else return 0;
         }
         if (r0==0 || r1==0){
-            current_values->insert(std::pair<int,int>(abs(id), 1));
+            current_values->insert(std::pair<int,int>(abs(id), 0));
             if (id>0) return 0;
             else return 1;
         }
@@ -168,23 +170,25 @@ std::shared_ptr<std::vector<int> > AigerModel::Get_next_latches_for_pine(std::ve
     for (auto l: current_latches)
         current_values->insert(std::pair<int,int>(abs(l), l>0?1:0));
     for (int i = GetNumInputs()+1, end = GetNumInputs()+GetNumLatches()+1; i<end; i++ ){
-        // std::cout<<i<<std::endl;
         int v = compute_latch_r(GetPrime(i), current_values);
         if (v == 1){
-            if (GetPrime(i)>0) next_latches->emplace_back(i);
-            else next_latches->emplace_back(-i);
+            next_latches->emplace_back(i);
         }
         if (v == 0){
-            if (GetPrime(i)>0) next_latches->emplace_back(-i);
-            else next_latches->emplace_back(i);
+            next_latches->emplace_back(-i);
         }
+        // if (v == 2){// just for debug
+        //     std::cout<<"next latch: "<<i<<" is:"<<GetPrime(i)<<" unknown!!"<<std::endl;
+        // }
     }
     // std::cout<<"current values"<<std::endl;
     // for (auto v: *current_values){
-    //     std::cout<<v<<" ";
+    //     if (v.second==1) std::cout<<v.first<<" ";
+    //     else if (v.second==0) std::cout<<-v.first<<" ";
     // }
     // std::cout<<std::endl;
     // std::sort(next_latches->begin(), next_latches->end(), cmp);
+
     return next_latches;
 }
 

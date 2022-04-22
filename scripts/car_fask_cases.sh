@@ -16,7 +16,7 @@ arr=("power2bit8"
 "texasparsesysp2"
 "139442p0"
 "6s362rb1"
-"bobtuint09neg"
+# "bobtuint09neg"
 "kenflashp11"
 "pdtvsar8multip23"
 "visarbiter"
@@ -103,7 +103,8 @@ arr=("power2bit8"
 
 for var in ${arr[@]}
 do
- echo $var
+  echo $var
   ./simplecar_minisat -b -end -inter -rotation ../cases/$var.aig ../output/temp/
-  sleep 3
+  echo "$var end"
+  # sleep 3
 done
