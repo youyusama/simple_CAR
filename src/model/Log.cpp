@@ -85,7 +85,7 @@ namespace car
 
     void Log::PrintUcNums(std::vector<int> &uc, IOverSequence* sequence)
     {
-        m_debug<<"SAT调用结果，UNSAT"<<std::endl<<"新uc=";
+        m_debug<<"SAT调用结果, UNSAT"<<std::endl<<"新uc=";
         for (int i = 0; i < uc.size(); ++i)
         {
             m_debug<<uc[i]<<" ";
@@ -111,6 +111,47 @@ namespace car
         m_debug<<std::endl;
     }
 
+
+    void Log::PrintPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector<int>> uc){
+        if (state->pine_state_type != 1) return;
+        m_debug<<"pine assumptions 分段:"<<std::endl;
+        m_debug<<"共 "<<state->pine_l_index->size()<<" 段: ";
+        for (auto i: *state->pine_l_index) m_debug<<i<<" ";
+        m_debug<<std::endl;
+        int n = 0;
+        for (auto u: *uc){
+            auto iter = std::find(state->pine_assumptions->begin(), state->pine_assumptions->end(), u);
+            if (iter - state->pine_assumptions->begin() + 1 > n)
+                n = iter - state->pine_assumptions->begin() + 1;
+        }
+        m_debug<<n<<std::endl;
+        int r = 0;
+        for (auto i: *state->pine_l_index){
+            if (n >= i) r ++;
+            else break;
+        }
+        m_debug<<"uc 落于第 "<<r+1<<" 段"<<std::endl;
+    }
+
+
+    void Log::StatPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector<int>> uc_pine, std::shared_ptr<std::vector<int>> uc){
+        m_pineCalled ++;
+        if (uc_pine->size()<= uc->size()) m_pineIsShort ++;
+        int n = 0;
+        for (auto u: *uc){
+            auto iter = std::find(state->pine_assumptions->begin(), state->pine_assumptions->end(), u);
+            if (iter - state->pine_assumptions->begin() + 1 > n)
+                n = iter - state->pine_assumptions->begin() + 1;
+        }
+        int len = 0;
+        for (auto i: *state->pine_l_index){
+            if (n < i){
+                len = i;
+                break;
+            }
+        }
+        if (len/(float)state->latches->size() < 0.2) m_pineL1isShort ++;
+    }
 
 
 }//namespace car

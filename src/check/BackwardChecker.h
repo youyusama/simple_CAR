@@ -97,43 +97,65 @@ private:
 	}
 
 
-	void build_ass_by_l_list(std::shared_ptr<std::vector<int> > l_0, std::vector<int>& ass){
+	void GetAssumptionByPine(std::shared_ptr<State> state, int frameLevel, std::vector<int>& ass){\
+		if (state->pine_state_type == 0){
+			std::shared_ptr<std::vector<int> > nextl = m_model->Get_next_latches_for_pine(*state->latches);
+			if (nextl->size()/(float)m_model->GetNumLatches()>0.1){
+				state->pine_state_type = 1;
+				build_ass_by_l_list(state, ass);
+				return;
+			}else state->pine_state_type = 2;
+		}else if(state->pine_state_type == 1){
+			ass.resize(state->latches->size());
+			std::copy(state->pine_assumptions->begin(), state->pine_assumptions->end(), ass.begin());
+			return;
+		}else if(state->pine_state_type == 2){
+			
+		}
+	}
+
+
+	void build_ass_by_l_list(std::shared_ptr<State> state, std::vector<int>& ass){
+		std::shared_ptr<std::vector<int> > l_0 = state->latches;
+		state->pine_l_index.reset(new std::vector<int>());
+		state->pine_assumptions.reset(new std::vector<int>());
+		state->pine_assumptions->resize(l_0->size());
 		ass.resize(l_0->size());
-		std::vector<int>::iterator ass_iter = ass.begin();
+		std::vector<int>::iterator ass_iter = ass.end();
 		std::vector<int> l_im1(*l_0); // l_(i-1)
 		bool end_flag = true;
 		do{
 			std::shared_ptr<std::vector<int> > next_l_im1 = m_model->Get_next_latches_for_pine(l_im1);
-			// print_vector(l_im1, "l_i-1 ========");
-			// print_vector(*next_l_im1, "get next(l_i-1) ============");
 			std::vector<int> l_i(l_0->size());
 			auto iter = std::set_intersection(l_im1.begin(), l_im1.end(), next_l_im1->begin(), next_l_im1->end(), l_i.begin(), id_comp);
 			l_i.resize(iter-l_i.begin());
-			// print_vector(l_i, "get l_i ==============");
-			ass_iter = std::set_difference(l_im1.begin(), l_im1.end(), l_i.begin(), l_i.end(), ass_iter, id_comp);
-			if (l_i.empty()) end_flag = false;
-			if (l_i.size() == l_im1.size()){
-				ass.insert(ass_iter, l_i.begin(), l_i.end());
-				ass.resize(l_0->size());
+			std::vector<int> l_im1_m_l_i(l_0->size());
+			iter = std::set_difference(l_im1.begin(), l_im1.end(), l_i.begin(), l_i.end(), l_im1_m_l_i.begin(), id_comp);
+			l_im1_m_l_i.resize(iter-l_im1_m_l_i.begin());
+			int temp_length = l_im1_m_l_i.size();
+			if (temp_length == 0){
+				state->pine_l_index->emplace_back(l_i.size());
+				std::copy(l_i.begin(), l_i.end(), ass.begin());
 				end_flag = false;
+				break;
 			}
+			state->pine_l_index->emplace_back(temp_length);
+			ass_iter -= temp_length;
+			std::copy(l_im1_m_l_i.begin(), l_im1_m_l_i.end(), ass_iter);
+			// print_vector(ass, "ass:===========");
+			if (l_i.empty()) end_flag = false;
 			l_i.swap(l_im1);
 		}while (end_flag);
-		std::reverse(ass.begin(), ass.end());
-		// print_vector(ass, "ordered ass: =========");
+		std::reverse(state->pine_l_index->begin(), state->pine_l_index->end());
+		for (int i=1; i<state->pine_l_index->size(); i++){
+			state->pine_l_index->at(i) += state->pine_l_index->at(i-1);
+		}
+		std::copy(ass.begin(), ass.end(), state->pine_assumptions->begin());
 	}
 
 	
 	void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int>& ass)
 	{
-		if (m_settings.pine){
-			std::shared_ptr<std::vector<int> > nextl = m_model->Get_next_latches_for_pine(*state->latches);
-			if (nextl->size()/(float)m_model->GetNumLatches()>0.2){
-				build_ass_by_l_list(state->latches, ass);
-				return;
-			}
-		}
-
 		if (m_settings.inter)
 		{
 			GetPriority(state->latches, frameLevel, ass);

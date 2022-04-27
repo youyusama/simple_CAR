@@ -34,7 +34,7 @@ int main(int argc, char** argv)
 
 void PrintUsage()
 {
-    printf ("Usage: simplecar [<-f|-b>]  [<-end>|<-interation|-rotation>|<-pine>] <aiger file> <output directory> [<-vis> [counter-example file]]\n");
+    printf ("Usage: simplecar <-f|-b>  [<-end><-interation><-rotation><-pine>] <aiger file> <output directory> [<-vis> [counter-example file]]\n");
     printf ("       -timeout        set timeout\n");   
     printf ("       -f              forward checking (Default = backward checking)\n");
     printf ("       -b              backward checking \n");
@@ -49,7 +49,6 @@ void PrintUsage()
     printf ("       -vis            output visualization\n");
     printf ("       -pine           active pineapple\n");
     printf ("NOTE: -f and -b cannot be used together!\n");
-    printf ("NOTE: -inter|-rotation cannot be used with -pine!\n");
     exit (0);
 }
 

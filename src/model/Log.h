@@ -57,6 +57,10 @@ public:
 
     void PrintSAT(std::vector<int>& vec, int frameLevel);
 
+    void PrintPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector<int>> uc);
+
+    void StatPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector<int>> uc_pine, std::shared_ptr<std::vector<int>> uc);
+
     void PrintStatistics()
     {
         m_log<<std::endl<<"MainSolverCalls:\t"<<m_mainSolverCalls<<std::endl;
@@ -65,7 +69,12 @@ public:
         m_log<<"GetNewLevel Procedure takes:\t"<<m_getNewLevelTime<<" seconds"<<std::endl;
         m_log<<"Update uc takes:\t"<<m_updateUcTime<<" seconds"<<std::endl;
         m_log<<"Restart Times:\t"<<m_restartTimes<<std::endl;
-        m_log<<"Pine Times:\t"<<m_pineTime<<std::endl;
+        if (m_settings.pine){
+            m_log<<"Pine Times:\t"<<m_pineTime<<std::endl;
+            m_log<<"Pine Called Times:\t"<<m_pineCalled<<std::endl;
+            m_log<<"Pine uc is short Times:\t"<<m_pineIsShort<<std::endl;
+            m_log<<"Pine l1 is <20% Times:\t"<<m_pineL1isShort<<std::endl;
+        }
         m_log<<"Total Time:\t"<<static_cast<double>(clock()-m_begin)/CLOCKS_PER_SEC<<" seconds"<<std::endl;
     }
 
@@ -79,6 +88,7 @@ public:
         m_invSolverTime = 0;
         m_getNewLevelTime = 0;
         m_updateUcTime = 0;
+        m_pineTime = 0;
     }
 
     void Timeout()
@@ -156,7 +166,12 @@ private:
     double m_getNewLevelTime = 0;
     double m_updateUcTime = 0;
     double m_timelimit = 0;
+    //pine
     double m_pineTime = 0;
+    int m_pineCalled = 0;
+    int m_pineIsShort = 0;
+    int m_pineL1isShort = 0;
+
     std::shared_ptr<AigerModel> m_model;
     clock_t m_tick;
     clock_t m_begin;
