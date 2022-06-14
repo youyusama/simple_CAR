@@ -104,6 +104,10 @@ Settings GetArgv(int argc, char** argv)
         {
             settings.pine = true;
         }
+        else if (strcmp(argv[i], "-empi") == 0)
+        {
+            settings.empi = true;
+        }
         else if (strcmp(argv[i], "-depth") == 0)
         {
             settings.condition = RestartCondition::Depth;

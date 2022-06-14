@@ -141,6 +141,7 @@ public:
             m_threshold = m_threshold * m_growthRate;
         }
         m_ucCounts = 0;
+        return true;
     }
 
     void UcCountsPlus1() {m_ucCounts++;}

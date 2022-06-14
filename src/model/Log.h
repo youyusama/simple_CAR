@@ -45,6 +45,8 @@ public:
     
     void PrintSth(std::string s);
 
+    void DebugPrintSth(std::string s);
+
     void PrintInDebug(std::string str);
 
     void PrintFramesInfo(IOverSequence* sequence);
@@ -52,6 +54,12 @@ public:
     void PrintCounterExample(int badNo, bool isForward = false);
 
     void PrintSafe(int badNo);
+
+    void DebugPrintVector(std::vector<int> &uc, std::string text = "");
+
+    void PrintOSequence(IOverSequence* sequence);
+
+    void Log::PrintStateShort(std::shared_ptr<State> s);
 
     void PrintUcNums(std::vector<int> &uc, IOverSequence* sequence);
 

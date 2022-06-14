@@ -4,7 +4,7 @@ namespace car
 {
 	void OverSequence::Insert(std::shared_ptr<std::vector<int> > uc, int index) 
 	{
-		
+		std::sort(uc->begin(), uc->end(), comp_abs);
 
 		if (index >= m_sequence.size())
 		{
@@ -88,17 +88,21 @@ namespace car
     bool OverSequence::IsImply (std::vector<int>& v1,  std::vector<int>& v2) //if v2->v1
 	{
 
-		if (v1.size () < v2.size ())
+		if (v1.size () <= v2.size ())
 			return false;
-		std::vector<int>::iterator first1 = v1.begin (), first2 = v2.begin (), last1 = v1.end (), last2 = v2.end ();
-		while (first2 != last2) 
-		{
-			if ( (first1 == last1) || comp (*first2, *first1) ) 
-				return false;
-			if ((*first1) == (*first2)) 
-				++ first2;
-			++ first1;
-		}
-		return true;
+		if (std::includes(v1.begin(), v1.end(), v2.begin(), v2.end(), comp_abs))
+			return true;
+		else
+			return false;
+		// std::vector<int>::iterator iter1 = v1.begin (), iter2 = v2.begin (), last1 = v1.end (), last2 = v2.end ();
+		// while (iter2 != last2) 
+		// {
+		// 	if (abs(*iter2) > abs(*iter1) || (iter1 == last1)) 
+		// 		return false;
+		// 	if ((*iter1) == (*iter2)) 
+		// 		iter2 ++;
+		// 	iter1 ++;
+		// }
+		// return true;
 	}
 }//namespace car

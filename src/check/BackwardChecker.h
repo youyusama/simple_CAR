@@ -13,6 +13,7 @@
 #include "Task.h"
 #include "Log.h"
 #include "Vis.h"
+#include <algorithm>
 #include <assert.h>
 #include <memory>
 #include "restart.h"
@@ -20,6 +21,28 @@
 
 namespace car
 {
+	#define CAR_DEBUG_v(s, v) do\
+	{\
+		m_log->DebugPrintVector(v, s);\
+	} while (0)
+	
+
+	#define CAR_DEBUG(s) do\
+	{\
+		m_log->DebugPrintSth(s);\
+	} while (0)
+
+	#define CAR_DEBUG_o(s, o) do\
+	{\
+		m_log->DebugPrintSth(s);\
+		m_log->PrintOSequence(o);\
+	} while (0)
+
+	#define CAR_DEBUG_s(t, s) do\
+	{\
+		m_log->DebugPrintSth(t);\
+		m_log->PrintStateShort(s);\
+	} while (0)
 
 
 
@@ -29,6 +52,49 @@ public:
 	BackwardChecker(Settings settings, std::shared_ptr<AigerModel> model);
 	bool Run();
 	bool Check(int badId);
+
+	struct HeuristicLitOrder {
+    HeuristicLitOrder() : _mini(1<<20) {}
+		std::vector<float> counts;
+		int _mini;
+		void count(const std::vector<int> & uc) {
+			// assumes cube is ordered
+			int sz = abs(uc.back());
+			int a = counts.size();
+			if (sz >= counts.size()) counts.resize(sz+1);
+			_mini = abs(uc[0]);
+			for (std::vector<int>::const_iterator i = uc.begin(); i != uc.end(); ++i)
+				counts[abs(*i)] ++;
+		}
+		void decay() {
+			for (int i = _mini; i < counts.size(); ++i)
+				counts[i] *= 0.99;
+		}
+	} litOrder;
+
+	struct SlimLitOrder {
+		HeuristicLitOrder *heuristicLitOrder;
+
+		SlimLitOrder() {}
+
+		bool operator()(const int & l1, const int & l2) const {
+			if (l2 >= heuristicLitOrder->counts.size()) return true;
+			if (l1 >= heuristicLitOrder->counts.size()) return false;
+			return (heuristicLitOrder->counts[abs(l1)] > heuristicLitOrder->counts[abs(l2)]);
+		}
+	} slimLitOrder;
+
+	float numLits, numUpdates;
+	void updateLitOrder(const std::vector<int> & uc) {
+		litOrder.decay();
+		litOrder.count(uc);
+	}
+
+	// order according to preference
+	void orderAssumption(std::vector<int> & uc) {
+		std::stable_sort(uc.begin(), uc.end(), slimLitOrder);
+	}
+
 private:
 	void Init();
 
@@ -137,13 +203,17 @@ private:
 				state->pine_l_index->emplace_back(l_i.size());
 				std::copy(l_i.begin(), l_i.end(), ass.begin());
 				end_flag = false;
+				state->pine_l_list_type = 1;
 				break;
 			}
 			state->pine_l_index->emplace_back(temp_length);
 			ass_iter -= temp_length;
 			std::copy(l_im1_m_l_i.begin(), l_im1_m_l_i.end(), ass_iter);
 			// print_vector(ass, "ass:===========");
-			if (l_i.empty()) end_flag = false;
+			if (l_i.empty()){
+				end_flag = false;
+				state->pine_l_list_type = 0;
+			}
 			l_i.swap(l_im1);
 		}while (end_flag);
 		std::reverse(state->pine_l_index->begin(), state->pine_l_index->end());
@@ -156,6 +226,14 @@ private:
 	
 	void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int>& ass)
 	{
+		if (m_settings.empi)
+		{
+			ass.reserve(ass.size() + state->latches->size());
+			ass.insert(ass.end(), state->latches->begin(), state->latches->end());
+			orderAssumption(ass);
+			return;
+		}
+		
 		if (m_settings.inter)
 		{
 			GetPriority(state->latches, frameLevel, ass);

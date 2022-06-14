@@ -29,6 +29,7 @@ public:
 	int pine_state_type;//0: uninitialized 1: solved 2: not suitable
 	std::shared_ptr<std::vector<int> > pine_assumptions;
 	std::shared_ptr<std::vector<int> > pine_l_index;
+	int pine_l_list_type;//0: end with zero 1: end with loop
 };
 
 

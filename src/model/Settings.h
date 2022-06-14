@@ -32,6 +32,7 @@ struct Settings
     bool inputS = false;
     bool luby = false;
     bool pine = false;
+    bool empi = false;
     bool Visualization = false;
     float growthRate = 1.5;
     int threshold = 64;

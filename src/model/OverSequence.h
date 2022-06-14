@@ -4,7 +4,8 @@
 #include <vector>
 #include <cmath>
 #include "IOverSequence.h"
-#include<memory>
+#include <memory>
+#include <algorithm>
 namespace car
 {
 
@@ -28,7 +29,7 @@ public:
 private:
 	bool IsImply ( std::vector<int>& v1,  std::vector<int>& v2);
 
-	bool comp (int i, int j)
+	bool static comp_abs (int i, int j)
 	{
 		return abs (i) < abs(j);
 	}

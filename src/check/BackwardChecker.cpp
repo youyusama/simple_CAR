@@ -65,22 +65,16 @@ namespace car
 
 		if (ImmediateSatisfiable(badId))
 		{
+			CAR_DEBUG("Result >>> SAT <<<");
 			std::pair<std::shared_ptr<std::vector<int> >, std::shared_ptr<std::vector<int> > > pair;
-			if (m_settings.debug)
-			{
-				pair = m_mainSolver->GetAssignment(m_log->m_debug);
-			}
-			else
-			{
-				pair = m_mainSolver->GetAssignment();
-			}
-			
+			pair = m_mainSolver->GetAssignment();
+			CAR_DEBUG_v("Get Assignment:", *pair.second);
 
 			std::shared_ptr<State> newState(new State (m_initialState, pair.first, pair.second, 1));
 			m_log->lastState = newState;
 			return false;
 		}
-
+		CAR_DEBUG("Result >>> UNSAT <<<");
 		m_log->Tick();
 		auto uc = m_mainSolver->GetUnsatisfiableCoreFromBad(badId);
 		m_log->StatMainSolver();
@@ -89,16 +83,14 @@ namespace car
 			//placeholder
 			return true;
 		}
+		CAR_DEBUG_v("Get UC:", *uc);
 		m_overSequence->Insert(uc, 0);
-		if (m_settings.debug)
-		{
-			m_log->PrintUcNums(*uc, m_overSequence.get()); //debug
-		}
 		
 		std::vector<std::shared_ptr<std::vector<int> > > frame;
 		m_overSequence->GetFrame(0, frame);
 		m_mainSolver->AddNewFrame(frame, 0);
 		m_overSequence->effectiveLevel = 0;
+		CAR_DEBUG_o("Frames: ", m_overSequence.get());
 # pragma endregion 
 
 
@@ -164,44 +156,36 @@ namespace car
 				{ 
 					m_log->Tick();
 					std::vector<int> assumption;
+					std::vector<int> assumption_pine;
 					GetAssumption(task.state, task.frameLevel, assumption);
-					if (m_settings.debug)
-					{
-						m_log->PrintSAT(assumption, task.frameLevel);
-					}
+					// GetAssumptionByPine(task.state, task.frameLevel, assumption_pine);
+					CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel));
+					CAR_DEBUG_v("Assumption: ", assumption);
 					bool result = m_mainSolver->SolveWithAssumptionAndBad(assumption, badId);
 					m_log->StatMainSolver();
 					if (result)
 					{
+						CAR_DEBUG("Result >>> SAT <<<");
 						std::pair<std::shared_ptr<std::vector<int> >, std::shared_ptr<std::vector<int> > > pair;
-						if (m_settings.debug)
-						{
-							pair = m_mainSolver->GetAssignment(m_log->m_debug);
-						}
-						else
-						{
-							pair = m_mainSolver->GetAssignment();
-						}
-
+						pair = m_mainSolver->GetAssignment();
+						CAR_DEBUG_v("Get Assignment:", *pair.second);
 						std::shared_ptr<State> newState(new State (task.state, pair.first, pair.second, task.state->depth+1));
 						m_log->lastState = newState;
 						return false;
 					}
 					else
 					{
+						CAR_DEBUG("Result >>> UNSAT <<<");
 						if (m_settings.rotate) PushToRotation(task.state, task.frameLevel);
 						auto uc = m_mainSolver->GetUnsatisfiableCore();
 						if (uc->empty())
 						{
 							//placeholder, uc is empty => safe
 						}
+						CAR_DEBUG_v("Get UC:", *uc);
 						m_log->Tick();
 						AddUnsatisfiableCore(uc, task.frameLevel+1);
 						m_log->StatUpdateUc();
-						if (m_settings.debug)
-						{
-							m_log->PrintUcNums(*uc, m_overSequence.get());
-						}
 						m_restart->UcCountsPlus1();
  						task.frameLevel++;
 						 //notes 4
@@ -224,25 +208,19 @@ namespace car
 	
 				std::vector<int> assumption;
 				GetAssumption(task.state, task.frameLevel, assumption);
-				if (m_settings.debug)
-				{
-					m_log->PrintSAT(assumption, task.frameLevel);
-				}
+				CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel));
+				CAR_DEBUG_s("From state: ", task.state);
+				CAR_DEBUG_v("Assumption: ", assumption);
 				bool result = m_mainSolver->SolveWithAssumption(assumption, task.frameLevel);
 				m_log->StatMainSolver();
 				if (result)
 				{
 					//Solver return SAT, get a new State, then continue
+					CAR_DEBUG("Result >>> SAT <<<");
 					std::pair<std::shared_ptr<std::vector<int> >, std::shared_ptr<std::vector<int> > > pair;
-					if (m_settings.debug)
-					{
-						pair = m_mainSolver->GetAssignment(m_log->m_debug);
-					}
-					else
-					{
-						pair = m_mainSolver->GetAssignment();
-					}
+					pair = m_mainSolver->GetAssignment();
 					std::shared_ptr<State> newState(new State (task.state, pair.first, pair.second, task.state->depth+1));
+					CAR_DEBUG_s("Get state: ", newState);
 					m_underSequence.push(newState);
 
 					if (m_settings.Visualization) {
@@ -255,34 +233,58 @@ namespace car
 				else
 				{
 					//Solver return UNSAT, get uc, then continue
+					CAR_DEBUG("Result >>> UNSAT <<<");
 					PushToRotation(task.state, task.frameLevel);
 					auto uc = m_mainSolver->GetUnsatisfiableCore();
 					if (uc->empty())
 					{
 						//placeholder, uc is empty => safe
 					}
-					if (m_settings.pine){
-						// maybe in a low framelevel
-						std::vector<int> assumption_pine;
-						m_log->Tick();
-						GetAssumptionByPine(task.state, task.frameLevel, assumption_pine);
-						m_log->StatPine();
-						if (task.state->pine_state_type == 1){
-							// redo the sat
-							m_mainSolver->SolveWithAssumption(assumption_pine, task.frameLevel);
-							auto uc_pine = m_mainSolver->GetUnsatisfiableCore();
-							m_log->StatPineInfo(task.state, uc_pine, uc);
-						}
-					}
+					// if (m_settings.pine){
+					// 	// maybe in a low framelevel
+					// 	std::vector<int> assumption_pine;
+					// 	m_log->Tick();
+					// 	GetAssumptionByPine(task.state, task.frameLevel, assumption_pine);
+					// 	m_log->PrintSAT(assumption_pine, task.frameLevel);
+					// 	m_log->StatPine();
+					// 	// all length pine progress
+					// 	if (task.state->pine_state_type == 1){
+					// 		// redo the sat
+					// 		m_mainSolver->SolveWithAssumption(assumption_pine, task.frameLevel);
+					// 		auto uc_pine = m_mainSolver->GetUnsatisfiableCore();
+					// 		m_log->StatPineInfo(task.state, uc_pine, uc);
+					// 		if (m_settings.debug){
+					// 			m_log->DebugPrintVector(*uc_pine, "pine uc:");
+					// 			m_log->PrintPineInfo(task.state, uc_pine);
+					// 		}
+					// 	}
+					// 	// part length pine
+					// 	if (m_settings.debug && task.state->pine_state_type == 1){
+					// 		for (int l: *task.state->pine_l_index){
+					// 			m_log->DebugPrintSth("== pine part sat check ==");
+					// 			//get part pine
+					// 			std::vector<int> part_pine(l);
+					// 			std::copy(assumption_pine.begin(), assumption_pine.begin()+l, part_pine.begin());
+					// 			m_log->DebugPrintVector(part_pine, "part pine:");
+					// 			//redo the sat
+					// 			bool part_result = m_mainSolver->SolveWithAssumption(part_pine, task.frameLevel);
+					// 			if (part_result){
+					// 				m_log->DebugPrintSth("sat");
+					// 			}else{
+					// 				auto uc_part = m_mainSolver->GetUnsatisfiableCore();
+					// 				m_log->DebugPrintVector(*uc_part, "part uc:");
+					// 				m_log->PrintPineInfo(task.state, uc_part);
+					// 			}
+					// 		}
+					// 	}
+					// }
+					
+					CAR_DEBUG_v("Get UC:", *uc);
 					m_log->Tick();
 					AddUnsatisfiableCore(uc, task.frameLevel+1);
 					m_log->StatUpdateUc();
 					m_restart->UcCountsPlus1();
-					if (m_settings.debug)
-					{
-						m_log->PrintUcNums(*uc, m_overSequence.get());
-						// if (m_settings.pine) m_log->PrintPineInfo(task.state, uc);
-					}
+					CAR_DEBUG_o("Frames: ", m_overSequence.get());
 					task.frameLevel++;
 					//notes 4
 					/*
@@ -299,6 +301,7 @@ namespace car
 					continue;
 				}
 			}
+			CAR_DEBUG("\nNew Frame Added");
 			if (m_settings.propagation)
 			{
 				Propagation();
@@ -333,6 +336,9 @@ namespace car
 		{
 			m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
 		}
+		if (m_settings.empi){
+			slimLitOrder.heuristicLitOrder = &litOrder;
+		}
 		m_underSequence = UnderSequence();
 		m_underSequence.push(m_initialState);
 		if (m_settings.Visualization) {
@@ -353,6 +359,9 @@ namespace car
 			m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
 		}
 		m_overSequence->Insert(uc, frameLevel);
+		if (m_settings.empi){
+			updateLitOrder(*uc);
+		}
 		if(frameLevel < m_minUpdateLevel)
 		{
 			m_minUpdateLevel = frameLevel;
@@ -363,9 +372,10 @@ namespace car
 	{
 		std::vector<int>& init = *(m_initialState->latches);
 		std::vector<int> assumptions;
+		// GetAssumptionByPine(m_initialState, -1, assumptions);
 		assumptions.resize((init.size()));
 		std::copy(init.begin(), init.end(), assumptions.begin());
-		//assumptions[assumptions.size()-1] = badId;
+		// assumptions[assumptions.size()-1] = badId;
 		bool result = m_mainSolver->SolveWithAssumptionAndBad(assumptions, badId);
 		return result;
 	}

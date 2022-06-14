@@ -25,6 +25,8 @@ namespace  car
 		else // result == l_Undef
 		{
 			//placeholder
+			assert(true);
+			return false;
 		}
 	}
 
@@ -48,6 +50,8 @@ namespace  car
 		else // result == l_Undef
 		{
 			//placeholder
+			assert(true);
+			return false;
 		}
 	}
 
@@ -290,6 +294,8 @@ namespace  car
 		else // result == l_Undef
 		{
 			//placeholder
+			assert(true);
+			return false;
 		}
 	}
 

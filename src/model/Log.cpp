@@ -6,6 +6,10 @@ namespace car
         m_log<<s<<std::endl;
     }
 
+    void Log::DebugPrintSth(std::string s){
+        m_debug<<s<<std::endl;
+    }
+
 
     void Log::PrintFramesInfo(IOverSequence* sequence)
     {
@@ -82,6 +86,48 @@ namespace car
         m_debug<<str;
     }
 
+    void Log::DebugPrintVector(std::vector<int> &v, std::string text)
+    {
+        m_debug<<text<<std::endl;
+        for (auto l: v)
+            m_debug<<l<<" ";
+        m_debug<<std::endl;
+    }
+
+    void latches_vecotr_to_short_vector(std::vector<int>& node, std::vector<int>& latches){
+        int count = 0;
+        int tempi = 0;
+        for (int l: latches){
+            if (l>0) tempi = (tempi << 1) + 1;
+            else tempi <<= 1;
+            count++;
+            if (count == 32 || l == latches[latches.size()-1]){
+                node.emplace_back(tempi);
+                tempi = 0;
+                count = 0;
+            }
+        }
+    }
+
+    void Log::PrintStateShort(std::shared_ptr<State> s){
+        std::vector<int> node;
+        latches_vecotr_to_short_vector(node, *s->latches);
+        for (int n: node){
+            m_debug<<n;
+        }
+        m_debug<<std::endl;
+    }
+
+    void Log::PrintOSequence(IOverSequence* sequence)
+    {
+        for (int i = 0; i < sequence->GetLength(); ++i)
+        {
+            std::vector<std::shared_ptr<std::vector<int> > > frame;
+            sequence->GetFrame(i, frame);
+            m_debug<<frame.size()<<" ";
+        }
+        m_debug<<std::endl;
+    }
 
     void Log::PrintUcNums(std::vector<int> &uc, IOverSequence* sequence)
     {
@@ -113,7 +159,10 @@ namespace car
 
 
     void Log::PrintPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector<int>> uc){
-        if (state->pine_state_type != 1) return;
+        if (state->pine_state_type != 1){
+            m_debug<<"pine 未启用"<<std::endl;
+            return;
+        }
         m_debug<<"pine assumptions 分段:"<<std::endl;
         m_debug<<"共 "<<state->pine_l_index->size()<<" 段: ";
         for (auto i: *state->pine_l_index) m_debug<<i<<" ";
@@ -131,6 +180,11 @@ namespace car
             else break;
         }
         m_debug<<"uc 落于第 "<<r+1<<" 段"<<std::endl;
+        if (state->pine_l_list_type == 0){
+            m_debug<<"list 以空结尾"<<std::endl;
+        }else{
+            m_debug<<"list 以循环结尾"<<std::endl;
+        }
     }
 
 
