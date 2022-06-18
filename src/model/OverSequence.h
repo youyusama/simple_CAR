@@ -31,7 +31,8 @@ private:
 
 	bool static comp_abs (int i, int j)
 	{
-		return abs (i) < abs(j);
+		if (abs(i) != abs(j)) return abs (i) < abs(j);
+		else return i<j;
 	}
 
 	bool comp (std::vector<int>& a, std::vector<int>& b)
