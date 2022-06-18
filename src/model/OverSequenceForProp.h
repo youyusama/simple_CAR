@@ -4,6 +4,7 @@
 #include "IOverSequence.h"
 #include <cmath>
 #include <memory>
+#include <vector>
 namespace car
 {
 
@@ -24,6 +25,13 @@ public:
 	bool IsBlockedByFrame(std::vector<int>& state, int frameLevel) override;
 	
 	int GetLength() override;
+
+	std::vector<int> GetStat();
+
+	int blockQuerryTimes;
+	int blockedTimes;
+	int implyQuerryTimes;
+	int implyTimes;
 
 	std::vector<std::shared_ptr<std::vector<int> > >& GetProp(int frameLevel)
 	{

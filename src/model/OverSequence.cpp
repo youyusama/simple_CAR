@@ -60,6 +60,7 @@ namespace car
 	
 	bool OverSequence::IsBlockedByFrame(std::vector<int>& state, int frameLevel)
 	{
+		blockQuerryTimes ++;
 		int index;
 		for (int i = 0; i < m_sequence[frameLevel].size(); ++i)//for each uc
 		{
@@ -75,6 +76,7 @@ namespace car
 			}
 			if (isBlockedByUc)
 			{
+				blockedTimes ++;
 				return true;
 			}
 		}
@@ -87,11 +89,13 @@ namespace car
 
     bool OverSequence::IsImply (std::vector<int>& v1,  std::vector<int>& v2) //if v2->v1
 	{
-
+		implyQuerryTimes ++;
 		if (v1.size () <= v2.size ())
 			return false;
-		if (std::includes(v1.begin(), v1.end(), v2.begin(), v2.end(), comp_abs))
+		if (std::includes(v1.begin(), v1.end(), v2.begin(), v2.end(), comp_abs)){
 			return true;
+			implyTimes ++;
+		}
 		else
 			return false;
 		// std::vector<int>::iterator iter1 = v1.begin (), iter2 = v2.begin (), last1 = v1.end (), last2 = v2.end ();
@@ -105,4 +109,14 @@ namespace car
 		// }
 		// return true;
 	}
+
+	std::vector<int> OverSequence::GetStat(){
+		std::vector<int> temp;
+		temp.push_back(blockQuerryTimes);
+		temp.push_back(blockedTimes);
+		temp.push_back(implyQuerryTimes);
+		temp.push_back(implyTimes);
+		return temp;
+	}
+
 }//namespace car

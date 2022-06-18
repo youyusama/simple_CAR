@@ -40,7 +40,9 @@ namespace car
 			if (m_settings.Visualization) {
 				m_vis->OutputGML(false);
 			}
-			std::string ps = "repeated states num: " + std::to_string(m_repeat_state_num);
+			std::string ps = "block querry/blocked/imply querry/imply: ";
+			for (auto i: m_overSequence->GetStat())
+				ps += std::to_string(i) + "/";
 			m_log->PrintSth(ps);
 			m_log->PrintStatistics();
 		}
@@ -124,7 +126,9 @@ namespace car
 					if (m_settings.Visualization) {
 						m_vis->OutputGML(true);
 					}
-					std::string ps = "repeated states num: " + std::to_string(m_repeat_state_num);
+					std::string ps = "block querry/blocked/imply querry/imply: ";
+					for (auto i: m_overSequence->GetStat())
+					  ps += std::to_string(i);
 					m_log->PrintSth(ps);
 					m_log->PrintSth("time out!!!");
 					m_log->Timeout();

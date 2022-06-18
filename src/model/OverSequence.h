@@ -26,6 +26,13 @@ public:
 	
 	int GetLength() override;
 
+	std::vector<int> GetStat();
+
+	int blockQuerryTimes;
+	int blockedTimes;
+	int implyQuerryTimes;
+	int implyTimes;
+
 private:
 	bool IsImply ( std::vector<int>& v1,  std::vector<int>& v2);
 

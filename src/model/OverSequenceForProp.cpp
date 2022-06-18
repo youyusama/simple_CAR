@@ -32,6 +32,11 @@ namespace car
 		m_unprop[index].push_back(uc);
 	}
 
+	std::vector<int> OverSequenceForProp::GetStat(){
+		std::vector<int> temp;
+		return temp;
+	}
+
 	void OverSequenceForProp::GetFrame(int frameLevel, std::vector<std::shared_ptr<std::vector<int> > >& out) 
 	{
 		if (frameLevel >= m_prop.size()) return;

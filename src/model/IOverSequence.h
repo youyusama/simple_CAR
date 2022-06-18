@@ -17,6 +17,8 @@ public:
 	
 	virtual int GetLength() = 0;
 
+	virtual std::vector<int> GetStat() = 0;
+
 	int effectiveLevel;
 	bool isForward = false;
 };
