@@ -128,7 +128,7 @@ namespace car
 					}
 					std::string ps = "block querry/blocked/imply querry/imply: ";
 					for (auto i: m_overSequence->GetStat())
-					  ps += std::to_string(i);
+					  ps += std::to_string(i) + "/";
 					m_log->PrintSth(ps);
 					m_log->PrintSth("time out!!!");
 					m_log->Timeout();

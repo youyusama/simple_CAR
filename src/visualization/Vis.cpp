@@ -263,7 +263,7 @@ namespace car{
 
 
   bool Vis::isEnoughNodesForVis(){
-    if (node_id_map.size() >= 10000) return true;
+    if (node_id_map.size() >= 8000) return true;
     else return false;
   }
 
