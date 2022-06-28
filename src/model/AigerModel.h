@@ -10,6 +10,7 @@ extern "C"
 #include <unordered_set>
 #include <vector>
 #include <unordered_map>
+#include <assert>
 
 typedef std::string string;
 
@@ -76,26 +77,41 @@ public:
     int GetFalseId() {return m_falseId;}
     std::vector<int>& GetInitialState() { return m_initialState; }
     std::vector<int>& GetOutputs() { return m_outputs;} 
-    std::vector<int> GetPrevious(int id)
+    // std::vector<int> GetPrevious(int id)
+    // {
+    //     if (m_preValueOfLatch.count(abs(id)) > 0)
+    //     {
+    //         return m_preValueOfLatch[abs(id)];
+    //     }
+    //     else
+    //     {
+    //         return std::vector<int>();
+    //     }
+    // }
+    // int GetPrime(const int id) 
+    // {
+    //     std::unordered_map<int,int>::iterator it = m_nextValueOfLatch.find(abs(id));
+    //     if (it == m_nextValueOfLatch.end())
+    //     {
+    //         return 0;
+    //     }
+    //     return id > 0 ? it->second : -(it->second);
+    // }
+
+    //new GetPrime
+    int GetPrime(const int id, int level = 1) 
     {
-        if (m_preValueOfLatch.count(abs(id)) > 0)
-        {
-            return m_preValueOfLatch[abs(id)];
-        }
-        else
-        {
-            return std::vector<int>();
-        }
+        
+        return id >= 0 ? (id + m_maxId*level) : (id - m_maxId*level);
     }
-    int GetPrime(const int id) 
+
+    int GetPrevious(int id, int level = 1)
     {
-        std::unordered_map<int,int>::iterator it = m_nextValueOfLatch.find(abs(id));
-        if (it == m_nextValueOfLatch.end())
-        {
-            return 0;
-        }
-        return id > 0 ? it->second : -(it->second);
+        assert (abs(id) >= (m_maxId)*level);
+		
+		return (id > 0 ? (id - (m_maxId)*level) : (id + (m_maxId)*level));
     }
+    
 
 
     std::vector<std::vector<int> >& GetClause() {return m_clauses;}
@@ -127,7 +143,7 @@ private:
 	
     void AddAndGateToClause (const aiger_and* aa);
 
-	inline void InsertIntoPreValueMapping (const int key, const int value);
+    void AddAndGatePrimeToClause (const aiger_and* aa);
 
 	inline aiger_and* IsAndGate (const unsigned id, const aiger* aig);
 

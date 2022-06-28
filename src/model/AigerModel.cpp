@@ -30,7 +30,8 @@ void AigerModel::Init(aiger* aig)
     m_numOutputs = aig->num_outputs;
     m_maxId = aig->maxvar+2;
     m_trueId = m_maxId - 1;
-	m_falseId = m_maxId;
+	//m_falseId = m_maxId;
+    m_falseId = -m_trueId;
 
     CollectTrues(aig);
     CollectConstraints(aig);
@@ -115,19 +116,19 @@ void AigerModel::CollectNextValueMapping(const aiger* aig)
         if (IsFalse(aig->latches[i].next)) 
         {
             m_nextValueOfLatch.insert(std::pair<int,int>(val, m_falseId));
-            InsertIntoPreValueMapping(m_falseId, val);
+            //InsertIntoPreValueMapping(m_falseId, val);
         }
         else if (IsTrue(aig->latches[i].next)) 
         {
             m_nextValueOfLatch.insert(std::pair<int,int>(val, m_trueId));
-            InsertIntoPreValueMapping(m_trueId, val);
+            //InsertIntoPreValueMapping(m_trueId, val);
         }
         else
         {
             int nextVal = static_cast<int>(aig->latches[i].next);
             nextVal =(nextVal % 2 == 0) ?(nextVal/2) : -(nextVal/2);
             m_nextValueOfLatch.insert(std::pair<int,int>(val, nextVal));
-            InsertIntoPreValueMapping(abs(nextVal),(nextVal > 0) ? val : -val);
+            //InsertIntoPreValueMapping(abs(nextVal),(nextVal > 0) ? val : -val);
         }
     }
 }
@@ -152,6 +153,12 @@ void AigerModel::CollectClauses(const aiger* aig)
         AddAndGateToClause(aa);
     }
 
+    //add constraints[i] as clauses
+    for(auto it = m_constraints.begin(); it != m_constraints.end(); it++)
+    {
+        m_clauses.emplace_back(std::vector<int>{*it});
+    }
+
     m_outputsStart = m_clauses.size();
     //create clauses for outputs
     std::vector<unsigned>().swap(gates);
@@ -165,7 +172,7 @@ void AigerModel::CollectClauses(const aiger* aig)
         {
             //placeholder
         }
-        AddAndGateToClause(aa);
+        AddAndGatePrimeToClause(aa);
     }
     m_latchesStart = m_clauses.size();
 
@@ -183,9 +190,16 @@ void AigerModel::CollectClauses(const aiger* aig)
         AddAndGateToClause(aa);
     }
 
+    // creat clause for prime(it->first) <-> it->second
+    for (auto it = m_nextValueOfLatch.begin(); it != m_nextValueOfLatch.end(); it++)
+    {
+        m_clauses.emplace_back(std::vector<int>{-GetPrime(it->first), it->second});
+        m_clauses.emplace_back(std::vector<int>{GetPrime(it->first), -(it->second)});
+    }
+
     //create clauses for true and false
     m_clauses.emplace_back(std::vector<int>{m_trueId});
-    m_clauses.emplace_back(std::vector<int>{-m_falseId});
+    m_clauses.emplace_back(std::vector<int>{GetPrime(m_trueId)});
 }
 
 void AigerModel::CollectNecessaryAndGates(const aiger* aig, const aiger_symbol* as, const int as_size, 
@@ -275,17 +289,39 @@ void AigerModel::AddAndGateToClause(const aiger_and* aa)
 	}		
 }
 
-inline void AigerModel::InsertIntoPreValueMapping(const int key, const int value)
+void AigerModel::AddAndGatePrimeToClause(const aiger_and* aa)
 {
-    std::unordered_map<int, std::vector<int> >::iterator it = m_preValueOfLatch.find(key);
-    if (it == m_preValueOfLatch.end())
+    if (aa == nullptr || IsTrue(aa->lhs) || IsFalse(aa->lhs))
     {
-        m_preValueOfLatch.insert(std::pair<int, std::vector<int> >(key, std::vector<int>{value}));
+        //placeholder
     }
-    else
-    {
-        it->second.emplace_back(value);
-    }
+		
+	if (IsTrue(aa->rhs0))
+	{
+		m_clauses.emplace_back(std::vector<int>{GetCarId(aa->lhs), -GetCarId(aa->rhs1)});
+        m_clauses.emplace_back(std::vector<int>{-GetCarId(aa->lhs), GetCarId(aa->rhs1)});
+        //add prime 
+        m_clauses.emplace_back(std::vector<int>{GetPrime(GetCarId(aa->lhs)), GetPrime(-GetCarId(aa->rhs1))});
+        m_clauses.emplace_back(std::vector<int>{GetPrime(-GetCarId(aa->lhs)), GetPrime(GetCarId(aa->rhs1))});
+	}
+	else if (IsTrue(aa->rhs1))
+	{
+        m_clauses.emplace_back(std::vector<int>{GetCarId(aa->lhs), -GetCarId(aa->rhs0)});
+        m_clauses.emplace_back(std::vector<int>{-GetCarId(aa->lhs), GetCarId(aa->rhs0)});
+        //add prime
+        m_clauses.emplace_back(std::vector<int>{GetPrime(GetCarId(aa->lhs)), GetPrime(-GetCarId(aa->rhs0))});
+        m_clauses.emplace_back(std::vector<int>{GetPrime(-GetCarId(aa->lhs)), GetPrime(GetCarId(aa->rhs0))});
+	}
+	else
+	{
+        m_clauses.emplace_back(std::vector<int>{GetCarId(aa->lhs), -GetCarId(aa->rhs0), -GetCarId(aa->rhs1)});
+        m_clauses.emplace_back(std::vector<int>{-GetCarId(aa->lhs), GetCarId(aa->rhs0)});
+        m_clauses.emplace_back(std::vector<int>{-GetCarId(aa->lhs), GetCarId(aa->rhs1)});
+        //add prime
+        m_clauses.emplace_back(std::vector<int>{GetPrime(GetCarId(aa->lhs)), GetPrime(-GetCarId(aa->rhs0)), GetPrime(-GetCarId(aa->rhs1))});
+        m_clauses.emplace_back(std::vector<int>{GetPrime(-GetCarId(aa->lhs)), GetPrime(GetCarId(aa->rhs0))});
+        m_clauses.emplace_back(std::vector<int>{GetPrime(-GetCarId(aa->lhs)), GetPrime(GetCarId(aa->rhs1))});
+	}		
 }
 
 inline aiger_and* AigerModel::IsAndGate(const unsigned id, const aiger* aig)
