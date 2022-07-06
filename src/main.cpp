@@ -1,7 +1,6 @@
 #include <cstdio>
 #include "BackwardChecker.h"
 #include "ForwardChecker.h"
-#include "CleanCARCheckerF.h"
 #include "AigerModel.h"
 #include "Settings.h"
 #include <string.h>

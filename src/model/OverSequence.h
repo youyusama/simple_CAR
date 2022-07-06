@@ -15,7 +15,6 @@ public:
 	OverSequence() {}
 	OverSequence(int inputNums): m_numInputs(inputNums)
 	{
-
 	}
 
 	void Insert(std::shared_ptr<std::vector<int> > uc, int index) override;

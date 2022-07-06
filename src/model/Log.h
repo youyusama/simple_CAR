@@ -7,6 +7,7 @@
 #include <time.h>
 #include <stack>
 #include "OverSequence.h"
+#include "OverSequenceNI.h"
 #include "AigerModel.h"
 #include <memory>
 #include "Settings.h"
@@ -49,6 +50,7 @@ public:
 
     void PrintInDebug(std::string str);
 
+    void PrintFramesInfo(OverSequenceNI* sequence);
     void PrintFramesInfo(IOverSequence* sequence);
 
     void PrintCounterExample(int badNo, bool isForward = false);
@@ -57,10 +59,12 @@ public:
 
     void DebugPrintVector(std::vector<int> &uc, std::string text = "");
 
+    void PrintOSequence(OverSequenceNI* sequence);
     void PrintOSequence(IOverSequence* sequence);
 
     void Log::PrintStateShort(std::shared_ptr<State> s);
 
+    void PrintUcNums(std::vector<int> &uc, OverSequenceNI* sequence);
     void PrintUcNums(std::vector<int> &uc, IOverSequence* sequence);
 
     void PrintSAT(std::vector<int>& vec, int frameLevel);

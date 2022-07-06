@@ -11,6 +11,13 @@ namespace  car
 		;
 	}
 
+	int lit_id (Lit l){
+		if (sign(l)) 
+			return -(var(l) + 1);
+		else 
+			return var(l) + 1;
+	}
+
 	bool CarSolver::SolveWithAssumption()
 	{
 		lbool result = solveLimited(m_assumptions);
@@ -272,6 +279,14 @@ namespace  car
 		{
 			AddUnsatisfiableCore(*frame[i], frameLevel);
 		}
+		// std::cout << "clauses in SAT solver: \n";
+		// for (int i = clauses.size ()-1; i > clauses.size ()-5; i --)
+		// {
+		// 	Clause& c = ca[clauses[i]];
+		// 	for (int j = 0; j < c.size (); j ++)
+		// 		std::cout << lit_id (c[j]) << " ";
+		// 	std::cout << "0 " << std::endl;
+		// }
 	}
 
   bool CarSolver::SolveWithAssumptionAndBad(std::vector<int>& assumption, int badId)

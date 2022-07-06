@@ -6,6 +6,7 @@
 #include "IOverSequence.h"
 #include "OverSequence.h"
 #include "OverSequenceForProp.h"
+#include "OverSequenceNI.h"
 #include "UnderSequence.h"
 #include "ISolver.h"
 #include "MainSolver.h"
@@ -78,8 +79,8 @@ public:
 		SlimLitOrder() {}
 
 		bool operator()(const int & l1, const int & l2) const {
-			if (l2 >= heuristicLitOrder->counts.size()) return true;
-			if (l1 >= heuristicLitOrder->counts.size()) return false;
+			if (abs(l2) >= heuristicLitOrder->counts.size()) return true;
+			if (abs(l1) >= heuristicLitOrder->counts.size()) return false;
 			return (heuristicLitOrder->counts[abs(l1)] > heuristicLitOrder->counts[abs(l2)]);
 		}
 	} slimLitOrder;
@@ -280,41 +281,46 @@ private:
 		m_rotation[frameLevel+1] = state->latches;
 	}
 
-	void Propagation()
-	{
-		OverSequenceForProp* sequence = dynamic_cast<OverSequenceForProp*>(m_overSequence.get());
-		for (int frameLevel = 0; frameLevel < sequence->GetLength()-1; ++frameLevel)
-		{
-			std::vector<std::shared_ptr<std::vector<int> > > unpropFrame = sequence->GetUnProp(frameLevel);
-			std::vector<std::shared_ptr<std::vector<int> > > propFrame = sequence->GetProp(frameLevel);
-			std::vector<std::shared_ptr<std::vector<int> > > tmp;
-			for (int j = 0; j < unpropFrame.size(); ++j)
-			{	
-				if (sequence->IsBlockedByFrame(*unpropFrame[j], frameLevel+1))
-				{
-					propFrame.push_back(unpropFrame[j]);
-					continue;
-				}
+	// void Propagation()
+	// {
+	// 	OverSequenceForProp* sequence = dynamic_cast<OverSequenceForProp*>(m_overSequence.get());
+	// 	for (int frameLevel = 0; frameLevel < sequence->GetLength()-1; ++frameLevel)
+	// 	{
+	// 		std::vector<std::shared_ptr<std::vector<int> > > unpropFrame = sequence->GetUnProp(frameLevel);
+	// 		std::vector<std::shared_ptr<std::vector<int> > > propFrame = sequence->GetProp(frameLevel);
+	// 		std::vector<std::shared_ptr<std::vector<int> > > tmp;
+	// 		for (int j = 0; j < unpropFrame.size(); ++j)
+	// 		{	
+	// 			if (sequence->IsBlockedByFrame(*unpropFrame[j], frameLevel+1))
+	// 			{
+	// 				propFrame.push_back(unpropFrame[j]);
+	// 				continue;
+	// 			}
 
-				bool result = m_mainSolver->SolveWithAssumption(*unpropFrame[j], frameLevel);
-				if (!result)
-				{
-					AddUnsatisfiableCore(unpropFrame[j], frameLevel+1);
-					sequence->InsertIntoProped(unpropFrame[j], frameLevel);
-				}
-				else
-				{
-					tmp.push_back(unpropFrame[j]);
-				}
-			}
-			tmp.swap(unpropFrame);
-		}
+	// 			bool result = m_mainSolver->SolveWithAssumption(*unpropFrame[j], frameLevel);
+	// 			if (!result)
+	// 			{
+	// 				AddUnsatisfiableCore(unpropFrame[j], frameLevel+1);
+	// 				sequence->InsertIntoProped(unpropFrame[j], frameLevel);
+	// 			}
+	// 			else
+	// 			{
+	// 				tmp.push_back(unpropFrame[j]);
+	// 			}
+	// 		}
+	// 		tmp.swap(unpropFrame);
+	// 	}
+	// }
+
+	void Propagation(){
+		// for (int i = 0; i < m_overSequence->GetLength()-1; i++){
+		// 	m_overSequence->propagate(i);
+		// }
 	}
 	
 
 	int m_minUpdateLevel;
-	std::shared_ptr<IOverSequence> m_overSequence;
-	//IOverSequence* m_overSequence;
+	std::shared_ptr<OverSequenceNI> m_overSequence;
 	UnderSequence m_underSequence;
 	std::shared_ptr<Vis> m_vis;
 	Settings m_settings;

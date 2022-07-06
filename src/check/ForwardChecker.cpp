@@ -98,7 +98,7 @@ namespace car
 		
 		while (true)
 		{
-			m_log->PrintFramesInfo(m_overSequence.get());
+			// m_log->PrintFramesInfo(m_overSequence.get());
 			m_minUpdateLevel = m_overSequence->GetLength();
 			std::shared_ptr<State> startState = EnumerateStartState();
 			while(startState != nullptr)
@@ -183,7 +183,7 @@ namespace car
 						AddUnsatisfiableCore(uc, task.frameLevel+1);
 						if (m_settings.debug)
 						{
-							m_log->PrintUcNums(*uc, m_overSequence.get());
+							// m_log->PrintUcNums(*uc, m_overSequence.get());
 						}
 						m_log->StatUpdateUc();
 	#ifdef __DEBUG__

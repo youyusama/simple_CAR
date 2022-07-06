@@ -11,6 +11,18 @@ namespace car
   }
 
 
+  void Log::PrintFramesInfo(OverSequenceNI* sequence)
+  {
+      m_log<<"Frame "<<sequence->GetLength()-1<<std::endl;
+      for (int i = 0; i < sequence->GetLength(); ++i)
+      {
+          std::vector<std::shared_ptr<std::vector<int> > > frame;
+          sequence->GetFrame(i, frame);
+          m_log<<frame.size()<<" ";
+      }
+      m_log<<std::endl;
+  }
+
   void Log::PrintFramesInfo(IOverSequence* sequence)
   {
       m_log<<"Frame "<<sequence->GetLength()-1<<std::endl;
@@ -120,9 +132,39 @@ namespace car
     m_debug<<std::endl;
   }
 
-  void Log::PrintOSequence(IOverSequence* sequence)
+  void Log::PrintOSequence(OverSequenceNI* sequence)
   {
     if (!m_debug) return;
+    for (int i = 0; i < sequence->GetLength(); ++i)
+    {
+        std::vector<std::shared_ptr<std::vector<int> > > frame;
+        sequence->GetFrame(i, frame);
+        m_debug<<frame.size()<<" ";
+    }
+    m_debug<<std::endl;
+  }
+
+    void Log::PrintOSequence(IOverSequence* sequence)
+  {
+    if (!m_debug) return;
+    for (int i = 0; i < sequence->GetLength(); ++i)
+    {
+        std::vector<std::shared_ptr<std::vector<int> > > frame;
+        sequence->GetFrame(i, frame);
+        m_debug<<frame.size()<<" ";
+    }
+    m_debug<<std::endl;
+  }
+
+  void Log::PrintUcNums(std::vector<int> &uc, OverSequenceNI* sequence)
+  {
+    if (!m_debug) return;
+    m_debug<<"SAT调用结果, UNSAT"<<std::endl<<"新uc=";
+    for (int i = 0; i < uc.size(); ++i)
+    {
+        m_debug<<uc[i]<<" ";
+    }
+    m_debug<<std::endl<<"Frame:\t";
     for (int i = 0; i < sequence->GetLength(); ++i)
     {
         std::vector<std::shared_ptr<std::vector<int> > > frame;

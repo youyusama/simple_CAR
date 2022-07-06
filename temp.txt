@@ -1,0 +1,1925 @@
+insert to frame0
+get frame: 0
+-20 
+get length1
+get frame: 0
+-20 
+get length1
+get length1
+get length1
+get frame: 0
+-20 
+get length1
+get length1
+get length1
+get length1
+insert to frame1
+get length2
+get frame: 0
+-20 
+get length2
+get frame: 1
+-25 
+get length2
+get length2
+get length2
+get frame: 1
+-25 
+get length2
+get frame: 0
+-20 
+get length2
+get frame: 1
+-25 
+get length2
+get length2
+get length2
+get frame: 0
+-20 
+get length2
+get frame: 1
+-25 
+get length2
+get length2
+get length2
+get length2
+get length2
+check isblock of level0
+block
+insert to frame0
+get length2
+check isblock of level1
+insert to frame1
+get length2
+get frame: 0
+-20 
+get length2
+get frame: 1
+-25 
+-20 -22 -23 
+get length2
+get length2
+get length2
+get length2
+check isblock of level0
+block
+insert to frame0
+get length2
+check isblock of level1
+get length2
+check isblock of level0
+insert to frame0
+get length2
+check isblock of level1
+get length2
+check isblock of level0
+insert to frame0
+get length2
+check isblock of level1
+get length2
+check isblock of level0
+insert to frame0
+get length2
+check isblock of level1
+get length2
+check isblock of level0
+insert to frame0
+get length2
+check isblock of level1
+get length2
+check isblock of level0
+insert to frame0
+get length2
+check isblock of level1
+get length2
+check isblock of level0
+insert to frame0
+get length2
+check isblock of level1
+get length2
+check isblock of level0
+insert to frame0
+get length2
+check isblock of level1
+get length2
+check isblock of level0
+insert to frame0
+get length2
+check isblock of level1
+insert to frame1
+get length2
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length2
+get frame: 1
+-25 
+-20 -22 -23 
+10 -11 -16 
+get length2
+get length2
+get length2
+get length2
+check isblock of level0
+block
+insert to frame0
+get length2
+check isblock of level1
+insert to frame1
+get length2
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length2
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length2
+get length2
+get length2
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level1
+block
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level1
+block
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level1
+block
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level1
+block
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level1
+block
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level1
+block
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level1
+block
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level1
+block
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level2
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+-10 -13 -14 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level2
+block
+block wrong
+should be unblocked
+-10 -11 -12 -13 -14 -15 -16 -17 -18 -19 -20 -21 -22 -23 -24 -25 
+uc:
+frame 0: 
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+frame 1: 
+-25 
+-24 
+-20 -22 -23 
+10 -11 -16 
+frame 2: 
+-24 25 
+-10 -13 -14 25 
+the uc of sat:
+
+get length3
+check isblock of level0
+block
+insert to frame0
+get length3
+check isblock of level1
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+-10 -13 -14 25 
+get length3
+get length3
+check isblock of level2
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+-10 -13 -14 25 
+-10 -11 22 -23 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level2
+block
+block wrong
+should be unblocked
+-10 -11 -12 -13 -14 -15 -16 -17 -18 -19 -20 -21 -22 -23 -24 -25 
+uc:
+frame 0: 
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+frame 1: 
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+10 -11 -16 
+frame 2: 
+-24 25 
+-10 -13 -14 25 
+-10 -11 22 -23 25 
+the uc of sat:
+
+get length3
+check isblock of level0
+block
+insert to frame0
+get length3
+check isblock of level1
+insert to frame1
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+-10 -13 -14 25 
+-10 -11 22 -23 25 
+get length3
+get length3
+check isblock of level2
+block
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length3
+get length3
+get length3
+get length3
+check isblock of level2
+block
+block wrong
+should be unblocked
+-10 -11 -12 -13 -14 -15 -16 -17 -18 -19 -20 -21 -22 -23 -24 -25 
+uc:
+frame 0: 
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+frame 1: 
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+frame 2: 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+the uc of sat:
+
+insert to frame2
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length3
+get length3
+get length3
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length3
+get length3
+get length3
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length3
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length3
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length3
+get length3
+get length3
+get length3
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+block
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+block
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+block
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+block
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+block
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+block
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+block
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+block
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+block
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level3
+get length4
+check isblock of level0
+block
+insert to frame0
+get length4
+check isblock of level1
+block
+insert to frame1
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+check isblock of level2
+get length4
+check isblock of level0
+block
+insert to frame0
+get length4
+check isblock of level1
+insert to frame1
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+get length4
+get frame: 1
+-25 
+-24 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+check isblock of level2
+get length4
+check isblock of level0
+block
+insert to frame0
+get length4
+check isblock of level1
+get length4
+check isblock of level0
+insert to frame0
+get length4
+check isblock of level1
+insert to frame1
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+check isblock of level2
+block
+insert to frame2
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+check isblock of level3
+get length4
+check isblock of level0
+block
+insert to frame0
+get length4
+check isblock of level1
+block
+insert to frame1
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+check isblock of level2
+insert to frame2
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+10 -11 -16 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+check isblock of level3
+get length4
+check isblock of level0
+block
+insert to frame0
+get length4
+check isblock of level1
+block
+insert to frame1
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+10 -11 -16 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+check isblock of level2
+get length4
+check isblock of level0
+block
+insert to frame0
+get length4
+check isblock of level1
+insert to frame1
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+10 11 12 -13 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+10 -11 -16 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+check isblock of level2
+insert to frame2
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+10 11 12 -13 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+10 -11 -16 
+10 11 -15 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+get length4
+get length4
+check isblock of level3
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+10 11 12 -13 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+10 -11 -16 
+10 11 -15 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+10 11 12 -13 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level2
+get length4
+check isblock of level0
+block
+insert to frame0
+get length4
+check isblock of level1
+get length4
+check isblock of level0
+insert to frame0
+get length4
+check isblock of level1
+block
+insert to frame1
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+13 -18 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+10 11 12 -13 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+10 -11 -16 
+10 11 -15 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+10 11 12 -13 25 
+get length4
+get length4
+check isblock of level2
+block
+insert to frame2
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+13 -18 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+10 11 12 -13 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+10 -11 -16 
+10 11 -15 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+10 11 12 -13 25 
+get length4
+get length4
+check isblock of level3
+insert to frame3
+get length4
+get frame: 0
+-24 
+-20 
+-14 19 
+-13 18 
+-12 17 
+-11 16 
+-10 15 
+10 -15 
+11 -16 
+12 -17 
+13 -18 
+get length4
+get frame: 1
+-25 
+-24 
+-10 -15 
+-20 -22 -23 
+-10 -11 16 
+-10 11 -16 
+-10 22 -23 
+10 -11 -16 
+10 11 12 -13 
+get length4
+get frame: 2
+-24 
+-24 25 
+-10 -11 -16 
+10 -11 -16 
+10 11 -15 
+-10 -13 -14 25 
+-10 -11 -16 25 
+-10 -11 22 -23 25 
+get length4
+get frame: 3
+-24 25 
+-10 -13 -14 25 
+-10 -11 -16 25 
+10 11 12 -13 25 
+get length4
+get length4
+get length4
+get length4
+check isblock of level1
+get length4
+check isblock of level0

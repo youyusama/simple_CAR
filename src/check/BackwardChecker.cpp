@@ -86,7 +86,10 @@ namespace car
 			return true;
 		}
 		CAR_DEBUG_v("Get UC:", *uc);
-		m_overSequence->Insert(uc, 0);
+		m_overSequence->Insert(uc, 0, m_model);
+		if (m_settings.empi){
+			updateLitOrder(*uc);
+		}
 		
 		std::vector<std::shared_ptr<std::vector<int> > > frame;
 		m_overSequence->GetFrame(0, frame);
@@ -147,6 +150,7 @@ namespace car
 				{
 					m_log->Tick();
 					task.frameLevel = GetNewLevel(task.state, task.frameLevel+1);
+					CAR_DEBUG("state get new level " + std::to_string(task.frameLevel));
 					m_log->StatGetNewLevel();
 					if (task.frameLevel > m_overSequence->effectiveLevel)
 					{
@@ -164,6 +168,7 @@ namespace car
 					GetAssumption(task.state, task.frameLevel, assumption);
 					// GetAssumptionByPine(task.state, task.frameLevel, assumption_pine);
 					CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel));
+					CAR_DEBUG_s("From state: ", task.state);
 					CAR_DEBUG_v("Assumption: ", assumption);
 					bool result = m_mainSolver->SolveWithAssumptionAndBad(assumption, badId);
 					m_log->StatMainSolver();
@@ -231,6 +236,7 @@ namespace car
 						m_vis->addState(newState);
 					}                              
 					int newFrameLevel = GetNewLevel(newState);
+					CAR_DEBUG("state get new level " + std::to_string(newFrameLevel));
 					workingStack.emplace(newState, newFrameLevel, true);
 					continue;
 				}
@@ -332,14 +338,16 @@ namespace car
 
 	void BackwardChecker::Init()
 	{
-		if (m_settings.propagation)
-		{
-			m_overSequence.reset(new OverSequenceForProp(m_model->GetNumInputs()));
-		}
-		else
-		{
-			m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
-		}
+		// if (m_settings.propagation)
+		// {
+		// 	m_overSequence.reset(new OverSequenceForProp(m_model->GetNumInputs()));
+		// }
+		// else
+		// {
+		// 	m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
+		// }
+		m_overSequence.reset(new OverSequenceNI());
+		// m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
 		if (m_settings.empi){
 			slimLitOrder.heuristicLitOrder = &litOrder;
 		}
@@ -358,11 +366,11 @@ namespace car
 
 	void BackwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int> > uc, int frameLevel)
 	{
-		if (frameLevel <= m_overSequence->effectiveLevel)
-		{
+		// if (frameLevel <= m_overSequence->effectiveLevel)
+		// {
 			m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
-		}
-		m_overSequence->Insert(uc, frameLevel);
+		// }
+		m_overSequence->Insert(uc, frameLevel, m_model);
 		if (m_settings.empi){
 			updateLitOrder(*uc);
 		}
@@ -407,6 +415,7 @@ namespace car
 		for (int i = start; i < m_overSequence->GetLength(); ++i)
 		{
 			if (!m_overSequence->IsBlockedByFrame(*(state->latches), i))
+			// if (!m_overSequence->IsBlockedByFrame(*(state->latches), i))
 			{
 				return i-1;
 			}
