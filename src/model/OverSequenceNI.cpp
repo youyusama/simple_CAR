@@ -2,10 +2,10 @@
 
 namespace car
 {
-	void OverSequenceNI::Insert(std::shared_ptr<std::vector<int> > uc, int index, std::shared_ptr<AigerModel> model){
+	void OverSequenceNI::Insert(std::shared_ptr<std::vector<int> > uc, int index){
 		if (index >= m_sequence.size()){
 			m_sequence.emplace_back(frame());
-			m_blockSolvers.emplace_back(new BlockSolver(model));
+			m_blockSolvers.emplace_back(new BlockSolver(m_model));
 		}
 		m_sequence[index].insert(*uc);
 		m_blockSolvers[index]->AddUnsatisfiableCore(*uc, index);
@@ -29,20 +29,38 @@ namespace car
 	bool OverSequenceNI::IsBlockedByFrame(std::vector<int>& latches, int frameLevel){
 		blockQuerryTimes ++;
 
-		std::vector<int> assumption;
-		assumption.reserve(latches.size());
-		for (int l: latches){
-			assumption.emplace_back(l);
+		int latch_index, num_inputs;
+		num_inputs = m_model->GetNumInputs();
+		for (frame::iterator uc = m_sequence[frameLevel].begin(); uc != m_sequence[frameLevel].end(); uc++){ // for each uc
+			bool blocked = true;
+			for (int j = 0; j < uc->size(); j++){ // for each literal
+				latch_index = abs(uc->at(j)) - num_inputs - 1;
+				if (latches[latch_index] != uc->at(j)){
+					blocked = false;
+					break;
+				}
+			}
+			if (blocked){
+				blockedTimes ++;
+				return true;
+			}
 		}
+		return false;
 
-		bool result = m_blockSolvers[frameLevel]->SolveWithAssumption(assumption, frameLevel);
-		if (!result){
-			blockedTimes ++;
-			return true;
-		}
-		else{
-			return false;
-		}
+		// std::vector<int> assumption;
+		// assumption.reserve(latches.size());
+		// for (int l: latches){
+		// 	assumption.emplace_back(l);
+		// }
+
+		// bool result = m_blockSolvers[frameLevel]->SolveWithAssumption(assumption, frameLevel);
+		// if (!result){
+		// 	blockedTimes ++;
+		// 	return true;
+		// }
+		// else{
+		// 	return false;
+		// }
 	}
 
 	int OverSequenceNI::GetLength(){

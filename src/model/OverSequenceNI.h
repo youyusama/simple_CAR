@@ -18,7 +18,8 @@ namespace car
 class OverSequenceNI
 {
 public:
-	OverSequenceNI() {
+	OverSequenceNI(std::shared_ptr<AigerModel> model) {
+    m_model = model;
     implyQuerryTimes = 0;
 	  implyTimes = 0;
     blockQuerryTimes = 0;
@@ -26,7 +27,7 @@ public:
     m_blockSolvers.clear();
   }
 
-	void Insert(std::shared_ptr<std::vector<int> > uc, int index, std::shared_ptr<AigerModel> model);
+	void Insert(std::shared_ptr<std::vector<int> > uc, int index);
 	
 	void GetFrame(int frameLevel, std::vector<std::shared_ptr<std::vector<int> > >& out);
 	
@@ -61,11 +62,10 @@ private:
   };
 
   static bool _cubeComp(const cube & v1, const cube & v2) {
-    if (v1.size() < v2.size()) return true;
-    if (v1.size() > v2.size()) return false;
+    if (v1.size() != v2.size()) return v1.size() < v2.size();
     for (size_t i = 0; i < v1.size(); ++i) {
-      if (v1[i] < v2[i]) return true;
-      if (v2[i] < v1[i]) return false;
+      if (abs(v1[i]) != abs(v2[i])) return abs(v1[i]) < abs(v2[i]);
+      else return v1[i] <= v2[i];
     }
     return false;
   }
@@ -78,6 +78,8 @@ private:
   };
 
   typedef std::set<cube, cubeComp> frame;
+
+  std::shared_ptr<AigerModel> m_model;
 
   std::vector<frame> m_sequence;
   std::vector<CarSolver*> m_blockSolvers;

@@ -3,9 +3,11 @@
 
 #include <vector>
 #include <cmath>
-#include "IOverSequence.h"
 #include <memory>
 #include <algorithm>
+#include <iostream>
+
+#include "IOverSequence.h"
 namespace car
 {
 
@@ -15,6 +17,10 @@ public:
 	OverSequence() {}
 	OverSequence(int inputNums): m_numInputs(inputNums)
 	{
+		implyQuerryTimes = 0;
+	  implyTimes = 0;
+    blockQuerryTimes = 0;
+    blockedTimes = 0;
 	}
 
 	void Insert(std::shared_ptr<std::vector<int> > uc, int index) override;

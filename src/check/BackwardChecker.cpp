@@ -86,7 +86,8 @@ namespace car
 			return true;
 		}
 		CAR_DEBUG_v("Get UC:", *uc);
-		m_overSequence->Insert(uc, 0, m_model);
+		m_overSequence->Insert(uc, 0);
+		// m_overSequence->Insert(uc, 0);
 		if (m_settings.empi){
 			updateLitOrder(*uc);
 		}
@@ -129,6 +130,7 @@ namespace car
 					if (m_settings.Visualization) {
 						m_vis->OutputGML(true);
 					}
+					m_log->PrintFramesInfo(m_overSequence.get());
 					std::string ps = "block querry/blocked/imply querry/imply: ";
 					for (auto i: m_overSequence->GetStat())
 					  ps += std::to_string(i) + "/";
@@ -180,6 +182,7 @@ namespace car
 						CAR_DEBUG_v("Get Assignment:", *pair.second);
 						std::shared_ptr<State> newState(new State (task.state, pair.first, pair.second, task.state->depth+1));
 						m_log->lastState = newState;
+						m_log->PrintFramesInfo(m_overSequence.get());
 						return false;
 					}
 					else
@@ -234,9 +237,11 @@ namespace car
 
 					if (m_settings.Visualization) {
 						m_vis->addState(newState);
-					}                              
+					}
+					m_log->Tick();
 					int newFrameLevel = GetNewLevel(newState);
 					CAR_DEBUG("state get new level " + std::to_string(newFrameLevel));
+					m_log->StatGetNewLevel();
 					workingStack.emplace(newState, newFrameLevel, true);
 					continue;
 				}
@@ -346,7 +351,7 @@ namespace car
 		// {
 		// 	m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
 		// }
-		m_overSequence.reset(new OverSequenceNI());
+		m_overSequence.reset(new OverSequenceNI(m_model));
 		// m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
 		if (m_settings.empi){
 			slimLitOrder.heuristicLitOrder = &litOrder;
@@ -366,11 +371,11 @@ namespace car
 
 	void BackwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int> > uc, int frameLevel)
 	{
-		// if (frameLevel <= m_overSequence->effectiveLevel)
-		// {
+		if (frameLevel <= m_overSequence->effectiveLevel)
+		{
 			m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
-		// }
-		m_overSequence->Insert(uc, frameLevel, m_model);
+		}
+		m_overSequence->Insert(uc, frameLevel);
 		if (m_settings.empi){
 			updateLitOrder(*uc);
 		}

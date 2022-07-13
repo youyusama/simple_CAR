@@ -93,8 +93,8 @@ namespace car
 		if (v1.size () <= v2.size ())
 			return false;
 		if (std::includes(v1.begin(), v1.end(), v2.begin(), v2.end(), comp_abs)){
-			return true;
 			implyTimes ++;
+			return true;
 		}
 		else
 			return false;
