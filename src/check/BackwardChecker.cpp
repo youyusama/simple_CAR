@@ -109,9 +109,9 @@ namespace car
 			m_minUpdateLevel = m_overSequence->GetLength();
 			if (m_settings.end)
 			{
-				for (int i = 0; i < m_underSequence.size(); ++i)
+				for (int i = m_underSequence.size() - 1; i >= 0; i--)
 				{
-					for (int j = m_underSequence[i].size()-1; j>=0; --j)
+					for (int j = 0; j < m_underSequence[i].size(); j++)
 					{
 						workingStack.emplace(m_underSequence[i][j], frameStep, false);
 					}
