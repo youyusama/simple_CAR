@@ -32,6 +32,8 @@ public:
 	void GetFrame(int frameLevel, std::vector<std::shared_ptr<std::vector<int> > >& out);
 	
 	bool IsBlockedByFrame(std::vector<int>& latches, int frameLevel);
+
+  bool IsBlockedByFrame_sat(std::vector<int>& latches, int frameLevel);
 	
 	int GetLength();
 

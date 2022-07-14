@@ -46,21 +46,26 @@ namespace car
 			}
 		}
 		return false;
+	}
 
-		// std::vector<int> assumption;
-		// assumption.reserve(latches.size());
-		// for (int l: latches){
-		// 	assumption.emplace_back(l);
-		// }
 
-		// bool result = m_blockSolvers[frameLevel]->SolveWithAssumption(assumption, frameLevel);
-		// if (!result){
-		// 	blockedTimes ++;
-		// 	return true;
-		// }
-		// else{
-		// 	return false;
-		// }
+	bool OverSequenceNI::IsBlockedByFrame_sat(std::vector<int>& latches, int frameLevel){
+		blockQuerryTimes ++;
+
+		std::vector<int> assumption;
+		assumption.reserve(latches.size());
+		for (int l: latches){
+			assumption.emplace_back(l);
+		}
+
+		bool result = m_blockSolvers[frameLevel]->SolveWithAssumption(assumption, frameLevel);
+		if (!result){
+			blockedTimes ++;
+			return true;
+		}
+		else{
+			return false;
+		}
 	}
 
 	int OverSequenceNI::GetLength(){

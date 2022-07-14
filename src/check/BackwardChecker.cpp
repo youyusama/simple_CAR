@@ -107,20 +107,19 @@ namespace car
 		{
 			m_log->PrintFramesInfo(m_overSequence.get());
 			m_minUpdateLevel = m_overSequence->GetLength();
-			if (m_settings.end)
+			if (m_settings.end) // from the deep and the end
 			{
-				for (int i = m_underSequence.size() - 1; i >= 0; i--)
-				{
-					for (int j = 0; j < m_underSequence[i].size(); j++)
-					{
+				for (int i = m_underSequence.size() - 1; i >= 0; i--){
+					for (int j = m_underSequence[i].size() - 1; j >= 0; j--){
 						workingStack.emplace(m_underSequence[i][j], frameStep, false);
 					}
 				}
-			}
-			else
-			{
-				// to do, not from end just not implemented
-				workingStack.emplace(m_underSequence[0][0], frameStep, false);
+			}	else{ // from the shallow and the start
+				for (int i = 0; i < m_underSequence.size(); i++){
+					for (int j = 0; j < m_underSequence[i].size(); j++){
+						workingStack.emplace(m_underSequence[i][j], frameStep, false);
+					}
+				}
 			}
 			
 			while (!workingStack.empty())
@@ -417,11 +416,8 @@ namespace car
 
 	int BackwardChecker::GetNewLevel(std::shared_ptr<State> state, int start)
 	{
-		for (int i = start; i < m_overSequence->GetLength(); ++i)
-		{
-			if (!m_overSequence->IsBlockedByFrame(*(state->latches), i))
-			// if (!m_overSequence->IsBlockedByFrame(*(state->latches), i))
-			{
+		for (int i = start; i < m_overSequence->GetLength(); ++i){
+			if (!m_overSequence->IsBlockedByFrame(*(state->latches), i)){
 				return i-1;
 			}
 		}
