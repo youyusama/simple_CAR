@@ -236,37 +236,6 @@ bool CarSolver::SolveWithAssumptionAndBad(std::vector<int> &assumption, int badI
   }
 }
 
-inline void CarSolver::AddConstraintOr(const std::vector<std::shared_ptr<std::vector<int>>> frame) {
-  std::vector<int> clause;
-  for (int i = 0; i < frame.size(); ++i) {
-    int flag = GetNewVar();
-    clause.push_back(flag);
-    for (int j = 0; j < frame[i]->size(); ++j) {
-      AddClause(std::vector<int>{-flag, (*frame[i])[j]});
-    }
-  }
-  AddClause(clause);
-}
-
-inline void CarSolver::AddConstraintAnd(const std::vector<std::shared_ptr<std::vector<int>>> frame) {
-  int flag = GetNewVar();
-  for (int i = 0; i < frame.size(); ++i) {
-    std::vector<int> clause;
-    for (int j = 0; j < frame[i]->size(); ++j) {
-      clause.push_back(-(*frame[i])[j]);
-    }
-    clause.push_back(-flag);
-    AddClause(clause);
-  }
-  AddAssumption(flag);
-}
-
-inline void CarSolver::FlipLastConstrain() {
-  Lit lit = m_assumptions.last();
-  m_assumptions.pop();
-  m_assumptions.push(~lit);
-}
-
 #pragma region private
 
 

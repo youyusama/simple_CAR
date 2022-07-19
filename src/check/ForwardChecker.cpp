@@ -243,7 +243,7 @@ bool ForwardChecker::isInvExisted() {
   return result;
 }
 
-int ForwardChecker::GetNewLevel(std::shared_ptr<State> state, int start = 0) {
+int ForwardChecker::GetNewLevel(std::shared_ptr<State> state, int start) {
   for (int i = start; i < m_overSequence->GetLength(); ++i) {
     if (!m_overSequence->IsBlockedByFrame(*(state->latches), i)) {
       return i - 1;

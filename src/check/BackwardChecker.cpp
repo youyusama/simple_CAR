@@ -28,7 +28,7 @@ bool BackwardChecker::Run() {
       m_log->PrintSafe(i);
     } else // unsafe
     {
-      m_log->PrintCounterExample(i);
+      m_log->PrintCounterExample(i, false);
     }
     if (m_settings.Visualization) {
       m_vis->OutputGML(false);
