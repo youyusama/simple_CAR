@@ -176,18 +176,6 @@ bool BackwardChecker::Check(int badId) {
           m_log->StatUpdateUc();
           m_restart->UcCountsPlus1();
           task.frameLevel++;
-          // notes 4
-          /*
-         if (task.frameLevel+1 >= m_overSequence->GetLength() || !m_overSequence->IsBlockedByFrame(*(task.state->latches), task.frameLevel+1))
-         {
-           task.isLocated = true;
-         }
-         else
-         {
-           workingStack.pop();
-         }
-         */
-          // end notes 4
           continue;
         }
       }
@@ -273,18 +261,6 @@ bool BackwardChecker::Check(int badId) {
         m_restart->UcCountsPlus1();
         CAR_DEBUG_o("Frames: ", m_overSequence.get());
         task.frameLevel++;
-        // notes 4
-        /*
-        if (task.frameLevel+1 < m_overSequence->GetLength() && !m_overSequence->IsBlockedByFrame(*(task.state->latches), task.frameLevel+1))
-        {
-          task.isLocated = true;
-        }
-        else
-        {
-          workingStack.pop();
-        }
-        */
-        // end notes 4
         continue;
       }
     }
@@ -378,7 +354,7 @@ bool BackwardChecker::isInvExisted() {
 
 int BackwardChecker::GetNewLevel(std::shared_ptr<State> state, int start) {
   for (int i = start; i < m_overSequence->GetLength(); ++i) {
-    if (!m_overSequence->IsBlockedByFrame(*(state->latches), i)) {
+    if (!m_overSequence->IsBlockedByFrame_4000(*(state->latches), i)) {
       return i - 1;
     }
   }
