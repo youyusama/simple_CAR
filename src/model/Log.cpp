@@ -20,23 +20,17 @@ void Log::PrintFramesInfo(OverSequenceNI *sequence) {
   m_log << std::endl;
 }
 
-// void Log::PrintFramesInfo(OverSequenceNI* sequence)
-// {
-//   m_log<<"Frame "<<sequence->GetLength()-1<<std::endl;
-//   for (int i = 0; i < sequence->GetLength(); ++i)
-//   {
-//     std::vector<std::shared_ptr<std::vector<int> > > frame;
-//     sequence->GetFrame(i, frame);
-//     m_log<<"frame "<<i<<" size "<<frame.size()<<std::endl;
-//     for (auto j: frame){
-//       for (auto k: *j){
-//         m_log<<k<<" ";
-//       }
-//       m_log<<std::endl;
-//     }
-//   }
-//   m_log<<std::endl;
-// }
+
+void Log::PrintFramesInfo(OverSequenceSet *sequence) {
+  m_log << "Frame " << sequence->GetLength() - 1 << std::endl;
+  for (int i = 0; i < sequence->GetLength(); ++i) {
+    std::vector<std::shared_ptr<std::vector<int>>> frame;
+    sequence->GetFrame(i, frame);
+    m_log << frame.size() << " ";
+  }
+  m_log << std::endl;
+}
+
 
 void Log::PrintFramesInfo(IOverSequence *sequence) {
   m_log << "Frame " << sequence->GetLength() - 1 << std::endl;
@@ -154,6 +148,16 @@ void Log::PrintStateShort(std::shared_ptr<State> s) {
 }
 
 void Log::PrintOSequence(OverSequenceNI *sequence) {
+  if (!m_debug) return;
+  for (int i = 0; i < sequence->GetLength(); ++i) {
+    std::vector<std::shared_ptr<std::vector<int>>> frame;
+    sequence->GetFrame(i, frame);
+    m_debug << frame.size() << " ";
+  }
+  m_debug << std::endl;
+}
+
+void Log::PrintOSequence(OverSequenceSet *sequence) {
   if (!m_debug) return;
   for (int i = 0; i < sequence->GetLength(); ++i) {
     std::vector<std::shared_ptr<std::vector<int>>> frame;

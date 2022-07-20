@@ -4,6 +4,7 @@
 #include "AigerModel.h"
 #include "OverSequence.h"
 #include "OverSequenceNI.h"
+#include "OverSequenceSet.h"
 #include "Settings.h"
 #include "State.h"
 #include <assert.h>
@@ -46,6 +47,7 @@ public:
 
   void PrintFramesInfo(OverSequenceNI *sequence);
   void PrintFramesInfo(IOverSequence *sequence);
+  void PrintFramesInfo(OverSequenceSet *sequence);
 
   void PrintCounterExample(int badNo, bool isForward);
 
@@ -55,6 +57,7 @@ public:
 
   void PrintOSequence(OverSequenceNI *sequence);
   void PrintOSequence(IOverSequence *sequence);
+  void PrintOSequence(OverSequenceSet *sequence);
 
   void PrintStateShort(std::shared_ptr<State> s);
 

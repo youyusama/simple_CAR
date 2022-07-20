@@ -5,6 +5,7 @@ void OverSequenceNI::Insert(std::shared_ptr<std::vector<int>> uc, int index) {
   if (index >= m_sequence.size()) {
     m_sequence.emplace_back(frame());
     m_blockSolvers.emplace_back(new BlockSolver(m_model));
+    m_block_counter.emplace_back(0);
   }
   m_sequence[index].insert(*uc);
   m_blockSolvers[index]->AddUnsatisfiableCore(*uc, index);
@@ -48,10 +49,10 @@ bool OverSequenceNI::IsBlockedByFrame(std::vector<int> &latches, int frameLevel)
 }
 
 
-bool OverSequenceNI::IsBlockedByFrame_4000(std::vector<int> &latches, int frameLevel) {
+bool OverSequenceNI::IsBlockedByFrame_lazy(std::vector<int> &latches, int frameLevel) {
   blockQuerryTimes++;
-
-  if (m_sequence[frameLevel].size() > 4000) { // by sat
+  int &counter = m_block_counter[frameLevel];
+  if (counter == -1) { // by sat
     std::vector<int> assumption;
     assumption.reserve(latches.size());
     for (int l : latches) {
@@ -65,25 +66,45 @@ bool OverSequenceNI::IsBlockedByFrame_4000(std::vector<int> &latches, int frameL
     } else {
       return false;
     }
-  } else { // by for check
-    int latch_index, num_inputs;
-    num_inputs = m_model->GetNumInputs();
-    for (frame::iterator uc = m_sequence[frameLevel].begin(); uc != m_sequence[frameLevel].end(); uc++) { // for each uc
-      bool blocked = true;
-      for (int j = 0; j < uc->size(); j++) { // for each literal
-        latch_index = abs(uc->at(j)) - num_inputs - 1;
-        if (latches[latch_index] != uc->at(j)) {
-          blocked = false;
-          break;
-        }
-      }
-      if (blocked) {
-        blockedTimes++;
-        return true;
+  }
+  counter++;
+  // whether it's need to change the way of checking
+  clock_t start_time, sat_time, for_time;
+  if (counter > 1000) {
+    start_time = clock();
+    std::vector<int> assumption;
+    assumption.reserve(latches.size());
+    for (int l : latches) {
+      assumption.emplace_back(l);
+    }
+    m_blockSolvers[frameLevel]->SolveWithAssumption(assumption, frameLevel);
+    sat_time = clock();
+  }
+  // by for checking
+  int latch_index, num_inputs;
+  num_inputs = m_model->GetNumInputs();
+  for (frame::iterator uc = m_sequence[frameLevel].begin(); uc != m_sequence[frameLevel].end(); uc++) { // for each uc
+    bool blocked = true;
+    for (int j = 0; j < uc->size(); j++) { // for each literal
+      latch_index = abs(uc->at(j)) - num_inputs - 1;
+      if (latches[latch_index] != uc->at(j)) {
+        blocked = false;
+        break;
       }
     }
-    return false;
+    if (blocked) {
+      blockedTimes++;
+      return true;
+    }
   }
+  if (counter > 1000) {
+    for_time = clock();
+    if (sat_time - start_time > for_time - sat_time)
+      counter = 0;
+    else
+      counter = -1;
+  }
+  return false;
 }
 
 
