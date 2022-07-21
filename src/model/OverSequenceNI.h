@@ -19,11 +19,7 @@ class OverSequenceNI {
 public:
   OverSequenceNI(std::shared_ptr<AigerModel> model) {
     m_model = model;
-    implyQuerryTimes = 0;
-    implyTimes = 0;
-    blockQuerryTimes = 0;
-    blockedTimes = 0;
-    m_blockSolvers.clear();
+    m_blockSolver = new BlockSolver(model);
     m_block_counter.clear();
   }
 
@@ -43,13 +39,6 @@ public:
 
   int effectiveLevel;
   bool isForward = false;
-
-  std::vector<int> GetStat();
-
-  int blockQuerryTimes;
-  int blockedTimes;
-  int implyQuerryTimes;
-  int implyTimes;
 
 private:
   typedef std::vector<int> cube;
@@ -86,7 +75,7 @@ private:
   std::shared_ptr<AigerModel> m_model;
 
   std::vector<frame> m_sequence;
-  std::vector<CarSolver *> m_blockSolvers;
+  CarSolver *m_blockSolver;
   std::vector<int> m_block_counter;
 };
 

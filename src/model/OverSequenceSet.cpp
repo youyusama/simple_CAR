@@ -27,6 +27,27 @@ void OverSequenceSet::GetFrame(int frameLevel, std::vector<std::shared_ptr<std::
   return;
 }
 
+bool OverSequenceSet::IsBlockedByFrame(std::vector<int> &latches, int frameLevel) {
+  // by for checking
+  int latch_index, num_inputs;
+  num_inputs = m_model->GetNumInputs();
+  for (auto uc : m_sequence[frameLevel]) { // for each uc
+    bool blocked = true;
+    for (int j = 0; j < uc->size(); j++) { // for each literal
+      latch_index = abs(uc->at(j)) - num_inputs - 1;
+      if (latches[latch_index] != uc->at(j)) {
+        blocked = false;
+        break;
+      }
+    }
+    if (blocked) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
 bool OverSequenceSet::IsBlockedByFrame_lazy(std::vector<int> &latches, int frameLevel) {
   int &counter = m_block_counter[frameLevel];
   if (counter == -1) { // by sat
@@ -43,7 +64,9 @@ bool OverSequenceSet::IsBlockedByFrame_lazy(std::vector<int> &latches, int frame
       return false;
     }
   }
-  counter++;
+  if (m_sequence[frameLevel].size() > 3000) {
+    counter++;
+  }
   // whether it's need to change the way of checking
   clock_t start_time, sat_time, for_time;
   if (counter > 1000) {

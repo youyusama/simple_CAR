@@ -23,9 +23,9 @@ public:
 
   virtual std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> GetAssignment() = 0;
 
-  inline virtual void AddConstraintOr(const std::vector<std::shared_ptr<std::vector<int>>> frame) = 0;
-  inline virtual void AddConstraintAnd(const std::vector<std::shared_ptr<std::vector<int>>> frame) = 0;
-  inline virtual void FlipLastConstrain() = 0;
+  virtual void AddConstraintOr(const std::vector<std::shared_ptr<std::vector<int>>> frame) = 0;
+  virtual void AddConstraintAnd(const std::vector<std::shared_ptr<std::vector<int>>> frame) = 0;
+  virtual void FlipLastConstrain() = 0;
 
 private:
 };

@@ -33,8 +33,6 @@ bool BackwardChecker::Run() {
     if (m_settings.Visualization) {
       m_vis->OutputGML(false);
     }
-    std::string ps = "Unique " + std::to_string(m_overSequence->Ucs.size()) + " " + std::to_string(m_overSequence->rep_counter) + "\n";
-    m_log->PrintSth(ps);
     m_log->PrintStatistics();
   }
   return true;
@@ -42,13 +40,10 @@ bool BackwardChecker::Run() {
 
 bool BackwardChecker::Check(int badId) {
 #pragma region early stage
-  if (m_model->GetTrueId() == badId) {
-    // placeholder
+  if (m_model->GetTrueId() == badId)
     return false;
-  } else if (m_model->GetFalseId() == badId) {
-    // placeholder
+  else if (m_model->GetFalseId() == badId)
     return true;
-  }
 
   Init();
 
@@ -112,8 +107,6 @@ bool BackwardChecker::Check(int badId) {
           m_vis->OutputGML(true);
         }
         m_log->PrintFramesInfo(m_overSequence.get());
-        std::string ps = "Unique " + std::to_string(m_overSequence->Ucs.size()) + " " + std::to_string(m_overSequence->rep_counter) + "\n";
-        m_log->PrintSth(ps);
         m_log->PrintSth("time out!!!");
         m_log->Timeout();
       }
@@ -291,8 +284,8 @@ void BackwardChecker::Init() {
   // {
   // 	m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
   // }
-  // m_overSequence.reset(new OverSequenceNI(m_model));
-  m_overSequence.reset(new OverSequenceSet(m_model));
+  m_overSequence.reset(new OverSequenceNI(m_model));
+  // m_overSequence.reset(new OverSequenceSet(m_model));
   // m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
   if (m_settings.empi) {
     slimLitOrder.heuristicLitOrder = &litOrder;

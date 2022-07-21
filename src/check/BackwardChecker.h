@@ -301,8 +301,8 @@ private:
 
 
   int m_minUpdateLevel;
-  // std::shared_ptr<OverSequenceNI> m_overSequence;
-  std::shared_ptr<OverSequenceSet> m_overSequence;
+  std::shared_ptr<OverSequenceNI> m_overSequence;
+  // std::shared_ptr<OverSequenceSet> m_overSequence;
   // std::shared_ptr<IOverSequence> m_overSequence;
   UnderSequence m_underSequence;
   std::shared_ptr<Vis> m_vis;

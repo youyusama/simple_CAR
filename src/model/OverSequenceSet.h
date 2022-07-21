@@ -30,6 +30,8 @@ public:
 
   bool IsBlockedByFrame_lazy(std::vector<int> &latches, int frameLevel);
 
+  bool IsBlockedByFrame(std::vector<int> &latches, int frameLevel);
+
   int GetLength();
 
   void propagate(int level);
