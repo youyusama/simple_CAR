@@ -14,6 +14,7 @@ extern "C"
 #include <iostream>
 #include <assert.h>
 #include <algorithm>
+#include "Settings.h"
 
 typedef std::string string;
 
@@ -24,7 +25,7 @@ namespace car
 class AigerModel
 {
 public:
-    AigerModel (string aigFilePath);
+    AigerModel (Settings settings);
 
     bool IsTrue(const unsigned id)
     {
@@ -155,6 +156,7 @@ private:
 #pragma endregion
 
 #pragma region private member variables
+    Settings m_settings;
     int m_maxId;
     int m_numInputs;
     int m_numLatches;

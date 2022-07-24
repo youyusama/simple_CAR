@@ -78,22 +78,23 @@ bool ForwardChecker::Check(int badId) {
   while (true) {
     m_log->PrintFramesInfo(m_overSequence.get());
     m_minUpdateLevel = m_overSequence->GetLength();
-    std::shared_ptr<State> startState = EnumerateStartState();
-    while (startState != nullptr) {
-      workingStack.push(Task(startState, frameStep, true));
-      if (m_settings.end) { // from the deep and the end
-        for (int i = m_underSequence.size() - 1; i >= 0; i--) {
-          for (int j = m_underSequence[i].size() - 1; j >= 0; j--) {
-            workingStack.emplace(m_underSequence[i][j], frameStep, false);
-          }
-        }
-      } else { // from the shallow and the start
-        for (int i = 0; i < m_underSequence.size(); i++) {
-          for (int j = 0; j < m_underSequence[i].size(); j++) {
-            workingStack.emplace(m_underSequence[i][j], frameStep, false);
-          }
+    if (m_settings.end) { // from the deep and the end
+      for (int i = m_underSequence.size() - 1; i >= 0; i--) {
+        for (int j = m_underSequence[i].size() - 1; j >= 0; j--) {
+          workingStack.emplace(m_underSequence[i][j], frameStep, false);
         }
       }
+    } else { // from the shallow and the start
+      for (int i = 0; i < m_underSequence.size(); i++) {
+        for (int j = 0; j < m_underSequence[i].size(); j++) {
+          workingStack.emplace(m_underSequence[i][j], frameStep, false);
+        }
+      }
+    }
+    std::shared_ptr<State> startState = EnumerateStartState();
+    CAR_DEBUG("\nstate from start solver");
+    while (startState != nullptr) {
+      workingStack.push(Task(startState, frameStep, true));
 
       while (!workingStack.empty()) {
         if (m_settings.timelimit > 0 && m_log->IsTimeout()) {
@@ -127,11 +128,11 @@ bool ForwardChecker::Check(int badId) {
         }
         m_log->Tick();
         // bool result = m_mainSolver->SolveWithAssumption(*(task.state->latches), task.frameLevel);
-        std::vector<int> assumption;
-        GetAssumption(task.state, task.frameLevel, assumption);
         CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel));
         CAR_DEBUG_s("From state: ", task.state);
-        CAR_DEBUG_v("Assumption: ", assumption);
+        std::vector<int> assumption;
+        GetAssumption(task.state, task.frameLevel, assumption);
+        CAR_DEBUG_v("Primed Assumption: ", assumption);
         bool result = m_mainSolver->SolveWithAssumption(assumption, task.frameLevel);
         m_log->StatMainSolver();
         if (result) {
@@ -165,6 +166,7 @@ bool ForwardChecker::Check(int badId) {
         }
       } // end while (!workingStack.empty())
       startState = EnumerateStartState();
+      CAR_DEBUG("\nstate from start solver");
     }
 
     CAR_DEBUG("\nNew Frame Added");
@@ -190,11 +192,6 @@ bool ForwardChecker::Check(int badId) {
 
 
 void ForwardChecker::Init(int badId) {
-  // if (m_settings.propagation) {
-  //   m_overSequence.reset(new OverSequenceForProp(m_model->GetNumInputs()));
-  // } else {
-  //   m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
-  // }
   m_overSequence.reset(new OverSequenceNI(m_model));
   if (m_settings.empi) {
     slimLitOrder.heuristicLitOrder = &litOrder;
@@ -205,7 +202,6 @@ void ForwardChecker::Init(int badId) {
   }
   m_overSequence->isForward = true;
   m_underSequence = UnderSequence();
-  m_underSequence.push(m_initialState);
   m_mainSolver.reset(new MainSolver(m_model, true));
   m_invSolver.reset(new InvSolver(m_model));
   m_startSovler.reset(new StartSolver(m_model, badId));

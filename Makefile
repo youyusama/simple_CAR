@@ -58,7 +58,8 @@ CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat -I./src/model -I./s
 -fpermissive \
 -O3
 
-LFLAG = -g -lz -lpthread -L./ -DNDEBUG
+LFLAG = -g -lz -lpthread -L./ \
+-DNDEBUG
 
 GCC = gcc
 

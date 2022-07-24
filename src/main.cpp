@@ -16,7 +16,7 @@ Settings GetArgv(int argc, char **argv);
 int main(int argc, char** argv)
 {
     Settings settings = GetArgv(argc, argv);
-    shared_ptr<AigerModel> aigerModel(new AigerModel(settings.aigFilePath));
+    shared_ptr<AigerModel> aigerModel(new AigerModel(settings));
     BaseChecker* checker;
     if (settings.forward)
     {

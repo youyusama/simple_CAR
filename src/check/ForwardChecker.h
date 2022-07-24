@@ -107,6 +107,7 @@ private:
       ass.reserve(ass.size() + state->latches->size());
       ass.insert(ass.end(), state->latches->begin(), state->latches->end());
       orderAssumption(ass);
+      CAR_DEBUG_v("Assumption: ", ass);
       for (auto &x : ass) {
         x = m_model->GetPrime(x);
       }
