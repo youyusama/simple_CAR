@@ -116,27 +116,9 @@ private:
   }
 
   void Propagation() {
-    // OverSequenceForProp *sequence = dynamic_cast<OverSequenceForProp *>(m_overSequence.get());
-    // for (int frameLevel = 0; frameLevel < sequence->GetLength() - 1; ++frameLevel) {
-    //   std::vector<std::shared_ptr<std::vector<int>>> unpropFrame = sequence->GetUnProp(frameLevel);
-    //   std::vector<std::shared_ptr<std::vector<int>>> propFrame = sequence->GetProp(frameLevel);
-    //   std::vector<std::shared_ptr<std::vector<int>>> tmp;
-    //   for (int j = 0; j < unpropFrame.size(); ++j) {
-    //     if (sequence->IsBlockedByFrame(*unpropFrame[j], frameLevel + 1)) {
-    //       propFrame.push_back(unpropFrame[j]);
-    //       continue;
-    //     }
-
-    //     bool result = m_mainSolver->SolveWithAssumption(*unpropFrame[j], frameLevel);
-    //     if (!result) {
-    //       AddUnsatisfiableCore(unpropFrame[j], frameLevel + 1);
-    //       sequence->InsertIntoProped(unpropFrame[j], frameLevel);
-    //     } else {
-    //       tmp.push_back(unpropFrame[j]);
-    //     }
-    //   }
-    //   tmp.swap(unpropFrame);
-    // }
+    for (int i = m_minUpdateLevel; i < m_overSequence->GetLength() - 1; i++) {
+      m_overSequence->propagate(i);
+    }
   }
 
   std::shared_ptr<State> EnumerateStartState() {
@@ -148,9 +130,7 @@ private:
   }
 
   int m_minUpdateLevel;
-  // std::shared_ptr<IOverSequence> m_overSequence;
   std::shared_ptr<OverSequenceNI> m_overSequence;
-  // IOverSequence* m_overSequence;
   UnderSequence m_underSequence;
   Settings m_settings;
   std::shared_ptr<Vis> m_vis;

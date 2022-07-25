@@ -37,6 +37,8 @@ public:
 
   void propagate(int level);
 
+  void set_solver(std::shared_ptr<ISolver> slv);
+
   int effectiveLevel;
   bool isForward = false;
 
@@ -75,6 +77,7 @@ private:
   std::shared_ptr<AigerModel> m_model;
 
   std::vector<frame> m_sequence;
+  std::shared_ptr<ISolver> m_mainSolver;
   CarSolver *m_blockSolver;
   std::vector<int> m_block_counter;
 };

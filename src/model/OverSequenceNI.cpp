@@ -88,7 +88,22 @@ int OverSequenceNI::GetLength() {
   return m_sequence.size();
 }
 
+void OverSequenceNI::set_solver(std::shared_ptr<ISolver> slv) {
+  m_mainSolver = slv;
+}
+
 void OverSequenceNI::propagate(int level) {
+  frame &fi = m_sequence[level];
+  frame &fi_plus_1 = m_sequence[level + 1];
+  std::set<cube>::iterator iter;
+  for (cube uc : fi) {
+    iter = fi_plus_1.find(uc);
+    if (iter == fi_plus_1.end()) continue; // propagated
+
+    if (!m_mainSolver->SolveWithAssumption(uc, level)) {
+      fi_plus_1.insert(uc);
+    }
+  }
   return;
 }
 
