@@ -104,16 +104,24 @@ private:
   int GetNewLevel(std::shared_ptr<State> state, int start = 0);
 
   void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass) {
-    if (m_settings.empi) {
-      ass.reserve(ass.size() + state->latches->size());
-      ass.insert(ass.end(), state->latches->begin(), state->latches->end());
-      orderAssumption(ass);
-      CAR_DEBUG_v("Assumption: ", ass);
-      for (auto &x : ass) {
-        x = m_model->GetPrime(x);
-      }
-      return;
+    if (m_settings.incr) {
+      std::vector<int> *uc_inc = m_overSequence->GetBlocker(state->latches, frameLevel);
+      ass.reserve(ass.size() + uc_inc->size());
+      ass.insert(ass.end(), uc_inc->begin(), uc_inc->end());
     }
+
+    std::vector<int> l_ass;
+    l_ass.reserve(state->latches->size());
+    l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
+    orderAssumption(l_ass);
+
+    ass.reserve(ass.size() + l_ass.size());
+    ass.insert(ass.end(), l_ass.begin(), l_ass.end());
+    CAR_DEBUG_v("Assumption: ", ass);
+    for (auto &x : ass) {
+      x = m_model->GetPrime(x);
+    }
+    return;
   }
 
   void Propagation() {

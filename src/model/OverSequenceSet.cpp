@@ -113,6 +113,26 @@ void OverSequenceSet::set_solver(std::shared_ptr<ISolver> slv) {
   m_mainSolver = slv;
 }
 
+std::vector<int> *OverSequenceSet::GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel) {
+  // by for checking
+  int latch_index, num_inputs;
+  num_inputs = m_model->GetNumInputs();
+  for (auto uc : m_sequence[framelevel]) { // for each uc
+    bool blocked = true;
+    for (int j = 0; j < uc->size(); j++) { // for each literal
+      latch_index = abs(uc->at(j)) - num_inputs - 1;
+      if (latches->at(latch_index) != uc->at(j)) {
+        blocked = false;
+        break;
+      }
+    }
+    if (blocked) {
+      return uc;
+    }
+  }
+  return new std::vector<int>();
+}
+
 void OverSequenceSet::propagate(int level) {
   // std::cout << "propagate " << level << std::endl;
   frame &fi = m_sequence[level];
@@ -128,11 +148,6 @@ void OverSequenceSet::propagate(int level) {
       ass.emplace_back(m_model->GetPrime(i));
     }
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
-      // std::cout << "add uc to next frame:";
-      // for (auto i : *uc) {
-      //   std::cout << i << " ";
-      // }
-      // std::cout << std::endl;
       fi_plus_1.insert(uc);
       m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);

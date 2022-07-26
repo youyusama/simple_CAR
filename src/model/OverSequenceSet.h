@@ -38,6 +38,8 @@ public:
 
   void set_solver(std::shared_ptr<ISolver> slv);
 
+  std::vector<int>* GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel);
+
   int effectiveLevel;
   bool isForward = false;
   int rep_counter;
