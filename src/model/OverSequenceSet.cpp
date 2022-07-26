@@ -8,7 +8,7 @@ void OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
     m_sequence.emplace_back(frame());
     m_block_counter.emplace_back(0);
   }
-  m_sequence[index].emplace_back(&*res.first);
+  m_sequence[index].emplace(&*res.first);
   m_blockSolver->AddUnsatisfiableCore(*uc, index);
 }
 
@@ -109,7 +109,35 @@ int OverSequenceSet::GetLength() {
   return m_sequence.size();
 }
 
+void OverSequenceSet::set_solver(std::shared_ptr<ISolver> slv) {
+  m_mainSolver = slv;
+}
+
 void OverSequenceSet::propagate(int level) {
+  // std::cout << "propagate " << level << std::endl;
+  frame &fi = m_sequence[level];
+  frame &fi_plus_1 = m_sequence[level + 1];
+  std::unordered_set<cube *>::iterator iter;
+  for (cube *uc : fi) {
+    iter = fi_plus_1.find(uc);
+    if (iter != fi_plus_1.end()) continue; // propagated
+
+    std::vector<int> ass;
+    ass.reserve(uc->size());
+    for (auto i : *uc) {
+      ass.emplace_back(m_model->GetPrime(i));
+    }
+    if (!m_mainSolver->SolveWithAssumption(ass, level)) {
+      // std::cout << "add uc to next frame:";
+      // for (auto i : *uc) {
+      //   std::cout << i << " ";
+      // }
+      // std::cout << std::endl;
+      fi_plus_1.insert(uc);
+      m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
+      m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);
+    }
+  }
   return;
 }
 

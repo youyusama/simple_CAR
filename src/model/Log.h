@@ -77,7 +77,8 @@ public:
     m_log << "InvSolver takes:\t" << m_invSolverTime << " seconds" << std::endl;
     m_log << "GetNewLevel Procedure takes:\t" << m_getNewLevelTime << " seconds" << std::endl;
     m_log << "Update uc takes:\t" << m_updateUcTime << " seconds" << std::endl;
-    m_log << "Restart Times:\t" << m_restartTimes << std::endl;
+    if (m_settings.restart) m_log << "Restart Times:\t" << m_restartTimes << std::endl;
+    if (m_settings.propagation) m_log << "Propagation Time:\t" << m_propagationTime << std::endl;
     if (m_settings.pine) {
       m_log << "Pine Times:\t" << m_pineTime << std::endl;
       m_log << "Pine Called Times:\t" << m_pineCalled << std::endl;
@@ -131,6 +132,10 @@ public:
     m_getNewLevelTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
   }
 
+  void StatPropagation() {
+    m_propagationTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+  }
+
   void StatUpdateUc() {
     m_updateUcTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
   }
@@ -161,6 +166,7 @@ private:
   double m_invSolverTime = 0;
   double m_getNewLevelTime = 0;
   double m_updateUcTime = 0;
+  double m_propagationTime = 0;
   double m_timelimit = 0;
   // pine
   double m_pineTime = 0;

@@ -10,6 +10,7 @@
 #include "OverSequence.h"
 #include "OverSequenceForProp.h"
 #include "OverSequenceNI.h"
+#include "OverSequenceSet.h"
 #include "StartSolver.h"
 #include "State.h"
 #include "Task.h"
@@ -130,14 +131,14 @@ private:
   }
 
   int m_minUpdateLevel;
-  std::shared_ptr<OverSequenceNI> m_overSequence;
+  std::shared_ptr<OverSequenceSet> m_overSequence;
   UnderSequence m_underSequence;
   Settings m_settings;
   std::shared_ptr<Vis> m_vis;
   std::shared_ptr<Log> m_log;
   std::shared_ptr<AigerModel> m_model;
   std::shared_ptr<State> m_initialState;
-  std::shared_ptr<ISolver> m_mainSolver;
+  std::shared_ptr<CarSolver> m_mainSolver;
   std::shared_ptr<ISolver> m_invSolver;
   std::shared_ptr<StartSolver> m_startSovler;
 };

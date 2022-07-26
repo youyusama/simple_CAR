@@ -170,13 +170,18 @@ bool ForwardChecker::Check(int badId) {
     }
 
     CAR_DEBUG("\nNew Frame Added");
-    if (m_settings.propagation) {
-      Propagation();
-    }
     std::vector<std::shared_ptr<std::vector<int>>> lastFrame;
     frameStep++;
     m_overSequence->GetFrame(frameStep, lastFrame);
     m_mainSolver->AddNewFrame(lastFrame, frameStep);
+
+    if (m_settings.propagation) {
+      m_log->Tick();
+      Propagation();
+      m_log->StatPropagation();
+    }
+
+    m_mainSolver->simplify();
     m_overSequence->effectiveLevel++;
     m_startSovler->UpdateStartSolverFlag();
 
@@ -192,7 +197,8 @@ bool ForwardChecker::Check(int badId) {
 
 
 void ForwardChecker::Init(int badId) {
-  m_overSequence.reset(new OverSequenceNI(m_model));
+  // m_overSequence.reset(new OverSequenceNI(m_model));
+  m_overSequence.reset(new OverSequenceSet(m_model));
   if (m_settings.empi) {
     slimLitOrder.heuristicLitOrder = &litOrder;
   }

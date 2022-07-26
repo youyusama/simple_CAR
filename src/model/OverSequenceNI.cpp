@@ -98,7 +98,7 @@ void OverSequenceNI::propagate(int level) {
   std::set<cube>::iterator iter;
   for (cube uc : fi) {
     iter = fi_plus_1.find(uc);
-    if (iter == fi_plus_1.end()) continue; // propagated
+    if (iter != fi_plus_1.end()) continue; // propagated
 
     if (!m_mainSolver->SolveWithAssumption(uc, level)) {
       fi_plus_1.insert(uc);
