@@ -1,6 +1,5 @@
-/**************************************************************************************[IntTypes.h]
-Copyright (c) 2009-2010, Niklas Sorensson
-
+/*******************************************************************************************[Rnd.h]
+Copyright (c) 2012, Niklas Sorensson
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
 including without limitation the rights to use, copy, modify, merge, publish, distribute,
@@ -17,26 +16,52 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
 
-#ifndef Minisat_IntTypes_h
-#define Minisat_IntTypes_h
+#ifndef Minisat_Rnd_h
+#define Minisat_Rnd_h
 
-#ifdef __sun
-    // Not sure if there are newer versions that support C99 headers. The
-    // needed features are implemented in the headers below though:
+#include "minisat/mtl/Vec.h"
 
-#   include <sys/int_types.h>
-#   include <sys/int_fmtio.h>
-#   include <sys/int_limits.h>
+namespace Minisat {
 
-#else
+// Generate a random double:
+static inline double drand(double& seed)
+{
+    seed *= 1389796;
+    int q = (int)(seed / 2147483647);
+    seed -= (double)q * 2147483647;
+    return seed / 2147483647;
+}
 
-#   include <stdint.h>
-#   include <inttypes.h>
 
-#endif
+// Generate a random integer:
+static inline int irand(double& seed, int size) { return (int)(drand(seed) * size); }
 
-#include <limits.h>
+
+// Randomly shuffle the contents of a vector:
+template<class T>
+static void randomShuffle(double& seed, vec<T>& xs)
+{
+    for (int i = 0; i < xs.size(); i++){
+        int pick = i + irand(seed, xs.size() - i);
+        T tmp = xs[i];
+        xs[i] = xs[pick];
+        xs[pick] = tmp;
+    }
+}
+
+// Randomly shuffle a vector of a vector (ugly)
+template<class T>
+static void randomShuffle(double& seed, vec<vec<T> >& xs)
+{
+    for (int i = 0; i < xs.size(); i++){
+        int pick = i + irand(seed, xs.size() - i);
+        vec<T> tmp; xs[i].moveTo(tmp);
+        xs[pick].moveTo(xs[i]);
+        tmp.moveTo(xs[pick]);
+    }
+}
+
 
 //=================================================================================================
-
+} // namespace Minisat
 #endif

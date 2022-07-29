@@ -31,6 +31,7 @@ struct Settings {
   bool empi = true;
   bool incr = true;
   bool Visualization = false;
+  bool pVisualization = false;
   float growthRate = 1.5;
   int threshold = 64;
   int timelimit = 0;

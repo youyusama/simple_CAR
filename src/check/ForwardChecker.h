@@ -124,6 +124,14 @@ private:
     return;
   }
 
+
+  std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>> get_predecessor(std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>> pair) {
+    std::shared_ptr<std::vector<int>> inputs(new std::vector<int>());
+    std::shared_ptr<std::vector<int>> latches(new std::vector<int>());
+    return std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>>(inputs, latches);
+  }
+
+
   void Propagation() {
     for (int i = m_minUpdateLevel; i < m_overSequence->GetLength() - 1; i++) {
       m_overSequence->propagate(i);

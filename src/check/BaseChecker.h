@@ -4,18 +4,16 @@
 #include "AigerModel.h"
 #include "Settings.h"
 
-namespace car
-{
+namespace car {
 
-    class BaseChecker
-    {
-    public:
-        virtual bool Run() = 0;
-        virtual ~BaseChecker(){};
-    };
+class BaseChecker {
+public:
+  virtual bool Run() = 0;
+  virtual ~BaseChecker(){};
+  typedef std::vector<int> cube;
+};
 
-} //namespace car
-
+} // namespace car
 
 
 #endif

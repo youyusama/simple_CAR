@@ -81,7 +81,7 @@ Settings GetArgv(int argc, char **argv) {
     } else if (strcmp(argv[i], "-depth") == 0) {
       settings.condition = RestartCondition::Depth;
     } else if (strcmp(argv[i], "-vis") == 0) {
-      settings.Visualization = true;
+      settings.pVisualization = true;
     } else if (!hasSetInputDir) {
       settings.aigFilePath = string(argv[i]);
       hasSetInputDir = true;

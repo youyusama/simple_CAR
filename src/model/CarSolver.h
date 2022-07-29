@@ -55,7 +55,8 @@ public:
   inline void FlipLastConstrain() {
     Lit lit = m_assumptions.last();
     m_assumptions.pop();
-    m_assumptions.push(~lit);
+    releaseVar(~lit);
+    // m_assumptions.push(~lit);
   }
 
   std::shared_ptr<std::vector<int>> GetModel() {

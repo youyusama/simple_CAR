@@ -17,9 +17,9 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
 
-#include "mtl/Sort.h"
-#include "utils/Options.h"
-#include "utils/ParseUtils.h"
+#include "minisat/mtl/Sort.h"
+#include "minisat/utils/Options.h"
+#include "minisat/utils/ParseUtils.h"
 
 using namespace Minisat;
 
@@ -42,11 +42,12 @@ void Minisat::parseOptions(int& argc, char** argv, bool strict)
                 // fprintf(stderr, "checking %d: %s against flag <%s> (%s)\n", i, argv[i], Option::getOptionList()[k]->name, parsed_ok ? "ok" : "skip");
             }
 
-            if (!parsed_ok)
+            if (!parsed_ok){
                 if (strict && match(argv[i], "-"))
                     fprintf(stderr, "ERROR! Unknown flag \"%s\". Use '--%shelp' for help.\n", argv[i], Option::getHelpPrefixString()), exit(1);
                 else
                     argv[j++] = argv[i];
+            }
         }
     }
 
@@ -56,7 +57,7 @@ void Minisat::parseOptions(int& argc, char** argv, bool strict)
 
 void Minisat::setUsageHelp      (const char* str){ Option::getUsageString() = str; }
 void Minisat::setHelpPrefixStr  (const char* str){ Option::getHelpPrefixString() = str; }
-void Minisat::printUsageAndExit (int argc, char** argv, bool verbose)
+void Minisat::printUsageAndExit (int /*argc*/, char** argv, bool verbose)
 {
     const char* usage = Option::getUsageString();
     if (usage != NULL)

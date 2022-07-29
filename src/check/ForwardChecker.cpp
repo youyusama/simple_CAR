@@ -138,9 +138,10 @@ bool ForwardChecker::Check(int badId) {
         if (result) {
           // Solver return SAT, get a new State, then continue
           CAR_DEBUG("Result >>> SAT <<<");
-          std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> pair;
+          std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> pair, partial_pair;
           pair = m_mainSolver->GetAssignment();
           CAR_DEBUG_v("Get Assignment:", *pair.second);
+          // partial_pair = get_predecessor(pair);
           std::shared_ptr<State> newState(new State(task.state, pair.first, pair.second, task.state->depth + 1));
           m_underSequence.push(newState);
           if (m_settings.Visualization) {
@@ -185,6 +186,16 @@ bool ForwardChecker::Check(int badId) {
     m_overSequence->effectiveLevel++;
     m_startSovler->UpdateStartSolverFlag();
 
+    if (m_settings.pVisualization) {
+      for (int k = 1; k < m_overSequence->GetLength(); k++) {
+        std::vector<std::shared_ptr<std::vector<int>>> frame;
+        m_overSequence->GetFrame(k, frame);
+        for (auto uc : frame) {
+          m_vis->add_tree_node(*uc, k);
+        }
+      }
+      m_vis->print_tree(frameStep);
+    }
 
     m_log->Tick();
     if (isInvExisted()) {
@@ -205,6 +216,9 @@ void ForwardChecker::Init(int badId) {
   if (m_settings.Visualization) {
     m_vis.reset(new Vis(m_settings, m_model));
     m_vis->addState(m_initialState);
+  }
+  if (m_settings.pVisualization) {
+    m_vis.reset(new Vis(m_settings, m_model));
   }
   m_overSequence->isForward = true;
   m_underSequence = UnderSequence();

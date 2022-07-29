@@ -71,6 +71,7 @@ bld/
 [Cc]ase/
 [Ss]afe/
 [Uu]nsafe/
+frame_vis/
 
 simplecar_cadical
 simplecar_minisat

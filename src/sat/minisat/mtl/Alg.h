@@ -21,7 +21,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef Minisat_Alg_h
 #define Minisat_Alg_h
 
-#include "mtl/Vec.h"
+#include "minisat/mtl/Vec.h"
 
 namespace Minisat {
 
@@ -36,9 +36,9 @@ template<class V, class T>
 static inline void remove(V& ts, const T& t)
 {
     int j = 0;
-    for (; j < ts.size() && ts[j] != t; j++);
-    assert(j < ts.size());
-    for (; j < ts.size()-1; j++) ts[j] = ts[j+1];
+    for (; j < (int)ts.size() && ts[j] != t; j++);
+    assert(j < (int)ts.size());
+    for (; j < (int)ts.size()-1; j++) ts[j] = ts[j+1];
     ts.pop();
 }
 
@@ -47,8 +47,8 @@ template<class V, class T>
 static inline bool find(V& ts, const T& t)
 {
     int j = 0;
-    for (; j < ts.size() && ts[j] != t; j++);
-    return j < ts.size();
+    for (; j < (int)ts.size() && ts[j] != t; j++);
+    return j < (int)ts.size();
 }
 
 
