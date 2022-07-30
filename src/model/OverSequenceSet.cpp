@@ -1,6 +1,11 @@
 #include "OverSequenceSet.h"
 
 namespace car {
+bool _cmp(int a, int b) {
+  if (abs(a) != abs(b)) return abs (a) < abs(b);
+		else return a<b;
+}
+
 void OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
   auto res = Ucs.insert(*uc);
   if (!res.second) rep_counter++;
@@ -79,21 +84,9 @@ bool OverSequenceSet::IsBlockedByFrame_lazy(std::vector<int> &latches, int frame
     m_blockSolver->SolveWithAssumption(assumption, frameLevel);
     sat_time = clock();
   }
-  // by for checking
-  int latch_index, num_inputs;
-  num_inputs = m_model->GetNumInputs();
+  // by imply checking
   for (auto uc : m_sequence[frameLevel]) { // for each uc
-    bool blocked = true;
-    for (int j = 0; j < uc->size(); j++) { // for each literal
-      latch_index = abs(uc->at(j)) - num_inputs - 1;
-      if (latches[latch_index] != uc->at(j)) {
-        blocked = false;
-        break;
-      }
-    }
-    if (blocked) {
-      return true;
-    }
+    if (std::includes(latches.begin(), latches.end(), uc->begin(), uc->end(), _cmp)) return true;
   }
   if (counter > 1000) {
     for_time = clock();
@@ -114,21 +107,9 @@ void OverSequenceSet::set_solver(std::shared_ptr<ISolver> slv) {
 }
 
 std::vector<int> *OverSequenceSet::GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel) {
-  // by for checking
-  int latch_index, num_inputs;
-  num_inputs = m_model->GetNumInputs();
+  // by imply checking
   for (auto uc : m_sequence[framelevel]) { // for each uc
-    bool blocked = true;
-    for (int j = 0; j < uc->size(); j++) { // for each literal
-      latch_index = abs(uc->at(j)) - num_inputs - 1;
-      if (latches->at(latch_index) != uc->at(j)) {
-        blocked = false;
-        break;
-      }
-    }
-    if (blocked) {
-      return uc;
-    }
+    if (std::includes(latches->begin(), latches->end(), uc->begin(), uc->end(), _cmp)) return uc;
   }
   return new std::vector<int>();
 }

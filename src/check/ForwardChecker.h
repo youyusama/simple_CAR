@@ -124,11 +124,57 @@ private:
     return;
   }
 
+  // ================================================================================
+  // @brief: t & input & T -> s'  =>  (t) & input & T & !s' is unsat
+  // @input: pair<input, latch>
+  // @output: pair<input, partial latch>
+  // ================================================================================
+  std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>> get_predecessor(
+    std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>> t,
+    std::shared_ptr<State> s) {
 
-  std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>> get_predecessor(std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>> pair) {
-    std::shared_ptr<std::vector<int>> inputs(new std::vector<int>());
-    std::shared_ptr<std::vector<int>> latches(new std::vector<int>());
-    return std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>>(inputs, latches);
+    std::shared_ptr<cube> partial_latch(new cube());
+    for (auto l : *t.second) partial_latch->emplace_back(l);
+
+    int act = m_lifts->get_temp_flag();
+    // add !s'
+    std::vector<int> *neg_primed_s = new std::vector<int>();
+    for (auto l : *s->latches) {
+      neg_primed_s->emplace_back(-l);
+    }
+    m_lifts->add_temp_clause(neg_primed_s, act, true);
+    m_lifts->clean_assumptions();
+    // add t
+    for (auto l : *t.second) {
+      m_lifts->AddAssumption(l);
+    }
+    // add input
+    for (auto i : *t.first) {
+      m_lifts->AddAssumption(i);
+    }
+    m_lifts->AddAssumption(act);
+    while (true) {
+      bool res = m_lifts->SolveWithAssumption();
+      assert(!res);
+      std::shared_ptr<cube> temp_p = m_lifts->justGetUC();
+      if (temp_p->size() == partial_latch->size() && std::equal(temp_p->begin(), temp_p->end(), partial_latch->begin()))
+        break;
+      else {
+        partial_latch = temp_p;
+        m_lifts->clean_assumptions();
+        // add t
+        for (auto l : *t.second) {
+          m_lifts->AddAssumption(l);
+        }
+        // add input
+        for (auto i : *t.first) {
+          m_lifts->AddAssumption(i);
+        }
+        m_lifts->AddAssumption(act);
+      }
+    }
+    m_lifts->release_temp_cls(act);
+    return std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>>(t.first, partial_latch);
   }
 
 
@@ -155,6 +201,7 @@ private:
   std::shared_ptr<AigerModel> m_model;
   std::shared_ptr<State> m_initialState;
   std::shared_ptr<CarSolver> m_mainSolver;
+  std::shared_ptr<CarSolver> m_lifts;
   std::shared_ptr<ISolver> m_invSolver;
   std::shared_ptr<StartSolver> m_startSovler;
 };

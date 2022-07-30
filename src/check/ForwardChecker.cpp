@@ -141,8 +141,8 @@ bool ForwardChecker::Check(int badId) {
           std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> pair, partial_pair;
           pair = m_mainSolver->GetAssignment();
           CAR_DEBUG_v("Get Assignment:", *pair.second);
-          // partial_pair = get_predecessor(pair);
-          std::shared_ptr<State> newState(new State(task.state, pair.first, pair.second, task.state->depth + 1));
+          partial_pair = get_predecessor(pair, task.state);
+          std::shared_ptr<State> newState(new State(task.state, pair.first, partial_pair.second, task.state->depth + 1));
           m_underSequence.push(newState);
           if (m_settings.Visualization) {
             m_vis->addState(newState);
@@ -223,6 +223,7 @@ void ForwardChecker::Init(int badId) {
   m_overSequence->isForward = true;
   m_underSequence = UnderSequence();
   m_mainSolver.reset(new MainSolver(m_model, true));
+  m_lifts.reset(new MainSolver(m_model, true));
   m_invSolver.reset(new InvSolver(m_model));
   m_startSovler.reset(new StartSolver(m_model, badId));
   m_overSequence->set_solver(m_mainSolver);

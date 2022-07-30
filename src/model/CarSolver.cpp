@@ -202,6 +202,25 @@ std::shared_ptr<std::vector<int>> CarSolver::GetUnsatisfiableCore() {
   return uc;
 }
 
+std::shared_ptr<std::vector<int>> CarSolver::justGetUC() {
+  std::shared_ptr<std::vector<int>> uc(new std::vector<int>());
+  uc->reserve(conflict.size());
+  int val;
+  for (int i = 0; i < conflict.size(); ++i) {
+    val = -GetLiteralId(conflict[i]);
+    if (m_model->IsLatch(val)) {
+      uc->emplace_back(val);
+    }
+  }
+  std::sort(uc->begin(), uc->end(), cmp);
+  return uc;
+}
+
+
+void CarSolver::clean_assumptions() {
+  m_assumptions.clear();
+}
+
 
 void CarSolver::AddNewFrame(const std::vector<std::shared_ptr<std::vector<int>>> &frame, int frameLevel) {
   for (int i = 0; i < frame.size(); ++i) {
@@ -235,6 +254,33 @@ bool CarSolver::SolveWithAssumptionAndBad(std::vector<int> &assumption, int badI
     return false;
   }
 }
+
+int CarSolver::get_temp_flag() {
+  return GetNewVar();
+}
+
+
+void CarSolver::add_temp_clause(std::vector<int> *cls, int temp_flag, bool is_primed) {
+  std::vector<int> *temp_cls = new std::vector<int>();
+  temp_cls->emplace_back(-temp_flag);
+  for (int l : *cls) {
+    if (is_primed)
+      temp_cls->emplace_back(m_model->GetPrime(l));
+    else
+      temp_cls->emplace_back(l);
+  }
+  // for (auto j : *temp_cls) {
+  //   std::cout << j << " | ";
+  // }
+  // std::cout << std::endl;
+  AddClause(*temp_cls);
+}
+
+
+void CarSolver::release_temp_cls(int temp_flag) {
+  releaseVar(~GetLit(temp_flag));
+}
+
 
 #pragma region private
 

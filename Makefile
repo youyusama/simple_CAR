@@ -50,12 +50,13 @@ CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat -I./src/model -I./src
  -DNDEBUG \
  -O3
 
-CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat -I./src/model -I./src/visualization -I./src/check \
+CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat -I./src/model -I./src/visualization -I./src/check \
 -D__STDC_LIMIT_MACROS \
 -D __STDC_FORMAT_MACROS \
 -c \
 -g \
 -fpermissive \
+-DNDEBUG \
 -O3
 
 LFLAG = -g -lz -lpthread -L./ \

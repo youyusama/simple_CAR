@@ -29,7 +29,7 @@ struct Settings {
   bool luby = false;
   bool pine = false;
   bool empi = true;
-  bool incr = true;
+  bool incr = false;
   bool Visualization = false;
   bool pVisualization = false;
   float growthRate = 1.5;

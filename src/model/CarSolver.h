@@ -22,6 +22,11 @@ public:
   bool SolveWithAssumption() override;
   inline void AddAssumption(int id) override { m_assumptions.push(GetLit(id)); }
   bool SolveWithAssumption(std::vector<int> &assumption, int frameLevel) override;
+  int get_temp_flag();
+  void add_temp_clause(std::vector<int> *cls, int temp_flag, bool is_primed);
+  void release_temp_cls(int temp_flag);
+  std::shared_ptr<std::vector<int>> justGetUC();
+  void clean_assumptions();
 
   std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> GetAssignment(std::ofstream &out) override;
 
