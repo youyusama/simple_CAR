@@ -388,7 +388,7 @@ void Vis::add_tree_node(std::vector<int> &cube, int level) {
 std::string _cube_to_string(std::vector<int> cube) {
   std::string res = "";
   for (auto l : cube) {
-    res += std::to_string(l) + "\n";
+    res += std::to_string((l > 0) ? (l * 2) : (-l * 2 + 1)) + "\n";
   }
   return res;
 }

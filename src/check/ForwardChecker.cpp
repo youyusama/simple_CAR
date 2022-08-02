@@ -141,7 +141,9 @@ bool ForwardChecker::Check(int badId) {
           std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> pair, partial_pair;
           pair = m_mainSolver->GetAssignment();
           CAR_DEBUG_v("Get Assignment:", *pair.second);
+          m_log->Tick();
           partial_pair = get_predecessor(pair, task.state);
+          m_log->Statpartial();
           std::shared_ptr<State> newState(new State(task.state, pair.first, partial_pair.second, task.state->depth + 1));
           m_underSequence.push(newState);
           if (m_settings.Visualization) {
@@ -153,10 +155,12 @@ bool ForwardChecker::Check(int badId) {
         } else {
           // Solver return UNSAT, get uc, then continue
           CAR_DEBUG("Result >>> UNSAT <<<");
-          auto uc = m_mainSolver->GetUnsatisfiableCore();
+          m_log->Tick();
+          auto uc = m_mainSolver->Getmuc();
           if (uc->empty()) {
             // placeholder, uc is empty => safe
           }
+          m_log->Statmuc();
           CAR_DEBUG_v("Get UC:", *uc);
           m_log->Tick();
           AddUnsatisfiableCore(uc, task.frameLevel + 1);
@@ -262,7 +266,9 @@ bool ForwardChecker::isInvExisted() {
   bool result = false;
   for (int i = 0; i < m_overSequence->GetLength(); ++i) {
     if (IsInvariant(i)) {
+      m_log->PrintSth("Proof at frame " + std::to_string(i) + "\n");
       result = true;
+      break;
     }
   }
   m_invSolver = nullptr;

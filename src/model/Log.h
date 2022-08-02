@@ -77,6 +77,8 @@ public:
     m_log << "InvSolver takes:\t" << m_invSolverTime << " seconds" << std::endl;
     m_log << "GetNewLevel Procedure takes:\t" << m_getNewLevelTime << " seconds" << std::endl;
     m_log << "Update uc takes:\t" << m_updateUcTime << " seconds" << std::endl;
+    m_log << "muc takes:\t" << m_mucTime << " seconds" << std::endl;
+    m_log << "partial takes:\t" << m_partialTime << " seconds" << std::endl;
     if (m_settings.restart) m_log << "Restart Times:\t" << m_restartTimes << std::endl;
     if (m_settings.propagation) m_log << "Propagation Time:\t" << m_propagationTime << std::endl;
     if (m_settings.pine) {
@@ -140,6 +142,14 @@ public:
     m_updateUcTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
   }
 
+  void Statmuc() {
+    m_mucTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+  }
+
+  void Statpartial() {
+    m_partialTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+  }
+
   void CountRestartTimes() { m_restartTimes++; }
 
   std::shared_ptr<State> lastState;
@@ -168,6 +178,8 @@ private:
   double m_updateUcTime = 0;
   double m_propagationTime = 0;
   double m_timelimit = 0;
+  double m_mucTime = 0;
+  double m_partialTime = 0;
   // pine
   double m_pineTime = 0;
   int m_pineCalled = 0;

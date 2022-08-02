@@ -202,6 +202,68 @@ std::shared_ptr<std::vector<int>> CarSolver::GetUnsatisfiableCore() {
   return uc;
 }
 
+// ================================================================================
+// @brief: after sat solve, get muc
+// @input: 
+// @output:
+// ================================================================================
+std::shared_ptr<std::vector<int>> CarSolver::Getmuc() {
+  vec<Lit> tass;
+  LSet ass, mass;
+  for (int i = 0; i < conflict.size(); i++)
+    ass.insert(~conflict[i]);
+
+  while (ass.size() > 0) {
+    int sz = ass.size();
+    Lit t = ass[sz - 1];
+    tass.clear();
+    for (int i = 0; i < sz - 1; i++) tass.push(ass[i]);
+    for (int i = 0; i < mass.size(); i++) tass.push(mass[i]);
+    // tass.push(GetLit(GetFrameFlag(level)));
+    lbool result = solveLimited(tass);
+    if (result == l_True) {
+      mass.insert(t);
+      ass.clear();
+      for (int i = 0; i < sz - 1; i++) ass.insert(tass[i]);
+    } else if (result == l_False) {
+      ass.clear();
+      for (int i = 0; i < conflict.size(); i++) {
+        if (!mass.has(~conflict[i]))
+          ass.insert(~conflict[i]);
+      }
+    } else {
+      assert(false);
+    }
+  }
+  int val;
+  std::shared_ptr<std::vector<int>> muc(new std::vector<int>());
+  if (m_isForward) {
+    for (int i = 0; i < mass.size(); ++i) {
+      val = GetLiteralId(mass[i]);
+      std::vector<int> ids = m_model->GetPrevious(val);
+      if (val > 0) {
+        for (auto x : ids) {
+          muc->push_back(x);
+        }
+      } else {
+        for (auto x : ids) {
+          muc->push_back(-x);
+        }
+      }
+    }
+  } else {
+    for (int i = 0; i < mass.size(); ++i) {
+      val = GetLiteralId(mass[i]);
+      if (m_model->IsLatch(val)) {
+        muc->emplace_back(val);
+      }
+    }
+  }
+  std::sort(muc->begin(), muc->end(), cmp);
+  return muc;
+}
+
+
 std::shared_ptr<std::vector<int>> CarSolver::justGetUC() {
   std::shared_ptr<std::vector<int>> uc(new std::vector<int>());
   uc->reserve(conflict.size());

@@ -17,6 +17,7 @@
 #include "UnderSequence.h"
 #include "Vis.h"
 #include <memory>
+#include <unordered_set>
 
 namespace car {
 #define CAR_DEBUG_v(s, v)          \
@@ -86,8 +87,9 @@ public:
   }
 
   // order according to preference
-  void orderAssumption(std::vector<int> &uc) {
+  void orderAssumption(std::vector<int> &uc, bool rev = false) {
     std::stable_sort(uc.begin(), uc.end(), slimLitOrder);
+    if (rev) std::reverse(uc.begin(), uc.end());
   }
 
 private:
