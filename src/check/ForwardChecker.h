@@ -31,11 +31,18 @@ namespace car {
     m_log->DebugPrintSth(s); \
   } while (0)
 
+#define CAR_DEBUG_od(s, o)          \
+  do {                              \
+    m_log->DebugPrintSth(s);        \
+    m_log->PrintOSequenceDetail(o); \
+  } while (0)
+
 #define CAR_DEBUG_o(s, o)     \
   do {                        \
     m_log->DebugPrintSth(s);  \
     m_log->PrintOSequence(o); \
   } while (0)
+
 
 #define CAR_DEBUG_s(t, s)      \
   do {                         \
@@ -119,7 +126,7 @@ private:
 
     ass.reserve(ass.size() + l_ass.size());
     ass.insert(ass.end(), l_ass.begin(), l_ass.end());
-    CAR_DEBUG_v("Assumption: ", ass);
+    // CAR_DEBUG_v("Assumption: ", ass);
     for (auto &x : ass) {
       x = m_model->GetPrime(x);
     }

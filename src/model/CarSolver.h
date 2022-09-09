@@ -28,6 +28,7 @@ public:
   void release_temp_cls(int temp_flag);
   std::shared_ptr<std::vector<int>> justGetUC();
   void clean_assumptions();
+  std::string ShowLatest5Clause();
 
   std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> GetAssignment(std::ofstream &out) override;
 

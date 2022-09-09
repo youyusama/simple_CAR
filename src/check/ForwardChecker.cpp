@@ -47,7 +47,6 @@ bool ForwardChecker::Check(int badId) {
     return true;
 
   Init(badId);
-
   if (ImmediateSatisfiable(badId)) {
     CAR_DEBUG("Result >>> SAT <<<");
     auto pair = m_mainSolver->GetAssignment();
@@ -68,13 +67,12 @@ bool ForwardChecker::Check(int badId) {
   m_mainSolver->AddNewFrame(frame, 0);
   m_overSequence->effectiveLevel = 0;
   m_startSovler->UpdateStartSolverFlag();
-  CAR_DEBUG_o("Frames: ", m_overSequence.get());
+  CAR_DEBUG_od("Frames: ", m_overSequence.get());
 #pragma endregion
 
   // main stage
   int frameStep = 0;
   std::stack<Task> workingStack;
-
   while (true) {
     m_log->PrintFramesInfo(m_overSequence.get());
     m_minUpdateLevel = m_overSequence->GetLength();
@@ -132,7 +130,7 @@ bool ForwardChecker::Check(int badId) {
         CAR_DEBUG_s("From state: ", task.state);
         std::vector<int> assumption;
         GetAssumption(task.state, task.frameLevel, assumption);
-        CAR_DEBUG_v("Primed Assumption: ", assumption);
+        // CAR_DEBUG_v("Primed Assumption: ", assumption);
         bool result = m_mainSolver->SolveWithAssumption(assumption, task.frameLevel);
         m_log->StatMainSolver();
         if (result) {
@@ -140,12 +138,13 @@ bool ForwardChecker::Check(int badId) {
           CAR_DEBUG("Result >>> SAT <<<");
           std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> pair, partial_pair;
           pair = m_mainSolver->GetAssignment();
-          CAR_DEBUG_v("Get Assignment:", *pair.second);
+          // CAR_DEBUG_v("Get Assignment:", *pair.second);
           m_log->Tick();
           partial_pair = get_predecessor(pair, task.state);
           m_log->Statpartial();
           std::shared_ptr<State> newState(new State(task.state, pair.first, partial_pair.second, task.state->depth + 1));
           m_underSequence.push(newState);
+          CAR_DEBUG_s("Get state: ", newState);
           if (m_settings.Visualization) {
             m_vis->addState(newState);
           }
@@ -165,7 +164,7 @@ bool ForwardChecker::Check(int badId) {
           m_log->Tick();
           AddUnsatisfiableCore(uc, task.frameLevel + 1);
           m_log->StatUpdateUc();
-          CAR_DEBUG_o("Frames: ", m_overSequence.get());
+          CAR_DEBUG_od("Frames: ", m_overSequence.get());
           task.frameLevel++;
           continue;
         }
@@ -185,7 +184,7 @@ bool ForwardChecker::Check(int badId) {
       Propagation();
       m_log->StatPropagation();
     }
-
+    CAR_DEBUG_od("Frames: ", m_overSequence.get());
     m_mainSolver->simplify();
     m_overSequence->effectiveLevel++;
     m_startSovler->UpdateStartSolverFlag();
@@ -239,6 +238,8 @@ void ForwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, 
     m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
   } else {
     m_startSovler->AddClause(-m_startSovler->GetFlag(), *uc);
+    // CAR_DEBUG_v("add clause to start:", *uc);
+    // CAR_DEBUG("start flag: " + std::to_string(m_startSovler->GetFlag()));
   }
   m_overSequence->Insert(uc, frameLevel);
   if (m_settings.empi) {

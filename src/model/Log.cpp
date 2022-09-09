@@ -167,6 +167,27 @@ void Log::PrintOSequence(OverSequenceSet *sequence) {
   m_debug << std::endl;
 }
 
+
+void Log::PrintOSequenceDetail(OverSequenceSet *sequence) {
+  if (!m_debug) return;
+  for (int i = 0; i < sequence->GetLength(); ++i) {
+    std::vector<std::shared_ptr<std::vector<int>>> frame;
+    sequence->GetFrame(i, frame);
+    m_debug << "frame " << i << " " << std::endl;
+    if (i != 0) {
+      for (auto uc : frame) {
+        for (auto i : *uc) {
+          m_debug << i << " ";
+        }
+        m_debug << std::endl;
+      }
+    }
+    m_debug << frame.size() << " ";
+  }
+  m_debug << std::endl;
+}
+
+
 void Log::PrintOSequence(IOverSequence *sequence) {
   if (!m_debug) return;
   for (int i = 0; i < sequence->GetLength(); ++i) {

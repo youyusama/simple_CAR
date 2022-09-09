@@ -2,8 +2,24 @@
 
 namespace car {
 bool _cmp(int a, int b) {
-  if (abs(a) != abs(b)) return abs (a) < abs(b);
-		else return a<b;
+  if (abs(a) != abs(b))
+    return abs(a) < abs(b);
+  else
+    return a < b;
+}
+
+// ================================================================================
+// @brief: if a->b
+// @input:
+// @output:
+// ================================================================================
+bool OverSequenceSet::is_imply(cube a, cube b) {
+  if (a.size() >= b.size())
+    return false;
+  if (std::includes(b.begin(), b.end(), a.begin(), a.end(), _cmp))
+    return true;
+  else
+    return false;
 }
 
 void OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
@@ -13,7 +29,13 @@ void OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
     m_sequence.emplace_back(frame());
     m_block_counter.emplace_back(0);
   }
-  m_sequence[index].emplace(&*res.first);
+  frame tmp;
+  for (auto f_uc : m_sequence[index]) {
+    if (!is_imply(*res.first, *f_uc))
+      tmp.emplace(f_uc);
+  }
+  tmp.emplace(&*res.first);
+  m_sequence[index].swap(tmp);
   m_blockSolver->AddUnsatisfiableCore(*uc, index);
 }
 
@@ -118,7 +140,7 @@ void OverSequenceSet::propagate(int level) {
   // std::cout << "propagate " << level << std::endl;
   frame &fi = m_sequence[level];
   frame &fi_plus_1 = m_sequence[level + 1];
-  std::unordered_set<cube *>::iterator iter;
+  std::set<cube *>::iterator iter;
   for (cube *uc : fi) {
     iter = fi_plus_1.find(uc);
     if (iter != fi_plus_1.end()) continue; // propagated
@@ -129,7 +151,19 @@ void OverSequenceSet::propagate(int level) {
       ass.emplace_back(m_model->GetPrime(i));
     }
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
-      fi_plus_1.insert(uc);
+      frame tmp;
+      for (auto f_uc : fi_plus_1) {
+        if (!is_imply(*uc, *f_uc))
+          tmp.emplace(f_uc);
+      }
+      tmp.emplace(uc);
+      fi_plus_1.swap(tmp);
+      // std::cout << "propagate uc: ";
+      // for (auto i : *uc) {
+      //   std::cout << i << " ";
+      // }
+      // std::cout << "to level " << level + 1 << std::endl;
+      // fi_plus_1.insert(uc);
       m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);
     }

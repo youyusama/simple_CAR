@@ -204,7 +204,7 @@ std::shared_ptr<std::vector<int>> CarSolver::GetUnsatisfiableCore() {
 
 // ================================================================================
 // @brief: after sat solve, get muc
-// @input: 
+// @input:
 // @output:
 // ================================================================================
 std::shared_ptr<std::vector<int>> CarSolver::Getmuc() {
@@ -296,6 +296,17 @@ void CarSolver::AddNewFrame(const std::vector<std::shared_ptr<std::vector<int>>>
   // 		std::cout << lit_id (c[j]) << " ";
   // 	std::cout << "0 " << std::endl;
   // }
+}
+
+std::string CarSolver::ShowLatest5Clause() {
+  std::string res = "clauses in SAT solver: \n";
+  for (int i = clauses.size() - 1; i > clauses.size() - 100; i--) {
+    Clause &c = ca[clauses[i]];
+    for (int j = 0; j < c.size(); j++)
+      res += std::to_string(lit_id(c[j])) + " ";
+    res += "0 \n";
+  }
+  return res;
 }
 
 bool CarSolver::SolveWithAssumptionAndBad(std::vector<int> &assumption, int badId) {

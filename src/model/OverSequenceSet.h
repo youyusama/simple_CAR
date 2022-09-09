@@ -38,7 +38,7 @@ public:
 
   void set_solver(std::shared_ptr<ISolver> slv);
 
-  std::vector<int>* GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel);
+  std::vector<int> *GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel);
 
   int effectiveLevel;
   bool isForward = false;
@@ -47,13 +47,15 @@ public:
 private:
   typedef std::vector<int> cube;
 
+  bool is_imply(cube a, cube b);
+
   static bool _cubeComp(const cube &v1, const cube &v2) {
     if (v1.size() != v2.size()) return v1.size() < v2.size();
     for (size_t i = 0; i < v1.size(); ++i) {
       if (abs(v1[i]) != abs(v2[i]))
         return abs(v1[i]) < abs(v2[i]);
       else
-        return v1[i] <= v2[i];
+        return v1[i] < v2[i];
     }
     return false;
   }
@@ -76,7 +78,14 @@ private:
     };
   };
 
-  typedef std::unordered_set<cube *> frame;
+  struct cubepComp {
+  public:
+    bool operator()(const cube *v1, const cube *v2) {
+      return _cubeComp(*v1, *v2);
+    }
+  };
+
+  typedef std::set<cube *, cubepComp> frame;
 
   std::shared_ptr<AigerModel> m_model;
 

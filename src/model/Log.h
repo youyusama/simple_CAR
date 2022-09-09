@@ -58,6 +58,7 @@ public:
   void PrintOSequence(OverSequenceNI *sequence);
   void PrintOSequence(IOverSequence *sequence);
   void PrintOSequence(OverSequenceSet *sequence);
+  void PrintOSequenceDetail(OverSequenceSet *sequence);
 
   void PrintStateShort(std::shared_ptr<State> s);
 
