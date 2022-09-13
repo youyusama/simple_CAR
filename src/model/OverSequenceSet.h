@@ -54,8 +54,8 @@ private:
     for (size_t i = 0; i < v1.size(); ++i) {
       if (abs(v1[i]) != abs(v2[i]))
         return abs(v1[i]) < abs(v2[i]);
-      else
-        return v1[i] < v2[i];
+      else if (v1[i] != v2[i])
+        return v1[i] > v2[i];
     }
     return false;
   }

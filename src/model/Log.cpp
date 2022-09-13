@@ -182,7 +182,7 @@ void Log::PrintOSequenceDetail(OverSequenceSet *sequence) {
         m_debug << std::endl;
       }
     }
-    m_debug << frame.size() << " ";
+    m_debug << "size:" << frame.size() << std::endl;
   }
   m_debug << std::endl;
 }

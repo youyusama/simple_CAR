@@ -67,7 +67,7 @@ bool ForwardChecker::Check(int badId) {
   m_mainSolver->AddNewFrame(frame, 0);
   m_overSequence->effectiveLevel = 0;
   m_startSovler->UpdateStartSolverFlag();
-  CAR_DEBUG_od("Frames: ", m_overSequence.get());
+  CAR_DEBUG_o("Frames: ", m_overSequence.get());
 #pragma endregion
 
   // main stage
@@ -164,7 +164,7 @@ bool ForwardChecker::Check(int badId) {
           m_log->Tick();
           AddUnsatisfiableCore(uc, task.frameLevel + 1);
           m_log->StatUpdateUc();
-          CAR_DEBUG_od("Frames: ", m_overSequence.get());
+          CAR_DEBUG_o("Frames: ", m_overSequence.get());
           task.frameLevel++;
           continue;
         }
