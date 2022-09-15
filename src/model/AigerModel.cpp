@@ -247,7 +247,7 @@ void AigerModel::CollectClauses(const aiger *aig) {
     AddAndGateToClause(aa);
   }
 
-  // constrain l' = p
+  // if l1 and l2 have same prime l', then l1 and l2 shoud have same value
   if (m_settings.forward) {
     int init = ++m_maxId;
     int cons = ++m_maxId;

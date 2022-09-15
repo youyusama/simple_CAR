@@ -155,7 +155,7 @@ bool ForwardChecker::Check(int badId) {
           // Solver return UNSAT, get uc, then continue
           CAR_DEBUG("Result >>> UNSAT <<<");
           m_log->Tick();
-          auto uc = m_mainSolver->Getmuc();
+          auto uc = m_mainSolver->Getuc();
           if (uc->empty()) {
             // placeholder, uc is empty => safe
           }
@@ -184,7 +184,7 @@ bool ForwardChecker::Check(int badId) {
       Propagation();
       m_log->StatPropagation();
     }
-    CAR_DEBUG_od("Frames: ", m_overSequence.get());
+    CAR_DEBUG_o("Frames: ", m_overSequence.get());
     m_mainSolver->simplify();
     m_overSequence->effectiveLevel++;
     m_startSovler->UpdateStartSolverFlag();
@@ -211,6 +211,7 @@ bool ForwardChecker::Check(int badId) {
 
 
 void ForwardChecker::Init(int badId) {
+  m_badId = badId;
   // m_overSequence.reset(new OverSequenceNI(m_model));
   m_overSequence.reset(new OverSequenceSet(m_model));
   if (m_settings.empi) {
@@ -227,6 +228,7 @@ void ForwardChecker::Init(int badId) {
   m_underSequence = UnderSequence();
   m_mainSolver.reset(new MainSolver(m_model, true));
   m_lifts.reset(new MainSolver(m_model, true));
+  m_deads.reset(new MainSolver(m_model, true));
   m_invSolver.reset(new InvSolver(m_model));
   m_startSovler.reset(new StartSolver(m_model, badId));
   m_overSequence->set_solver(m_mainSolver);

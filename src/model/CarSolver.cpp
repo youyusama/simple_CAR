@@ -202,16 +202,60 @@ std::shared_ptr<std::vector<int>> CarSolver::GetUnsatisfiableCore() {
   return uc;
 }
 
+
 // ================================================================================
-// @brief: after sat solve, get muc
+// @brief: after sat solve, get uc
 // @input:
 // @output:
 // ================================================================================
-std::shared_ptr<std::vector<int>> CarSolver::Getmuc() {
-  vec<Lit> tass;
-  LSet ass, mass;
+std::shared_ptr<cube> CarSolver::Getuc() {
+  // get conflict as assumption
+  LSet ass;
   for (int i = 0; i < conflict.size(); i++)
     ass.insert(~conflict[i]);
+
+  // compute muc
+  Getmuc(ass);
+
+  // get <int> form muc
+  int val;
+  std::shared_ptr<cube> muc(new cube());
+  if (m_isForward) {
+    for (int i = 0; i < ass.size(); ++i) {
+      val = GetLiteralId(ass[i]);
+      std::vector<int> ids = m_model->GetPrevious(val);
+      if (val > 0) {
+        for (auto x : ids) {
+          muc->push_back(x);
+        }
+      } else {
+        for (auto x : ids) {
+          muc->push_back(-x);
+        }
+      }
+    }
+  } else {
+    for (int i = 0; i < ass.size(); ++i) {
+      val = GetLiteralId(ass[i]);
+      if (m_model->IsLatch(val)) {
+        muc->emplace_back(val);
+      }
+    }
+  }
+  std::sort(muc->begin(), muc->end(), cmp);
+  return muc;
+}
+
+
+// ================================================================================
+// @brief: get muc by uc
+// @input: assumption
+// @output:
+// ================================================================================
+void CarSolver::Getmuc(LSet &ass) {
+  if (ass.size() > 215) return;
+  vec<Lit> tass;
+  LSet mass;
 
   while (ass.size() > 0) {
     int sz = ass.size();
@@ -235,32 +279,7 @@ std::shared_ptr<std::vector<int>> CarSolver::Getmuc() {
       assert(false);
     }
   }
-  int val;
-  std::shared_ptr<std::vector<int>> muc(new std::vector<int>());
-  if (m_isForward) {
-    for (int i = 0; i < mass.size(); ++i) {
-      val = GetLiteralId(mass[i]);
-      std::vector<int> ids = m_model->GetPrevious(val);
-      if (val > 0) {
-        for (auto x : ids) {
-          muc->push_back(x);
-        }
-      } else {
-        for (auto x : ids) {
-          muc->push_back(-x);
-        }
-      }
-    }
-  } else {
-    for (int i = 0; i < mass.size(); ++i) {
-      val = GetLiteralId(mass[i]);
-      if (m_model->IsLatch(val)) {
-        muc->emplace_back(val);
-      }
-    }
-  }
-  std::sort(muc->begin(), muc->end(), cmp);
-  return muc;
+  for (int i = 0; i < mass.size(); i++) ass.insert(mass[i]);
 }
 
 

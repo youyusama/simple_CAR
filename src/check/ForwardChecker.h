@@ -134,25 +134,30 @@ private:
   }
 
   // ================================================================================
-  // @brief: t & input & T -> s'  =>  (t) & input & T & !s' is unsat
+  // @brief: t & input & T -> s'  =>  (t) & input & T & !s' is unsat, !bad & input & t & T is unsat
   // @input: pair<input, latch>
   // @output: pair<input, partial latch>
   // ================================================================================
-  std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>> get_predecessor(
-    std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>> t,
-    std::shared_ptr<State> s) {
+  std::pair<sptr<cube>, sptr<cube>> get_predecessor(
+    std::pair<sptr<cube>, sptr<cube>> t, sptr<State> s = nullptr) {
 
     std::shared_ptr<cube> partial_latch(new cube());
     for (auto l : *t.second) partial_latch->emplace_back(l);
 
     int act = m_lifts->get_temp_flag();
-    // add !s'
-    std::vector<int> *neg_primed_s = new std::vector<int>();
-    for (auto l : *s->latches) {
-      neg_primed_s->emplace_back(-l);
+    if (s == nullptr) {
+      // add !bad to assumption
+      m_lifts->clean_assumptions();
+      m_lifts->AddAssumption(-m_badId);
+    } else {
+      // add !s' to clause
+      std::vector<int> *neg_primed_s = new std::vector<int>();
+      for (auto l : *s->latches) {
+        neg_primed_s->emplace_back(-l);
+      }
+      m_lifts->add_temp_clause(neg_primed_s, act, true);
+      m_lifts->clean_assumptions();
     }
-    m_lifts->add_temp_clause(neg_primed_s, act, true);
-    m_lifts->clean_assumptions();
     // add t
     for (auto l : *t.second) {
       m_lifts->AddAssumption(l);
@@ -179,13 +184,15 @@ private:
         for (auto i : *t.first) {
           m_lifts->AddAssumption(i);
         }
+        if (s == nullptr) {
+          m_lifts->AddAssumption(-m_badId);
+        }
         m_lifts->AddAssumption(act);
       }
     }
     m_lifts->release_temp_cls(act);
     return std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>>(t.first, partial_latch);
   }
-
 
   void Propagation() {
     for (int i = m_minUpdateLevel; i < m_overSequence->GetLength() - 1; i++) {
@@ -195,13 +202,17 @@ private:
 
   std::shared_ptr<State> EnumerateStartState() {
     if (m_startSovler->SolveWithAssumption()) {
-      return m_startSovler->GetStartState();
+      std::pair<sptr<cube>, sptr<cube>> pair = m_startSovler->GetStartPair();
+      pair = get_predecessor(pair);
+      sptr<State> newState(new State(nullptr, pair.first, pair.second, 0));
+      return newState;
     } else {
       return nullptr;
     }
   }
 
   int m_minUpdateLevel;
+  int m_badId;
   std::shared_ptr<OverSequenceSet> m_overSequence;
   UnderSequence m_underSequence;
   Settings m_settings;
@@ -211,6 +222,7 @@ private:
   std::shared_ptr<State> m_initialState;
   std::shared_ptr<CarSolver> m_mainSolver;
   std::shared_ptr<CarSolver> m_lifts;
+  std::shared_ptr<CarSolver> m_deads;
   std::shared_ptr<ISolver> m_invSolver;
   std::shared_ptr<StartSolver> m_startSovler;
 };
