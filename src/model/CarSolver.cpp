@@ -208,14 +208,14 @@ std::shared_ptr<std::vector<int>> CarSolver::GetUnsatisfiableCore() {
 // @input:
 // @output:
 // ================================================================================
-std::shared_ptr<cube> CarSolver::Getuc() {
+std::shared_ptr<cube> CarSolver::Getuc(bool minimal) {
   // get conflict as assumption
   LSet ass;
   for (int i = 0; i < conflict.size(); i++)
     ass.insert(~conflict[i]);
 
   // compute muc
-  Getmuc(ass);
+  if (minimal) Getmuc(ass);
 
   // get <int> form muc
   int val;

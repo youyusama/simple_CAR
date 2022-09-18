@@ -194,6 +194,65 @@ private:
     return std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>>(t.first, partial_latch);
   }
 
+  // ================================================================================
+  // @brief: counter-example to generalization
+  // @input:
+  // @output:
+  // ================================================================================
+  void generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
+    std::unordered_set<int> required_lits;
+    for (int i = 0; i < uc->size(); i++) {
+      if (required_lits.find(uc->at(i)) == required_lits.end()) continue;
+      sptr<cube> temp_uc(new cube());
+      for (auto ll : *uc)
+        if (ll != uc->at(i)) temp_uc->emplace_back(ll);
+      if (down_ctg(temp_uc, frame_lvl, rec_lvl)) {
+        uc->swap(*temp_uc);
+        i = -1;
+      } else {
+        required_lits.emplace(uc->at(i));
+      }
+    }
+  }
+
+  bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl) {
+    int ctgs = 0;
+    while (true) {
+      std::vector<int> ass;
+      for (auto l : *uc) ass.emplace_back(l);
+      orderAssumption(ass);
+      for (auto &x : ass) {
+        x = m_model->GetPrime(x);
+      }
+      // F_i & T & temp_uc'
+      if (!m_mainSolver->SolveWithAssumption(ass, frame_lvl)) {
+        auto uc_ctg = m_mainSolver->Getuc(true);
+        uc->swap(*uc_ctg);
+        return true;
+      } else if (rec_lvl > 1)
+        return false;
+      else {
+        std::pair<sptr<cube>, sptr<cube>> pair = m_mainSolver->GetAssignment();
+        pair = get_predecessor(pair);
+        sptr<State> cts(new State(nullptr, pair.first, pair.second, 0));
+        int cts_lvl = GetNewLevel(cts);
+        // int cts_lvl = frame_lvl - 1;
+        GetAssumption(cts, cts_lvl, ass);
+        // F_i-1 & T & cts'
+        if (ctgs < 3 && cts_lvl > 0 && !m_mainSolver->SolveWithAssumption(ass, cts_lvl)) {
+          ctgs++;
+          auto uc_cts = m_mainSolver->Getuc(false);
+          generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1);
+          AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
+          // m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl);
+        } else {
+          return false;
+        }
+      }
+    }
+  }
+
+
   void Propagation() {
     for (int i = m_minUpdateLevel; i < m_overSequence->GetLength() - 1; i++) {
       m_overSequence->propagate(i);

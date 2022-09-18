@@ -129,6 +129,7 @@ void OverSequenceSet::set_solver(std::shared_ptr<ISolver> slv) {
 }
 
 std::vector<int> *OverSequenceSet::GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel) {
+  if (framelevel >= m_sequence.size()) return new std::vector<int>();
   // by imply checking
   for (auto uc : m_sequence[framelevel]) { // for each uc
     if (std::includes(latches->begin(), latches->end(), uc->begin(), uc->end(), _cmp)) return uc;

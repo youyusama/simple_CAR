@@ -155,11 +155,12 @@ bool ForwardChecker::Check(int badId) {
           // Solver return UNSAT, get uc, then continue
           CAR_DEBUG("Result >>> UNSAT <<<");
           m_log->Tick();
-          auto uc = m_mainSolver->Getuc();
+          auto uc = m_mainSolver->Getuc(m_settings.minimal_uc);
           if (uc->empty()) {
             // placeholder, uc is empty => safe
           }
           m_log->Statmuc();
+          if (m_settings.ctg) generalize_ctg(uc, task.frameLevel);
           CAR_DEBUG_v("Get UC:", *uc);
           m_log->Tick();
           AddUnsatisfiableCore(uc, task.frameLevel + 1);

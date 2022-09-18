@@ -17,7 +17,7 @@ public:
   void AddClause(const std::vector<int> &clause) override;
   void AddUnsatisfiableCore(const std::vector<int> &clause, int frameLevel) override;
   std::shared_ptr<std::vector<int>> GetUnsatisfiableCore() override;
-  std::shared_ptr<cube> Getuc();
+  std::shared_ptr<cube> Getuc(bool minimal);
   void Getmuc(LSet &ass);
   void AddNewFrame(const std::vector<std::shared_ptr<std::vector<int>>> &frame, int frameLevel) override;
   bool SolveWithAssumptionAndBad(std::vector<int> &assumption, int badId) override;

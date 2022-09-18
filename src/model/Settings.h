@@ -21,6 +21,7 @@ struct Settings {
   bool forward = false;
   bool propagation = false;
   bool minimal_uc = false;
+  bool ctg = true;
   bool restart = false;
   bool end = false;
   bool inter = false;
