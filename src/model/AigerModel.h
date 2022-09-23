@@ -7,6 +7,7 @@ extern "C" {
 #include "Settings.h"
 #include <algorithm>
 #include <assert.h>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -132,6 +133,8 @@ private:
   static bool cmp(int a, int b) {
     return abs(a) < abs(b);
   }
+
+  void print_aiger_gml(const aiger *aig);
 
 #pragma endregion
 

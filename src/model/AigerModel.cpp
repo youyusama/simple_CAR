@@ -37,6 +37,7 @@ void AigerModel::Init(aiger *aig) {
   CollectNextValueMapping(aig);
   CollectClauses(aig);
   //   Collect_and_gates_for_pine(aig);
+  if (m_settings.pVisualization) print_aiger_gml(aig);
 }
 
 void AigerModel::CollectTrues(const aiger *aig) {
@@ -406,5 +407,113 @@ void AigerModel::Collect_and_gates_for_pine(const aiger *aig) {
   // }
 }
 
+
+// ================================================================================
+// @brief: draw the aiger latch and and gate
+// @input: aig
+// @output:
+// ================================================================================
+void draw_node(std::ofstream &visFile, uint id, std::string text = "", std::string color = "\"#008000\"") {
+  text = (text.length() == 0) ? std::to_string(id) : text;
+  visFile << "node" << std::endl;
+  visFile << "[" << std::endl;
+  visFile << "id\t" << id << std::endl;
+  visFile << "graphics" << std::endl;
+  visFile << "[" << std::endl;
+  visFile << "w\t" << 50 << std::endl;
+  visFile << "h\t" << 50 << std::endl;
+  visFile << "fill\t" << color << std::endl;
+  visFile << "]" << std::endl;
+  visFile << "LabelGraphics" << std::endl;
+  visFile << "[" << std::endl;
+  visFile << "text\t"
+          << "\"" << text << "\"" << std::endl;
+  visFile << "color\t"
+          << "\"#333333\"" << std::endl;
+  visFile << "]" << std::endl;
+  visFile << "]" << std::endl;
+}
+
+void draw_edge(std::ofstream &visFile, uint source, uint target) {
+  visFile << "edge" << std::endl;
+  visFile << "[" << std::endl;
+  visFile << "source\t" << source << std::endl;
+  visFile << "target\t" << target << std::endl;
+  visFile << "graphics" << std::endl;
+  visFile << "[" << std::endl;
+  visFile << "type\t"
+          << "\"arc\"" << std::endl;
+  if (target % 2 != 0)
+    visFile << "style\t"
+            << "\"dotted\"" << std::endl;
+  visFile << "arrow\t"
+          << "\"last\"" << std::endl;
+  visFile << "]" << std::endl;
+  visFile << "]" << std::endl;
+}
+
+
+void AigerModel::print_aiger_gml(const aiger *aig) {
+  // io
+  std::ofstream visFile;
+  visFile.open("frame_vis/aiger_output.gml");
+  // header
+  visFile << "Creator\t"
+          << "\"car visualization\"" << std::endl;
+  visFile << "Version\t" << 0.1 << std::endl;
+  visFile << "graph" << std::endl;
+  visFile << "[" << std::endl;
+  // graph info
+  visFile << "directed\t" << 1 << std::endl;
+  // latches
+  for (int i = 0; i < aig->num_latches; i++) {
+    draw_node(visFile, (int)aig->latches[i].lit, "", "\"#87CEFA\"");
+  }
+  // edges
+  std::vector<std::pair<int, int>> saved_edges;
+  // gates from output
+  int output_id = static_cast<int>(aig->outputs[0].lit);
+  draw_node(visFile, m_maxId + 2, "", "\"#FF4500\"");
+  std::unordered_set<int> required_gate;
+  if (output_id % 2 == 0) {
+    required_gate.emplace(output_id);
+    saved_edges.emplace_back(std::pair<int, int>(m_maxId + 2, output_id));
+  } else {
+    required_gate.emplace(output_id - 1);
+    saved_edges.emplace_back(std::pair<int, int>(m_maxId + 2, output_id - 1));
+  }
+
+  for (int i = aig->num_ands - 1; i >= 0; i--) {
+    aiger_and &aa = aig->ands[i];
+    if (required_gate.find(aa.lhs) != required_gate.end()) {
+      draw_node(visFile, aa.lhs, "", "\"#FFFFF0\"");
+      if (IsAndGate(aa.rhs0, aig))
+        required_gate.emplace((aa.rhs0 % 2 == 0) ? (aa.rhs0) : (aa.rhs0 - 1));
+      if (IsAndGate(aa.rhs1, aig))
+        required_gate.emplace((aa.rhs1 % 2 == 0) ? (aa.rhs1) : (aa.rhs1 - 1));
+      if (aa.rhs0 % 2 == 0) {
+        saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs0));
+        saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs0 + 1));
+      } else {
+        saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs0));
+        saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs0 - 1));
+      }
+
+
+      if (aa.rhs1 % 2 == 0) {
+        saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs1));
+        saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs1 + 1));
+      } else {
+        saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs1));
+        saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs1 - 1));
+      }
+    }
+  }
+  for (auto i : saved_edges) {
+    draw_edge(visFile, i.first, i.second);
+  }
+  visFile << "]" << std::endl;
+  visFile.close();
+}
 
 } // namespace car

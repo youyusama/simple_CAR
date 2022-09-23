@@ -201,7 +201,8 @@ private:
   // ================================================================================
   void generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
     std::unordered_set<int> required_lits;
-    for (int i = 0; i < uc->size(); i++) {
+    orderAssumption(*uc);
+    for (int i = uc->size() - 1; i > 0; i--) {
       if (required_lits.find(uc->at(i)) == required_lits.end()) continue;
       sptr<cube> temp_uc(new cube());
       for (auto ll : *uc)
@@ -226,7 +227,7 @@ private:
       }
       // F_i & T & temp_uc'
       if (!m_mainSolver->SolveWithAssumption(ass, frame_lvl)) {
-        auto uc_ctg = m_mainSolver->Getuc(true);
+        auto uc_ctg = m_mainSolver->Getuc(false);
         uc->swap(*uc_ctg);
         return true;
       } else if (rec_lvl > 1)
