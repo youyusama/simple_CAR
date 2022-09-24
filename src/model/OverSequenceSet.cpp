@@ -172,4 +172,33 @@ void OverSequenceSet::propagate(int level) {
   return;
 }
 
+void OverSequenceSet::propagate_uc_from_lvl(sptr<cube> uc, int lvl) {
+  // std::cout << "propagate " << level << std::endl;
+
+  while (lvl + 1 <= m_sequence.size()) {
+    frame &fi = m_sequence[lvl];
+    frame &fi_plus_1 = m_sequence[lvl + 1];
+    std::vector<int> ass;
+    ass.reserve(uc->size());
+    for (auto i : *uc) {
+      ass.emplace_back(m_model->GetPrime(i));
+    }
+    if (!m_mainSolver->SolveWithAssumption(ass, lvl)) {
+      frame tmp;
+      auto res = Ucs.insert(*uc);
+      for (auto f_uc : fi_plus_1) {
+        if (!is_imply(*res.first, *f_uc))
+          tmp.emplace(f_uc);
+      }
+      tmp.emplace(&*res.first);
+      fi_plus_1.swap(tmp);
+
+      m_blockSolver->AddUnsatisfiableCore(*uc, lvl + 1);
+      m_mainSolver->AddUnsatisfiableCore(*uc, lvl + 1);
+    }
+  }
+
+  return;
+}
+
 } // namespace car

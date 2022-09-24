@@ -200,9 +200,11 @@ private:
   // @output:
   // ================================================================================
   void generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
+    if (uc->size() == 1) return;
+    int fail_times = 0;
     std::unordered_set<int> required_lits;
-    orderAssumption(*uc);
     for (int i = uc->size() - 1; i > 0; i--) {
+      if (fail_times > 10) return;
       if (required_lits.find(uc->at(i)) == required_lits.end()) continue;
       sptr<cube> temp_uc(new cube());
       for (auto ll : *uc)
@@ -211,6 +213,7 @@ private:
         uc->swap(*temp_uc);
         i = -1;
       } else {
+        fail_times++;
         required_lits.emplace(uc->at(i));
       }
     }
@@ -230,7 +233,7 @@ private:
         auto uc_ctg = m_mainSolver->Getuc(false);
         uc->swap(*uc_ctg);
         return true;
-      } else if (rec_lvl > 1)
+      } else if (rec_lvl > 2)
         return false;
       else {
         std::pair<sptr<cube>, sptr<cube>> pair = m_mainSolver->GetAssignment();
@@ -245,7 +248,7 @@ private:
           auto uc_cts = m_mainSolver->Getuc(false);
           generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1);
           AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
-          // m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl);
+          m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1);
         } else {
           return false;
         }
