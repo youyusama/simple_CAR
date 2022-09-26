@@ -206,50 +206,51 @@ private:
   void generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
     if (uc->size() == 1) return;
     int fail_times = 0;
-    orderAssumption(*uc);
     std::unordered_set<int> required_lits;
     for (int i = uc->size() - 1; i > 0; i--) {
       if (fail_times > 10) return;
-      if (required_lits.find(uc->at(i)) == required_lits.end()) continue;
+      if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
       sptr<cube> temp_uc(new cube());
       for (auto ll : *uc)
         if (ll != uc->at(i)) temp_uc->emplace_back(ll);
       if (down_ctg(temp_uc, frame_lvl, rec_lvl)) {
         uc->swap(*temp_uc);
-        i = -1;
+        i = uc->size();
+        fail_times = 0;
       } else {
         fail_times++;
         required_lits.emplace(uc->at(i));
       }
     }
-    std::sort(uc->begin(), uc->end(), cmp);
   }
 
   bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl) {
     int ctgs = 0;
+    std::vector<int> ass;
+    for (auto l : *uc) ass.emplace_back(l);
+    for (auto &x : ass) {
+      x = m_model->GetPrime(x);
+    }
+    sptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
     while (true) {
-      std::vector<int> ass;
-      for (auto l : *uc) ass.emplace_back(l);
-      orderAssumption(ass);
-      for (auto &x : ass) {
-        x = m_model->GetPrime(x);
-      }
       // F_i & T & temp_uc'
       if (!m_mainSolver->SolveWithAssumption(ass, frame_lvl)) {
         auto uc_ctg = m_mainSolver->Getuc(false);
+        if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
         uc->swap(*uc_ctg);
         return true;
       } else if (rec_lvl > 2)
         return false;
       else {
         std::pair<sptr<cube>, sptr<cube>> pair = m_mainSolver->GetAssignment();
-        pair = get_predecessor(pair);
-        sptr<State> cts(new State(nullptr, pair.first, pair.second, 0));
+        std::pair<sptr<cube>, sptr<cube>> partial_pair = get_predecessor(pair, p_ucs);
+        sptr<State> cts(new State(nullptr, partial_pair.first, partial_pair.second, 0));
         int cts_lvl = GetNewLevel(cts);
+        std::vector<int> cts_ass;
         // int cts_lvl = frame_lvl - 1;
-        GetAssumption(cts, cts_lvl, ass);
+        GetAssumption(cts, cts_lvl, cts_ass);
         // F_i-1 & T & cts'
-        if (ctgs < 3 && cts_lvl > 0 && !m_mainSolver->SolveWithAssumption(ass, cts_lvl)) {
+        if (ctgs < 3 && cts_lvl > 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
           ctgs++;
           auto uc_cts = m_mainSolver->Getuc(false);
           generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1);

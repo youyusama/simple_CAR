@@ -36,7 +36,7 @@ public:
 
   void propagate(int level);
 
-  void propagate_uc_from_lvl(sptr<cube> uc, int lvl);
+  int propagate_uc_from_lvl(sptr<cube> uc, int lvl);
 
   void set_solver(std::shared_ptr<ISolver> slv);
 
