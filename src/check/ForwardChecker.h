@@ -133,6 +133,10 @@ private:
     return;
   }
 
+  static bool cmp(int a, int b) {
+    return abs(a) < abs(b);
+  }
+
   // ================================================================================
   // @brief: t & input & T -> s'  =>  (t) & input & T & !s' is unsat, !bad & input & t & T is unsat
   // @input: pair<input, latch>
@@ -202,6 +206,7 @@ private:
   void generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
     if (uc->size() == 1) return;
     int fail_times = 0;
+    orderAssumption(*uc);
     std::unordered_set<int> required_lits;
     for (int i = uc->size() - 1; i > 0; i--) {
       if (fail_times > 10) return;
@@ -217,6 +222,7 @@ private:
         required_lits.emplace(uc->at(i));
       }
     }
+    std::sort(uc->begin(), uc->end(), cmp);
   }
 
   bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl) {
