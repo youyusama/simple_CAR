@@ -26,6 +26,8 @@ public:
 
   void Insert(std::shared_ptr<std::vector<int>> uc, int index);
 
+  void Init_Frame_0(sptr<cube> latches);
+
   void GetFrame(int frameLevel, std::vector<std::shared_ptr<std::vector<int>>> &out);
 
   bool IsBlockedByFrame_lazy(std::vector<int> &latches, int frameLevel);

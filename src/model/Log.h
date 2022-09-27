@@ -76,6 +76,7 @@ public:
           << "MainSolverCalls:\t" << m_mainSolverCalls << std::endl;
     m_log << "MainSolver takes:\t" << m_mainSolverTime << " seconds" << std::endl;
     m_log << "InvSolver takes:\t" << m_invSolverTime << " seconds" << std::endl;
+    m_log << "StartSolver takes:\t" << m_enumerateStartStateTime << " seconds" << std::endl;
     m_log << "GetNewLevel Procedure takes:\t" << m_getNewLevelTime << " seconds" << std::endl;
     m_log << "Update uc takes:\t" << m_updateUcTime << " seconds" << std::endl;
     m_log << "muc takes:\t" << m_mucTime << " seconds" << std::endl;
@@ -88,6 +89,7 @@ public:
       m_log << "Pine uc is short Times:\t" << m_pineIsShort << std::endl;
       m_log << "Pine l1 is <20% Times:\t" << m_pineL1isShort << std::endl;
     }
+    m_log << "Init Time:\t" << m_initTime << " seconds" << std::endl;
     m_log << "Total Time:\t" << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << " seconds" << std::endl;
   }
 
@@ -131,12 +133,20 @@ public:
     m_pineTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
   }
 
+  void StatInit() {
+    m_initTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+  }
+
   void StatGetNewLevel() {
     m_getNewLevelTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
   }
 
   void StatPropagation() {
     m_propagationTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+  }
+
+  void StatStartSolver() {
+    m_enumerateStartStateTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
   }
 
   void StatUpdateUc() {
@@ -181,6 +191,8 @@ private:
   double m_timelimit = 0;
   double m_mucTime = 0;
   double m_partialTime = 0;
+  double m_enumerateStartStateTime = 0;
+  double m_initTime = 0;
   // pine
   double m_pineTime = 0;
   int m_pineCalled = 0;

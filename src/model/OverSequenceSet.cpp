@@ -39,6 +39,24 @@ void OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
   m_blockSolver->AddUnsatisfiableCore(*uc, index);
 }
 
+
+// ================================================================================
+// @brief: init frame 0
+// @input: init state
+// @output:
+// ================================================================================
+void OverSequenceSet::Init_Frame_0(sptr<cube> latches) {
+  m_sequence.emplace_back(frame());
+  m_block_counter.emplace_back(0);
+  for (auto l : *latches) {
+    sptr<cube> puc(new std::vector<int>{-l});
+    auto res = Ucs.insert(*puc);
+    m_sequence[0].emplace(&*res.first);
+    m_blockSolver->AddUnsatisfiableCore(*puc, 0);
+  }
+}
+
+
 void OverSequenceSet::GetFrame(int frameLevel, std::vector<std::shared_ptr<std::vector<int>>> &out) {
   if (frameLevel >= m_sequence.size()) return;
   frame frame_i = m_sequence[frameLevel];

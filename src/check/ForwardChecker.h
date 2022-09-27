@@ -195,6 +195,15 @@ private:
       }
     }
     m_lifts->release_temp_cls(act);
+    // delete !bad
+    if (s == nullptr) {
+      for (auto it = partial_latch->begin(); it != partial_latch->end(); it++) {
+        if (*it == -m_badId) {
+          partial_latch->erase(it);
+          break;
+        }
+      }
+    }
     return std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>>(t.first, partial_latch);
   }
 
@@ -205,10 +214,8 @@ private:
   // ================================================================================
   void generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
     if (uc->size() == 1) return;
-    int fail_times = 0;
     std::unordered_set<int> required_lits;
     for (int i = uc->size() - 1; i > 0; i--) {
-      if (fail_times > 10) return;
       if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
       sptr<cube> temp_uc(new cube());
       for (auto ll : *uc)
@@ -216,9 +223,7 @@ private:
       if (down_ctg(temp_uc, frame_lvl, rec_lvl)) {
         uc->swap(*temp_uc);
         i = uc->size();
-        fail_times = 0;
       } else {
-        fail_times++;
         required_lits.emplace(uc->at(i));
       }
     }
@@ -273,6 +278,7 @@ private:
   std::shared_ptr<State> EnumerateStartState() {
     if (m_startSovler->SolveWithAssumption()) {
       std::pair<sptr<cube>, sptr<cube>> pair = m_startSovler->GetStartPair();
+      // CAR_DEBUG_v("From state: ", *pair.second);
       pair = get_predecessor(pair);
       sptr<State> newState(new State(nullptr, pair.first, pair.second, 0));
       return newState;
