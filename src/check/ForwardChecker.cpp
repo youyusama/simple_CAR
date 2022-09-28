@@ -171,6 +171,7 @@ bool ForwardChecker::Check(int badId) {
           AddUnsatisfiableCore(uc, task.frameLevel + 1);
           m_log->StatUpdateUc();
           CAR_DEBUG_o("Frames: ", m_overSequence.get());
+          m_overSequence->propagate_uc_from_lvl(uc, task.frameLevel + 1);
           task.frameLevel++;
           continue;
         }

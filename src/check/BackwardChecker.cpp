@@ -284,7 +284,7 @@ void BackwardChecker::Init() {
   // {
   // 	m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
   // }
-  m_overSequence.reset(new OverSequenceNI(m_model));
+  m_overSequence.reset(new OverSequenceSet(m_model));
   // m_overSequence.reset(new OverSequenceSet(m_model));
   // m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
   if (m_settings.empi) {
