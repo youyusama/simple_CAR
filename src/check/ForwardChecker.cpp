@@ -168,10 +168,10 @@ bool ForwardChecker::Check(int badId) {
           m_log->Statmuc();
           CAR_DEBUG_v("Get UC:", *uc);
           m_log->Tick();
-          AddUnsatisfiableCore(uc, task.frameLevel + 1);
+          if (AddUnsatisfiableCore(uc, task.frameLevel + 1))
+            m_overSequence->propagate_uc_from_lvl(uc, task.frameLevel + 1);
           m_log->StatUpdateUc();
           CAR_DEBUG_o("Frames: ", m_overSequence.get());
-          m_overSequence->propagate_uc_from_lvl(uc, task.frameLevel + 1);
           task.frameLevel++;
           continue;
         }
@@ -185,8 +185,8 @@ bool ForwardChecker::Check(int badId) {
     CAR_DEBUG("\nNew Frame Added");
     std::vector<std::shared_ptr<std::vector<int>>> lastFrame;
     frameStep++;
-    m_overSequence->GetFrame(frameStep, lastFrame);
-    m_mainSolver->AddNewFrame(lastFrame, frameStep);
+    // m_overSequence->GetFrame(frameStep, lastFrame);
+    // m_mainSolver->AddNewFrame(lastFrame, frameStep);
 
     if (m_settings.propagation) {
       m_log->Tick();
@@ -246,21 +246,23 @@ void ForwardChecker::Init(int badId) {
   m_log->StatInit();
 }
 
-void ForwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel) {
-  if (frameLevel <= m_overSequence->effectiveLevel) {
-    m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
-  } else {
+bool ForwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel) {
+  // if (frameLevel <= m_overSequence->effectiveLevel) {
+  //   m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
+  // } else {
+  //   m_startSovler->AddClause(-m_startSovler->GetFlag(), *uc);
+  // }
+  m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
+  if (frameLevel > m_overSequence->effectiveLevel) {
     m_startSovler->AddClause(-m_startSovler->GetFlag(), *uc);
-    // CAR_DEBUG_v("add clause to start:", *uc);
-    // CAR_DEBUG("start flag: " + std::to_string(m_startSovler->GetFlag()));
   }
-  m_overSequence->Insert(uc, frameLevel);
   if (m_settings.empi) {
     updateLitOrder(*uc);
   }
   if (frameLevel < m_minUpdateLevel) {
     m_minUpdateLevel = frameLevel;
   }
+  return m_overSequence->Insert(uc, frameLevel);
 }
 
 bool ForwardChecker::ImmediateSatisfiable(int badId) {

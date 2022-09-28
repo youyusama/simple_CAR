@@ -102,7 +102,7 @@ public:
 private:
   void Init(int badId);
 
-  void AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel);
+  bool AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel);
 
   bool ImmediateSatisfiable(int badId);
 

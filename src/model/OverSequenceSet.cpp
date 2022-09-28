@@ -22,7 +22,10 @@ bool OverSequenceSet::is_imply(cube a, cube b) {
     return false;
 }
 
-void OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
+bool OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
+  if (index != 1 && !IsBlockedByFrame_lazy(*uc, index - 1)) {
+    return false;
+  }
   auto res = Ucs.insert(*uc);
   if (!res.second) rep_counter++;
   if (index >= m_sequence.size()) {
@@ -37,6 +40,7 @@ void OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
   tmp.emplace(&*res.first);
   m_sequence[index].swap(tmp);
   m_blockSolver->AddUnsatisfiableCore(*uc, index);
+  return true;
 }
 
 

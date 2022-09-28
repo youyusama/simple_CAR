@@ -24,7 +24,7 @@ public:
     rep_counter = 0;
   }
 
-  void Insert(std::shared_ptr<std::vector<int>> uc, int index);
+  bool Insert(std::shared_ptr<std::vector<int>> uc, int index);
 
   void Init_Frame_0(sptr<cube> latches);
 
