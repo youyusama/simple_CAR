@@ -23,15 +23,16 @@ bool OverSequenceSet::is_imply(cube a, cube b) {
 }
 
 bool OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
-  if (index != 1 && !IsBlockedByFrame_lazy(*uc, index - 1)) {
-    return false;
-  }
-  auto res = Ucs.insert(*uc);
-  if (!res.second) rep_counter++;
+  m_blockSolver->AddUnsatisfiableCore(*uc, index);
   if (index >= m_sequence.size()) {
     m_sequence.emplace_back(frame());
     m_block_counter.emplace_back(0);
   }
+  if (index != 1 && !IsBlockedByFrame_sat(*uc, index - 1)) {
+    return false;
+  }
+  auto res = Ucs.insert(*uc);
+  if (!res.second) rep_counter++;
   frame tmp;
   for (auto f_uc : m_sequence[index]) {
     if (!is_imply(*res.first, *f_uc))
@@ -39,7 +40,6 @@ bool OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
   }
   tmp.emplace(&*res.first);
   m_sequence[index].swap(tmp);
-  m_blockSolver->AddUnsatisfiableCore(*uc, index);
   return true;
 }
 
@@ -94,6 +94,22 @@ bool OverSequenceSet::IsBlockedByFrame(std::vector<int> &latches, int frameLevel
     }
   }
   return false;
+}
+
+
+bool OverSequenceSet::IsBlockedByFrame_sat(std::vector<int> &latches, int frameLevel) {
+  std::vector<int> assumption;
+  assumption.reserve(latches.size());
+  for (int l : latches) {
+    assumption.emplace_back(l);
+  }
+
+  bool result = m_blockSolver->SolveWithAssumption(assumption, frameLevel);
+  if (!result) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 

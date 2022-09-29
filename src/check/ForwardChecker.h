@@ -259,8 +259,8 @@ private:
           ctgs++;
           auto uc_cts = m_mainSolver->Getuc(false);
           generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1);
-          AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
-          m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1);
+          if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
+            m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1);
         } else {
           return false;
         }
