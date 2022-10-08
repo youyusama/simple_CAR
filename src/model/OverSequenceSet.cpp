@@ -28,9 +28,9 @@ bool OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
     m_sequence.emplace_back(frame());
     m_block_counter.emplace_back(0);
   }
-  if (index != 1 && !IsBlockedByFrame_sat(*uc, index - 1)) {
-    return false;
-  }
+  // if (index != 1 && !IsBlockedByFrame_sat(*uc, index - 1)) {
+  //   return false;
+  // }
   auto res = Ucs.insert(*uc);
   if (!res.second) rep_counter++;
   frame tmp;

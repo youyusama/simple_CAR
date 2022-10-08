@@ -215,6 +215,8 @@ private:
   void generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
     if (uc->size() == 1) return;
     std::unordered_set<int> required_lits;
+    std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
+    for (auto b : *uc_blocker) required_lits.emplace(b);
     for (int i = uc->size() - 1; i > 0; i--) {
       if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
       sptr<cube> temp_uc(new cube());

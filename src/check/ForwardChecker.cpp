@@ -283,6 +283,7 @@ bool ForwardChecker::isInvExisted() {
   for (int i = 0; i < m_overSequence->GetLength(); ++i) {
     if (IsInvariant(i)) {
       m_log->PrintSth("Proof at frame " + std::to_string(i) + "\n");
+      m_log->PrintFramesInfo(m_overSequence.get());
       result = true;
       break;
     }
