@@ -284,11 +284,19 @@ void CarSolver::Getmuc(LSet &ass) {
 
 
 std::shared_ptr<std::vector<int>> CarSolver::justGetUC() {
+  // get conflict as assumption
+  LSet ass;
+  for (int i = 0; i < conflict.size(); i++)
+    ass.insert(~conflict[i]);
+
+  // compute muc
+  Getmuc(ass);
+
   std::shared_ptr<std::vector<int>> uc(new std::vector<int>());
-  uc->reserve(conflict.size());
+  uc->reserve(ass.size());
   int val;
-  for (int i = 0; i < conflict.size(); ++i) {
-    val = -GetLiteralId(conflict[i]);
+  for (int i = 0; i < ass.size(); ++i) {
+    val = GetLiteralId(ass[i]);
     if (m_model->IsLatch(val)) {
       uc->emplace_back(val);
     }

@@ -16,7 +16,6 @@ src/model/OverSequenceNI.cpp\
 src/model/OverSequenceSet.cpp\
 src/model/Log.cpp\
 src/visualization/Vis.cpp\
-src/model/OverSequenceForProp.cpp\
 src/sat/minisat/core/Solver.cc\
 src/sat/minisat/utils/Options.cc\
 src/sat/minisat/utils/System.cc
@@ -37,7 +36,6 @@ OverSequenceNI.o \
 OverSequenceSet.o \
 Log.o \
 Vis.o \
-OverSequenceForProp.o\
 Solver.o \
 Options.o \
 System.o

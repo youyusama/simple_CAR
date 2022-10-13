@@ -1,7 +1,8 @@
 #include "OverSequenceSet.h"
 
 namespace car {
-bool _cmp(int a, int b) {
+
+static bool _cmp(int a, int b) {
   if (abs(a) != abs(b))
     return abs(a) < abs(b);
   else

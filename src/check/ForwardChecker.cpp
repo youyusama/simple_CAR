@@ -131,8 +131,8 @@ bool ForwardChecker::Check(int badId) {
         m_log->Tick();
         // bool result = m_mainSolver->SolveWithAssumption(*(task.state->latches), task.frameLevel);
         CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel));
-        // CAR_DEBUG_s("From state: ", task.state);
-        // CAR_DEBUG_v("State Detail: ", *task.state->latches);
+        CAR_DEBUG_s("From state: ", task.state);
+        CAR_DEBUG_v("State Detail: ", *task.state->latches);
         std::vector<int> assumption;
         GetAssumption(task.state, task.frameLevel, assumption);
         // CAR_DEBUG_v("Primed Assumption: ", assumption);
@@ -185,8 +185,6 @@ bool ForwardChecker::Check(int badId) {
     CAR_DEBUG("\nNew Frame Added");
     std::vector<std::shared_ptr<std::vector<int>>> lastFrame;
     frameStep++;
-    // m_overSequence->GetFrame(frameStep, lastFrame);
-    // m_mainSolver->AddNewFrame(lastFrame, frameStep);
 
     if (m_settings.propagation) {
       m_log->Tick();
@@ -223,8 +221,8 @@ void ForwardChecker::Init(int badId) {
   m_log->ResetClock();
   m_log->Tick();
   m_badId = badId;
-  // m_overSequence.reset(new OverSequenceNI(m_model));
-  m_overSequence.reset(new OverSequenceSet(m_model));
+  m_overSequence.reset(new OverSequenceNI(m_model));
+  // m_overSequence.reset(new OverSequenceSet(m_model));
   if (m_settings.empi) {
     slimLitOrder.heuristicLitOrder = &litOrder;
   }
@@ -247,22 +245,21 @@ void ForwardChecker::Init(int badId) {
 }
 
 bool ForwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel) {
-  // if (frameLevel <= m_overSequence->effectiveLevel) {
-  //   m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
-  // } else {
-  //   m_startSovler->AddClause(-m_startSovler->GetFlag(), *uc);
-  // }
   m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
   if (frameLevel > m_overSequence->effectiveLevel) {
     m_startSovler->AddClause(-m_startSovler->GetFlag(), *uc);
   }
-  if (m_settings.empi) {
-    updateLitOrder(*uc);
-  }
   if (frameLevel < m_minUpdateLevel) {
     m_minUpdateLevel = frameLevel;
   }
-  return m_overSequence->Insert(uc, frameLevel);
+  bool res = false;
+  if (m_overSequence->Insert(uc, frameLevel)) {
+    if (m_settings.empi) {
+      updateLitOrder(*uc);
+    }
+    res = true;
+  }
+  return res;
 }
 
 bool ForwardChecker::ImmediateSatisfiable(int badId) {
@@ -270,7 +267,6 @@ bool ForwardChecker::ImmediateSatisfiable(int badId) {
   std::vector<int> assumptions;
   assumptions.resize((init.size()));
   std::copy(init.begin(), init.end(), assumptions.begin());
-  // assumptions[assumptions.size()-1] = badId;
   bool result = m_mainSolver->SolveWithAssumptionAndBad(assumptions, badId);
   return result;
 }
@@ -294,7 +290,7 @@ bool ForwardChecker::isInvExisted() {
 
 int ForwardChecker::GetNewLevel(std::shared_ptr<State> state, int start) {
   for (int i = start; i < m_overSequence->GetLength(); ++i) {
-    if (!m_overSequence->IsBlockedByFrame_sat(*(state->latches), i)) {
+    if (!m_overSequence->IsBlockedByFrame_lazy(*(state->latches), i)) {
       return i - 1;
     }
   }

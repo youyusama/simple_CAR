@@ -21,7 +21,6 @@ typedef std::vector<int> cube;
 template <typename T>
 using sptr = std::shared_ptr<T>;
 
-
 namespace car {
 
 class AigerModel {

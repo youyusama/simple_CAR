@@ -8,7 +8,6 @@
 #include "Log.h"
 #include "MainSolver.h"
 #include "OverSequence.h"
-#include "OverSequenceForProp.h"
 #include "OverSequenceNI.h"
 #include "OverSequenceSet.h"
 #include "State.h"

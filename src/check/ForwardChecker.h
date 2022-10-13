@@ -8,7 +8,6 @@
 #include "Log.h"
 #include "MainSolver.h"
 #include "OverSequence.h"
-#include "OverSequenceForProp.h"
 #include "OverSequenceNI.h"
 #include "OverSequenceSet.h"
 #include "StartSolver.h"
@@ -112,9 +111,9 @@ private:
 
   int GetNewLevel(std::shared_ptr<State> state, int start = 0);
 
-  void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass) {
+  void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass, bool rev = false) {
     if (m_settings.incr) {
-      std::vector<int> *uc_inc = m_overSequence->GetBlocker(state->latches, frameLevel);
+      const std::vector<int> *uc_inc = m_overSequence->GetBlocker(state->latches, frameLevel);
       ass.reserve(ass.size() + uc_inc->size());
       ass.insert(ass.end(), uc_inc->begin(), uc_inc->end());
     }
@@ -122,7 +121,7 @@ private:
     std::vector<int> l_ass;
     l_ass.reserve(state->latches->size());
     l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
-    orderAssumption(l_ass);
+    orderAssumption(l_ass, rev);
 
     ass.reserve(ass.size() + l_ass.size());
     ass.insert(ass.end(), l_ass.begin(), l_ass.end());
@@ -171,29 +170,33 @@ private:
       m_lifts->AddAssumption(i);
     }
     m_lifts->AddAssumption(act);
-    while (true) {
-      bool res = m_lifts->SolveWithAssumption();
-      assert(!res);
-      std::shared_ptr<cube> temp_p = m_lifts->justGetUC();
-      if (temp_p->size() == partial_latch->size() && std::equal(temp_p->begin(), temp_p->end(), partial_latch->begin()))
-        break;
-      else {
-        partial_latch = temp_p;
-        m_lifts->clean_assumptions();
-        // add t
-        for (auto l : *t.second) {
-          m_lifts->AddAssumption(l);
-        }
-        // add input
-        for (auto i : *t.first) {
-          m_lifts->AddAssumption(i);
-        }
-        if (s == nullptr) {
-          m_lifts->AddAssumption(-m_badId);
-        }
-        m_lifts->AddAssumption(act);
-      }
-    }
+    // while (true) {
+    //   bool res = m_lifts->SolveWithAssumption();
+    //   assert(!res);
+    //   std::shared_ptr<cube> temp_p = m_lifts->justGetUC();//muc
+    //   if (temp_p->size() == partial_latch->size() && std::equal(temp_p->begin(), temp_p->end(), partial_latch->begin()))
+    //     break;
+    //   else {
+    //     partial_latch = temp_p;
+    //     m_lifts->clean_assumptions();
+    //     // add t
+    //     for (auto l : *t.second) {
+    //       m_lifts->AddAssumption(l);
+    //     }
+    //     // add input
+    //     for (auto i : *t.first) {
+    //       m_lifts->AddAssumption(i);
+    //     }
+    //     if (s == nullptr) {
+    //       m_lifts->AddAssumption(-m_badId);
+    //     }
+    //     m_lifts->AddAssumption(act);
+    //   }
+    // }
+    bool res = m_lifts->SolveWithAssumption();
+    assert(!res);
+    std::shared_ptr<cube> temp_p = m_lifts->justGetUC(); // muc
+    partial_latch = temp_p;
     m_lifts->release_temp_cls(act);
     // delete !bad
     if (s == nullptr) {
@@ -215,7 +218,7 @@ private:
   void generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
     if (uc->size() == 1) return;
     std::unordered_set<int> required_lits;
-    std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
+    const std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
     for (auto b : *uc_blocker) required_lits.emplace(b);
     for (int i = uc->size() - 1; i > 0; i--) {
       if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
@@ -235,6 +238,7 @@ private:
     int ctgs = 0;
     std::vector<int> ass;
     for (auto l : *uc) ass.emplace_back(l);
+    orderAssumption(ass);
     for (auto &x : ass) {
       x = m_model->GetPrime(x);
     }
@@ -291,7 +295,7 @@ private:
 
   int m_minUpdateLevel;
   int m_badId;
-  std::shared_ptr<OverSequenceSet> m_overSequence;
+  std::shared_ptr<OverSequenceNI> m_overSequence;
   UnderSequence m_underSequence;
   Settings m_settings;
   std::shared_ptr<Vis> m_vis;
