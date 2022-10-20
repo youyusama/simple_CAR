@@ -315,6 +315,25 @@ bool _cube_same(std::vector<int> cube1, std::vector<int> cube2) {
 }
 
 // ================================================================================
+// @brief: clear the tree
+// @input:
+// @output:
+// ================================================================================
+void Vis::clear_tree() {
+  std::queue<uc_tree_node *> node_queue;
+  node_queue.push(uc_tree_root);
+  while (!node_queue.empty()) {
+    uc_tree_node *f_node = node_queue.front();
+    node_queue.pop();
+    for (auto c : f_node->children) {
+      node_queue.push(c);
+    }
+    delete f_node;
+  }
+  uc_tree_root = new uc_tree_node();
+}
+
+// ================================================================================
 // @brief: add node to the frame tree
 // @input: the cube, frame level
 // @output:

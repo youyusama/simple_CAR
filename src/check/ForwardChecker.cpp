@@ -197,6 +197,7 @@ bool ForwardChecker::Check(int badId) {
     m_startSovler->UpdateStartSolverFlag();
 
     if (m_settings.pVisualization) {
+      m_vis->clear_tree();
       for (int k = 1; k < m_overSequence->GetLength(); k++) {
         std::vector<std::shared_ptr<std::vector<int>>> frame;
         m_overSequence->GetFrame(k, frame);
@@ -221,8 +222,8 @@ void ForwardChecker::Init(int badId) {
   m_log->ResetClock();
   m_log->Tick();
   m_badId = badId;
-  m_overSequence.reset(new OverSequenceNI(m_model));
-  // m_overSequence.reset(new OverSequenceSet(m_model));
+  // m_overSequence.reset(new OverSequenceNI(m_model));
+  m_overSequence.reset(new OverSequenceSet(m_model));
   if (m_settings.empi) {
     slimLitOrder.heuristicLitOrder = &litOrder;
   }

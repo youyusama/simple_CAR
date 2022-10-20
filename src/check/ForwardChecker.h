@@ -225,7 +225,7 @@ private:
       sptr<cube> temp_uc(new cube());
       for (auto ll : *uc)
         if (ll != uc->at(i)) temp_uc->emplace_back(ll);
-      if (down_ctg(temp_uc, frame_lvl, rec_lvl)) {
+      if (down_ctg(temp_uc, frame_lvl, rec_lvl, required_lits)) {
         uc->swap(*temp_uc);
         i = uc->size();
       } else {
@@ -234,7 +234,7 @@ private:
     }
   }
 
-  bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl) {
+  bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl, std::unordered_set<int> required_lits) {
     int ctgs = 0;
     std::vector<int> ass;
     for (auto l : *uc) ass.emplace_back(l);
@@ -268,7 +268,18 @@ private:
           if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
             m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1);
         } else {
-          return false;
+          sptr<cube> temp_uc(new cube());
+          std::sort(cts->latches->begin(), cts->latches->end());
+          for (auto lit : *uc) {
+            if (std::binary_search(cts->latches->begin(), cts->latches->end(), lit)) {
+              temp_uc->emplace_back(lit);
+            } else {
+              if (required_lits.find(lit) != required_lits.end()) return false;
+            }
+          }
+          if (temp_uc->size() == uc->size()) return false;
+          ctgs = 0;
+          uc->swap(*temp_uc);
         }
       }
     }
@@ -295,7 +306,7 @@ private:
 
   int m_minUpdateLevel;
   int m_badId;
-  std::shared_ptr<OverSequenceNI> m_overSequence;
+  std::shared_ptr<OverSequenceSet> m_overSequence;
   UnderSequence m_underSequence;
   Settings m_settings;
   std::shared_ptr<Vis> m_vis;

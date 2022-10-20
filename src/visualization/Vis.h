@@ -59,6 +59,8 @@ graph
 
   void print_tree(int k);
 
+  void clear_tree();
+
 private:
   // search vis
   uint tempId;
