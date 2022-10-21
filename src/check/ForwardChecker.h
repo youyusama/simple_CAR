@@ -144,14 +144,15 @@ private:
   std::pair<sptr<cube>, sptr<cube>> get_predecessor(
     std::pair<sptr<cube>, sptr<cube>> t, sptr<State> s = nullptr) {
 
-    std::shared_ptr<cube> partial_latch(new cube());
-    for (auto l : *t.second) partial_latch->emplace_back(l);
+    orderAssumption(*t.second);
+    std::shared_ptr<cube> partial_latch(new cube(*t.second));
 
     int act = m_lifts->get_temp_flag();
     if (s == nullptr) {
       // add !bad to assumption
+      std::vector<int> *neg_bad = new std::vector<int>(1, -m_badId);
+      m_lifts->add_temp_clause(neg_bad, act, false);
       m_lifts->clean_assumptions();
-      m_lifts->AddAssumption(-m_badId);
     } else {
       // add !s' to clause
       std::vector<int> *neg_primed_s = new std::vector<int>();
@@ -170,41 +171,25 @@ private:
       m_lifts->AddAssumption(i);
     }
     m_lifts->AddAssumption(act);
-    // while (true) {
-    //   bool res = m_lifts->SolveWithAssumption();
-    //   assert(!res);
-    //   std::shared_ptr<cube> temp_p = m_lifts->justGetUC();//muc
-    //   if (temp_p->size() == partial_latch->size() && std::equal(temp_p->begin(), temp_p->end(), partial_latch->begin()))
-    //     break;
-    //   else {
-    //     partial_latch = temp_p;
-    //     m_lifts->clean_assumptions();
-    //     // add t
-    //     for (auto l : *t.second) {
-    //       m_lifts->AddAssumption(l);
-    //     }
-    //     // add input
-    //     for (auto i : *t.first) {
-    //       m_lifts->AddAssumption(i);
-    //     }
-    //     if (s == nullptr) {
-    //       m_lifts->AddAssumption(-m_badId);
-    //     }
-    //     m_lifts->AddAssumption(act);
-    //   }
-    // }
-    bool res = m_lifts->SolveWithAssumption();
-    assert(!res);
-    std::shared_ptr<cube> temp_p = m_lifts->justGetUC(); // muc
-    partial_latch = temp_p;
-    m_lifts->release_temp_cls(act);
-    // delete !bad
-    if (s == nullptr) {
-      for (auto it = partial_latch->begin(); it != partial_latch->end(); it++) {
-        if (*it == -m_badId) {
-          partial_latch->erase(it);
-          break;
+    while (true) {
+      bool res = m_lifts->SolveWithAssumption();
+      assert(!res);
+      std::shared_ptr<cube> temp_p = m_lifts->justGetUC(); // not muc
+      if (temp_p->size() == partial_latch->size() && std::equal(temp_p->begin(), temp_p->end(), partial_latch->begin()))
+        break;
+      else {
+        partial_latch = temp_p;
+        m_lifts->clean_assumptions();
+        // add t
+        // orderAssumption(*t.second);
+        for (auto l : *partial_latch) {
+          m_lifts->AddAssumption(l);
         }
+        // add input
+        for (auto i : *t.first) {
+          m_lifts->AddAssumption(i);
+        }
+        m_lifts->AddAssumption(act);
       }
     }
     return std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>>(t.first, partial_latch);
@@ -261,25 +246,26 @@ private:
         // int cts_lvl = frame_lvl - 1;
         GetAssumption(cts, cts_lvl, cts_ass);
         // F_i-1 & T & cts'
-        if (ctgs < 3 && cts_lvl > 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
+        if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
           ctgs++;
           auto uc_cts = m_mainSolver->Getuc(false);
           generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1);
           if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
             m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1);
         } else {
-          sptr<cube> temp_uc(new cube());
-          std::sort(cts->latches->begin(), cts->latches->end());
-          for (auto lit : *uc) {
-            if (std::binary_search(cts->latches->begin(), cts->latches->end(), lit)) {
-              temp_uc->emplace_back(lit);
-            } else {
-              if (required_lits.find(lit) != required_lits.end()) return false;
-            }
-          }
-          if (temp_uc->size() == uc->size()) return false;
-          ctgs = 0;
-          uc->swap(*temp_uc);
+          // sptr<cube> temp_uc(new cube());
+          // std::sort(cts->latches->begin(), cts->latches->end());
+          // for (auto lit : *uc) {
+          //   if (std::binary_search(cts->latches->begin(), cts->latches->end(), lit)) {
+          //     temp_uc->emplace_back(lit);
+          //   } else {
+          //     if (required_lits.find(lit) != required_lits.end()) return false;
+          //   }
+          // }
+          // if (temp_uc->size() == uc->size()) return false;
+          // ctgs = 0;
+          // uc->swap(*temp_uc);
+          return false;
         }
       }
     }

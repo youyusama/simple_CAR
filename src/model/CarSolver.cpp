@@ -290,7 +290,7 @@ std::shared_ptr<std::vector<int>> CarSolver::justGetUC() {
     ass.insert(~conflict[i]);
 
   // compute muc
-  Getmuc(ass);
+  // Getmuc(ass);
 
   std::shared_ptr<std::vector<int>> uc(new std::vector<int>());
   uc->reserve(ass.size());
