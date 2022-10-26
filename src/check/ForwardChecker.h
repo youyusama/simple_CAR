@@ -205,6 +205,7 @@ private:
     std::unordered_set<int> required_lits;
     const std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
     for (auto b : *uc_blocker) required_lits.emplace(b);
+    orderAssumption(*uc);
     for (int i = uc->size() - 1; i > 0; i--) {
       if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
       sptr<cube> temp_uc(new cube());
@@ -212,21 +213,19 @@ private:
         if (ll != uc->at(i)) temp_uc->emplace_back(ll);
       if (down_ctg(temp_uc, frame_lvl, rec_lvl, required_lits)) {
         uc->swap(*temp_uc);
+        orderAssumption(*uc);
         i = uc->size();
       } else {
         required_lits.emplace(uc->at(i));
       }
     }
+    std::sort(uc->begin(), uc->end(), cmp);
   }
 
   bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl, std::unordered_set<int> required_lits) {
     int ctgs = 0;
     std::vector<int> ass;
-    for (auto l : *uc) ass.emplace_back(l);
-    orderAssumption(ass);
-    for (auto &x : ass) {
-      x = m_model->GetPrime(x);
-    }
+    for (auto l : *uc) ass.emplace_back(m_model->GetPrime(l));
     sptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
     while (true) {
       // F_i & T & temp_uc'

@@ -164,6 +164,7 @@ bool ForwardChecker::Check(int badId) {
           if (uc->empty()) {
             // placeholder, uc is empty => safe
           }
+          CAR_DEBUG_v("Get UC:", *uc);
           if (m_settings.ctg) generalize_ctg(uc, task.frameLevel);
           m_log->Statmuc();
           CAR_DEBUG_v("Get UC:", *uc);
