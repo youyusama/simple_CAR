@@ -88,12 +88,18 @@ public:
 
 
   struct LvlLitOrder {
-    sptr<cube> aiger_order;
+    sptr<std::vector<float>> aiger_order;
 
     void update_order(const cube &uc) {
       for (auto l : uc) {
         int lit = (l > 0) ? (l * 2) : (abs(l) * 2 + 1);
         aiger_order->at(lit)++;
+      }
+    }
+
+    void decay() {
+      for (auto i : *aiger_order) {
+        i *= 0.99;
       }
     }
 
@@ -112,6 +118,7 @@ public:
     litOrder.decay();
     litOrder.count(uc);
 
+    lvlLitOrder.decay();
     lvlLitOrder.update_order(uc);
   }
 

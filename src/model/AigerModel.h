@@ -90,7 +90,7 @@ public:
 
   std::vector<std::vector<int>> &GetClause() { return m_clauses; }
 
-  sptr<std::vector<int>> get_aiger_order();
+  sptr<std::vector<float>> get_aiger_order();
 #pragma endregion
 
 #pragma region private methods
@@ -167,7 +167,7 @@ private:
   std::unordered_map<int, int> m_nextValueOfGate;              // next value of and gate
   std::unordered_map<int, std::vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
 
-  sptr<cube> m_aiger_order;
+  sptr<std::vector<float>> m_aiger_order;
 
 #pragma endregion
 };

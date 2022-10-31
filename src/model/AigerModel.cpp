@@ -464,7 +464,7 @@ int get_neg(int l) {
 
 
 void AigerModel::build_aiger_order(const aiger *aig) {
-  sptr<std::vector<int>> aiger_order(new cube());
+  sptr<std::vector<float>> aiger_order(new std::vector<float>());
   sptr<std::queue<int>> required_gates(new std::queue<int>);
   sptr<std::vector<int>> latches(new cube());
   sptr<std::unordered_set<int>> added_latches(new std::unordered_set<int>());
@@ -514,7 +514,7 @@ void AigerModel::build_aiger_order(const aiger *aig) {
 }
 
 
-sptr<cube> AigerModel::get_aiger_order() {
+sptr<std::vector<float>> AigerModel::get_aiger_order() {
   return m_aiger_order;
 }
 
