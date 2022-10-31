@@ -86,15 +86,38 @@ public:
     }
   } slimLitOrder;
 
+
+  struct LvlLitOrder {
+    sptr<cube> aiger_order;
+
+    void update_order(const cube &uc) {
+      for (auto l : uc) {
+        int lit = (l > 0) ? (l * 2) : (abs(l) * 2 + 1);
+        aiger_order->at(lit)++;
+      }
+    }
+
+    bool operator()(const int &l1, const int &l2) const {
+      int lit_1 = (l1 > 0) ? (l1 * 2) : (abs(l1) * 2 + 1);
+      int lit_2 = (l2 > 0) ? (l2 * 2) : (abs(l2) * 2 + 1);
+      if (lit_2 >= aiger_order->size()) return true;
+      if (lit_1 >= aiger_order->size()) return false;
+      return (aiger_order->at(lit_1) > aiger_order->at(lit_2));
+    }
+  } lvlLitOrder;
+
+
   float numLits, numUpdates;
   void updateLitOrder(const std::vector<int> &uc) {
     litOrder.decay();
     litOrder.count(uc);
+
+    lvlLitOrder.update_order(uc);
   }
 
   // order according to preference
   void orderAssumption(std::vector<int> &uc, bool rev = false) {
-    std::stable_sort(uc.begin(), uc.end(), slimLitOrder);
+    std::stable_sort(uc.begin(), uc.end(), lvlLitOrder);
     if (rev) std::reverse(uc.begin(), uc.end());
   }
 

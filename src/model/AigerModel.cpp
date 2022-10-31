@@ -39,6 +39,7 @@ void AigerModel::Init(aiger *aig) {
   //   Collect_and_gates_for_pine(aig);
   // if (m_settings.pVisualization)
   // print_aiger_gml(aig);
+  build_aiger_order(aig);
 }
 
 void AigerModel::CollectTrues(const aiger *aig) {
@@ -451,6 +452,70 @@ void draw_edge(std::ofstream &visFile, uint source, uint target) {
           << "\"last\"" << std::endl;
   visFile << "]" << std::endl;
   visFile << "]" << std::endl;
+}
+
+
+int get_neg(int l) {
+  if (l % 2 == 0)
+    return l + 1;
+  else
+    return l - 1;
+}
+
+
+void AigerModel::build_aiger_order(const aiger *aig) {
+  sptr<std::vector<int>> aiger_order(new cube());
+  sptr<std::queue<int>> required_gates(new std::queue<int>);
+  sptr<std::vector<int>> latches(new cube());
+  sptr<std::unordered_set<int>> added_latches(new std::unordered_set<int>());
+  required_gates->push(static_cast<int>(aig->outputs[0].lit));
+  int gate_start = (aig->num_inputs + aig->num_latches + 1) * 2;
+  // std::cerr << gate_start << " ";
+  int loop = 10;
+  while (loop > 0) {
+    while (!required_gates->empty()) {
+      int gate = required_gates->front();
+      // std::cerr << gate << " ";
+      aiger_and &aa = aig->ands[(((gate % 2 == 0) ? gate : (gate - 1)) - gate_start) / 2];
+      if (IsAndGate(aa.rhs0, aig))
+        required_gates->push((gate % 2 == 0) ? (aa.rhs0) : (get_neg(aa.rhs0)));
+      else if (IsLatch(GetCarId(aa.rhs0))) {
+        int temp_l = (gate % 2 == 0) ? (aa.rhs0) : (get_neg(aa.rhs0));
+        if (added_latches->find(temp_l) == added_latches->end())
+          latches->emplace_back(temp_l);
+      }
+      if (IsAndGate(aa.rhs1, aig))
+        required_gates->push((gate % 2 == 0) ? (aa.rhs1) : (get_neg(aa.rhs1)));
+      else if (IsLatch(GetCarId(aa.rhs1))) {
+        int temp_l = (gate % 2 == 0) ? (aa.rhs1) : (get_neg(aa.rhs1));
+        if (added_latches->find(temp_l) == added_latches->end())
+          latches->emplace_back(temp_l);
+      }
+      required_gates->pop();
+    }
+    // std::cerr << "here ";
+    for (auto l : *latches) {
+      if (l >= aiger_order->size()) aiger_order->resize(l + 1);
+      if (aiger_order->at(l) != 0)
+        aiger_order->at(l)++;
+      else
+        aiger_order->at(l) += loop * 100000;
+      int p = GetPrime(GetCarId(l));
+      required_gates->push((p > 0) ? (p * 2) : ((-p) * 2 + 1));
+      added_latches->insert(l);
+    }
+    latches->clear();
+    loop--;
+  }
+  // for (int i = 0; i < aiger_order->size(); i++) {
+  //   std::cerr << i << ":" << aiger_order->at(i) << " ";
+  // }
+  m_aiger_order = aiger_order;
+}
+
+
+sptr<cube> AigerModel::get_aiger_order() {
+  return m_aiger_order;
 }
 
 

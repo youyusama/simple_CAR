@@ -171,6 +171,7 @@ std::vector<int> *OverSequenceSet::GetBlocker(std::shared_ptr<std::vector<int>> 
   if (framelevel >= m_sequence.size()) return new std::vector<int>();
   // by imply checking
   for (auto uc : m_sequence[framelevel]) { // for each uc
+    if (latches->size() < uc->size()) break;
     if (std::includes(latches->begin(), latches->end(), uc->begin(), uc->end(), _cmp)) return uc;
   }
   return new std::vector<int>();
