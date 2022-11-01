@@ -514,9 +514,9 @@ void AigerModel::build_aiger_order(const aiger *aig) {
       else
         aiger_order->at(l) += loop * 100000;
       int p = GetPrime(GetCarId(l));
-      if (!IsLatch(p))
+      if (!IsLatch(p) && !IsInput(p))
         required_gates->push((p > 0) ? (p * 2) : ((-p) * 2 + 1));
-      else
+      else if (IsLatch(p))
         temp_latches->emplace_back((p > 0) ? (p * 2) : ((-p) * 2 + 1));
       added_latches->insert(l);
     }
