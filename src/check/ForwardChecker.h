@@ -152,6 +152,7 @@ private:
     l_ass.reserve(state->latches->size());
     l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
     orderAssumption(l_ass, rev);
+    CAR_DEBUG_v("Assumption Detail: ", l_ass);
 
     ass.reserve(ass.size() + l_ass.size());
     ass.insert(ass.end(), l_ass.begin(), l_ass.end());
@@ -211,8 +212,11 @@ private:
         partial_latch = temp_p;
         m_lifts->clean_assumptions();
         // add t
-        // orderAssumption(*t.second);
-        for (auto l : *partial_latch) {
+        sptr<cube> temp_latch_for_sort(new cube());
+        temp_latch_for_sort->resize(partial_latch->size());
+        std::copy(partial_latch->begin(), partial_latch->end(), temp_latch_for_sort->begin());
+        orderAssumption(*temp_latch_for_sort);
+        for (auto l : *temp_latch_for_sort) {
           m_lifts->AddAssumption(l);
         }
         // add input
