@@ -43,6 +43,7 @@ void AigerModel::Init(aiger *aig) {
 }
 
 void AigerModel::CollectTrues(const aiger *aig) {
+  m_trues.insert(m_trueId);
   for (int i = 0; i < aig->num_ands; ++i) {
     aiger_and &aa = aig->ands[i];
     // and gate is always an even number in aiger
@@ -505,20 +506,22 @@ void AigerModel::build_aiger_order(const aiger *aig) {
       required_gates->pop();
     }
     added_gates->clear();
-    // std::cerr << "here ";
+    std::cerr << "here " << std::endl;
     temp_latches->clear();
     for (auto l : *latches) {
+      std::cerr << "latch " << l << "add ";
       if (l >= aiger_order->size()) aiger_order->resize(l + 1);
       if (aiger_order->at(l) != 0)
         aiger_order->at(l)++;
       else
         aiger_order->at(l) += loop * 100000;
       int p = GetPrime(GetCarId(l));
-      if (!IsLatch(p) && !IsInput(p))
+      if (!IsLatch(p) && !IsInput(p) && !IsTrue(p) && !IsFalse(p))
         required_gates->push((p > 0) ? (p * 2) : ((-p) * 2 + 1));
       else if (IsLatch(p))
         temp_latches->emplace_back((p > 0) ? (p * 2) : ((-p) * 2 + 1));
       added_latches->insert(l);
+      std::cerr << required_gates->back() << ".";
     }
     latches->clear();
     latches->resize(temp_latches->size());
