@@ -39,7 +39,8 @@ void AigerModel::Init(aiger *aig) {
   //   Collect_and_gates_for_pine(aig);
   // if (m_settings.pVisualization)
   // print_aiger_gml(aig);
-  build_aiger_order(aig);
+  if (m_settings.preorder)
+    build_aiger_order(aig);
 }
 
 void AigerModel::CollectTrues(const aiger *aig) {

@@ -227,7 +227,8 @@ void ForwardChecker::Init(int badId) {
   m_overSequence.reset(new OverSequenceSet(m_model));
   if (m_settings.empi) {
     slimLitOrder.heuristicLitOrder = &litOrder;
-    lvlLitOrder.aiger_order = m_model->get_aiger_order();
+    if (m_settings.preorder) 
+      lvlLitOrder.aiger_order = m_model->get_aiger_order();
   }
   if (m_settings.Visualization) {
     m_vis.reset(new Vis(m_settings, m_model));

@@ -57,16 +57,22 @@ public:
 
   struct HeuristicLitOrder {
     HeuristicLitOrder() : _mini(1 << 20) {}
+
     std::vector<float> counts;
     int _mini;
     void count(const std::vector<int> &uc) {
       // assumes cube is ordered
-      int sz = abs(uc.back());
-      int a = counts.size();
+      int back_var = uc.back();
+      int sz = (back_var > 0) ? (back_var * 2) : (abs(back_var) * 2 + 1);
+      // int sz = abs(back_var);
       if (sz >= counts.size()) counts.resize(sz + 1);
-      _mini = abs(uc[0]);
-      for (std::vector<int>::const_iterator i = uc.begin(); i != uc.end(); ++i)
-        counts[abs(*i)]++;
+      int front_lit = (uc[0] > 0) ? (uc[0] * 2) : (uc[0] * 2 + 1);
+      if (_mini > front_lit) _mini = front_lit;
+      for (auto l : uc) {
+        // int lit = abs(l);
+        int lit = (l > 0) ? (l * 2) : (abs(l) * 2 + 1);
+        counts[lit]++;
+      }
     }
     void decay() {
       for (int i = _mini; i < counts.size(); ++i)
@@ -80,9 +86,13 @@ public:
     SlimLitOrder() {}
 
     bool operator()(const int &l1, const int &l2) const {
-      if (abs(l2) >= heuristicLitOrder->counts.size()) return true;
-      if (abs(l1) >= heuristicLitOrder->counts.size()) return false;
-      return (heuristicLitOrder->counts[abs(l1)] > heuristicLitOrder->counts[abs(l2)]);
+      int lit_1 = (l1 > 0) ? (l1 * 2) : (abs(l1) * 2 + 1);
+      int lit_2 = (l2 > 0) ? (l2 * 2) : (abs(l2) * 2 + 1);
+      // int lit_1 = abs(l1);
+      // int lit_2 = abs(l2);
+      if (lit_2 >= heuristicLitOrder->counts.size()) return true;
+      if (lit_1 >= heuristicLitOrder->counts.size()) return false;
+      return (heuristicLitOrder->counts[lit_1] > heuristicLitOrder->counts[lit_2]);
     }
   } slimLitOrder;
 
@@ -102,7 +112,7 @@ public:
 
     void decay() {
       for (auto i : *aiger_order) {
-        i *= 0.90;
+        i *= 0.99;
       }
     }
 
@@ -118,16 +128,21 @@ public:
 
   float numLits, numUpdates;
   void updateLitOrder(const std::vector<int> &uc) {
-    litOrder.decay();
-    litOrder.count(uc);
-
-    lvlLitOrder.decay();
-    lvlLitOrder.update_order(uc);
+    if (m_settings.preorder) {
+      lvlLitOrder.decay();
+      lvlLitOrder.update_order(uc);
+    } else {
+      litOrder.decay();
+      litOrder.count(uc);
+    }
   }
 
   // order according to preference
   void orderAssumption(std::vector<int> &uc, bool rev = false) {
-    std::stable_sort(uc.begin(), uc.end(), lvlLitOrder);
+    if (m_settings.preorder)
+      std::stable_sort(uc.begin(), uc.end(), lvlLitOrder);
+    else
+      std::stable_sort(uc.begin(), uc.end(), slimLitOrder);
     if (rev) std::reverse(uc.begin(), uc.end());
   }
 
