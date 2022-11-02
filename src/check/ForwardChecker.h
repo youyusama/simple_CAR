@@ -91,6 +91,9 @@ public:
     sptr<std::vector<float>> aiger_order;
 
     void update_order(const cube &uc) {
+      int back_var = uc.back();
+      int sz = (back_var > 0) ? (back_var * 2) : (abs(back_var) * 2 + 1);
+      if (sz >= aiger_order->size()) aiger_order->resize(sz + 1);
       for (auto l : uc) {
         int lit = (l > 0) ? (l * 2) : (abs(l) * 2 + 1);
         aiger_order->at(lit)++;
@@ -99,7 +102,7 @@ public:
 
     void decay() {
       for (auto i : *aiger_order) {
-        i *= 0.99;
+        i *= 0.90;
       }
     }
 
