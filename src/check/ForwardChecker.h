@@ -70,9 +70,18 @@ public:
       }
     }
 
+    void decay_uc(const std::vector<int> &uc) {
+      int sz = abs(uc.back());
+      if (sz >= counts.size()) counts.resize(sz + 1);
+      if (_mini > abs(uc[0])) _mini = abs(uc[0]);
+      for (auto l : uc) {
+        counts[abs(l)] -= 0;
+      }
+    }
+
     void decay() {
       for (int i = _mini; i < counts.size(); ++i)
-        counts[i] *= 0.99;
+        counts[i] *= 0.9;
     }
   } litOrder;
 
@@ -106,7 +115,7 @@ public:
 
     void decay() {
       for (int i = _mini; i < aiger_order->size(); i++) {
-        aiger_order->at(i) *= 0.99;
+        aiger_order->at(i) *= 0.9;
       }
     }
 
@@ -128,6 +137,15 @@ public:
     } else {
       litOrder.decay();
       litOrder.count(uc);
+    }
+  }
+
+  void decayLitOrder(const std::vector<int> &uc) {
+    if (m_settings.preorder) {
+      // lvlLitOrder.decay();
+      // lvlLitOrder.update_order(uc);
+    } else {
+      litOrder.decay_uc(uc);
     }
   }
 
@@ -242,8 +260,7 @@ private:
   // @input:
   // @output:
   // ================================================================================
-  void generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
-    if (uc->size() == 1) return;
+  bool generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
     std::unordered_set<int> required_lits;
     const std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
     for (auto b : *uc_blocker) required_lits.emplace(b);
@@ -262,6 +279,10 @@ private:
       }
     }
     std::sort(uc->begin(), uc->end(), cmp);
+    if (uc->size() > uc_blocker->size())
+      return false;
+    else
+      return true;
   }
 
   bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl, std::unordered_set<int> required_lits) {
@@ -290,7 +311,11 @@ private:
         if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
           ctgs++;
           auto uc_cts = m_mainSolver->Getuc(false);
-          generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1);
+          if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1)) {
+            updateLitOrder(*uc);
+          } else {
+            decayLitOrder(*uc);
+          }
           CAR_DEBUG_v("ctg Get UC:", *uc_cts);
           if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
             m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1);

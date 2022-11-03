@@ -165,7 +165,12 @@ bool ForwardChecker::Check(int badId) {
             // placeholder, uc is empty => safe
           }
           CAR_DEBUG_v("Get UC:", *uc);
-          if (m_settings.ctg) generalize_ctg(uc, task.frameLevel);
+          if (m_settings.ctg)
+            if (generalize_ctg(uc, task.frameLevel)) {
+              updateLitOrder(*uc);
+            } else {
+              decayLitOrder(*uc);
+            }
           m_log->Statmuc();
           CAR_DEBUG_v("Get UC:", *uc);
           m_log->Tick();
@@ -227,7 +232,7 @@ void ForwardChecker::Init(int badId) {
   m_overSequence.reset(new OverSequenceSet(m_model));
   if (m_settings.empi) {
     slimLitOrder.heuristicLitOrder = &litOrder;
-    if (m_settings.preorder) 
+    if (m_settings.preorder)
       lvlLitOrder.aiger_order = m_model->get_aiger_order();
   }
   if (m_settings.Visualization) {
@@ -256,14 +261,9 @@ bool ForwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, 
   if (frameLevel < m_minUpdateLevel) {
     m_minUpdateLevel = frameLevel;
   }
-  bool res = false;
-  if (m_overSequence->Insert(uc, frameLevel)) {
-    if (m_settings.empi) {
-      updateLitOrder(*uc);
-    }
-    res = true;
-  }
-  return res;
+
+  m_overSequence->Insert(uc, frameLevel);
+  return true;
 }
 
 bool ForwardChecker::ImmediateSatisfiable(int badId) {
