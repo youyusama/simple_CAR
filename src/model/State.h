@@ -1,7 +1,6 @@
 #ifndef STATE_H
 #define STATE_H
 
-#include <algorithm>
 #include <memory>
 #include <stdlib.h>
 #include <string>

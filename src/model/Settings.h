@@ -33,7 +33,7 @@ struct Settings {
   bool incr = false;
   bool Visualization = false;
   bool pVisualization = false;
-  bool preorder = true;
+  bool preorder = false;
   float growthRate = 1.5;
   int threshold = 64;
   int timelimit = 0;

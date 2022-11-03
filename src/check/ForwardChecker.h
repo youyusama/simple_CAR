@@ -224,11 +224,7 @@ private:
         partial_latch = temp_p;
         m_lifts->clean_assumptions();
         // add t
-        sptr<cube> temp_latch_for_sort(new cube());
-        temp_latch_for_sort->resize(partial_latch->size());
-        std::copy(partial_latch->begin(), partial_latch->end(), temp_latch_for_sort->begin());
-        orderAssumption(*temp_latch_for_sort);
-        for (auto l : *temp_latch_for_sort) {
+        for (auto l : *partial_latch) {
           m_lifts->AddAssumption(l);
         }
         // add input

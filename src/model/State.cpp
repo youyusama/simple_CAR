@@ -4,15 +4,11 @@ namespace car {
 int State::numInputs = -1;
 int State::numLatches = -1;
 
-static bool cmp(int a, int b) {
-  return abs(a) < abs(b);
-}
 
 std::string State::GetValueOfLatches() {
   std::string result = "";
   result.reserve(numLatches);
   int j = 0;
-  std::sort(latches->begin(), latches->end(), cmp);
   for (int i = 0; i < State::numLatches; ++i) {
     if (State::numInputs + i + 1 < abs((*latches)[j])) {
       result += "x";
