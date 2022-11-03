@@ -456,12 +456,12 @@ void draw_edge(std::ofstream &visFile, uint source, uint target) {
 }
 
 
-int get_neg(int l) {
-  if (l % 2 == 0)
-    return l + 1;
-  else
-    return l - 1;
-}
+// int get_neg(int l) {
+//   if (l % 2)
+//     return l - 1;
+//   else
+//     return l + 1;
+// }
 
 
 void AigerModel::build_aiger_order(const aiger *aig) {
@@ -471,69 +471,62 @@ void AigerModel::build_aiger_order(const aiger *aig) {
   sptr<std::vector<int>> latches(new cube());
   sptr<std::unordered_set<int>> added_latches(new std::unordered_set<int>());
   sptr<std::vector<int>> temp_latches(new cube());
-  required_gates->push(static_cast<int>(aig->outputs[0].lit));
-  int gate_start = (aig->num_inputs + aig->num_latches + 1) * 2;
-  // std::cerr << gate_start << " ";
-  int loop = 10;
-  while (loop > 0) {
+  required_gates->push(static_cast<int>(aig->outputs[0].lit) / 2);
+  int loop = 1;
+  while (loop <= 10) {
     while (!required_gates->empty()) {
-      int gate = required_gates->front();
-      // std::cerr << gate << " add ";
-
-      // aiger_and &aa = aig->ands[(gate - gate_start) / 2];
+      int gate = required_gates->front() * 2;
       aiger_and *aa = aiger_is_and(const_cast<aiger *>(aig), gate);
       if (!aa) {
         required_gates->pop();
         continue;
       }
       if (aiger_is_and(const_cast<aiger *>(aig), aa->rhs0)) {
-        int temp_g = (gate % 2 == 0) ? (aa->rhs0) : (get_neg(aa->rhs0));
+        int temp_g = aa->rhs0 / 2;
         if (added_gates->find(temp_g) == added_gates->end()) {
           required_gates->push(temp_g);
           added_gates->insert(temp_g);
         }
       } else if (aiger_is_latch(const_cast<aiger *>(aig), aa->rhs0)) {
-        int temp_l = (gate % 2 == 0) ? (aa->rhs0) : (get_neg(aa->rhs0));
+        int temp_l = aa->rhs0 / 2;
         if (added_latches->find(temp_l) == added_latches->end())
           latches->emplace_back(temp_l);
       }
       if (aiger_is_and(const_cast<aiger *>(aig), aa->rhs1)) {
-        int temp_g = (gate % 2 == 0) ? (aa->rhs1) : (get_neg(aa->rhs1));
+        int temp_g = aa->rhs1 / 2;
         if (added_gates->find(temp_g) == added_gates->end()) {
           required_gates->push(temp_g);
           added_gates->insert(temp_g);
         }
       } else if (aiger_is_latch(const_cast<aiger *>(aig), aa->rhs1)) {
-        int temp_l = (gate % 2 == 0) ? (aa->rhs1) : (get_neg(aa->rhs1));
+        int temp_l = aa->rhs1 / 2;
         if (added_latches->find(temp_l) == added_latches->end())
           latches->emplace_back(temp_l);
       }
-      // std::cerr << required_gates->back() << ".";
       required_gates->pop();
     }
     added_gates->clear();
-    // std::cerr << "here " << std::endl;
     temp_latches->clear();
+    int lvl_weight = abs(log((float)loop / 10.0)) * 10;
     for (auto l : *latches) {
-      // std::cerr << "latch " << l << "add ";
       if (l >= aiger_order->size()) aiger_order->resize(l + 1);
-      if (aiger_order->at(l) != 0)
-        aiger_order->at(l)++;
-      else
-        aiger_order->at(l) += loop * 100000;
-      int p = GetPrime(GetCarId(l));
-      int temp_lit = (p > 0) ? (p * 2) : ((-p) * 2 + 1);
-      if (aiger_is_and(const_cast<aiger *>(aig), temp_lit))
-        required_gates->push(temp_lit);
-      else if (aiger_is_latch(const_cast<aiger *>(aig), temp_lit))
-        temp_latches->emplace_back(temp_lit);
+      // if (aiger_order->at(l) != 0)
+      //   aiger_order->at(l)++;
+      // else
+      //   aiger_order->at(l) += loop * 100000;
+      if (aiger_order->at(l) == 0)
+        aiger_order->at(l) = lvl_weight;
+      int primed_lit = abs(GetPrime(l)) * 2;
+      if (aiger_is_and(const_cast<aiger *>(aig), primed_lit))
+        required_gates->push(primed_lit / 2);
+      else if (aiger_is_latch(const_cast<aiger *>(aig), primed_lit))
+        temp_latches->emplace_back(primed_lit / 2);
       added_latches->insert(l);
-      // std::cerr << required_gates->back() << ".";
     }
     latches->clear();
     latches->resize(temp_latches->size());
     std::copy(temp_latches->begin(), temp_latches->end(), latches->begin());
-    loop--;
+    loop++;
   }
   // for (int i = 0; i < aiger_order->size(); i++) {
   //   std::cerr << i << ":" << aiger_order->at(i) << " ";

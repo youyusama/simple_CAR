@@ -62,18 +62,14 @@ public:
     int _mini;
     void count(const std::vector<int> &uc) {
       // assumes cube is ordered
-      int back_var = uc.back();
-      int sz = (back_var > 0) ? (back_var * 2) : (abs(back_var) * 2 + 1);
-      // int sz = abs(back_var);
+      int sz = abs(uc.back());
       if (sz >= counts.size()) counts.resize(sz + 1);
-      int front_lit = (uc[0] > 0) ? (uc[0] * 2) : (uc[0] * 2 + 1);
-      if (_mini > front_lit) _mini = front_lit;
+      if (_mini > abs(uc[0])) _mini = abs(uc[0]);
       for (auto l : uc) {
-        // int lit = abs(l);
-        int lit = (l > 0) ? (l * 2) : (abs(l) * 2 + 1);
-        counts[lit]++;
+        counts[abs(l)]++;
       }
     }
+
     void decay() {
       for (int i = _mini; i < counts.size(); ++i)
         counts[i] *= 0.99;
@@ -86,10 +82,8 @@ public:
     SlimLitOrder() {}
 
     bool operator()(const int &l1, const int &l2) const {
-      int lit_1 = (l1 > 0) ? (l1 * 2) : (abs(l1) * 2 + 1);
-      int lit_2 = (l2 > 0) ? (l2 * 2) : (abs(l2) * 2 + 1);
-      // int lit_1 = abs(l1);
-      // int lit_2 = abs(l2);
+      int lit_1 = abs(l1);
+      int lit_2 = abs(l2);
       if (lit_2 >= heuristicLitOrder->counts.size()) return true;
       if (lit_1 >= heuristicLitOrder->counts.size()) return false;
       return (heuristicLitOrder->counts[lit_1] > heuristicLitOrder->counts[lit_2]);
@@ -98,27 +92,27 @@ public:
 
 
   struct LvlLitOrder {
+    LvlLitOrder() : _mini(1 << 20) {}
     sptr<std::vector<float>> aiger_order;
-
+    int _mini;
     void update_order(const cube &uc) {
-      int back_var = uc.back();
-      int sz = (back_var > 0) ? (back_var * 2) : (abs(back_var) * 2 + 1);
+      int sz = abs(uc.back());
       if (sz >= aiger_order->size()) aiger_order->resize(sz + 1);
+      if (_mini > abs(uc[0])) _mini = abs(uc[0]);
       for (auto l : uc) {
-        int lit = (l > 0) ? (l * 2) : (abs(l) * 2 + 1);
-        aiger_order->at(lit)++;
+        aiger_order->at(abs(l))++;
       }
     }
 
     void decay() {
-      for (auto i : *aiger_order) {
-        i *= 0.99;
+      for (int i = _mini; i < aiger_order->size(); i++) {
+        aiger_order->at(i) *= 0.99;
       }
     }
 
     bool operator()(const int &l1, const int &l2) const {
-      int lit_1 = (l1 > 0) ? (l1 * 2) : (abs(l1) * 2 + 1);
-      int lit_2 = (l2 > 0) ? (l2 * 2) : (abs(l2) * 2 + 1);
+      int lit_1 = abs(l1);
+      int lit_2 = abs(l2);
       if (lit_2 >= aiger_order->size()) return true;
       if (lit_1 >= aiger_order->size()) return false;
       return (aiger_order->at(lit_1) > aiger_order->at(lit_2));

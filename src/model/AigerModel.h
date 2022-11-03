@@ -9,6 +9,7 @@ extern "C" {
 #include <assert.h>
 #include <fstream>
 #include <iostream>
+#include <math.h>
 #include <memory>
 #include <queue>
 #include <set>
