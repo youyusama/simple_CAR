@@ -56,17 +56,19 @@ public:
   bool Check(int badId);
 
   struct HeuristicLitOrder {
-    HeuristicLitOrder() : _mini(1 << 20) {}
+    HeuristicLitOrder() : _mini(1 << 20), conflict_index(0) {}
 
+    int conflict_index;
     std::vector<float> counts;
     int _mini;
     void count(const std::vector<int> &uc) {
+      conflict_index++;
       // assumes cube is ordered
       int sz = abs(uc.back());
       if (sz >= counts.size()) counts.resize(sz + 1);
       if (_mini > abs(uc[0])) _mini = abs(uc[0]);
       for (auto l : uc) {
-        counts[abs(l)]++;
+        counts[abs(l)] = (counts[abs(l)] + conflict_index) / 2.0;
       }
     }
 
@@ -135,7 +137,7 @@ public:
       lvlLitOrder.decay();
       lvlLitOrder.update_order(uc);
     } else {
-      litOrder.decay();
+      // litOrder.decay();
       litOrder.count(uc);
     }
   }
@@ -145,7 +147,7 @@ public:
       // lvlLitOrder.decay();
       // lvlLitOrder.update_order(uc);
     } else {
-      litOrder.decay_uc(uc);
+      // litOrder.decay_uc(uc);
     }
   }
 
