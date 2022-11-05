@@ -17,6 +17,8 @@ namespace car {
 
 class OverSequenceSet {
 public:
+  typedef std::vector<int> cube;
+
   OverSequenceSet(std::shared_ptr<AigerModel> model) {
     m_model = model;
     m_blockSolver = new BlockSolver(model);
@@ -46,13 +48,13 @@ public:
 
   std::vector<int> *GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel);
 
+  std::vector<cube *> *GetBlockers(std::shared_ptr<std::vector<int>> latches, int framelevel);
+
   int effectiveLevel;
   bool isForward = false;
   int rep_counter;
 
 private:
-  typedef std::vector<int> cube;
-
   bool is_imply(cube a, cube b);
 
   static bool _cubeComp(const cube &v1, const cube &v2) {

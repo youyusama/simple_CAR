@@ -177,6 +177,21 @@ std::vector<int> *OverSequenceSet::GetBlocker(std::shared_ptr<std::vector<int>> 
   return new std::vector<int>();
 }
 
+std::vector<cube *> *OverSequenceSet::GetBlockers(std::shared_ptr<std::vector<int>> latches, int framelevel) {
+  std::vector<cube *> *res = new std::vector<cube *>();
+  if (framelevel >= m_sequence.size()) return res;
+  int size = -1;
+  // by imply checking
+  for (auto uc : m_sequence[framelevel]) { // for each uc
+    if (size != -1 && size < uc->size()) break;
+    if (std::includes(latches->begin(), latches->end(), uc->begin(), uc->end(), _cmp)) {
+      size = uc->size();
+      res->emplace_back(uc);
+    }
+  }
+  return res;
+}
+
 void OverSequenceSet::propagate(int level) {
   // std::cout << "propagate " << level << std::endl;
   frame &fi = m_sequence[level];

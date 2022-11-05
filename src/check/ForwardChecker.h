@@ -102,6 +102,22 @@ public:
   } slimLitOrder;
 
 
+  struct BlockersOrder {
+    HeuristicLitOrder *heuristicLitOrder;
+
+    BlockersOrder() {}
+
+    bool operator()(const cube *a, const cube *b) const {
+      float score_a = 0, score_b = 0;
+      for (int i = 0; i < a->size(); i++) {
+        score_a += heuristicLitOrder->counts[abs(a->at(i))];
+        score_b += heuristicLitOrder->counts[abs(b->at(i))];
+      }
+      return score_a > score_b;
+    }
+  } blockersOrder;
+
+
   struct LvlLitOrder {
     LvlLitOrder() : _mini(1 << 20) {}
     sptr<std::vector<float>> aiger_order;
@@ -264,7 +280,15 @@ private:
   // ================================================================================
   bool generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
     std::unordered_set<int> required_lits;
-    const std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
+    // const std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
+    std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
+    cube *uc_blocker;
+    if (uc_blockers->size() > 0) {
+      std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockersOrder);
+      uc_blocker = uc_blockers->at(0);
+    } else {
+      uc_blocker = new cube();
+    }
     for (auto b : *uc_blocker) required_lits.emplace(b);
     orderAssumption(*uc);
     for (int i = uc->size() - 1; i > 0; i--) {
