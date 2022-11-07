@@ -108,6 +108,8 @@ public:
     BlockersOrder() {}
 
     bool operator()(const cube *a, const cube *b) const {
+      int sz = (abs(a->back()) > abs(b->back())) ? abs(a->back()) : abs(b->back());
+      if (sz >= heuristicLitOrder->counts.size()) heuristicLitOrder->counts.resize(sz + 1);
       float score_a = 0, score_b = 0;
       for (int i = 0; i < a->size(); i++) {
         score_a += heuristicLitOrder->counts[abs(a->at(i))];
