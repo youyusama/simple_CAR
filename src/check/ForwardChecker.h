@@ -155,7 +155,7 @@ public:
       lvlLitOrder.decay();
       lvlLitOrder.update_order(uc);
     } else {
-      // litOrder.decay();
+      litOrder.decay();
       litOrder.count(uc);
     }
   }
