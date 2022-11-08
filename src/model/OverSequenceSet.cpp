@@ -207,22 +207,31 @@ void OverSequenceSet::propagate(int level) {
       ass.emplace_back(m_model->GetPrime(i));
     }
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
-      auto uc_new = m_mainSolver->Getuc(false);
+      auto uc_uc = m_mainSolver->Getuc(false);
       frame tmp;
-      for (auto f_uc : fi_plus_1) {
-        if (!is_imply(*uc_new, *f_uc))
-          tmp.emplace(f_uc);
+      cube *uc_i = new cube();
+      if (uc_uc->size() < uc->size()) {
+        uc_i->resize(uc_uc->size());
+        std::copy(uc_uc->begin(), uc_uc->end(), uc_i->begin());
+        auto res = Ucs.insert(*uc_uc);
+        for (auto f_uc : fi_plus_1) {
+          if (!is_imply(*res.first, *f_uc))
+            tmp.emplace(f_uc);
+        }
+        tmp.emplace(&*res.first);
+        fi_plus_1.swap(tmp);
+        m_blockSolver->AddUnsatisfiableCore(*uc_i, level + 1);
+        m_mainSolver->AddUnsatisfiableCore(*uc_i, level + 1);
+      } else {
+        for (auto f_uc : fi_plus_1) {
+          if (!is_imply(*uc, *f_uc))
+            tmp.emplace(f_uc);
+        }
+        tmp.emplace(uc);
+        fi_plus_1.swap(tmp);
+        m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
+        m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);
       }
-      tmp.emplace(uc_new);
-      fi_plus_1.swap(tmp);
-      // std::cout << "propagate uc: ";
-      // for (auto i : *uc) {
-      //   std::cout << i << " ";
-      // }
-      // std::cout << "to level " << level + 1 << std::endl;
-      // fi_plus_1.insert(uc);
-      m_blockSolver->AddUnsatisfiableCore(*uc_new, level + 1);
-      m_mainSolver->AddUnsatisfiableCore(*uc_new, level + 1);
     }
   }
   return;

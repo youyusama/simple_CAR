@@ -55,6 +55,10 @@ public:
   int rep_counter;
 
 private:
+  static bool cmp(int a, int b) {
+    return abs(a) < abs(b);
+  }
+
   bool is_imply(cube a, cube b);
 
   static bool _cubeComp(const cube &v1, const cube &v2) {
