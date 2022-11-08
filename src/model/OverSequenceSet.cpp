@@ -163,7 +163,7 @@ int OverSequenceSet::GetLength() {
   return m_sequence.size();
 }
 
-void OverSequenceSet::set_solver(std::shared_ptr<ISolver> slv) {
+void OverSequenceSet::set_solver(std::shared_ptr<CarSolver> slv) {
   m_mainSolver = slv;
 }
 
@@ -207,12 +207,13 @@ void OverSequenceSet::propagate(int level) {
       ass.emplace_back(m_model->GetPrime(i));
     }
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
+      auto uc_new = m_mainSolver->Getuc(false);
       frame tmp;
       for (auto f_uc : fi_plus_1) {
-        if (!is_imply(*uc, *f_uc))
+        if (!is_imply(*uc_new, *f_uc))
           tmp.emplace(f_uc);
       }
-      tmp.emplace(uc);
+      tmp.emplace(uc_new);
       fi_plus_1.swap(tmp);
       // std::cout << "propagate uc: ";
       // for (auto i : *uc) {
@@ -220,8 +221,8 @@ void OverSequenceSet::propagate(int level) {
       // }
       // std::cout << "to level " << level + 1 << std::endl;
       // fi_plus_1.insert(uc);
-      m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
-      m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);
+      m_blockSolver->AddUnsatisfiableCore(*uc_new, level + 1);
+      m_mainSolver->AddUnsatisfiableCore(*uc_new, level + 1);
     }
   }
   return;

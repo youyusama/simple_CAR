@@ -44,7 +44,7 @@ public:
 
   int propagate_uc_from_lvl(sptr<cube> uc, int lvl);
 
-  void set_solver(std::shared_ptr<ISolver> slv);
+  void set_solver(std::shared_ptr<CarSolver> slv);
 
   std::vector<int> *GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel);
 
@@ -97,7 +97,7 @@ private:
 
   std::shared_ptr<AigerModel> m_model;
 
-  std::shared_ptr<ISolver> m_mainSolver;
+  std::shared_ptr<CarSolver> m_mainSolver;
   std::vector<frame> m_sequence;
   CarSolver *m_blockSolver;
   std::vector<int> m_block_counter;
