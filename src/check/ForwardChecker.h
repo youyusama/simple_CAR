@@ -73,11 +73,12 @@ public:
     }
 
     void decay_uc(const std::vector<int> &uc) {
+      if (!uc.size()) return;
       int sz = abs(uc.back());
       if (sz >= counts.size()) counts.resize(sz + 1);
       if (_mini > abs(uc[0])) _mini = abs(uc[0]);
       for (auto l : uc) {
-        counts[abs(l)] -= 0;
+        counts[abs(l)] *= 0.9;
       }
     }
 
@@ -165,7 +166,7 @@ public:
       // lvlLitOrder.decay();
       // lvlLitOrder.update_order(uc);
     } else {
-      // litOrder.decay_uc(uc);
+      litOrder.decay_uc(uc);
     }
   }
 
@@ -307,9 +308,10 @@ private:
       }
     }
     std::sort(uc->begin(), uc->end(), cmp);
-    if (uc->size() > uc_blocker->size())
+    if (uc->size() > uc_blocker->size()) {
+      decayLitOrder(*uc_blocker);
       return false;
-    else
+    } else
       return true;
   }
 
@@ -341,8 +343,6 @@ private:
           auto uc_cts = m_mainSolver->Getuc(false);
           if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1)) {
             updateLitOrder(*uc);
-          } else {
-            decayLitOrder(*uc);
           }
           CAR_DEBUG_v("ctg Get UC:", *uc_cts);
           if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))

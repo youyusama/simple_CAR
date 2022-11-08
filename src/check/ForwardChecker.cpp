@@ -168,8 +168,6 @@ bool ForwardChecker::Check(int badId) {
           if (m_settings.ctg)
             if (generalize_ctg(uc, task.frameLevel)) {
               updateLitOrder(*uc);
-            } else {
-              decayLitOrder(*uc);
             }
           m_log->Statmuc();
           CAR_DEBUG_v("Get UC:", *uc);
