@@ -91,6 +91,8 @@ public:
 
   std::vector<std::vector<int>> &GetClause() { return m_clauses; }
 
+  std::vector<int> GetNegBad();
+
   sptr<std::vector<float>> get_aiger_order();
 #pragma endregion
 

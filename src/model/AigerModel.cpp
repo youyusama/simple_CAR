@@ -456,6 +456,12 @@ void draw_edge(std::ofstream &visFile, uint source, uint target) {
 }
 
 
+std::vector<int> AigerModel::GetNegBad() {
+  cube res = cube();
+  res.emplace_back(-m_outputs[0]);
+  return res;
+}
+
 // int get_neg(int l) {
 //   if (l % 2)
 //     return l - 1;

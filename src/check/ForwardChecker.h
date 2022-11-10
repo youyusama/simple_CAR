@@ -308,9 +308,10 @@ private:
       }
     }
     std::sort(uc->begin(), uc->end(), cmp);
-    if (uc->size() > uc_blocker->size())
+    if (uc->size() > uc_blocker->size()) {
+      decayLitOrder(*uc_blocker);
       return false;
-    else
+    } else
       return true;
   }
 

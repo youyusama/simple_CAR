@@ -13,6 +13,7 @@ MainSolver::MainSolver(std::shared_ptr<AigerModel> model, bool isForward) {
     // std::cout << std::endl;
     AddClause(clause[i]);
   }
+  AddClause(m_model->GetNegBad());
 }
 
 } // namespace car

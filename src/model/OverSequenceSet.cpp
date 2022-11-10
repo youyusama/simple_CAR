@@ -9,6 +9,17 @@ static bool _cmp(int a, int b) {
     return a < b;
 }
 
+
+void OverSequenceSet::add_uc_to_frame(const cube *uc, frame &f) {
+  frame tmp;
+  for (auto f_uc : f) {
+    if (!is_imply(*uc, *f_uc))
+      tmp.emplace(f_uc);
+  }
+  tmp.emplace(uc);
+  f.swap(tmp);
+}
+
 // ================================================================================
 // @brief: if a->b
 // @input:
@@ -29,18 +40,8 @@ bool OverSequenceSet::Insert(std::shared_ptr<cube> uc, int index) {
     m_sequence.emplace_back(frame());
     m_block_counter.emplace_back(0);
   }
-  // if (index != 1 && !IsBlockedByFrame_sat(*uc, index - 1)) {
-  //   return false;
-  // }
   auto res = Ucs.insert(*uc);
-  if (!res.second) rep_counter++;
-  frame tmp;
-  for (auto f_uc : m_sequence[index]) {
-    if (!is_imply(*res.first, *f_uc))
-      tmp.emplace(f_uc);
-  }
-  tmp.emplace(&*res.first);
-  m_sequence[index].swap(tmp);
+  add_uc_to_frame(&*res.first, m_sequence[index]);
   return true;
 }
 
@@ -210,25 +211,26 @@ void OverSequenceSet::propagate(int level) {
       auto uc_uc = m_mainSolver->Getuc(false);
       frame tmp;
       cube *uc_i = new cube();
-      if (uc_uc->size() < uc->size()) {
+      if (uc_uc->size() < uc->size()) { // generalization when propagation
         uc_i->resize(uc_uc->size());
         std::copy(uc_uc->begin(), uc_uc->end(), uc_i->begin());
         auto res = Ucs.insert(*uc_uc);
-        for (auto f_uc : fi_plus_1) {
-          if (!is_imply(*res.first, *f_uc))
-            tmp.emplace(f_uc);
-        }
-        tmp.emplace(&*res.first);
-        fi_plus_1.swap(tmp);
+        add_uc_to_frame(&*res.first, fi_plus_1);
         m_blockSolver->AddUnsatisfiableCore(*uc_i, level + 1);
         m_mainSolver->AddUnsatisfiableCore(*uc_i, level + 1);
+        // generalization on current level
+        // m_mainSolver->SolveWithAssumption(ass, level - 1);
+        // auto uc_uc = m_mainSolver->Getuc(false);
+        // if (uc_uc->size() < uc->size()) {
+        //   uc_i->resize(uc_uc->size());
+        //   std::copy(uc_uc->begin(), uc_uc->end(), uc_i->begin());
+        //   auto res = Ucs.insert(*uc_uc);
+        //   add_uc_to_frame(&*res.first, fi);
+        //   m_blockSolver->AddUnsatisfiableCore(*uc_i, level);
+        //   m_mainSolver->AddUnsatisfiableCore(*uc_i, level);
+        // }
       } else {
-        for (auto f_uc : fi_plus_1) {
-          if (!is_imply(*uc, *f_uc))
-            tmp.emplace(f_uc);
-        }
-        tmp.emplace(uc);
-        fi_plus_1.swap(tmp);
+        add_uc_to_frame(uc, fi_plus_1);
         m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
         m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);
       }
@@ -255,13 +257,7 @@ int OverSequenceSet::propagate_uc_from_lvl(sptr<cube> uc, int lvl) {
     if (!m_mainSolver->SolveWithAssumption(ass, lvl)) {
       frame tmp;
       auto res = Ucs.insert(*uc);
-      for (auto f_uc : fi_plus_1) {
-        if (!is_imply(*res.first, *f_uc))
-          tmp.emplace(f_uc);
-      }
-      tmp.emplace(&*res.first);
-      fi_plus_1.swap(tmp);
-
+      add_uc_to_frame(&*res.first, fi_plus_1);
       m_blockSolver->AddUnsatisfiableCore(*uc, lvl + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, lvl + 1);
     } else {

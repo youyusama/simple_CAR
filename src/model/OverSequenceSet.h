@@ -98,6 +98,7 @@ private:
   };
 
   typedef std::set<cube *, cubepComp> frame;
+  void add_uc_to_frame(const cube *uc, frame &f);
 
   std::shared_ptr<AigerModel> m_model;
 
