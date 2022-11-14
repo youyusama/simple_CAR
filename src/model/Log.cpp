@@ -42,6 +42,15 @@ void Log::PrintFramesInfo(IOverSequence *sequence) {
   m_log << std::endl;
 }
 
+
+void Log::PrintLitOrder(std::vector<float> order) {
+  if (!m_debug) return;
+  for (int i = 0; i < order.size(); i++) {
+    m_debug << i << ": " << (order[i] ? std::to_string(order[i]) : "-") << "\t";
+  }
+  m_debug << std::endl;
+}
+
 // void Log::PrintFramesInfo(IOverSequence* sequence)
 // {
 //   m_log<<"Frame "<<sequence->GetLength()-1<<std::endl;

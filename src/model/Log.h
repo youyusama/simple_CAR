@@ -67,6 +67,8 @@ public:
 
   void PrintSAT(std::vector<int> &vec, int frameLevel);
 
+  void PrintLitOrder(std::vector<float> order);
+
   void PrintPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector<int>> uc);
 
   void StatPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector<int>> uc_pine, std::shared_ptr<std::vector<int>> uc);

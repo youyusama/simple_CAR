@@ -209,7 +209,6 @@ void OverSequenceSet::propagate(int level) {
     }
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
       auto uc_uc = m_mainSolver->Getuc(false);
-      frame tmp;
       cube *uc_i = new cube();
       if (uc_uc->size() < uc->size()) { // generalization when propagation
         uc_i->resize(uc_uc->size());

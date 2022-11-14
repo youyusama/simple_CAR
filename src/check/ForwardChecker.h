@@ -49,6 +49,13 @@ namespace car {
     m_log->PrintStateShort(s); \
   } while (0)
 
+
+#define CAR_DEBUG_order(t, o) \
+  do {                        \
+    m_log->DebugPrintSth(t);  \
+    m_log->PrintLitOrder(o);  \
+  } while (0)
+
 class ForwardChecker : public BaseChecker {
 public:
   ForwardChecker(Settings settings, std::shared_ptr<AigerModel> model);
@@ -68,7 +75,7 @@ public:
       if (sz >= counts.size()) counts.resize(sz + 1);
       if (_mini > abs(uc[0])) _mini = abs(uc[0]);
       for (auto l : uc) {
-        counts[abs(l)] = (counts[abs(l)] + conflict_index) / 2.0;
+        counts[abs(l)]++;
       }
     }
 
@@ -84,7 +91,7 @@ public:
 
     void decay() {
       for (int i = _mini; i < counts.size(); ++i)
-        counts[i] *= 0.9;
+        counts[i] *= 0.99;
     }
   } litOrder;
 
@@ -159,6 +166,7 @@ public:
       litOrder.decay();
       litOrder.count(uc);
     }
+    CAR_DEBUG_order("\nLit Order:\n", litOrder.counts);
   }
 
   void decayLitOrder(const std::vector<int> &uc) {
@@ -309,7 +317,7 @@ private:
     }
     std::sort(uc->begin(), uc->end(), cmp);
     if (uc->size() > uc_blocker->size()) {
-      decayLitOrder(*uc_blocker);
+      // decayLitOrder(*uc_blocker);
       return false;
     } else
       return true;
