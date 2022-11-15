@@ -75,7 +75,7 @@ public:
       if (sz >= counts.size()) counts.resize(sz + 1);
       if (_mini > abs(uc[0])) _mini = abs(uc[0]);
       for (auto l : uc) {
-        counts[abs(l)] = (counts[abs(l)] + conflict_index) / 2;
+        counts[abs(l)]++;
       }
     }
 
@@ -85,14 +85,14 @@ public:
       if (sz >= counts.size()) counts.resize(sz + 1);
       if (_mini > abs(uc[0])) _mini = abs(uc[0]);
       for (auto l : uc) {
-        counts[abs(l)] *= 1.0 / (gap + 1);
+        counts[abs(l)] *= 1 - 0.01 * (gap - 1);
       }
     }
 
-    // void decay() {
-    //   for (int i = _mini; i < counts.size(); ++i)
-    //     counts[i] *= 0.99;
-    // }
+    void decay() {
+      for (int i = _mini; i < counts.size(); ++i)
+        counts[i] *= 0.99;
+    }
   } litOrder;
 
   struct SlimLitOrder {
@@ -163,7 +163,7 @@ public:
       // lvlLitOrder.decay();
       lvlLitOrder.update_order(uc);
     } else {
-      // litOrder.decay();
+      litOrder.decay();
       litOrder.count(uc);
     }
     CAR_DEBUG_order("\nLit Order:\n", litOrder.counts);
