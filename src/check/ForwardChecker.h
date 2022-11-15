@@ -75,24 +75,24 @@ public:
       if (sz >= counts.size()) counts.resize(sz + 1);
       if (_mini > abs(uc[0])) _mini = abs(uc[0]);
       for (auto l : uc) {
-        counts[abs(l)]++;
+        counts[abs(l)] = (counts[abs(l)] + conflict_index) / 2;
       }
     }
 
-    void decay_uc(const std::vector<int> &uc) {
+    void decay_uc(const std::vector<int> &uc, int gap) {
       if (!uc.size()) return;
       int sz = abs(uc.back());
       if (sz >= counts.size()) counts.resize(sz + 1);
       if (_mini > abs(uc[0])) _mini = abs(uc[0]);
       for (auto l : uc) {
-        counts[abs(l)] *= 0.9;
+        counts[abs(l)] *= 1.0 / (gap + 1);
       }
     }
 
-    void decay() {
-      for (int i = _mini; i < counts.size(); ++i)
-        counts[i] *= 0.99;
-    }
+    // void decay() {
+    //   for (int i = _mini; i < counts.size(); ++i)
+    //     counts[i] *= 0.99;
+    // }
   } litOrder;
 
   struct SlimLitOrder {
@@ -141,11 +141,11 @@ public:
       }
     }
 
-    void decay() {
-      for (int i = _mini; i < aiger_order->size(); i++) {
-        aiger_order->at(i) *= 0.9;
-      }
-    }
+    // void decay() {
+    //   for (int i = _mini; i < aiger_order->size(); i++) {
+    //     aiger_order->at(i) *= 0.9;
+    //   }
+    // }
 
     bool operator()(const int &l1, const int &l2) const {
       int lit_1 = abs(l1);
@@ -160,21 +160,21 @@ public:
   float numLits, numUpdates;
   void updateLitOrder(const std::vector<int> &uc) {
     if (m_settings.preorder) {
-      lvlLitOrder.decay();
+      // lvlLitOrder.decay();
       lvlLitOrder.update_order(uc);
     } else {
-      litOrder.decay();
+      // litOrder.decay();
       litOrder.count(uc);
     }
     CAR_DEBUG_order("\nLit Order:\n", litOrder.counts);
   }
 
-  void decayLitOrder(const std::vector<int> &uc) {
+  void decayLitOrder(const std::vector<int> &uc, int gap = 0) {
     if (m_settings.preorder) {
       // lvlLitOrder.decay();
       // lvlLitOrder.update_order(uc);
     } else {
-      litOrder.decay_uc(uc);
+      litOrder.decay_uc(uc, gap);
     }
   }
 
@@ -317,7 +317,7 @@ private:
     }
     std::sort(uc->begin(), uc->end(), cmp);
     if (uc->size() > uc_blocker->size()) {
-      // decayLitOrder(*uc_blocker);
+      decayLitOrder(*uc_blocker, uc->size() - uc_blocker->size());
       return false;
     } else
       return true;
