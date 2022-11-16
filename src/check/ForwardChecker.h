@@ -69,6 +69,7 @@ public:
     std::vector<float> counts;
     int _mini;
     void count(const std::vector<int> &uc) {
+      if (!uc.size()) return;
       conflict_index++;
       // assumes cube is ordered
       int sz = abs(uc.back());
