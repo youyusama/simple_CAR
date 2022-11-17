@@ -62,6 +62,10 @@ public:
   bool Run();
   bool Check(int badId);
 
+  static int to_lit(int var) {
+    return (var > 0) ? (var * 2) : (abs(var) * 2 + 1);
+  }
+
   struct HeuristicLitOrder {
     HeuristicLitOrder() : _mini(1 << 20), conflict_index(0) {}
 
@@ -72,21 +76,21 @@ public:
       if (!uc.size()) return;
       conflict_index++;
       // assumes cube is ordered
-      int sz = abs(uc.back());
+      int sz = to_lit(uc.back());
       if (sz >= counts.size()) counts.resize(sz + 1);
-      if (_mini > abs(uc[0])) _mini = abs(uc[0]);
+      if (_mini > to_lit(uc[0])) _mini = to_lit(uc[0]);
       for (auto l : uc) {
-        counts[abs(l)]++;
+        counts[to_lit(l)]++;
       }
     }
 
     void decay_uc(const std::vector<int> &uc, int gap) {
       if (!uc.size()) return;
-      int sz = abs(uc.back());
+      int sz = to_lit(uc.back());
       if (sz >= counts.size()) counts.resize(sz + 1);
-      if (_mini > abs(uc[0])) _mini = abs(uc[0]);
+      if (_mini > to_lit(uc[0])) _mini = to_lit(uc[0]);
       for (auto l : uc) {
-        counts[abs(l)] *= 1 - 0.01 * (gap - 1);
+        counts[to_lit(l)] *= 1 - 0.01 * (gap - 1);
       }
     }
 
@@ -102,8 +106,8 @@ public:
     SlimLitOrder() {}
 
     bool operator()(const int &l1, const int &l2) const {
-      int lit_1 = abs(l1);
-      int lit_2 = abs(l2);
+      int lit_1 = to_lit(l1);
+      int lit_2 = to_lit(l2);
       if (lit_2 >= heuristicLitOrder->counts.size()) return true;
       if (lit_1 >= heuristicLitOrder->counts.size()) return false;
       return (heuristicLitOrder->counts[lit_1] > heuristicLitOrder->counts[lit_2]);
@@ -117,12 +121,12 @@ public:
     BlockersOrder() {}
 
     bool operator()(const cube *a, const cube *b) const {
-      int sz = (abs(a->back()) > abs(b->back())) ? abs(a->back()) : abs(b->back());
+      int sz = (abs(a->back()) > abs(b->back())) ? to_lit(a->back()) : to_lit(b->back());
       if (sz >= heuristicLitOrder->counts.size()) heuristicLitOrder->counts.resize(sz + 1);
       float score_a = 0, score_b = 0;
       for (int i = 0; i < a->size(); i++) {
-        score_a += heuristicLitOrder->counts[abs(a->at(i))];
-        score_b += heuristicLitOrder->counts[abs(b->at(i))];
+        score_a += heuristicLitOrder->counts[to_lit(a->at(i))];
+        score_b += heuristicLitOrder->counts[to_lit(b->at(i))];
       }
       return score_a > score_b;
     }
