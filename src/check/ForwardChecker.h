@@ -69,10 +69,6 @@ public:
     LitOrder() {}
 
     bool operator()(const int &l1, const int &l2) const {
-      int lit_1 = abs(l1);
-      int lit_2 = abs(l2);
-      if (lit_2 >= branching->counts_len()) return true;
-      if (lit_1 >= branching->counts_len()) return false;
       return (branching->prior_of(l1) > branching->prior_of(l2));
     }
   } litOrder;

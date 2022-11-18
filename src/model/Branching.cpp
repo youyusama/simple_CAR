@@ -48,6 +48,7 @@ void Branching::decay(const cube *uc, int gap = 1) {
 
 
 float Branching::prior_of(int lit) {
+  if (abs(lit) > counts.size()) return 0;
   return counts[abs(lit)];
 }
 
