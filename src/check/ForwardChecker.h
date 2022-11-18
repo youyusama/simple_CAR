@@ -2,6 +2,7 @@
 #define FORWARDCHECKER_H
 
 #include "BaseChecker.h"
+#include "Branching.h"
 #include "IOverSequence.h"
 #include "ISolver.h"
 #include "InvSolver.h"
@@ -62,129 +63,49 @@ public:
   bool Run();
   bool Check(int badId);
 
-  struct HeuristicLitOrder {
-    HeuristicLitOrder() : _mini(1 << 20), conflict_index(0) {}
+  struct LitOrder {
+    sptr<Branching> branching;
 
-    int conflict_index;
-    std::vector<float> counts;
-    int _mini;
-    void count(const std::vector<int> &uc) {
-      if (!uc.size()) return;
-      conflict_index++;
-      // assumes cube is ordered
-      int sz = abs(uc.back());
-      if (sz >= counts.size()) counts.resize(sz + 1);
-      if (_mini > abs(uc[0])) _mini = abs(uc[0]);
-      for (auto l : uc) {
-        counts[abs(l)]++;
-      }
-    }
+    LitOrder() {}
 
-    void decay_uc(const std::vector<int> &uc, int gap) {
-      if (!uc.size()) return;
-      int sz = abs(uc.back());
-      if (sz >= counts.size()) counts.resize(sz + 1);
-      if (_mini > abs(uc[0])) _mini = abs(uc[0]);
-      for (auto l : uc) {
-        counts[abs(l)] *= 1 - 0.01 * (gap - 1);
-      }
-    }
-
-    void decay() {
-      for (int i = _mini; i < counts.size(); ++i)
-        counts[i] *= 0.99;
+    bool operator()(const int &l1, const int &l2) const {
+      int lit_1 = abs(l1);
+      int lit_2 = abs(l2);
+      if (lit_2 >= branching->counts_len()) return true;
+      if (lit_1 >= branching->counts_len()) return false;
+      return (branching->prior_of(l1) > branching->prior_of(l2));
     }
   } litOrder;
 
-  struct SlimLitOrder {
-    HeuristicLitOrder *heuristicLitOrder;
 
-    SlimLitOrder() {}
+  struct BlockerOrder {
+    sptr<Branching> branching;
 
-    bool operator()(const int &l1, const int &l2) const {
-      int lit_1 = abs(l1);
-      int lit_2 = abs(l2);
-      if (lit_2 >= heuristicLitOrder->counts.size()) return true;
-      if (lit_1 >= heuristicLitOrder->counts.size()) return false;
-      return (heuristicLitOrder->counts[lit_1] > heuristicLitOrder->counts[lit_2]);
-    }
-  } slimLitOrder;
-
-
-  struct BlockersOrder {
-    HeuristicLitOrder *heuristicLitOrder;
-
-    BlockersOrder() {}
+    BlockerOrder() {}
 
     bool operator()(const cube *a, const cube *b) const {
-      int sz = (abs(a->back()) > abs(b->back())) ? abs(a->back()) : abs(b->back());
-      if (sz >= heuristicLitOrder->counts.size()) heuristicLitOrder->counts.resize(sz + 1);
       float score_a = 0, score_b = 0;
       for (int i = 0; i < a->size(); i++) {
-        score_a += heuristicLitOrder->counts[abs(a->at(i))];
-        score_b += heuristicLitOrder->counts[abs(b->at(i))];
+        score_a += branching->prior_of(a->at(i));
+        score_b += branching->prior_of(b->at(i));
       }
       return score_a > score_b;
     }
-  } blockersOrder;
-
-
-  struct LvlLitOrder {
-    LvlLitOrder() : _mini(1 << 20) {}
-    sptr<std::vector<float>> aiger_order;
-    int _mini;
-    void update_order(const cube &uc) {
-      int sz = abs(uc.back());
-      if (sz >= aiger_order->size()) aiger_order->resize(sz + 1);
-      if (_mini > abs(uc[0])) _mini = abs(uc[0]);
-      for (auto l : uc) {
-        aiger_order->at(abs(l))++;
-      }
-    }
-
-    // void decay() {
-    //   for (int i = _mini; i < aiger_order->size(); i++) {
-    //     aiger_order->at(i) *= 0.9;
-    //   }
-    // }
-
-    bool operator()(const int &l1, const int &l2) const {
-      int lit_1 = abs(l1);
-      int lit_2 = abs(l2);
-      if (lit_2 >= aiger_order->size()) return true;
-      if (lit_1 >= aiger_order->size()) return false;
-      return (aiger_order->at(lit_1) > aiger_order->at(lit_2));
-    }
-  } lvlLitOrder;
-
+  } blockerOrder;
 
   float numLits, numUpdates;
-  void updateLitOrder(const std::vector<int> &uc) {
-    if (m_settings.preorder) {
-      // lvlLitOrder.decay();
-      lvlLitOrder.update_order(uc);
-    } else {
-      litOrder.decay();
-      litOrder.count(uc);
-    }
-    CAR_DEBUG_order("\nLit Order:\n", litOrder.counts);
+  void updateLitOrder(cube uc) {
+    m_branching->update(&uc);
+    CAR_DEBUG_order("\nLit Order:\n", *m_branching->get_counts());
   }
 
-  void decayLitOrder(const std::vector<int> &uc, int gap = 0) {
-    if (m_settings.preorder) {
-      // lvlLitOrder.decay();
-      // lvlLitOrder.update_order(uc);
-    } else {
-      litOrder.decay_uc(uc, gap);
-    }
+  void decayLitOrder(cube *uc, int gap = 1) {
+    m_branching->decay(uc, gap);
   }
 
   // order according to preference
   void orderAssumption(std::vector<int> &uc, bool rev = false) {
-    if (m_settings.preorder)
-      std::stable_sort(uc.begin(), uc.end(), lvlLitOrder);
-    else
-      std::stable_sort(uc.begin(), uc.end(), slimLitOrder);
+    std::stable_sort(uc.begin(), uc.end(), litOrder);
     if (rev) std::reverse(uc.begin(), uc.end());
   }
 
@@ -296,7 +217,7 @@ private:
     std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
     cube *uc_blocker;
     if (uc_blockers->size() > 0) {
-      std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockersOrder);
+      std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
       uc_blocker = uc_blockers->at(0);
     } else {
       uc_blocker = new cube();
@@ -318,7 +239,7 @@ private:
     }
     std::sort(uc->begin(), uc->end(), cmp);
     if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
-      decayLitOrder(*uc_blocker, uc->size() - uc_blocker->size());
+      decayLitOrder(uc_blocker, uc->size() - uc_blocker->size());
       return false;
     } else
       return true;
@@ -355,20 +276,8 @@ private:
           }
           CAR_DEBUG_v("ctg Get UC:", *uc_cts);
           if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
-            m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1);
+            m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1, m_branching);
         } else {
-          // sptr<cube> temp_uc(new cube());
-          // std::sort(cts->latches->begin(), cts->latches->end());
-          // for (auto lit : *uc) {
-          //   if (std::binary_search(cts->latches->begin(), cts->latches->end(), lit)) {
-          //     temp_uc->emplace_back(lit);
-          //   } else {
-          //     if (required_lits.find(lit) != required_lits.end()) return false;
-          //   }
-          // }
-          // if (temp_uc->size() == uc->size()) return false;
-          // ctgs = 0;
-          // uc->swap(*temp_uc);
           return false;
         }
       }
@@ -378,7 +287,7 @@ private:
 
   void Propagation() {
     for (int i = m_minUpdateLevel; i < m_overSequence->GetLength() - 1; i++) {
-      m_overSequence->propagate(i);
+      m_overSequence->propagate(i, m_branching);
     }
   }
 
@@ -408,6 +317,7 @@ private:
   std::shared_ptr<CarSolver> m_deads;
   std::shared_ptr<ISolver> m_invSolver;
   std::shared_ptr<StartSolver> m_startSovler;
+  sptr<Branching> m_branching;
 };
 
 

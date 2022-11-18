@@ -11,6 +11,7 @@ src/model/MainSolver.cpp\
 src/model/InvSolver.cpp\
 src/model/State.cpp\
 src/main.cpp\
+src/model/Branching.cpp\
 src/model/OverSequence.cpp\
 src/model/OverSequenceNI.cpp\
 src/model/OverSequenceSet.cpp\
@@ -31,6 +32,7 @@ aiger.o \
 aigsim_for_vis.o \
 MainSolver.o \
 InvSolver.o \
+Branching.o\
 OverSequence.o \
 OverSequenceNI.o \
 OverSequenceSet.o \

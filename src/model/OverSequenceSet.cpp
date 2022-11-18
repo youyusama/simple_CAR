@@ -193,7 +193,7 @@ std::vector<cube *> *OverSequenceSet::GetBlockers(std::shared_ptr<std::vector<in
   return res;
 }
 
-void OverSequenceSet::propagate(int level) {
+void OverSequenceSet::propagate(int level, sptr<Branching> b) {
   // std::cout << "propagate " << level << std::endl;
   frame &fi = m_sequence[level];
   frame &fi_plus_1 = m_sequence[level + 1];
@@ -209,6 +209,7 @@ void OverSequenceSet::propagate(int level) {
     }
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
       add_uc_to_frame(uc, fi_plus_1);
+      b->update(uc);
       m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);
     }
@@ -222,7 +223,7 @@ void OverSequenceSet::propagate(int level) {
 // @input: uc already in lvl
 // @output: uc cannot propagate to lvl
 // ================================================================================
-int OverSequenceSet::propagate_uc_from_lvl(sptr<cube> uc, int lvl) {
+int OverSequenceSet::propagate_uc_from_lvl(sptr<cube> uc, int lvl, sptr<Branching> b) {
   while (lvl + 1 < m_sequence.size()) {
     frame &fi = m_sequence[lvl];
     frame &fi_plus_1 = m_sequence[lvl + 1];
@@ -234,6 +235,7 @@ int OverSequenceSet::propagate_uc_from_lvl(sptr<cube> uc, int lvl) {
     if (!m_mainSolver->SolveWithAssumption(ass, lvl)) {
       auto res = Ucs.insert(*uc);
       add_uc_to_frame(&*res.first, fi_plus_1);
+      b->update(&*res.first);
       m_blockSolver->AddUnsatisfiableCore(*uc, lvl + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, lvl + 1);
     } else {

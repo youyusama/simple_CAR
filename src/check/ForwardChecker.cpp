@@ -173,7 +173,7 @@ bool ForwardChecker::Check(int badId) {
           CAR_DEBUG_v("Get UC:", *uc);
           m_log->Tick();
           if (AddUnsatisfiableCore(uc, task.frameLevel + 1))
-            m_overSequence->propagate_uc_from_lvl(uc, task.frameLevel + 1);
+            m_overSequence->propagate_uc_from_lvl(uc, task.frameLevel + 1, m_branching);
           m_log->StatUpdateUc();
           CAR_DEBUG_o("Frames: ", m_overSequence.get());
           task.frameLevel++;
@@ -228,12 +228,9 @@ void ForwardChecker::Init(int badId) {
   m_badId = badId;
   // m_overSequence.reset(new OverSequenceNI(m_model));
   m_overSequence.reset(new OverSequenceSet(m_model));
-  if (m_settings.empi) {
-    slimLitOrder.heuristicLitOrder = &litOrder;
-    blockersOrder.heuristicLitOrder = &litOrder;
-    if (m_settings.preorder)
-      lvlLitOrder.aiger_order = m_model->get_aiger_order();
-  }
+  m_branching.reset(new Branching());
+  litOrder.branching = m_branching;
+  blockerOrder.branching = m_branching;
   if (m_settings.Visualization) {
     m_vis.reset(new Vis(m_settings, m_model));
     m_vis->addState(m_initialState);

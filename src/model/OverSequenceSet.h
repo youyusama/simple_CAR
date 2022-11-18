@@ -10,6 +10,7 @@
 #include <time.h>
 #include <vector>
 
+#include "Branching.h"
 #include "CarSolver.h"
 #include "MainSolver.h"
 
@@ -40,9 +41,9 @@ public:
 
   int GetLength();
 
-  void propagate(int level);
+  void propagate(int level, sptr<Branching> b);
 
-  int propagate_uc_from_lvl(sptr<cube> uc, int lvl);
+  int propagate_uc_from_lvl(sptr<cube> uc, int lvl, sptr<Branching> b);
 
   void set_solver(std::shared_ptr<CarSolver> slv);
 
