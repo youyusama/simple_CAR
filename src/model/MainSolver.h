@@ -3,17 +3,17 @@
 
 #include "CarSolver.h"
 
-namespace car
-{
+namespace car {
 
-class MainSolver : public CarSolver
-{
+class MainSolver : public CarSolver {
 public:
-    MainSolver(std::shared_ptr<AigerModel> model, bool isForward);
-private:
+  MainSolver(std::shared_ptr<AigerModel> model, bool isForward);
 
+  void add_negation_bad();
+
+private:
 };
 
-}
+} // namespace car
 
 #endif

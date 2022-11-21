@@ -13,6 +13,9 @@ MainSolver::MainSolver(std::shared_ptr<AigerModel> model, bool isForward) {
     // std::cout << std::endl;
     AddClause(clause[i]);
   }
+}
+
+void MainSolver::add_negation_bad() {
   AddClause(m_model->GetNegBad());
 }
 

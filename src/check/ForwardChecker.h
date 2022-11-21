@@ -199,6 +199,7 @@ private:
         m_lifts->AddAssumption(act);
       }
     }
+    std::sort(partial_latch->begin(), partial_latch->end(), cmp);
     return std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>>(t.first, partial_latch);
   }
 
@@ -308,9 +309,8 @@ private:
   std::shared_ptr<Log> m_log;
   std::shared_ptr<AigerModel> m_model;
   std::shared_ptr<State> m_initialState;
-  std::shared_ptr<CarSolver> m_mainSolver;
+  std::shared_ptr<MainSolver> m_mainSolver;
   std::shared_ptr<CarSolver> m_lifts;
-  std::shared_ptr<CarSolver> m_deads;
   std::shared_ptr<ISolver> m_invSolver;
   std::shared_ptr<StartSolver> m_startSovler;
   sptr<Branching> m_branching;

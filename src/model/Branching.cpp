@@ -17,7 +17,7 @@ void Branching::update(const cube *uc) {
   if (conflict_index == 256) {
     // decay first
     for (int i = mini; i < counts.size(); i++)
-      counts[i] *= 0.99;
+      counts[i] *= 0.5;
     conflict_index = 0;
   }
 

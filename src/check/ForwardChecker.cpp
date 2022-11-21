@@ -52,16 +52,14 @@ bool ForwardChecker::Check(int badId) {
     auto pair = m_mainSolver->GetAssignment();
     CAR_DEBUG_v("Get Assignment:", *pair.second);
     m_initialState->inputs = pair.first;
+    m_log->lastState = m_initialState;
     return false;
   }
 
+  m_mainSolver->add_negation_bad();
   CAR_DEBUG("Result >>> UNSAT <<<");
   // frame 0 is init state
   m_overSequence->Init_Frame_0(m_initialState->latches);
-  // for (auto latch : *(m_initialState->latches)) {
-  //   std::shared_ptr<std::vector<int>> puc(new std::vector<int>{-latch});
-  //   m_overSequence->Insert(puc, 0);
-  // }
 
   std::vector<std::shared_ptr<std::vector<int>>> frame;
   m_overSequence->GetFrame(0, frame);
@@ -129,7 +127,6 @@ bool ForwardChecker::Check(int badId) {
           return false;
         }
         m_log->Tick();
-        // bool result = m_mainSolver->SolveWithAssumption(*(task.state->latches), task.frameLevel);
         CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel));
         CAR_DEBUG_s("From state: ", task.state);
         CAR_DEBUG_v("State Detail: ", *task.state->latches);
@@ -242,7 +239,6 @@ void ForwardChecker::Init(int badId) {
   m_underSequence = UnderSequence();
   m_mainSolver.reset(new MainSolver(m_model, true));
   m_lifts.reset(new MainSolver(m_model, true));
-  m_deads.reset(new MainSolver(m_model, true));
   m_invSolver.reset(new InvSolver(m_model));
   m_startSovler.reset(new StartSolver(m_model, badId));
   m_overSequence->set_solver(m_mainSolver);
