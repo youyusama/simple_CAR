@@ -235,7 +235,7 @@ private:
     }
     std::sort(uc->begin(), uc->end(), cmp);
     if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
-      decayLitOrder(uc_blocker, uc->size() - uc_blocker->size());
+      // decayLitOrder(uc_blocker, uc->size() - uc_blocker->size());
       return false;
     } else
       return true;

@@ -12,12 +12,15 @@ Branching::~Branching() {}
 
 
 void Branching::update(const cube *uc) {
-  // decay first
-  for (int i = mini; i < counts.size(); i++)
-    counts[i] *= 0.99;
-
   if (uc->size() == 0) return;
   conflict_index++;
+  if (conflict_index == 256) {
+    // decay first
+    for (int i = mini; i < counts.size(); i++)
+      counts[i] *= 0.99;
+    conflict_index = 0;
+  }
+
   // assumes cube is ordered
   int sz = abs(uc->back());
   if (sz >= counts.size()) counts.resize(sz + 1);
@@ -48,7 +51,7 @@ void Branching::decay(const cube *uc, int gap = 1) {
 
 
 float Branching::prior_of(int lit) {
-  if (abs(lit) > counts.size()) return 0;
+  if (abs(lit) >= counts.size()) return 0;
   return counts[abs(lit)];
 }
 
