@@ -4,6 +4,8 @@
 extern "C" {
 #include "aiger.h"
 }
+#include "../sat/minisat/core/Solver.h"
+#include "../sat/minisat/simp/SimpSolver.h"
 #include "Settings.h"
 #include <algorithm>
 #include <assert.h>
@@ -22,6 +24,7 @@ typedef std::string string;
 typedef std::vector<int> cube;
 template <typename T>
 using sptr = std::shared_ptr<T>;
+using namespace Minisat;
 
 namespace car {
 
@@ -94,6 +97,8 @@ public:
   std::vector<int> GetNegBad();
 
   sptr<std::vector<float>> get_aiger_order();
+
+  sptr<SimpSolver> get_sslv();
 #pragma endregion
 
 #pragma region private methods
@@ -144,6 +149,8 @@ private:
 
   void build_aiger_order(const aiger *aig);
 
+  void create_sslv();
+
 #pragma endregion
 
 #pragma region private member variables
@@ -171,6 +178,7 @@ private:
   std::unordered_map<int, std::vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
 
   sptr<std::vector<float>> m_aiger_order;
+  sptr<SimpSolver> m_sslv;
 
 #pragma endregion
 };

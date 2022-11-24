@@ -18,6 +18,7 @@ src/model/OverSequenceSet.cpp\
 src/model/Log.cpp\
 src/visualization/Vis.cpp\
 src/sat/minisat/core/Solver.cc\
+src/sat/minisat/simp/SimpSolver.cc\
 src/sat/minisat/utils/Options.cc\
 src/sat/minisat/utils/System.cc
 
@@ -38,11 +39,12 @@ OverSequenceNI.o \
 OverSequenceSet.o \
 Log.o \
 Vis.o \
+SimpSolver.o\
 Solver.o \
 Options.o \
 System.o
 
-CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat -I./src/model -I./src/visualization -I./src/check -I./src/sat/cadical/src\
+CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat/minisat -I./src/model -I./src/visualization -I./src/check -I./src/sat/cadical/src\
  -D__STDC_LIMIT_MACROS \
  -D __STDC_FORMAT_MACROS \
  -c \
@@ -50,7 +52,7 @@ CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat -I./src/model -I./src
  -DNDEBUG \
  -O3
 
-CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat -I./src/model -I./src/visualization -I./src/check \
+CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat -I./src/model -I./src/visualization -I./src/check \
 -D__STDC_LIMIT_MACROS \
 -D __STDC_FORMAT_MACROS \
 -c \

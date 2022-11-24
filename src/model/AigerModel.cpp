@@ -36,6 +36,7 @@ void AigerModel::Init(aiger *aig) {
   CollectInitialState(aig);
   CollectNextValueMapping(aig);
   CollectClauses(aig);
+  create_sslv();
   //   Collect_and_gates_for_pine(aig);
   // if (m_settings.pVisualization)
   // print_aiger_gml(aig);
@@ -468,6 +469,51 @@ std::vector<int> AigerModel::GetNegBad() {
 //   else
 //     return l + 1;
 // }
+Lit getLit(sptr<SimpSolver> sslv, int id) {
+  if (id == 0) {
+    // placeholder
+  }
+  int var = abs(id) - 1;
+  while (var >= sslv->nVars()) sslv->newVar();
+  return ((id > 0) ? mkLit(var) : ~mkLit(var));
+};
+
+void addClause(sptr<SimpSolver> sslv, const std::vector<int> &clause) {
+  vec<Lit> literals;
+  for (int i = 0; i < clause.size(); ++i) {
+    literals.push(getLit(sslv, clause[i]));
+  }
+  bool result = sslv->addClause(literals);
+  assert(result != false);
+}
+
+void AigerModel::create_sslv() {
+  m_sslv.reset(new SimpSolver);
+  for (int i = 0; i < m_numInputs + m_numLatches; i++) {
+    Var nv = m_sslv->newVar();
+    // std::cout << nv << " ";
+    m_sslv->setFrozen(nv, true);
+  }
+  for (int i = m_numInputs + 1; i < m_numInputs + m_numLatches + 1; i++) {
+    Var p = abs(GetPrime(i)) - 1;
+    while (p >= m_sslv->nVars()) m_sslv->newVar();
+    m_sslv->setFrozen(p, true);
+  }
+  int bad_var = abs(m_outputs[0]) - 1;
+  while (bad_var >= m_sslv->nVars()) m_sslv->newVar();
+  m_sslv->setFrozen(bad_var, true);
+  for (int i = 0; i < m_clauses.size(); i++) {
+    addClause(m_sslv, m_clauses[i]);
+  }
+  // std::cout << m_sslv->nClauses() << std::endl;
+  m_sslv->eliminate();
+  // std::cout << m_sslv->nClauses() << std::endl;
+}
+
+
+sptr<SimpSolver> AigerModel::get_sslv() {
+  return m_sslv;
+}
 
 
 void AigerModel::build_aiger_order(const aiger *aig) {
