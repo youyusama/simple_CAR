@@ -225,7 +225,7 @@ void ForwardChecker::Init(int badId) {
   m_badId = badId;
   // m_overSequence.reset(new OverSequenceNI(m_model));
   m_overSequence.reset(new OverSequenceSet(m_model));
-  m_branching.reset(new Branching());
+  m_branching.reset(new Branching(m_settings.Branching));
   litOrder.branching = m_branching;
   blockerOrder.branching = m_branching;
   if (m_settings.Visualization) {
@@ -238,7 +238,7 @@ void ForwardChecker::Init(int badId) {
   m_overSequence->isForward = true;
   m_underSequence = UnderSequence();
   m_mainSolver.reset(new MainSolver(m_model, true, true));
-  m_lifts.reset(new MainSolver(m_model, true));
+  m_lifts.reset(new MainSolver(m_model, true, true));
   m_invSolver.reset(new InvSolver(m_model));
   m_startSovler.reset(new StartSolver(m_model, badId));
   m_overSequence->set_solver(m_mainSolver);

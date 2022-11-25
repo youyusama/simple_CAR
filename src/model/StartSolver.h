@@ -1,9 +1,9 @@
 #ifndef STARTSOLVER_H
 #define STARTSOLVER_H
 
+#include "../sat/minisat/core/Solver.h"
 #include "AigerModel.h"
 #include "CarSolver.h"
-#include "Solver.h"
 #include <memory>
 namespace car {
 

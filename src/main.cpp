@@ -80,6 +80,9 @@ Settings GetArgv(int argc, char **argv) {
       settings.incr = true;
     } else if (strcmp(argv[i], "-depth") == 0) {
       settings.condition = RestartCondition::Depth;
+    } else if (strcmp(argv[i], "-br") == 0) {
+      settings.Branching = atoi(argv[i + 1]);
+      i++;
     } else if (strcmp(argv[i], "-vis") == 0) {
       settings.pVisualization = true;
     } else if (!hasSetInputDir) {

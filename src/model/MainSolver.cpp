@@ -1,4 +1,5 @@
 #include "MainSolver.h"
+#include <fstream>
 
 namespace car {
 MainSolver::MainSolver(std::shared_ptr<AigerModel> model, bool isForward, bool by_sslv) {
@@ -13,14 +14,11 @@ MainSolver::MainSolver(std::shared_ptr<AigerModel> model, bool isForward, bool b
       vec<Lit> cls_;
       for (int i = 0; i < cls.size(); ++i) {
         cls_.push(cls[i]);
-        // std::cout << ((cls[i].x % 2) ? (-cls[i].x / 2) : (cls[i].x / 2)) << " | ";
       }
-      // std::cout << std::endl;
       addClause_(cls_);
     }
     for (auto c = sslv->trailBegin(); c != sslv->trailEnd(); ++c)
       addClause(*c);
-    std::cout << std::endl;
   } else {
     auto &clause = m_model->GetClause();
     for (int i = 0; i < clause.size(); ++i) {

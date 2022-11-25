@@ -37,6 +37,7 @@ struct Settings {
   float growthRate = 1.5;
   int threshold = 64;
   int timelimit = 0;
+  int Branching = 0;
   RestartCondition condition = RestartCondition::UcNums;
   RestartBehaviour behaviour = RestartBehaviour::BackToInit;
   std::string aigFilePath;

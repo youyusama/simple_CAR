@@ -506,7 +506,7 @@ void AigerModel::create_sslv() {
     addClause(m_sslv, m_clauses[i]);
   }
   // std::cout << m_sslv->nClauses() << std::endl;
-  m_sslv->eliminate();
+  m_sslv->eliminate(true);
   // std::cout << m_sslv->nClauses() << std::endl;
 }
 
