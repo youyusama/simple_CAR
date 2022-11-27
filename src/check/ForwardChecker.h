@@ -101,6 +101,7 @@ public:
 
   // order according to preference
   void orderAssumption(std::vector<int> &uc, bool rev = false) {
+    if (m_settings.Branching == -1) return;
     std::stable_sort(uc.begin(), uc.end(), litOrder);
     if (rev) std::reverse(uc.begin(), uc.end());
   }
@@ -214,7 +215,8 @@ private:
     std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
     cube *uc_blocker;
     if (uc_blockers->size() > 0) {
-      std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
+      if (m_settings.Branching != -1)
+        std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
       uc_blocker = uc_blockers->at(0);
     } else {
       uc_blocker = new cube();
