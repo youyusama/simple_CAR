@@ -61,24 +61,13 @@ bool BackwardChecker::Check(int badId) {
   m_log->Tick();
   auto uc = m_mainSolver->GetUnsatisfiableCoreFromBad(badId);
   m_log->StatMainSolver();
-  if (uc->empty()) // uc is empty when Bad by itself is unsatisfying
-  {
-    // placeholder
+  if (uc->empty())
     return true;
-  }
   CAR_DEBUG_v("Get UC:", *uc);
-  m_overSequence->Insert(uc, 0);
-  if (m_settings.empi) {
-    updateLitOrder(*uc);
-  }
-
-  std::vector<std::shared_ptr<std::vector<int>>> frame;
-  m_overSequence->GetFrame(0, frame);
-  m_mainSolver->AddNewFrame(frame, 0);
+  AddUnsatisfiableCore(uc, 0);
   m_overSequence->effectiveLevel = 0;
   CAR_DEBUG_o("Frames: ", m_overSequence.get());
 #pragma endregion
-
 
   // main stage
   int frameStep = 0;
@@ -111,13 +100,7 @@ bool BackwardChecker::Check(int badId) {
         m_log->Timeout();
       }
 
-
       Task &task = workingStack.top();
-      if (m_settings.restart && m_restart->RestartCheck(task.state.get())) {
-        m_restart->DoRestart(workingStack);
-        m_log->CountRestartTimes();
-        continue;
-      }
 
       if (!task.isLocated) {
         m_log->Tick();
@@ -134,9 +117,7 @@ bool BackwardChecker::Check(int badId) {
       if (task.frameLevel == -1) {
         m_log->Tick();
         std::vector<int> assumption;
-        std::vector<int> assumption_pine;
         GetAssumption(task.state, task.frameLevel, assumption);
-        // GetAssumptionByPine(task.state, task.frameLevel, assumption_pine);
         CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel));
         CAR_DEBUG_s("From state: ", task.state);
         CAR_DEBUG_v("Assumption: ", assumption);
@@ -153,28 +134,22 @@ bool BackwardChecker::Check(int badId) {
           return false;
         } else {
           CAR_DEBUG("Result >>> UNSAT <<<");
-          if (m_settings.rotate) PushToRotation(task.state, task.frameLevel);
           auto uc = m_mainSolver->GetUnsatisfiableCore();
-          if (uc->empty()) {
-            // placeholder, uc is empty => safe
-          }
           CAR_DEBUG_v("Get UC:", *uc);
           m_log->Tick();
           AddUnsatisfiableCore(uc, task.frameLevel + 1);
           m_log->StatUpdateUc();
-          m_restart->UcCountsPlus1();
           task.frameLevel++;
           continue;
         }
       }
-      m_log->Tick();
-
 
       std::vector<int> assumption;
       GetAssumption(task.state, task.frameLevel, assumption);
       CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel));
       CAR_DEBUG_s("From state: ", task.state);
       CAR_DEBUG_v("Assumption: ", assumption);
+      m_log->Tick();
       bool result = m_mainSolver->SolveWithAssumption(assumption, task.frameLevel);
       m_log->StatMainSolver();
       if (result) {
@@ -198,55 +173,19 @@ bool BackwardChecker::Check(int badId) {
       } else {
         // Solver return UNSAT, get uc, then continue
         CAR_DEBUG("Result >>> UNSAT <<<");
-        PushToRotation(task.state, task.frameLevel);
-        auto uc = m_mainSolver->GetUnsatisfiableCore();
-        if (uc->empty()) {
-          // placeholder, uc is empty => safe
-        }
-        // if (m_settings.pine){
-        // 	// maybe in a low framelevel
-        // 	std::vector<int> assumption_pine;
-        // 	m_log->Tick();
-        // 	GetAssumptionByPine(task.state, task.frameLevel, assumption_pine);
-        // 	m_log->PrintSAT(assumption_pine, task.frameLevel);
-        // 	m_log->StatPine();
-        // 	// all length pine progress
-        // 	if (task.state->pine_state_type == 1){
-        // 		// redo the sat
-        // 		m_mainSolver->SolveWithAssumption(assumption_pine, task.frameLevel);
-        // 		auto uc_pine = m_mainSolver->GetUnsatisfiableCore();
-        // 		m_log->StatPineInfo(task.state, uc_pine, uc);
-        // 		if (m_settings.debug){
-        // 			m_log->DebugPrintVector(*uc_pine, "pine uc:");
-        // 			m_log->PrintPineInfo(task.state, uc_pine);
-        // 		}
-        // 	}
-        // 	// part length pine
-        // 	if (m_settings.debug && task.state->pine_state_type == 1){
-        // 		for (int l: *task.state->pine_l_index){
-        // 			m_log->DebugPrintSth("== pine part sat check ==");
-        // 			//get part pine
-        // 			std::vector<int> part_pine(l);
-        // 			std::copy(assumption_pine.begin(), assumption_pine.begin()+l, part_pine.begin());
-        // 			m_log->DebugPrintVector(part_pine, "part pine:");
-        // 			//redo the sat
-        // 			bool part_result = m_mainSolver->SolveWithAssumption(part_pine, task.frameLevel);
-        // 			if (part_result){
-        // 				m_log->DebugPrintSth("sat");
-        // 			}else{
-        // 				auto uc_part = m_mainSolver->GetUnsatisfiableCore();
-        // 				m_log->DebugPrintVector(*uc_part, "part uc:");
-        // 				m_log->PrintPineInfo(task.state, uc_part);
-        // 			}
-        // 		}
-        // 	}
-        // }
-
+        auto uc = m_mainSolver->Getuc(false);
         CAR_DEBUG_v("Get UC:", *uc);
         m_log->Tick();
-        AddUnsatisfiableCore(uc, task.frameLevel + 1);
+        if (m_settings.ctg)
+          if (generalize_ctg(uc, task.frameLevel)) {
+            updateLitOrder(*uc);
+          }
+        m_log->Statmuc();
+        CAR_DEBUG_v("Get UC:", *uc);
+        m_log->Tick();
+        if (AddUnsatisfiableCore(uc, task.frameLevel + 1))
+          m_overSequence->propagate_uc_from_lvl(uc, task.frameLevel + 1, m_branching);
         m_log->StatUpdateUc();
-        m_restart->UcCountsPlus1();
         CAR_DEBUG_o("Frames: ", m_overSequence.get());
         task.frameLevel++;
         continue;
@@ -254,15 +193,14 @@ bool BackwardChecker::Check(int badId) {
     }
     CAR_DEBUG("\nNew Frame Added");
     if (m_settings.propagation) {
+      m_log->Tick();
       Propagation();
+      m_log->StatPropagation();
     }
     std::vector<std::shared_ptr<std::vector<int>>> lastFrame;
     frameStep++;
-    m_overSequence->GetFrame(frameStep, lastFrame);
-    m_mainSolver->AddNewFrame(lastFrame, frameStep);
     m_mainSolver->simplify();
     m_overSequence->effectiveLevel++;
-    m_restart->ResetUcCounts();
 
 
     m_log->Tick();
@@ -276,53 +214,36 @@ bool BackwardChecker::Check(int badId) {
 
 
 void BackwardChecker::Init() {
-  // if (m_settings.propagation)
-  // {
-  // 	m_overSequence.reset(new OverSequenceForProp(m_model->GetNumInputs()));
-  // }
-  // else
-  // {
-  // 	m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
-  // }
   m_overSequence.reset(new OverSequenceSet(m_model));
-  // m_overSequence.reset(new OverSequenceSet(m_model));
-  // m_overSequence.reset(new OverSequence(m_model->GetNumInputs()));
-  if (m_settings.empi) {
-    slimLitOrder.heuristicLitOrder = &litOrder;
-  }
+  m_branching.reset(new Branching(m_settings.Branching));
+  litOrder.branching = m_branching;
+  blockerOrder.branching = m_branching;
   m_underSequence = UnderSequence();
   m_underSequence.push(m_initialState);
   if (m_settings.Visualization) {
     m_vis.reset(new Vis(m_settings, m_model));
     m_vis->addState(m_initialState);
   }
-  m_mainSolver.reset(new MainSolver(m_model, false));
+  m_mainSolver.reset(new MainSolver(m_model, false, true));
   m_invSolver.reset(new InvSolver(m_model));
+  m_overSequence->set_solver(m_mainSolver);
   m_log->ResetClock();
-  m_restart.reset(new Restart(m_settings));
-  m_repeat_state_num = 0;
 }
 
-void BackwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel) {
-  if (frameLevel <= m_overSequence->effectiveLevel) {
-    m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
-  }
-  m_overSequence->Insert(uc, frameLevel);
-  if (m_settings.empi) {
-    updateLitOrder(*uc);
-  }
+bool BackwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel) {
+  m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
   if (frameLevel < m_minUpdateLevel) {
     m_minUpdateLevel = frameLevel;
   }
+  m_overSequence->Insert(uc, frameLevel);
+  return true;
 }
 
 bool BackwardChecker::ImmediateSatisfiable(int badId) {
   std::vector<int> &init = *(m_initialState->latches);
   std::vector<int> assumptions;
-  // GetAssumptionByPine(m_initialState, -1, assumptions);
   assumptions.resize((init.size()));
   std::copy(init.begin(), init.end(), assumptions.begin());
-  // assumptions[assumptions.size()-1] = badId;
   bool result = m_mainSolver->SolveWithAssumptionAndBad(assumptions, badId);
   return result;
 }
@@ -334,7 +255,10 @@ bool BackwardChecker::isInvExisted() {
   bool result = false;
   for (int i = 0; i < m_overSequence->GetLength(); ++i) {
     if (IsInvariant(i)) {
+      m_log->PrintSth("Proof at frame " + std::to_string(i) + "\n");
+      m_log->PrintFramesInfo(m_overSequence.get());
       result = true;
+      break;
     }
   }
   m_invSolver = nullptr;

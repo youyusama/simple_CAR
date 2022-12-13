@@ -204,9 +204,14 @@ void OverSequenceSet::propagate(int level, sptr<Branching> b) {
 
     std::vector<int> ass;
     ass.reserve(uc->size());
-    for (auto i : *uc) {
-      ass.emplace_back(m_model->GetPrime(i));
-    }
+    if (isForward)
+      for (auto i : *uc) {
+        ass.emplace_back(m_model->GetPrime(i));
+      }
+    else
+      for (auto i : *uc) {
+        ass.emplace_back(i);
+      }
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
       add_uc_to_frame(uc, fi_plus_1);
       b->update(uc);
@@ -229,9 +234,14 @@ int OverSequenceSet::propagate_uc_from_lvl(sptr<cube> uc, int lvl, sptr<Branchin
     frame &fi_plus_1 = m_sequence[lvl + 1];
     std::vector<int> ass;
     ass.reserve(uc->size());
-    for (auto i : *uc) {
-      ass.emplace_back(m_model->GetPrime(i));
-    }
+    if (isForward)
+      for (auto i : *uc) {
+        ass.emplace_back(m_model->GetPrime(i));
+      }
+    else
+      for (auto i : *uc) {
+        ass.emplace_back(i);
+      }
     if (!m_mainSolver->SolveWithAssumption(ass, lvl)) {
       auto res = Ucs.insert(*uc);
       add_uc_to_frame(&*res.first, fi_plus_1);

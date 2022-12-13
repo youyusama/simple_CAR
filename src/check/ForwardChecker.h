@@ -89,7 +89,6 @@ public:
     }
   } blockerOrder;
 
-  float numLits, numUpdates;
   void updateLitOrder(cube uc) {
     m_branching->update(&uc);
     CAR_DEBUG_order("\nLit Order:\n", *m_branching->get_counts());

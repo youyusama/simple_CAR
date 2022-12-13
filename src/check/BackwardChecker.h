@@ -38,6 +38,12 @@ namespace car {
     m_log->PrintOSequence(o); \
   } while (0)
 
+#define CAR_DEBUG_od(s, o)          \
+  do {                              \
+    m_log->DebugPrintSth(s);        \
+    m_log->PrintOSequenceDetail(o); \
+  } while (0)
+
 #define CAR_DEBUG_s(t, s)      \
   do {                         \
     m_log->DebugPrintSth(t);   \
@@ -51,52 +57,51 @@ public:
   bool Run();
   bool Check(int badId);
 
-  struct HeuristicLitOrder {
-    HeuristicLitOrder() : _mini(1 << 20) {}
-    std::vector<float> counts;
-    int _mini;
-    void count(const std::vector<int> &uc) {
-      // assumes cube is ordered
-      int sz = abs(uc.back());
-      int a = counts.size();
-      if (sz >= counts.size()) counts.resize(sz + 1);
-      _mini = abs(uc[0]);
-      for (std::vector<int>::const_iterator i = uc.begin(); i != uc.end(); ++i)
-        counts[abs(*i)]++;
-    }
-    void decay() {
-      for (int i = _mini; i < counts.size(); ++i)
-        counts[i] *= 0.99;
+  struct LitOrder {
+    sptr<Branching> branching;
+
+    LitOrder() {}
+
+    bool operator()(const int &l1, const int &l2) const {
+      return (branching->prior_of(l1) > branching->prior_of(l2));
     }
   } litOrder;
 
-  struct SlimLitOrder {
-    HeuristicLitOrder *heuristicLitOrder;
 
-    SlimLitOrder() {}
+  struct BlockerOrder {
+    sptr<Branching> branching;
 
-    bool operator()(const int &l1, const int &l2) const {
-      if (abs(l2) >= heuristicLitOrder->counts.size()) return true;
-      if (abs(l1) >= heuristicLitOrder->counts.size()) return false;
-      return (heuristicLitOrder->counts[abs(l1)] > heuristicLitOrder->counts[abs(l2)]);
+    BlockerOrder() {}
+
+    bool operator()(const cube *a, const cube *b) const {
+      float score_a = 0, score_b = 0;
+      for (int i = 0; i < a->size(); i++) {
+        score_a += branching->prior_of(a->at(i));
+        score_b += branching->prior_of(b->at(i));
+      }
+      return score_a > score_b;
     }
-  } slimLitOrder;
+  } blockerOrder;
 
-  float numLits, numUpdates;
-  void updateLitOrder(const std::vector<int> &uc) {
-    litOrder.decay();
-    litOrder.count(uc);
+  void updateLitOrder(cube uc) {
+    m_branching->update(&uc);
+  }
+
+  void decayLitOrder(cube *uc, int gap = 1) {
+    m_branching->decay(uc, gap);
   }
 
   // order according to preference
-  void orderAssumption(std::vector<int> &uc) {
-    std::stable_sort(uc.begin(), uc.end(), slimLitOrder);
+  void orderAssumption(std::vector<int> &uc, bool rev = false) {
+    if (m_settings.Branching == -1) return;
+    std::stable_sort(uc.begin(), uc.end(), litOrder);
+    if (rev) std::reverse(uc.begin(), uc.end());
   }
 
 private:
   void Init();
 
-  void AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel);
+  bool AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel);
 
   bool ImmediateSatisfiable(int badId);
 
@@ -106,200 +111,119 @@ private:
 
   int GetNewLevel(std::shared_ptr<State> state, int start = 0);
 
-  string GetFileName(string filePath) {
-    auto startIndex = filePath.find_last_of("/");
-    if (startIndex == string::npos) {
-      startIndex = 0;
+  void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass, bool rev = false) {
+    if (m_settings.incr) {
+      const std::vector<int> *uc_inc = m_overSequence->GetBlocker(state->latches, frameLevel);
+      ass.reserve(ass.size() + uc_inc->size());
+      ass.insert(ass.end(), uc_inc->begin(), uc_inc->end());
+    }
+
+    std::vector<int> l_ass;
+    l_ass.reserve(state->latches->size());
+    l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
+    orderAssumption(l_ass, rev);
+    CAR_DEBUG_v("Assumption Detail: ", l_ass);
+
+    ass.reserve(ass.size() + l_ass.size());
+    ass.insert(ass.end(), l_ass.begin(), l_ass.end());
+    // CAR_DEBUG_v("Assumption: ", ass);
+    return;
+  }
+
+
+  static bool cmp(int a, int b) {
+    return abs(a) < abs(b);
+  }
+
+
+  // ================================================================================
+  // @brief: counter-example to generalization
+  // @input:
+  // @output:
+  // ================================================================================
+  bool generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
+    std::unordered_set<int> required_lits;
+    // const std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
+    std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
+    cube *uc_blocker;
+    if (uc_blockers->size() > 0) {
+      if (m_settings.Branching != -1)
+        std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
+      uc_blocker = uc_blockers->at(0);
     } else {
-      startIndex++;
+      uc_blocker = new cube();
     }
-    auto endIndex = filePath.find_last_of(".");
-    assert(endIndex != string::npos);
-    return filePath.substr(startIndex, endIndex - startIndex);
+    for (auto b : *uc_blocker) required_lits.emplace(b);
+    orderAssumption(*uc);
+    for (int i = uc->size() - 1; i > 0; i--) {
+      if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
+      sptr<cube> temp_uc(new cube());
+      for (auto ll : *uc)
+        if (ll != uc->at(i)) temp_uc->emplace_back(ll);
+      if (down_ctg(temp_uc, frame_lvl, rec_lvl, required_lits)) {
+        uc->swap(*temp_uc);
+        orderAssumption(*uc);
+        i = uc->size();
+      } else {
+        required_lits.emplace(uc->at(i));
+      }
+    }
+    std::sort(uc->begin(), uc->end(), cmp);
+    if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
+      // decayLitOrder(uc_blocker, uc->size() - uc_blocker->size());
+      return false;
+    } else
+      return true;
   }
 
-  void GetPriority(std::shared_ptr<std::vector<int>> latches, const int frameLevel, std::vector<int> &res) {
-    if (frameLevel + 1 >= m_overSequence->GetLength()) {
-      return;
-    }
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    m_overSequence->GetFrame(frameLevel + 1, frame);
-    if (frame.size() == 0) {
-      return;
-    }
-
-    std::shared_ptr<std::vector<int>> uc = frame[frame.size() - 1];
-    res.reserve(uc->size());
-    for (int i = 0; i < uc->size(); ++i) {
-      if ((*latches)[abs((*uc)[i]) - m_model->GetNumInputs() - 1] == (*uc)[i]) {
-        res.push_back((*uc)[i]);
+  bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl, std::unordered_set<int> required_lits) {
+    int ctgs = 0;
+    std::vector<int> ass;
+    for (auto l : *uc) ass.emplace_back(l);
+    sptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
+    while (true) {
+      // F_i & T & temp_uc'
+      if (!m_mainSolver->SolveWithAssumption(ass, frame_lvl)) {
+        auto uc_ctg = m_mainSolver->Getuc(false);
+        if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
+        uc->swap(*uc_ctg);
+        return true;
+      } else if (rec_lvl > 2)
+        return false;
+      else {
+        std::pair<sptr<cube>, sptr<cube>> pair = m_mainSolver->GetAssignment();
+        sptr<State> cts(new State(nullptr, pair.first, pair.second, 0));
+        int cts_lvl = GetNewLevel(cts);
+        std::vector<int> cts_ass;
+        // int cts_lvl = frame_lvl - 1;
+        GetAssumption(cts, cts_lvl, cts_ass);
+        // F_i-1 & T & cts'
+        if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
+          ctgs++;
+          auto uc_cts = m_mainSolver->Getuc(false);
+          if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1)) {
+            updateLitOrder(*uc);
+          }
+          CAR_DEBUG_v("ctg Get UC:", *uc_cts);
+          if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
+            m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1, m_branching);
+        } else {
+          return false;
+        }
       }
     }
   }
 
-
-  void print_vector(std::vector<int> &v, std::string s = "") {
-    std::cout << std::endl
-              << s << std::endl;
-    for (auto l : v) {
-      std::cout << l << " ";
-    }
-  }
-
-
-  bool static id_comp(int a, int b) {
-    if (abs(a) != abs(b))
-      return abs(a) < abs(b);
-    else
-      return a < b;
-  }
-
-
-  void GetAssumptionByPine(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass) {
-    if (state->pine_state_type == 0) {
-      std::shared_ptr<std::vector<int>> nextl = m_model->Get_next_latches_for_pine(*state->latches);
-      if (nextl->size() / (float)m_model->GetNumLatches() > 0.1) {
-        state->pine_state_type = 1;
-        build_ass_by_l_list(state, ass);
-        return;
-      } else
-        state->pine_state_type = 2;
-    } else if (state->pine_state_type == 1) {
-      ass.resize(state->latches->size());
-      std::copy(state->pine_assumptions->begin(), state->pine_assumptions->end(), ass.begin());
-      return;
-    } else if (state->pine_state_type == 2) {
-    }
-  }
-
-
-  void build_ass_by_l_list(std::shared_ptr<State> state, std::vector<int> &ass) {
-    std::shared_ptr<std::vector<int>> l_0 = state->latches;
-    state->pine_l_index.reset(new std::vector<int>());
-    state->pine_assumptions.reset(new std::vector<int>());
-    state->pine_assumptions->resize(l_0->size());
-    ass.resize(l_0->size());
-    std::vector<int>::iterator ass_iter = ass.end();
-    std::vector<int> l_im1(*l_0); // l_(i-1)
-    bool end_flag = true;
-    do {
-      std::shared_ptr<std::vector<int>> next_l_im1 = m_model->Get_next_latches_for_pine(l_im1);
-      std::vector<int> l_i(l_0->size());
-      auto iter = std::set_intersection(l_im1.begin(), l_im1.end(), next_l_im1->begin(), next_l_im1->end(), l_i.begin(), id_comp);
-      l_i.resize(iter - l_i.begin());
-      std::vector<int> l_im1_m_l_i(l_0->size());
-      iter = std::set_difference(l_im1.begin(), l_im1.end(), l_i.begin(), l_i.end(), l_im1_m_l_i.begin(), id_comp);
-      l_im1_m_l_i.resize(iter - l_im1_m_l_i.begin());
-      int temp_length = l_im1_m_l_i.size();
-      if (temp_length == 0) {
-        state->pine_l_index->emplace_back(l_i.size());
-        std::copy(l_i.begin(), l_i.end(), ass.begin());
-        end_flag = false;
-        state->pine_l_list_type = 1;
-        break;
-      }
-      state->pine_l_index->emplace_back(temp_length);
-      ass_iter -= temp_length;
-      std::copy(l_im1_m_l_i.begin(), l_im1_m_l_i.end(), ass_iter);
-      // print_vector(ass, "ass:===========");
-      if (l_i.empty()) {
-        end_flag = false;
-        state->pine_l_list_type = 0;
-      }
-      l_i.swap(l_im1);
-    } while (end_flag);
-    std::reverse(state->pine_l_index->begin(), state->pine_l_index->end());
-    for (int i = 1; i < state->pine_l_index->size(); i++) {
-      state->pine_l_index->at(i) += state->pine_l_index->at(i - 1);
-    }
-    std::copy(ass.begin(), ass.end(), state->pine_assumptions->begin());
-  }
-
-
-  void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass) {
-    if (m_settings.empi) {
-      ass.reserve(ass.size() + state->latches->size());
-      ass.insert(ass.end(), state->latches->begin(), state->latches->end());
-      orderAssumption(ass);
-      return;
-    }
-
-    if (m_settings.inter) {
-      GetPriority(state->latches, frameLevel, ass);
-    }
-
-    ass.reserve(ass.size() + state->latches->size());
-
-    if (m_settings.rotate) {
-      std::vector<int> tmp;
-      tmp.reserve(state->latches->size());
-      int aa = m_rotation.size();
-      if (frameLevel + 2 > m_rotation.size()) {
-        ass.insert(ass.end(), state->latches->begin(), state->latches->end());
-        return;
-      } else if (m_rotation[frameLevel + 1] == nullptr) {
-        ass.insert(ass.end(), state->latches->begin(), state->latches->end());
-        return;
-      }
-      std::vector<int> &cube = *m_rotation[frameLevel + 1];
-      for (int i = 0; i < cube.size(); ++i) {
-        if ((*state->latches)[abs(cube[i]) - m_model->GetNumInputs() - 1] == cube[i])
-          ass.push_back(cube[i]);
-        else
-          tmp.push_back(-cube[i]);
-      }
-      ass.insert(ass.end(), tmp.begin(), tmp.end());
-    } else {
-      ass.insert(ass.end(), state->latches->begin(), state->latches->end());
-    }
-  }
-
-  void PushToRotation(std::shared_ptr<State> state, int frameLevel) {
-    while (frameLevel + 2 > m_rotation.size()) {
-      m_rotation.push_back(nullptr);
-    }
-    m_rotation[frameLevel + 1] = state->latches;
-  }
-
-  // void Propagation()
-  // {
-  // 	OverSequenceForProp* sequence = dynamic_cast<OverSequenceForProp*>(m_overSequence.get());
-  // 	for (int frameLevel = 0; frameLevel < sequence->GetLength()-1; ++frameLevel)
-  // 	{
-  // 		std::vector<std::shared_ptr<std::vector<int> > > unpropFrame = sequence->GetUnProp(frameLevel);
-  // 		std::vector<std::shared_ptr<std::vector<int> > > propFrame = sequence->GetProp(frameLevel);
-  // 		std::vector<std::shared_ptr<std::vector<int> > > tmp;
-  // 		for (int j = 0; j < unpropFrame.size(); ++j)
-  // 		{
-  // 			if (sequence->IsBlockedByFrame(*unpropFrame[j], frameLevel+1))
-  // 			{
-  // 				propFrame.push_back(unpropFrame[j]);
-  // 				continue;
-  // 			}
-
-  // 			bool result = m_mainSolver->SolveWithAssumption(*unpropFrame[j], frameLevel);
-  // 			if (!result)
-  // 			{
-  // 				AddUnsatisfiableCore(unpropFrame[j], frameLevel+1);
-  // 				sequence->InsertIntoProped(unpropFrame[j], frameLevel);
-  // 			}
-  // 			else
-  // 			{
-  // 				tmp.push_back(unpropFrame[j]);
-  // 			}
-  // 		}
-  // 		tmp.swap(unpropFrame);
-  // 	}
-  // }
 
   void Propagation() {
-    // for (int i = 0; i < m_overSequence->GetLength()-1; i++){
-    // 	m_overSequence->propagate(i);
-    // }
+    for (int i = m_minUpdateLevel; i < m_overSequence->GetLength() - 1; i++) {
+      m_overSequence->propagate(i, m_branching);
+    }
   }
 
 
   int m_minUpdateLevel;
+  sptr<Branching> m_branching;
   std::shared_ptr<OverSequenceSet> m_overSequence;
   UnderSequence m_underSequence;
   std::shared_ptr<Vis> m_vis;
