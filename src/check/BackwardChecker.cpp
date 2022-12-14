@@ -136,6 +136,7 @@ bool BackwardChecker::Check(int badId) {
           CAR_DEBUG("Result >>> UNSAT <<<");
           auto uc = m_mainSolver->GetUnsatisfiableCore();
           CAR_DEBUG_v("Get UC:", *uc);
+          updateLitOrder(*uc);
           m_log->Tick();
           AddUnsatisfiableCore(uc, task.frameLevel + 1);
           m_log->StatUpdateUc();
@@ -176,10 +177,9 @@ bool BackwardChecker::Check(int badId) {
         auto uc = m_mainSolver->Getuc(false);
         CAR_DEBUG_v("Get UC:", *uc);
         m_log->Tick();
-        if (m_settings.ctg)
-          if (generalize_ctg(uc, task.frameLevel)) {
-            updateLitOrder(*uc);
-          }
+        // if (m_settings.ctg)
+        //   if (generalize_ctg(uc, task.frameLevel))
+        updateLitOrder(*uc);
         m_log->Statmuc();
         CAR_DEBUG_v("Get UC:", *uc);
         m_log->Tick();
