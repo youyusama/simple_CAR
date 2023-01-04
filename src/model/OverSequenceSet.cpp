@@ -215,8 +215,11 @@ void OverSequenceSet::propagate(int level, sptr<Branching> b) {
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
       add_uc_to_frame(uc, fi_plus_1);
       b->update(uc);
+      m_log->StatSuccProp(true);
       m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);
+    } else {
+      m_log->StatSuccProp(false);
     }
   }
   return;
@@ -246,14 +249,50 @@ int OverSequenceSet::propagate_uc_from_lvl(sptr<cube> uc, int lvl, sptr<Branchin
       auto res = Ucs.insert(*uc);
       add_uc_to_frame(&*res.first, fi_plus_1);
       b->update(&*res.first);
+      m_log->StatSuccProp(true);
       m_blockSolver->AddUnsatisfiableCore(*uc, lvl + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, lvl + 1);
     } else {
+      m_log->StatSuccProp(false);
       break;
     }
     lvl++;
   }
   return lvl + 1;
+}
+
+void OverSequenceSet::PrintFramesInfo() {
+  m_log->PrintSth("Frames " + std::to_string(m_sequence.size() - 1) + "\n");
+  for (int i = 0; i < m_sequence.size(); ++i) {
+    m_log->PrintSth(std::to_string(m_sequence[i].size()) + " ");
+  }
+  m_log->PrintSth("\n");
+}
+
+void OverSequenceSet::PrintOSequence() {
+  if (!m_log->IsDebug()) return;
+  for (int i = 0; i < m_sequence.size(); ++i) {
+    m_log->DebugPrintSth(std::to_string(m_sequence[i].size()) + " ");
+  }
+  m_log->DebugPrintSth("\n");
+}
+
+
+void OverSequenceSet::PrintOSequenceDetail() {
+  if (!m_log->IsDebug()) return;
+  for (int i = 0; i < m_sequence.size(); ++i) {
+    m_log->DebugPrintSth("Frame " + std::to_string(i) + "\n");
+    if (i != 0) {
+      for (auto uc : m_sequence[i]) {
+        for (auto j : *uc) {
+          m_log->DebugPrintSth(std::to_string(j) + " ");
+        }
+        m_log->DebugPrintSth("\n");
+      }
+    }
+    m_log->DebugPrintSth("size: " + std::to_string(m_sequence[i].size()) + "\n");
+  }
+  m_log->DebugPrintSth("\n");
 }
 
 } // namespace car

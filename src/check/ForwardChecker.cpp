@@ -48,7 +48,7 @@ bool ForwardChecker::Check(int badId) {
 
   Init(badId);
   if (ImmediateSatisfiable(badId)) {
-    CAR_DEBUG("Result >>> SAT <<<");
+    CAR_DEBUG("Result >>> SAT <<<\n");
     auto pair = m_mainSolver->GetAssignment();
     CAR_DEBUG_v("Get Assignment:", *pair.second);
     m_initialState->inputs = pair.first;
@@ -57,7 +57,7 @@ bool ForwardChecker::Check(int badId) {
   }
 
   m_mainSolver->add_negation_bad();
-  CAR_DEBUG("Result >>> UNSAT <<<");
+  CAR_DEBUG("Result >>> UNSAT <<<\n");
   // frame 0 is init state
   m_overSequence->Init_Frame_0(m_initialState->latches);
 
@@ -73,7 +73,7 @@ bool ForwardChecker::Check(int badId) {
   int frameStep = 0;
   std::stack<Task> workingStack;
   while (true) {
-    m_log->PrintFramesInfo(m_overSequence.get());
+    m_overSequence->PrintFramesInfo();
     m_minUpdateLevel = m_overSequence->GetLength();
     if (m_settings.end) { // from the deep and the end
       for (int i = m_underSequence.size() - 1; i >= 0; i--) {
@@ -92,7 +92,7 @@ bool ForwardChecker::Check(int badId) {
     std::shared_ptr<State> startState = EnumerateStartState();
     m_log->StatStartSolver();
     if (startState == nullptr) return true;
-    CAR_DEBUG("\nstate from start solver");
+    CAR_DEBUG("\nstate from start solver\n");
     while (startState != nullptr) {
       workingStack.push(Task(startState, frameStep, true));
 
@@ -101,7 +101,7 @@ bool ForwardChecker::Check(int badId) {
           if (m_settings.Visualization) {
             m_vis->OutputGML(true);
           }
-          m_log->PrintFramesInfo(m_overSequence.get());
+          m_overSequence->PrintFramesInfo();
           m_log->PrintSth("time out!!!");
           m_log->Timeout();
         }
@@ -111,7 +111,7 @@ bool ForwardChecker::Check(int badId) {
         if (!task.isLocated) {
           m_log->Tick();
           task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
-          CAR_DEBUG("state get new level " + std::to_string(task.frameLevel));
+          CAR_DEBUG("state get new level " + std::to_string(task.frameLevel) + "\n");
           m_log->StatGetNewLevel();
           if (task.frameLevel > m_overSequence->effectiveLevel) {
             workingStack.pop();
@@ -127,7 +127,7 @@ bool ForwardChecker::Check(int badId) {
           return false;
         }
         m_log->Tick();
-        CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel));
+        CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel) + "\n");
         CAR_DEBUG_s("From state: ", task.state);
         CAR_DEBUG_v("State Detail: ", *task.state->latches);
         std::vector<int> assumption;
@@ -137,7 +137,7 @@ bool ForwardChecker::Check(int badId) {
         m_log->StatMainSolver();
         if (result) {
           // Solver return SAT, get a new State, then continue
-          CAR_DEBUG("Result >>> SAT <<<");
+          CAR_DEBUG("Result >>> SAT <<<\n");
           std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> pair, partial_pair;
           pair = m_mainSolver->GetAssignment();
           // CAR_DEBUG_v("Get Assignment:", *pair.second);
@@ -155,16 +155,19 @@ bool ForwardChecker::Check(int badId) {
           continue;
         } else {
           // Solver return UNSAT, get uc, then continue
-          CAR_DEBUG("Result >>> UNSAT <<<");
-          m_log->Tick();
+          CAR_DEBUG("Result >>> UNSAT <<<\n");
           auto uc = m_mainSolver->Getuc(m_settings.minimal_uc);
           if (uc->empty()) {
             // placeholder, uc is empty => safe
           }
           CAR_DEBUG_v("Get UC:", *uc);
+          m_log->Tick();
           if (m_settings.ctg)
             if (generalize_ctg(uc, task.frameLevel)) {
               updateLitOrder(*uc);
+              m_log->StatSuccProp(true);
+            } else {
+              m_log->StatSuccProp(false);
             }
           m_log->Statmuc();
           CAR_DEBUG_v("Get UC:", *uc);
@@ -180,10 +183,10 @@ bool ForwardChecker::Check(int badId) {
       m_log->Tick();
       startState = EnumerateStartState();
       m_log->StatStartSolver();
-      CAR_DEBUG("\nstate from start solver");
+      CAR_DEBUG("\nstate from start solver\n");
     }
 
-    CAR_DEBUG("\nNew Frame Added");
+    CAR_DEBUG("\nNew Frame Added\n");
     std::vector<std::shared_ptr<std::vector<int>>> lastFrame;
     frameStep++;
 
@@ -225,6 +228,7 @@ void ForwardChecker::Init(int badId) {
   m_badId = badId;
   // m_overSequence.reset(new OverSequenceNI(m_model));
   m_overSequence.reset(new OverSequenceSet(m_model));
+  m_overSequence->set_log(m_log);
   m_branching.reset(new Branching(m_settings.Branching));
   litOrder.branching = m_branching;
   blockerOrder.branching = m_branching;
@@ -275,7 +279,7 @@ bool ForwardChecker::isInvExisted() {
   for (int i = 0; i < m_overSequence->GetLength(); ++i) {
     if (IsInvariant(i)) {
       m_log->PrintSth("Proof at frame " + std::to_string(i) + "\n");
-      m_log->PrintFramesInfo(m_overSequence.get());
+      m_overSequence->PrintFramesInfo();
       result = true;
       break;
     }

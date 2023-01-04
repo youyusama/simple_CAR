@@ -38,6 +38,7 @@ struct Settings {
   int threshold = 64;
   int timelimit = 0;
   int Branching = 0;
+  bool stat = false;
   RestartCondition condition = RestartCondition::UcNums;
   RestartBehaviour behaviour = RestartBehaviour::BackToInit;
   std::string aigFilePath;

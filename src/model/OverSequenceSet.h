@@ -12,6 +12,7 @@
 
 #include "Branching.h"
 #include "CarSolver.h"
+#include "Log.h"
 #include "MainSolver.h"
 
 namespace car {
@@ -25,6 +26,10 @@ public:
     m_blockSolver = new BlockSolver(model);
     m_block_counter.clear();
     rep_counter = 0;
+  }
+
+  void set_log(sptr<Log> log) {
+    m_log = log;
   }
 
   bool Insert(std::shared_ptr<std::vector<int>> uc, int index);
@@ -50,6 +55,12 @@ public:
   std::vector<int> *GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel);
 
   std::vector<cube *> *GetBlockers(std::shared_ptr<std::vector<int>> latches, int framelevel);
+
+  void PrintFramesInfo();
+
+  void PrintOSequence();
+
+  void PrintOSequenceDetail();
 
   int effectiveLevel;
   bool isForward = false;
@@ -107,6 +118,7 @@ private:
   std::vector<frame> m_sequence;
   CarSolver *m_blockSolver;
   std::vector<int> m_block_counter;
+  sptr<Log> m_log;
 };
 
 } // namespace car

@@ -2,13 +2,10 @@
 #define BACKWARDCHECKER_H
 
 #include "BaseChecker.h"
-#include "IOverSequence.h"
 #include "ISolver.h"
 #include "InvSolver.h"
 #include "Log.h"
 #include "MainSolver.h"
-#include "OverSequence.h"
-#include "OverSequenceNI.h"
 #include "OverSequenceSet.h"
 #include "State.h"
 #include "Task.h"
@@ -32,16 +29,16 @@ namespace car {
     m_log->DebugPrintSth(s); \
   } while (0)
 
-#define CAR_DEBUG_o(s, o)     \
-  do {                        \
-    m_log->DebugPrintSth(s);  \
-    m_log->PrintOSequence(o); \
+#define CAR_DEBUG_o(s, o)             \
+  do {                                \
+    m_log->DebugPrintSth(s);          \
+    m_overSequence->PrintOSequence(); \
   } while (0)
 
-#define CAR_DEBUG_od(s, o)          \
-  do {                              \
-    m_log->DebugPrintSth(s);        \
-    m_log->PrintOSequenceDetail(o); \
+#define CAR_DEBUG_od(s, o)                  \
+  do {                                      \
+    m_log->DebugPrintSth(s);                \
+    m_overSequence->PrintOSequenceDetail(); \
   } while (0)
 
 #define CAR_DEBUG_s(t, s)      \

@@ -3,13 +3,10 @@
 
 #include "BaseChecker.h"
 #include "Branching.h"
-#include "IOverSequence.h"
 #include "ISolver.h"
 #include "InvSolver.h"
 #include "Log.h"
 #include "MainSolver.h"
-#include "OverSequence.h"
-#include "OverSequenceNI.h"
 #include "OverSequenceSet.h"
 #include "StartSolver.h"
 #include "State.h"
@@ -31,16 +28,16 @@ namespace car {
     m_log->DebugPrintSth(s); \
   } while (0)
 
-#define CAR_DEBUG_od(s, o)          \
-  do {                              \
-    m_log->DebugPrintSth(s);        \
-    m_log->PrintOSequenceDetail(o); \
+#define CAR_DEBUG_od(s, o)                  \
+  do {                                      \
+    m_log->DebugPrintSth(s);                \
+    m_overSequence->PrintOSequenceDetail(); \
   } while (0)
 
-#define CAR_DEBUG_o(s, o)     \
-  do {                        \
-    m_log->DebugPrintSth(s);  \
-    m_log->PrintOSequence(o); \
+#define CAR_DEBUG_o(s, o)             \
+  do {                                \
+    m_log->DebugPrintSth(s);          \
+    m_overSequence->PrintOSequence(); \
   } while (0)
 
 
@@ -209,6 +206,7 @@ private:
   // @output:
   // ================================================================================
   bool generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
+    m_log->stackTick();
     std::unordered_set<int> required_lits;
     // const std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
     std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
@@ -236,6 +234,7 @@ private:
       }
     }
     std::sort(uc->begin(), uc->end(), cmp);
+    m_log->StatGeneralTime();
     if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
       // decayLitOrder(uc_blocker, uc->size() - uc_blocker->size());
       return false;
@@ -271,6 +270,9 @@ private:
           auto uc_cts = m_mainSolver->Getuc(false);
           if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1)) {
             updateLitOrder(*uc);
+            m_log->StatSuccProp(true);
+          } else {
+            m_log->StatSuccProp(false);
           }
           CAR_DEBUG_v("ctg Get UC:", *uc_cts);
           if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))

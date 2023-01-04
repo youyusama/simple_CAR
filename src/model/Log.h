@@ -2,9 +2,6 @@
 #define LOG_H
 
 #include "AigerModel.h"
-#include "OverSequence.h"
-#include "OverSequenceNI.h"
-#include "OverSequenceSet.h"
 #include "Settings.h"
 #include "State.h"
 #include <assert.h>
@@ -43,11 +40,9 @@ public:
 
   void DebugPrintSth(std::string s);
 
-  void PrintInDebug(std::string str);
+  bool IsDebug();
 
-  void PrintFramesInfo(OverSequenceNI *sequence);
-  void PrintFramesInfo(IOverSequence *sequence);
-  void PrintFramesInfo(OverSequenceSet *sequence);
+  void PrintInDebug(std::string str);
 
   void PrintCounterExample(int badNo, bool isForward);
 
@@ -55,15 +50,7 @@ public:
 
   void DebugPrintVector(std::vector<int> &uc, std::string text = "");
 
-  void PrintOSequence(OverSequenceNI *sequence);
-  void PrintOSequence(IOverSequence *sequence);
-  void PrintOSequence(OverSequenceSet *sequence);
-  void PrintOSequenceDetail(OverSequenceSet *sequence);
-
   void PrintStateShort(std::shared_ptr<State> s);
-
-  void PrintUcNums(std::vector<int> &uc, OverSequenceNI *sequence);
-  void PrintUcNums(std::vector<int> &uc, IOverSequence *sequence);
 
   void PrintSAT(std::vector<int> &vec, int frameLevel);
 
@@ -74,6 +61,10 @@ public:
   void StatPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector<int>> uc_pine, std::shared_ptr<std::vector<int>> uc);
 
   void PrintStatistics() {
+    if (m_settings.stat) {
+      m_log << "STATPROP " << (float)m_succ_prop_times / (float)m_prop_times << std::endl;
+      m_log << "STATGENERAL " << (float)m_general_stat_time / (float)m_general_times << std::endl;
+    }
     m_log << std::endl
           << "MainSolverCalls:\t" << m_mainSolverCalls << std::endl;
     m_log << "MainSolver takes:\t" << m_mainSolverTime << " seconds" << std::endl;
@@ -105,6 +96,7 @@ public:
     m_getNewLevelTime = 0;
     m_updateUcTime = 0;
     m_pineTime = 0;
+    m_succ_prop_per.clear();
   }
 
   void Timeout() {
@@ -120,6 +112,10 @@ public:
 
   void Tick() {
     m_tick = clock();
+  }
+
+  void stackTick() {
+    m_ticks.push(clock());
   }
 
   void StatMainSolver() {
@@ -163,6 +159,34 @@ public:
     m_partialTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
   }
 
+  void StatSuccProp(bool is_succ) {
+    if (!m_settings.stat) return;
+    clock_t current = clock();
+    if (static_cast<double>(current - m_begin) / (CLOCKS_PER_SEC) >= m_succpropstatTime) {
+      m_log << "STATPROP " << (float)m_succ_prop_times / (float)m_prop_times << std::endl;
+      m_succ_prop_times = 0;
+      m_prop_times = 0;
+      m_succpropstatTime *= 4;
+    }
+    m_prop_times++;
+    if (is_succ)
+      m_succ_prop_times++;
+  }
+
+  void StatGeneralTime() {
+    if (!m_settings.stat) return;
+    clock_t current = clock();
+    if (static_cast<double>(current - m_begin) / (CLOCKS_PER_SEC) >= m_generalstatTime) {
+      m_log << "STATGENERAL " << (float)m_general_stat_time / (float)m_general_times << std::endl;
+      m_general_stat_time = 0;
+      m_general_times = 0;
+      m_generalstatTime *= 4;
+    }
+    m_general_stat_time += static_cast<double>(clock() - m_ticks.top()) / CLOCKS_PER_SEC;
+    m_ticks.pop();
+    m_general_times++;
+  }
+
   void CountRestartTimes() { m_restartTimes++; }
 
   std::shared_ptr<State> lastState;
@@ -195,6 +219,13 @@ private:
   double m_partialTime = 0;
   double m_enumerateStartStateTime = 0;
   double m_initTime = 0;
+  double m_succpropstatTime = 1;
+  int m_prop_times = 0;
+  int m_succ_prop_times = 0;
+  double m_general_stat_time = 0;
+  int m_general_times = 0;
+  double m_generalstatTime = 1;
+  std::vector<float> m_succ_prop_per;
   // pine
   double m_pineTime = 0;
   int m_pineCalled = 0;
@@ -204,6 +235,7 @@ private:
   std::shared_ptr<AigerModel> m_model;
   clock_t m_tick;
   clock_t m_begin;
+  std::stack<clock_t> m_ticks;
 
   std::ofstream m_log;
   Settings m_settings;

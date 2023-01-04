@@ -76,6 +76,8 @@ Settings GetArgv(int argc, char **argv) {
       settings.pine = true;
     } else if (strcmp(argv[i], "-empi") == 0) {
       settings.empi = true;
+    } else if (strcmp(argv[i], "-stat") == 0) {
+      settings.stat = true;
     } else if (strcmp(argv[i], "-incr") == 0) {
       settings.incr = true;
     } else if (strcmp(argv[i], "-depth") == 0) {

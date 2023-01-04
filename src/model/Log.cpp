@@ -2,44 +2,18 @@
 
 namespace car {
 void Log::PrintSth(std::string s) {
-  m_log << s << std::endl;
+  m_log << s;
 }
 
 void Log::DebugPrintSth(std::string s) {
-  if (m_debug) m_debug << s << std::endl;
+  if (m_debug) m_debug << s;
 }
 
-
-void Log::PrintFramesInfo(OverSequenceNI *sequence) {
-  m_log << "Frame " << sequence->GetLength() - 1 << std::endl;
-  for (int i = 0; i < sequence->GetLength(); ++i) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    sequence->GetFrame(i, frame);
-    m_log << frame.size() << " ";
-  }
-  m_log << std::endl;
-}
-
-
-void Log::PrintFramesInfo(OverSequenceSet *sequence) {
-  m_log << "Frame " << sequence->GetLength() - 1 << std::endl;
-  for (int i = 0; i < sequence->GetLength(); ++i) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    sequence->GetFrame(i, frame);
-    m_log << frame.size() << " ";
-  }
-  m_log << std::endl;
-}
-
-
-void Log::PrintFramesInfo(IOverSequence *sequence) {
-  m_log << "Frame " << sequence->GetLength() - 1 << std::endl;
-  for (int i = 0; i < sequence->GetLength(); ++i) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    sequence->GetFrame(i, frame);
-    m_log << frame.size() << " ";
-  }
-  m_log << std::endl;
+bool Log::IsDebug() {
+  if (m_settings.debug)
+    return true;
+  else
+    return false;
 }
 
 
@@ -156,90 +130,6 @@ void Log::PrintStateShort(std::shared_ptr<State> s) {
   m_debug << std::endl;
 }
 
-void Log::PrintOSequence(OverSequenceNI *sequence) {
-  if (!m_debug) return;
-  for (int i = 0; i < sequence->GetLength(); ++i) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    sequence->GetFrame(i, frame);
-    m_debug << frame.size() << " ";
-  }
-  m_debug << std::endl;
-}
-
-void Log::PrintOSequence(OverSequenceSet *sequence) {
-  if (!m_debug) return;
-  for (int i = 0; i < sequence->GetLength(); ++i) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    sequence->GetFrame(i, frame);
-    m_debug << frame.size() << " ";
-  }
-  m_debug << std::endl;
-}
-
-
-void Log::PrintOSequenceDetail(OverSequenceSet *sequence) {
-  if (!m_debug) return;
-  for (int i = 0; i < sequence->GetLength(); ++i) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    sequence->GetFrame(i, frame);
-    m_debug << "frame " << i << " " << std::endl;
-    if (i != 0) {
-      for (auto uc : frame) {
-        for (auto i : *uc) {
-          m_debug << i << " ";
-        }
-        m_debug << std::endl;
-      }
-    }
-    m_debug << "size:" << frame.size() << std::endl;
-  }
-  m_debug << std::endl;
-}
-
-
-void Log::PrintOSequence(IOverSequence *sequence) {
-  if (!m_debug) return;
-  for (int i = 0; i < sequence->GetLength(); ++i) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    sequence->GetFrame(i, frame);
-    m_debug << frame.size() << " ";
-  }
-  m_debug << std::endl;
-}
-
-void Log::PrintUcNums(std::vector<int> &uc, OverSequenceNI *sequence) {
-  if (!m_debug) return;
-  m_debug << "SAT调用结果, UNSAT" << std::endl
-          << "新uc=";
-  for (int i = 0; i < uc.size(); ++i) {
-    m_debug << uc[i] << " ";
-  }
-  m_debug << std::endl
-          << "Frame:\t";
-  for (int i = 0; i < sequence->GetLength(); ++i) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    sequence->GetFrame(i, frame);
-    m_debug << frame.size() << " ";
-  }
-  m_debug << std::endl;
-}
-
-void Log::PrintUcNums(std::vector<int> &uc, IOverSequence *sequence) {
-  if (!m_debug) return;
-  m_debug << "SAT调用结果, UNSAT" << std::endl
-          << "新uc=";
-  for (int i = 0; i < uc.size(); ++i) {
-    m_debug << uc[i] << " ";
-  }
-  m_debug << std::endl
-          << "Frame:\t";
-  for (int i = 0; i < sequence->GetLength(); ++i) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
-    sequence->GetFrame(i, frame);
-    m_debug << frame.size() << " ";
-  }
-  m_debug << std::endl;
-}
 
 void Log::PrintSAT(std::vector<int> &vec, int frameLevel) {
   if (!m_debug) return;
