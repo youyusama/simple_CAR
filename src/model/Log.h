@@ -4,6 +4,7 @@
 #include "AigerModel.h"
 #include "Settings.h"
 #include "State.h"
+#include "signal.h"
 #include <assert.h>
 #include <fstream>
 #include <iostream>
@@ -61,10 +62,6 @@ public:
   void StatPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector<int>> uc_pine, std::shared_ptr<std::vector<int>> uc);
 
   void PrintStatistics() {
-    if (m_settings.stat) {
-      m_log << "STATPROP " << (float)m_succ_prop_times / (float)m_prop_times << std::endl;
-      m_log << "STATGENERAL " << (float)m_general_stat_time / (float)m_general_times << std::endl;
-    }
     m_log << std::endl
           << "MainSolverCalls:\t" << m_mainSolverCalls << std::endl;
     m_log << "MainSolver takes:\t" << m_mainSolverTime << " seconds" << std::endl;
@@ -81,6 +78,9 @@ public:
       m_log << "Pine Called Times:\t" << m_pineCalled << std::endl;
       m_log << "Pine uc is short Times:\t" << m_pineIsShort << std::endl;
       m_log << "Pine l1 is <20% Times:\t" << m_pineL1isShort << std::endl;
+    }
+    if (m_settings.stat) {
+      m_log << "CLS in O same as parent rate:\t" << m_o_same_rate << std::endl;
     }
     m_log << "Init Time:\t" << m_initTime << " seconds" << std::endl;
     m_log << "Total Time:\t" << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << " seconds" << std::endl;
@@ -163,7 +163,8 @@ public:
     if (!m_settings.stat) return;
     clock_t current = clock();
     if (static_cast<double>(current - m_begin) / (CLOCKS_PER_SEC) >= m_succpropstatTime) {
-      m_log << "STATPROP " << (float)m_succ_prop_times / (float)m_prop_times << std::endl;
+      if (m_prop_times != 0)
+        m_log << "STATPROP " << (float)m_succ_prop_times / (float)m_prop_times << std::endl;
       m_succ_prop_times = 0;
       m_prop_times = 0;
       m_succpropstatTime *= 4;
@@ -177,7 +178,8 @@ public:
     if (!m_settings.stat) return;
     clock_t current = clock();
     if (static_cast<double>(current - m_begin) / (CLOCKS_PER_SEC) >= m_generalstatTime) {
-      m_log << "STATGENERAL " << (float)m_general_stat_time / (float)m_general_times << std::endl;
+      if (m_general_times != 0)
+        m_log << "STATGENERAL " << (float)m_general_stat_time / (float)m_general_times << std::endl;
       m_general_stat_time = 0;
       m_general_times = 0;
       m_generalstatTime *= 4;
@@ -186,6 +188,15 @@ public:
     m_ticks.pop();
     m_general_times++;
   }
+
+  bool need_same_stat() {
+    if (m_settings.stat)
+      return true;
+    else
+      return false;
+  }
+
+  void set_o_same_rate(float rate);
 
   void CountRestartTimes() { m_restartTimes++; }
 
@@ -239,6 +250,8 @@ private:
 
   std::ofstream m_log;
   Settings m_settings;
+
+  float m_o_same_rate;
 };
 
 } // namespace car

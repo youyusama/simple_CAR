@@ -8,7 +8,7 @@ namespace car {
 
 class Branching {
 public:
-  Branching(int type = 0);
+  Branching(int type = 1);
   ~Branching();
   void update(const cube *uc);
   void decay();
@@ -18,7 +18,7 @@ public:
   std::vector<float> *get_counts();
 
 private:
-  int branching_type; // 0: sum 1: vsids 2: acids 3: MAB -1: static
+  int branching_type; // 1: sum 2: vsids 3: acids 4: MAB (to do) 0: static
   int conflict_index;
   int mini;
   std::vector<float> counts;

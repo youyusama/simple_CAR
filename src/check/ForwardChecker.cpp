@@ -1,13 +1,25 @@
 #include "ForwardChecker.h"
 #include <stack>
 #include <string>
-
 namespace car {
+
+sptr<Log> GLOBAL_LOG;
+sptr<OverSequenceSet> GLOBAL_OS;
+
+void signalHandler(int signum) {
+  if (GLOBAL_LOG->need_same_stat())
+    GLOBAL_OS->compute_same_stat();
+  GLOBAL_LOG->PrintStatistics();
+  exit(signum);
+}
+
+
 ForwardChecker::ForwardChecker(Settings settings, std::shared_ptr<AigerModel> model) : m_settings(settings) {
   m_model = model;
   State::numInputs = model->GetNumInputs();
   State::numLatches = model->GetNumLatches();
   m_log.reset(new Log(settings, model));
+  GLOBAL_LOG = m_log;
 
   const std::vector<int> &init = model->GetInitialState();
   std::shared_ptr<std::vector<int>> inputs(new std::vector<int>(State::numInputs, 0));
@@ -34,12 +46,15 @@ bool ForwardChecker::Run() {
     if (m_settings.Visualization) {
       m_vis->OutputGML(false);
     }
+    if (m_log->need_same_stat())
+      m_overSequence->compute_same_stat();
     m_log->PrintStatistics();
   }
   return true;
 }
 
 bool ForwardChecker::Check(int badId) {
+  signal(SIGINT, signalHandler);
 #pragma region early stage
   if (m_model->GetTrueId() == badId)
     return false;
@@ -163,12 +178,8 @@ bool ForwardChecker::Check(int badId) {
           CAR_DEBUG_v("Get UC:", *uc);
           m_log->Tick();
           if (m_settings.ctg)
-            if (generalize_ctg(uc, task.frameLevel)) {
+            if (generalize_ctg(uc, task.frameLevel))
               updateLitOrder(*uc);
-              m_log->StatSuccProp(true);
-            } else {
-              m_log->StatSuccProp(false);
-            }
           m_log->Statmuc();
           CAR_DEBUG_v("Get UC:", *uc);
           m_log->Tick();
@@ -229,6 +240,7 @@ void ForwardChecker::Init(int badId) {
   // m_overSequence.reset(new OverSequenceNI(m_model));
   m_overSequence.reset(new OverSequenceSet(m_model));
   m_overSequence->set_log(m_log);
+  GLOBAL_OS = m_overSequence;
   m_branching.reset(new Branching(m_settings.Branching));
   litOrder.branching = m_branching;
   blockerOrder.branching = m_branching;

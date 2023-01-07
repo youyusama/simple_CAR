@@ -215,11 +215,8 @@ void OverSequenceSet::propagate(int level, sptr<Branching> b) {
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
       add_uc_to_frame(uc, fi_plus_1);
       b->update(uc);
-      m_log->StatSuccProp(true);
       m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);
-    } else {
-      m_log->StatSuccProp(false);
     }
   }
   return;
@@ -249,11 +246,9 @@ int OverSequenceSet::propagate_uc_from_lvl(sptr<cube> uc, int lvl, sptr<Branchin
       auto res = Ucs.insert(*uc);
       add_uc_to_frame(&*res.first, fi_plus_1);
       b->update(&*res.first);
-      m_log->StatSuccProp(true);
       m_blockSolver->AddUnsatisfiableCore(*uc, lvl + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, lvl + 1);
     } else {
-      m_log->StatSuccProp(false);
       break;
     }
     lvl++;
@@ -293,6 +288,37 @@ void OverSequenceSet::PrintOSequenceDetail() {
     m_log->DebugPrintSth("size: " + std::to_string(m_sequence[i].size()) + "\n");
   }
   m_log->DebugPrintSth("\n");
+}
+
+void OverSequenceSet::compute_same_stat() {
+  int cls_num = 0, cls_same_num = 0;
+  std::set<cube, cubeComp> good_cls;
+  std::set<cube, cubeComp> cls;
+  // cls_num = Ucs.size();
+  // for (auto uc : Ucs) {
+  //   int i = 1;
+  //   while (i < m_sequence.size() - 1) {
+  //     if (m_sequence[i].find(&uc) != m_sequence[i].end() && m_sequence[i + 1].find(&uc) != m_sequence[i + 1].end()) {
+  //       cls_same_num++;
+  //       break;
+  //     }
+  //     i++;
+  //   }
+  // }
+
+  for (int i = 1; i < m_sequence.size() - 1; i++) {
+    for (auto uc : m_sequence[i]) {
+      cls.insert(*uc);
+      if (good_cls.find(*uc) == good_cls.end() && m_sequence[i].find(uc) != m_sequence[i].end() && m_sequence[i + 1].find(uc) != m_sequence[i + 1].end())
+        good_cls.insert(*uc);
+    }
+  }
+  cls_num = cls.size();
+  cls_same_num = good_cls.size();
+  if (cls_num > 0)
+    m_log->set_o_same_rate((float)cls_same_num / (float)cls_num);
+  else
+    m_log->set_o_same_rate(0);
 }
 
 } // namespace car

@@ -90,7 +90,7 @@ public:
 
   // order according to preference
   void orderAssumption(std::vector<int> &uc, bool rev = false) {
-    if (m_settings.Branching == -1) return;
+    if (m_settings.Branching == 0) return;
     std::stable_sort(uc.begin(), uc.end(), litOrder);
     if (rev) std::reverse(uc.begin(), uc.end());
   }
@@ -140,17 +140,17 @@ private:
   // ================================================================================
   bool generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
     std::unordered_set<int> required_lits;
-    // const std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
     std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
     cube *uc_blocker;
     if (uc_blockers->size() > 0) {
-      if (m_settings.Branching != -1)
+      if (m_settings.Branching > 0)
         std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
       uc_blocker = uc_blockers->at(0);
     } else {
       uc_blocker = new cube();
     }
-    for (auto b : *uc_blocker) required_lits.emplace(b);
+    if (m_settings.skip_refer)
+      for (auto b : *uc_blocker) required_lits.emplace(b);
     orderAssumption(*uc);
     for (int i = uc->size() - 1; i > 0; i--) {
       if (required_lits.find(uc->at(i)) != required_lits.end()) continue;

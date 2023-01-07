@@ -16,11 +16,11 @@ void Branching::update(const cube *uc) {
   if (uc->size() == 0) return;
   conflict_index++;
   switch (branching_type) {
-  case 0: {
+  case 1: {
     decay();
     break;
   }
-  case 1: {
+  case 2: {
     if (conflict_index == 256) {
       for (int i = mini; i < counts.size(); i++)
         counts[i] *= 0.5;
@@ -35,12 +35,12 @@ void Branching::update(const cube *uc) {
   if (mini > abs(uc->at(0))) mini = abs(uc->at(0));
   for (auto l : *uc) {
     switch (branching_type) {
-    case 0:
-    case 1: {
+    case 1:
+    case 2: {
       counts[abs(l)]++;
       break;
     }
-    case 2:
+    case 3:
       counts[abs(l)] = (counts[abs(l)] + conflict_index) / 2.0;
       break;
     }

@@ -62,6 +62,8 @@ public:
 
   void PrintOSequenceDetail();
 
+  void compute_same_stat();
+
   int effectiveLevel;
   bool isForward = false;
   int rep_counter;

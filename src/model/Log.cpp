@@ -196,4 +196,9 @@ void Log::StatPineInfo(std::shared_ptr<State> state, std::shared_ptr<std::vector
 }
 
 
+void Log::set_o_same_rate(float rate) {
+  m_o_same_rate = rate;
+}
+
+
 } // namespace car

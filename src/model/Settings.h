@@ -37,7 +37,8 @@ struct Settings {
   float growthRate = 1.5;
   int threshold = 64;
   int timelimit = 0;
-  int Branching = 0;
+  int Branching = 1;
+  bool skip_refer = false;
   bool stat = false;
   RestartCondition condition = RestartCondition::UcNums;
   RestartBehaviour behaviour = RestartBehaviour::BackToInit;

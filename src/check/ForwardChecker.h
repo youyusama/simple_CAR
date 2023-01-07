@@ -97,7 +97,7 @@ public:
 
   // order according to preference
   void orderAssumption(std::vector<int> &uc, bool rev = false) {
-    if (m_settings.Branching == -1) return;
+    if (m_settings.Branching == 0) return;
     std::stable_sort(uc.begin(), uc.end(), litOrder);
     if (rev) std::reverse(uc.begin(), uc.end());
   }
@@ -206,19 +206,18 @@ private:
   // @output:
   // ================================================================================
   bool generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
-    m_log->stackTick();
     std::unordered_set<int> required_lits;
-    // const std::vector<int> *uc_blocker = m_overSequence->GetBlocker(uc, frame_lvl);
     std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
     cube *uc_blocker;
     if (uc_blockers->size() > 0) {
-      if (m_settings.Branching != -1)
+      if (m_settings.Branching > 0)
         std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
       uc_blocker = uc_blockers->at(0);
     } else {
       uc_blocker = new cube();
     }
-    for (auto b : *uc_blocker) required_lits.emplace(b);
+    if (m_settings.skip_refer)
+      for (auto b : *uc_blocker) required_lits.emplace(b);
     orderAssumption(*uc);
     for (int i = uc->size() - 1; i > 0; i--) {
       if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
@@ -234,9 +233,7 @@ private:
       }
     }
     std::sort(uc->begin(), uc->end(), cmp);
-    m_log->StatGeneralTime();
     if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
-      // decayLitOrder(uc_blocker, uc->size() - uc_blocker->size());
       return false;
     } else
       return true;
@@ -268,12 +265,8 @@ private:
         if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
           ctgs++;
           auto uc_cts = m_mainSolver->Getuc(false);
-          if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1)) {
+          if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1))
             updateLitOrder(*uc);
-            m_log->StatSuccProp(true);
-          } else {
-            m_log->StatSuccProp(false);
-          }
           CAR_DEBUG_v("ctg Get UC:", *uc_cts);
           if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
             m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1, m_branching);
