@@ -305,8 +305,8 @@ void OverSequenceSet::compute_same_stat() {
   //     i++;
   //   }
   // }
-
-  for (int i = 1; i < m_sequence.size() - 1; i++) {
+  int O_size = m_sequence.size();
+  for (int i = 1; i < O_size - 1; i++) {
     for (auto uc : m_sequence[i]) {
       cls.insert(*uc);
       if (good_cls.find(*uc) == good_cls.end() && m_sequence[i].find(uc) != m_sequence[i].end() && m_sequence[i + 1].find(uc) != m_sequence[i + 1].end())

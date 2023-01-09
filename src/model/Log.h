@@ -251,7 +251,7 @@ private:
   std::ofstream m_log;
   Settings m_settings;
 
-  float m_o_same_rate;
+  float m_o_same_rate = 0;
 };
 
 } // namespace car

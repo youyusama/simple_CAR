@@ -48,12 +48,23 @@ void Log::PrintCounterExample(int badNo, bool isForward) {
   m_res << "1" << std::endl
         << "b" << badNo << std::endl;
   if (isForward) {
-    std::shared_ptr<State> state = lastState;
-    m_res << state->GetValueOfLatches() << std::endl;
-    m_res << state->GetValueOfInputs() << std::endl;
-    while (state->preState != nullptr) {
-      state = state->preState;
+    if (lastState == nullptr) {
+      for (int i = 0; i < m_model->GetNumLatches(); ++i) {
+        m_res << "0";
+      }
+      m_res << std::endl;
+      for (int i = 0; i < m_model->GetNumInputs(); ++i) {
+        m_res << "0";
+      }
+      m_res << std::endl;
+    } else {
+      std::shared_ptr<State> state = lastState;
+      m_res << state->GetValueOfLatches() << std::endl;
       m_res << state->GetValueOfInputs() << std::endl;
+      while (state->preState != nullptr) {
+        state = state->preState;
+        m_res << state->GetValueOfInputs() << std::endl;
+      }
     }
   } else {
     if (lastState == nullptr) {
