@@ -24,9 +24,9 @@ ForwardChecker::ForwardChecker(Settings settings, std::shared_ptr<AigerModel> mo
   const std::vector<int> &init = model->GetInitialState();
   std::shared_ptr<std::vector<int>> inputs(new std::vector<int>(State::numInputs, 0));
   std::shared_ptr<std::vector<int>> latches(new std::vector<int>());
-  latches->reserve(State::numLatches);
+  latches->reserve(init.size());
 
-  for (int i = 0; i < State::numLatches; ++i) {
+  for (int i = 0; i < init.size(); ++i) {
     latches->push_back(init[i]);
   }
   m_initialState.reset(new State(nullptr, inputs, latches, 0));
