@@ -81,6 +81,12 @@ public:
     }
     if (m_settings.stat) {
       m_log << "CLS in O same as parent rate:\t" << m_o_same_rate << std::endl;
+      m_log << "gen good lemma rate:\t" << (float)m_gen_good_times / (float)m_gen_times << std::endl;
+      m_log << "prop succ rate:\t" << (float)m_succ_prop_times / (float)m_prop_times << std::endl;
+      m_log << "frame lemmas, good lemmas" << std::endl;
+      for (int i = 0; i < m_lemma_num_frame->size(); i++) {
+        m_log << m_lemma_num_frame->at(i) << " " << m_good_lemma_num_frame->at(i) << std::endl;
+      }
     }
     m_log << "Init Time:\t" << m_initTime << " seconds" << std::endl;
     m_log << "Total Time:\t" << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << " seconds" << std::endl;
@@ -96,7 +102,8 @@ public:
     m_getNewLevelTime = 0;
     m_updateUcTime = 0;
     m_pineTime = 0;
-    m_succ_prop_per.clear();
+    m_good_lemma_num_frame.reset(new std::vector<int>());
+    m_lemma_num_frame.reset(new std::vector<int>());
   }
 
   void Timeout() {
@@ -161,32 +168,16 @@ public:
 
   void StatSuccProp(bool is_succ) {
     if (!m_settings.stat) return;
-    clock_t current = clock();
-    if (static_cast<double>(current - m_begin) / (CLOCKS_PER_SEC) >= m_succpropstatTime) {
-      if (m_prop_times != 0)
-        m_log << "STATPROP " << (float)m_succ_prop_times / (float)m_prop_times << std::endl;
-      m_succ_prop_times = 0;
-      m_prop_times = 0;
-      m_succpropstatTime *= 4;
-    }
     m_prop_times++;
     if (is_succ)
       m_succ_prop_times++;
   }
 
-  void StatGeneralTime() {
+  void StatGenGood(bool is_good) {
     if (!m_settings.stat) return;
-    clock_t current = clock();
-    if (static_cast<double>(current - m_begin) / (CLOCKS_PER_SEC) >= m_generalstatTime) {
-      if (m_general_times != 0)
-        m_log << "STATGENERAL " << (float)m_general_stat_time / (float)m_general_times << std::endl;
-      m_general_stat_time = 0;
-      m_general_times = 0;
-      m_generalstatTime *= 4;
-    }
-    m_general_stat_time += static_cast<double>(clock() - m_ticks.top()) / CLOCKS_PER_SEC;
-    m_ticks.pop();
-    m_general_times++;
+    m_gen_times++;
+    if (is_good)
+      m_gen_good_times++;
   }
 
   bool need_same_stat() {
@@ -203,6 +194,8 @@ public:
   std::shared_ptr<State> lastState;
   std::ofstream m_res;
   std::ofstream m_debug;
+  sptr<std::vector<int>> m_lemma_num_frame;
+  sptr<std::vector<int>> m_good_lemma_num_frame;
 
 private:
   string GetFileName(string filePath) {
@@ -233,10 +226,8 @@ private:
   double m_succpropstatTime = 1;
   int m_prop_times = 0;
   int m_succ_prop_times = 0;
-  double m_general_stat_time = 0;
-  int m_general_times = 0;
-  double m_generalstatTime = 1;
-  std::vector<float> m_succ_prop_per;
+  int m_gen_times = 0;
+  int m_gen_good_times = 0;
   // pine
   double m_pineTime = 0;
   int m_pineCalled = 0;

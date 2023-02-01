@@ -213,10 +213,13 @@ void OverSequenceSet::propagate(int level, sptr<Branching> b) {
         ass.emplace_back(i);
       }
     if (!m_mainSolver->SolveWithAssumption(ass, level)) {
+      m_log->StatSuccProp(true);
       add_uc_to_frame(uc, fi_plus_1);
       b->update(uc);
       m_blockSolver->AddUnsatisfiableCore(*uc, level + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, level + 1);
+    } else {
+      m_log->StatSuccProp(false);
     }
   }
   return;
@@ -291,34 +294,34 @@ void OverSequenceSet::PrintOSequenceDetail() {
 }
 
 void OverSequenceSet::compute_same_stat() {
-  int cls_num = 0, cls_same_num = 0;
-  std::set<cube, cubeComp> good_cls;
-  std::set<cube, cubeComp> cls;
-  // cls_num = Ucs.size();
-  // for (auto uc : Ucs) {
-  //   int i = 1;
-  //   while (i < m_sequence.size() - 1) {
-  //     if (m_sequence[i].find(&uc) != m_sequence[i].end() && m_sequence[i + 1].find(&uc) != m_sequence[i + 1].end()) {
-  //       cls_same_num++;
-  //       break;
-  //     }
-  //     i++;
+  // int cls_num = 0, cls_same_num = 0;
+  // std::set<cube, cubeComp> good_cls;
+  // std::set<cube, cubeComp> cls;
+  // int O_size = m_sequence.size();
+  // for (int i = 1; i < O_size - 1; i++) {
+  //   for (auto uc : m_sequence[i]) {
+  //     cls.insert(*uc);
+  //     if (good_cls.find(*uc) == good_cls.end() && m_sequence[i].find(uc) != m_sequence[i].end() && m_sequence[i + 1].find(uc) != m_sequence[i + 1].end())
+  //       good_cls.insert(*uc);
   //   }
   // }
+  // cls_num = cls.size();
+  // cls_same_num = good_cls.size();
+  // if (cls_num > 0)
+  //   m_log->set_o_same_rate((float)cls_same_num / (float)cls_num);
+  // else
+  //   m_log->set_o_same_rate(0);
+
   int O_size = m_sequence.size();
   for (int i = 1; i < O_size - 1; i++) {
+    m_log->m_lemma_num_frame->emplace_back(m_sequence[i].size());
+    int good_lemma_num = 0;
     for (auto uc : m_sequence[i]) {
-      cls.insert(*uc);
-      if (good_cls.find(*uc) == good_cls.end() && m_sequence[i].find(uc) != m_sequence[i].end() && m_sequence[i + 1].find(uc) != m_sequence[i + 1].end())
-        good_cls.insert(*uc);
+      if (m_sequence[i + 1].find(uc) != m_sequence[i + 1].end())
+        good_lemma_num++;
     }
+    m_log->m_good_lemma_num_frame->emplace_back(good_lemma_num);
   }
-  cls_num = cls.size();
-  cls_same_num = good_cls.size();
-  if (cls_num > 0)
-    m_log->set_o_same_rate((float)cls_same_num / (float)cls_num);
-  else
-    m_log->set_o_same_rate(0);
 }
 
 } // namespace car

@@ -234,9 +234,12 @@ private:
     }
     std::sort(uc->begin(), uc->end(), cmp);
     if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
+      m_log->StatGenGood(false);
       return false;
-    } else
+    } else {
+      m_log->StatGenGood(true);
       return true;
+    }
   }
 
   bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl, std::unordered_set<int> required_lits) {
