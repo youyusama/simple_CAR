@@ -246,12 +246,14 @@ int OverSequenceSet::propagate_uc_from_lvl(sptr<cube> uc, int lvl, sptr<Branchin
         ass.emplace_back(i);
       }
     if (!m_mainSolver->SolveWithAssumption(ass, lvl)) {
+      m_log->StatSuccProp(true);
       auto res = Ucs.insert(*uc);
       add_uc_to_frame(&*res.first, fi_plus_1);
       b->update(&*res.first);
       m_blockSolver->AddUnsatisfiableCore(*uc, lvl + 1);
       m_mainSolver->AddUnsatisfiableCore(*uc, lvl + 1);
     } else {
+      m_log->StatSuccProp(false);
       break;
     }
     lvl++;
