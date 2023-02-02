@@ -27,6 +27,8 @@ public:
     lastState = nullptr;
     m_begin = clock();
     m_restartTimes = 0;
+    m_good_lemma_num_frame.reset(new std::vector<int>());
+    m_lemma_num_frame.reset(new std::vector<int>());
   }
 
   ~Log() {
@@ -102,8 +104,6 @@ public:
     m_getNewLevelTime = 0;
     m_updateUcTime = 0;
     m_pineTime = 0;
-    m_good_lemma_num_frame.reset(new std::vector<int>());
-    m_lemma_num_frame.reset(new std::vector<int>());
   }
 
   void Timeout() {
