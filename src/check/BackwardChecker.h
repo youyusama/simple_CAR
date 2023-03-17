@@ -119,7 +119,7 @@ private:
     l_ass.reserve(state->latches->size());
     l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
     orderAssumption(l_ass, rev);
-    CAR_DEBUG_v("Assumption Detail: ", l_ass);
+    // CAR_DEBUG_v("Assumption Detail: ", l_ass);
 
     ass.reserve(ass.size() + l_ass.size());
     ass.insert(ass.end(), l_ass.begin(), l_ass.end());

@@ -28,20 +28,17 @@ int main(int argc, char **argv) {
 }
 
 void PrintUsage() {
-  printf("Usage: simplecar <-f|-b>  [<-end><-interation><-rotation><-pine>] <aiger file> <output directory> [<-vis> [counter-example file]]\n");
+  printf("Usage: simplecar <-f|-b> [<-prop>|...] aiger_file.aig output_path\n");
   printf("       -timeout        set timeout\n");
   printf("       -f              forward checking (Default = backward checking)\n");
   printf("       -b              backward checking \n");
-  printf("       -inter          active intersection\n");
-  printf("       -rotation       active rotation\n");
   printf("       -prop           active propagation\n");
+  printf("       -br             branching (Default activated)\n");
+  printf("       -sr             refer-skipping\n");
+  printf("       -seed           seed (works when >0) for random var ordering\n");
   printf("       -end            state numeration from end of the sequence\n");
   printf("       -h              print help information\n");
   printf("       -debug          print debug info\n");
-  printf("       -depth          restart-depth mode\n");
-  printf("       -restart        active restart policy\n");
-  printf("       -vis            output visualization\n");
-  printf("       -pine           active pineapple\n");
   printf("NOTE: -f and -b cannot be used together!\n");
   exit(0);
 }
@@ -58,37 +55,22 @@ Settings GetArgv(int argc, char **argv) {
       settings.forward = false;
     } else if (strcmp(argv[i], "-timeout") == 0) {
       settings.timelimit = stoi(argv[++i]);
-    } else if (strcmp(argv[i], "-inter") == 0) {
-      settings.inter = true;
-    } else if (strcmp(argv[i], "-rotation") == 0) {
-      settings.rotate = true;
     } else if (strcmp(argv[i], "-prop") == 0) {
       settings.propagation = true;
     } else if (strcmp(argv[i], "-end") == 0) {
       settings.end = true;
     } else if (strcmp(argv[i], "-debug") == 0) {
       settings.debug = true;
-    } else if (strcmp(argv[i], "-restart") == 0) {
-      settings.restart = true;
-    } else if (strcmp(argv[i], "-luby") == 0) {
-      settings.luby = true;
-    } else if (strcmp(argv[i], "-pine") == 0) {
-      settings.pine = true;
-    } else if (strcmp(argv[i], "-empi") == 0) {
-      settings.empi = true;
     } else if (strcmp(argv[i], "-stat") == 0) {
       settings.stat = true;
     } else if (strcmp(argv[i], "-sr") == 0) {
       settings.skip_refer = true;
-    } else if (strcmp(argv[i], "-incr") == 0) {
-      settings.incr = true;
-    } else if (strcmp(argv[i], "-depth") == 0) {
-      settings.condition = RestartCondition::Depth;
     } else if (strcmp(argv[i], "-br") == 0) {
       settings.Branching = atoi(argv[i + 1]);
       i++;
-    } else if (strcmp(argv[i], "-vis") == 0) {
-      settings.pVisualization = true;
+    } else if (strcmp(argv[i], "-seed") == 0) {
+      settings.seed = atoi(argv[i + 1]);
+      i++;
     } else if (!hasSetInputDir) {
       settings.aigFilePath = string(argv[i]);
       hasSetInputDir = true;

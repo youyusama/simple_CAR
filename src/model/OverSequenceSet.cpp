@@ -295,6 +295,12 @@ void OverSequenceSet::PrintOSequenceDetail() {
   m_log->DebugPrintSth("\n");
 }
 
+
+void OverSequenceSet::compute_cls_in_fixpoint_ratio(int lvl) {
+  m_log->m_cls_in_fixpoint_ratio = (double)m_sequence[lvl].size() / (double)Ucs.size();
+}
+
+
 void OverSequenceSet::compute_same_stat() {
   // int cls_num = 0, cls_same_num = 0;
   // std::set<cube, cubeComp> good_cls;

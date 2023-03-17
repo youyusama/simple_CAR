@@ -7,8 +7,8 @@ sptr<Log> GLOBAL_LOG;
 sptr<OverSequenceSet> GLOBAL_OS;
 
 void signalHandler(int signum) {
-  if (GLOBAL_LOG->need_same_stat() && GLOBAL_OS != nullptr)
-    GLOBAL_OS->compute_same_stat();
+  // if (GLOBAL_LOG->need_same_stat() && GLOBAL_OS != nullptr)
+  //   GLOBAL_OS->compute_same_stat();
   GLOBAL_LOG->PrintStatistics();
   exit(signum);
 }
@@ -141,13 +141,13 @@ bool ForwardChecker::Check(int badId) {
           m_log->lastState = m_initialState;
           return false;
         }
-        m_log->Tick();
         CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel) + "\n");
         CAR_DEBUG_s("From state: ", task.state);
         CAR_DEBUG_v("State Detail: ", *task.state->latches);
         std::vector<int> assumption;
         GetAssumption(task.state, task.frameLevel, assumption);
         // CAR_DEBUG_v("Primed Assumption: ", assumption);
+        m_log->Tick();
         bool result = m_mainSolver->SolveWithAssumption(assumption, task.frameLevel);
         m_log->StatMainSolver();
         if (result) {
@@ -291,6 +291,7 @@ bool ForwardChecker::isInvExisted() {
   for (int i = 0; i < m_overSequence->GetLength(); ++i) {
     if (IsInvariant(i)) {
       m_log->PrintSth("Proof at frame " + std::to_string(i) + "\n");
+      m_overSequence->compute_cls_in_fixpoint_ratio(i);
       m_overSequence->PrintFramesInfo();
       result = true;
       break;

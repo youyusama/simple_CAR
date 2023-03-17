@@ -13,6 +13,7 @@
 #include "Task.h"
 #include "UnderSequence.h"
 #include "Vis.h"
+#include "random"
 #include <memory>
 #include <unordered_set>
 
@@ -97,6 +98,10 @@ public:
 
   // order according to preference
   void orderAssumption(std::vector<int> &uc, bool rev = false) {
+    if (m_settings.seed > 0) {
+      std::shuffle(uc.begin(), uc.end(), std::default_random_engine(m_settings.seed));
+      return;
+    }
     if (m_settings.Branching == 0) return;
     std::stable_sort(uc.begin(), uc.end(), litOrder);
     if (rev) std::reverse(uc.begin(), uc.end());
@@ -249,14 +254,18 @@ private:
     sptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
     while (true) {
       // F_i & T & temp_uc'
+      m_log->Tick();
       if (!m_mainSolver->SolveWithAssumption(ass, frame_lvl)) {
+        m_log->StatMainSolver();
         auto uc_ctg = m_mainSolver->Getuc(false);
         if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
         uc->swap(*uc_ctg);
         return true;
-      } else if (rec_lvl > 2)
+      } else if (rec_lvl > 2) {
+        m_log->StatMainSolver();
         return false;
-      else {
+      } else {
+        m_log->StatMainSolver();
         std::pair<sptr<cube>, sptr<cube>> pair = m_mainSolver->GetAssignment();
         std::pair<sptr<cube>, sptr<cube>> partial_pair = get_predecessor(pair, p_ucs);
         sptr<State> cts(new State(nullptr, partial_pair.first, partial_pair.second, 0));
@@ -265,7 +274,9 @@ private:
         // int cts_lvl = frame_lvl - 1;
         GetAssumption(cts, cts_lvl, cts_ass);
         // F_i-1 & T & cts'
+        m_log->Tick();
         if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
+          m_log->StatMainSolver();
           ctgs++;
           auto uc_cts = m_mainSolver->Getuc(false);
           if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1))
@@ -274,6 +285,7 @@ private:
           if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
             m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1, m_branching);
         } else {
+          m_log->StatMainSolver();
           return false;
         }
       }

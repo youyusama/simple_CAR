@@ -85,10 +85,11 @@ public:
       m_log << "CLS in O same as parent rate:\t" << m_o_same_rate << std::endl;
       m_log << "gen good lemma rate:\t" << (float)m_gen_good_times / (float)m_gen_times << std::endl;
       m_log << "prop succ rate:\t" << (float)m_succ_prop_times / (float)m_prop_times << std::endl;
-      m_log << "frame lemmas, good lemmas" << std::endl;
-      for (int i = 0; i < m_lemma_num_frame->size(); i++) {
-        m_log << m_lemma_num_frame->at(i) << " " << m_good_lemma_num_frame->at(i) << std::endl;
-      }
+      // m_log << "frame lemmas, good lemmas" << std::endl;
+      // for (int i = 0; i < m_lemma_num_frame->size(); i++) {
+      //   m_log << m_lemma_num_frame->at(i) << " " << m_good_lemma_num_frame->at(i) << std::endl;
+      // }
+      m_log << "cls in fixpoint ratio:\t" << m_cls_in_fixpoint_ratio << std::endl;
     }
     m_log << "Init Time:\t" << m_initTime << " seconds" << std::endl;
     m_log << "Total Time:\t" << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << " seconds" << std::endl;
@@ -196,6 +197,7 @@ public:
   std::ofstream m_debug;
   sptr<std::vector<int>> m_lemma_num_frame;
   sptr<std::vector<int>> m_good_lemma_num_frame;
+  double m_cls_in_fixpoint_ratio = 0;
 
 private:
   string GetFileName(string filePath) {

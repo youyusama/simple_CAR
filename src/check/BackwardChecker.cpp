@@ -120,7 +120,7 @@ bool BackwardChecker::Check(int badId) {
         GetAssumption(task.state, task.frameLevel, assumption);
         CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel) + "\n");
         CAR_DEBUG_s("From state: ", task.state);
-        CAR_DEBUG_v("Assumption: ", assumption);
+        // CAR_DEBUG_v("Assumption: ", assumption);
         bool result = m_mainSolver->SolveWithAssumptionAndBad(assumption, badId);
         m_log->StatMainSolver();
         if (result) {
@@ -149,7 +149,7 @@ bool BackwardChecker::Check(int badId) {
       GetAssumption(task.state, task.frameLevel, assumption);
       CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel) + "\n");
       CAR_DEBUG_s("From state: ", task.state);
-      CAR_DEBUG_v("Assumption: ", assumption);
+      // CAR_DEBUG_v("Assumption: ", assumption);
       m_log->Tick();
       bool result = m_mainSolver->SolveWithAssumption(assumption, task.frameLevel);
       m_log->StatMainSolver();

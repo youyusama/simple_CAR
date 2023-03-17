@@ -64,6 +64,8 @@ public:
 
   void compute_same_stat();
 
+  void compute_cls_in_fixpoint_ratio(int lvl);
+
   int effectiveLevel;
   bool isForward = false;
   int rep_counter;
