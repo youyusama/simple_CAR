@@ -38,8 +38,8 @@ void AigerModel::Init(aiger *aig) {
   CollectClauses(aig);
   create_sslv();
   //   Collect_and_gates_for_pine(aig);
-  // if (m_settings.pVisualization)
-  // print_aiger_gml(aig);
+  if (m_settings.draw)
+    print_aiger_gml(aig);
   if (m_settings.preorder)
     build_aiger_order(aig);
 }
@@ -413,12 +413,35 @@ void AigerModel::Collect_and_gates_for_pine(const aiger *aig) {
 
 
 // ================================================================================
-// @brief: draw the aiger latch and and gate
+// @brief: draw the nodes: input, latch and and gate,
 // @input: aig
 // @output:
 // ================================================================================
-void draw_node(std::ofstream &visFile, uint id, std::string text = "", std::string color = "\"#008000\"") {
-  text = (text.length() == 0) ? std::to_string(id) : text;
+void draw_node(std::ofstream &visFile, uint id, int type) {
+  std::string text = "";
+  std::string color = "";
+  switch (type) {
+  case 0:
+    text = "i" + std::to_string(id);
+    color = "\"#FFFF00\"";
+    break;
+  case 1:
+    text = "l" + std::to_string(id);
+    color = "\"#4876FF\"";
+    break;
+  case 2:
+    text = "g" + std::to_string(id);
+    color = "\"#FFFFF0\"";
+    break;
+  case 3:
+    text = "b" + std::to_string(id);
+    color = "\"#CD0000\"";
+    break;
+  case 4:
+    text = "l" + std::to_string(id - 1) + "'";
+    color = "\"#00868B\"";
+    break;
+  }
   visFile << "node" << std::endl;
   visFile << "[" << std::endl;
   visFile << "id\t" << id << std::endl;
@@ -438,16 +461,16 @@ void draw_node(std::ofstream &visFile, uint id, std::string text = "", std::stri
   visFile << "]" << std::endl;
 }
 
-void draw_edge(std::ofstream &visFile, uint source, uint target) {
+void draw_edge(std::ofstream &visFile, std::tuple<int, int, bool> &t) {
   visFile << "edge" << std::endl;
   visFile << "[" << std::endl;
-  visFile << "source\t" << source << std::endl;
-  visFile << "target\t" << target << std::endl;
+  visFile << "source\t" << std::get<0>(t) << std::endl;
+  visFile << "target\t" << std::get<1>(t) << std::endl;
   visFile << "graphics" << std::endl;
   visFile << "[" << std::endl;
   visFile << "type\t"
           << "\"arc\"" << std::endl;
-  if (target % 2 != 0)
+  if (!std::get<2>(t))
     visFile << "style\t"
             << "\"dotted\"" << std::endl;
   visFile << "arrow\t"
@@ -591,98 +614,165 @@ sptr<std::vector<float>> AigerModel::get_aiger_order() {
   return m_aiger_order;
 }
 
+struct uset_Hasher {
+  size_t operator()(std::tuple<int, int, bool> const &t) const {
+    return std::get<0>(t);
+  }
+};
+
+struct uset_Equaler {
+  bool operator()(std::tuple<int, int, bool> const &t1, std::tuple<int, int, bool> const &t2) const {
+    return (std::get<0>(t1) == std::get<0>(t2)) && (std::get<1>(t1) == std::get<1>(t2)) && (std::get<2>(t1) == std::get<2>(t2));
+  }
+};
+
+struct uset_Hasher_n {
+  size_t operator()(std::pair<int, int> const &p) const {
+    return p.first;
+  }
+};
+
+struct uset_Equaler_n {
+  bool operator()(std::pair<int, int> const &p1, std::pair<int, int> const &p2) const {
+    return (p1.first == p2.first) && (p1.second == p2.second);
+  }
+};
+
 
 void AigerModel::print_aiger_gml(const aiger *aig) {
-  // // io
-  // std::ofstream visFile;
-  // visFile.open("frame_vis/aiger_output.gml");
-  // // header
-  // visFile << "Creator\t"
-  //         << "\"car visualization\"" << std::endl;
-  // visFile << "Version\t" << 0.1 << std::endl;
-  // visFile << "graph" << std::endl;
-  // visFile << "[" << std::endl;
-  // // graph info
-  // visFile << "directed\t" << 1 << std::endl;
-  // // latches
-  // for (int i = 0; i < aig->num_latches; i++) {
-  //   draw_node(visFile, (int)aig->latches[i].lit, "", "\"#87CEFA\"");
-  // }
-  // // edges
-  // std::vector<std::pair<int, int>> saved_edges;
-  // // gates from output
-  // int output_id = static_cast<int>(aig->outputs[0].lit);
-  // draw_node(visFile, m_maxId + 2, "", "\"#FF4500\"");
-  // std::unordered_set<int> required_gate;
-  // if (output_id % 2 == 0) {
-  //   required_gate.emplace(output_id);
-  //   saved_edges.emplace_back(std::pair<int, int>(m_maxId + 2, output_id));
-  // } else {
-  //   required_gate.emplace(output_id - 1);
-  //   saved_edges.emplace_back(std::pair<int, int>(m_maxId + 2, output_id - 1));
-  // }
-
-  // for (int i = aig->num_ands - 1; i >= 0; i--) {
-  //   aiger_and &aa = aig->ands[i];
-  //   if (required_gate.find(aa.lhs) != required_gate.end()) {
-  //     draw_node(visFile, aa.lhs, "", "\"#FFFFF0\"");
-  //     if (IsAndGate(aa.rhs0, aig))
-  //       required_gate.emplace((aa.rhs0 % 2 == 0) ? (aa.rhs0) : (aa.rhs0 - 1));
-  //     if (IsAndGate(aa.rhs1, aig))
-  //       required_gate.emplace((aa.rhs1 % 2 == 0) ? (aa.rhs1) : (aa.rhs1 - 1));
-  //     if (aa.rhs0 % 2 == 0) {
-  //       saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs0));
-  //       saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs0 + 1));
-  //     } else {
-  //       saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs0));
-  //       saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs0 - 1));
-  //     }
-
-
-  //     if (aa.rhs1 % 2 == 0) {
-  //       saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs1));
-  //       saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs1 + 1));
-  //     } else {
-  //       saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs1));
-  //       saved_edges.emplace_back(std::pair<int, int>(aa.lhs, aa.rhs1 - 1));
-  //     }
-  //   }
-  // }
-  // for (auto i : saved_edges) {
-  //   draw_edge(visFile, i.first, i.second);
-  // }
-  // visFile << "]" << std::endl;
-  // visFile.close();
+  // io
+  std::ofstream visFile;
+  visFile.open(m_settings.outputDir + GetFileName(m_settings.aigFilePath) + "_output.gml");
+  // header
+  visFile << "Creator\t"
+          << "\"car visualization\"" << std::endl;
+  visFile << "Version\t" << 0.1 << std::endl;
+  visFile << "graph" << std::endl;
+  visFile << "[" << std::endl;
+  // graph info
+  visFile << "directed\t" << 1 << std::endl;
+  // gates from output
   int output_id = static_cast<int>(aig->outputs[0].lit);
-  std::set<int> required_gate, latches;
-  required_gate.emplace((output_id % 2 == 0) ? output_id : (output_id - 1));
-  int loop = 10;
-  while (loop > 0) {
-    for (int i = aig->num_ands - 1; i >= 0; i--) {
-      aiger_and &aa = aig->ands[i];
-      if (required_gate.find(aa.lhs) != required_gate.end()) {
-        if (IsAndGate(aa.rhs0, aig))
-          required_gate.emplace((aa.rhs0 % 2 == 0) ? (aa.rhs0) : (aa.rhs0 - 1));
-        else if (IsLatch(GetCarId(aa.rhs0)))
-          latches.emplace((aa.rhs0 % 2 == 0) ? (aa.rhs0) : (aa.rhs0 - 1));
+  draw_node(visFile, m_maxId + 2, 3);
+  std::unordered_set<int> required_gates;
+  std::unordered_set<std::pair<int, int>, uset_Hasher_n, uset_Equaler_n> saved_nodes;
+  std::unordered_set<std::tuple<int, int, bool>, uset_Hasher, uset_Equaler> saved_edges;
+  if (output_id % 2 == 0) {
+    required_gates.emplace(output_id);
+    saved_edges.emplace(std::tuple<int, int, bool>{m_maxId + 2, output_id, true});
+  } else {
+    required_gates.emplace(output_id - 1);
+    saved_edges.emplace(std::tuple<int, int, bool>{m_maxId + 2, output_id - 1, false});
+  }
 
-        if (IsAndGate(aa.rhs1, aig))
-          required_gate.emplace((aa.rhs1 % 2 == 0) ? (aa.rhs1) : (aa.rhs1 - 1));
-        else if (IsLatch(GetCarId(aa.rhs1)))
-          latches.emplace((aa.rhs1 % 2 == 0) ? (aa.rhs1) : (aa.rhs1 - 1));
+  for (int i = aig->num_ands - 1; i >= 0; i--) {
+    aiger_and &aa = aig->ands[i];
+    if (required_gates.find(aa.lhs) != required_gates.end()) {
+      saved_nodes.emplace(std::pair<int, int>{aa.lhs, 2});
+      if (IsAndGate(aa.rhs0, aig))
+        required_gates.emplace((aa.rhs0 | 1) - 1);
+      else if (IsInput(aa.rhs0 / 2)) {
+        saved_nodes.emplace(std::pair<int, int>{(aa.rhs0 | 1) - 1, 0});
+      } else {
+        saved_nodes.emplace(std::pair<int, int>{(aa.rhs0 | 1) - 1, 1});
+      }
+
+      if (IsAndGate(aa.rhs1, aig))
+        required_gates.emplace((aa.rhs1 | 1) - 1);
+      else if (IsInput(aa.rhs1 / 2)) {
+        saved_nodes.emplace(std::pair<int, int>{(aa.rhs1 | 1) - 1, 0});
+      } else {
+        saved_nodes.emplace(std::pair<int, int>{(aa.rhs1 | 1) - 1, 1});
+      }
+
+      if (aa.rhs0 % 2 == 0) {
+        saved_edges.emplace(std::tuple<int, int, bool>{aa.lhs, aa.rhs0, true});
+      } else {
+        saved_edges.emplace(std::tuple<int, int, bool>{aa.lhs, aa.rhs0 - 1, false});
+      }
+      if (aa.rhs1 % 2 == 0) {
+        saved_edges.emplace(std::tuple<int, int, bool>{aa.lhs, aa.rhs1, true});
+      } else {
+        saved_edges.emplace(std::tuple<int, int, bool>{aa.lhs, aa.rhs1 - 1, false});
       }
     }
-    required_gate.clear();
-    std::cout << "latches:" << std::endl;
-    for (auto l : latches) {
-      std::cout << l << " ";
-      int p = GetPrime(GetCarId(l));
-      required_gate.emplace(abs(p) * 2);
-    }
-    std::cout << std::endl;
-    latches.clear();
-    loop--;
   }
+  for (auto i : saved_nodes) {
+    draw_node(visFile, i.first, i.second);
+  }
+  for (auto i : saved_edges) {
+    draw_edge(visFile, i);
+  }
+  visFile << "]" << std::endl;
+  visFile.close();
+
+
+  // io
+  visFile.open(m_settings.outputDir + GetFileName(m_settings.aigFilePath) + "_latch.gml");
+  // header
+  visFile << "Creator\t"
+          << "\"car visualization\"" << std::endl;
+  visFile << "Version\t" << 0.1 << std::endl;
+  visFile << "graph" << std::endl;
+  visFile << "[" << std::endl;
+  // graph info
+  visFile << "directed\t" << 1 << std::endl;
+  // gates from latches
+  required_gates.clear();
+  saved_nodes.clear();
+  saved_edges.clear();
+  for (int i = 0; i < aig->num_latches; i++) {
+    saved_nodes.emplace(std::pair<int, int>{(int)aig->latches[i].lit + 1, 4});
+    if (IsAndGate(aig->latches[i].next, aig)) {
+      required_gates.emplace((aig->latches[i].next | 1) - 1);
+    } else if (IsInput(aig->latches[i].next / 2)) {
+      saved_nodes.emplace(std::pair<int, int>{(aig->latches[i].next | 1) - 1, 0});
+    } else {
+      saved_nodes.emplace(std::pair<int, int>{(aig->latches[i].next | 1) - 1, 1});
+    }
+    saved_edges.emplace(std::tuple<int, int, bool>{(int)aig->latches[i].lit + 1, (aig->latches[i].next | 1) - 1, aig->latches[i].next % 2 == 0});
+  }
+
+  for (int i = aig->num_ands - 1; i >= 0; i--) {
+    aiger_and &aa = aig->ands[i];
+    if (required_gates.find(aa.lhs) != required_gates.end()) {
+      saved_nodes.emplace(std::pair<int, int>{aa.lhs, 2});
+      if (IsAndGate(aa.rhs0, aig))
+        required_gates.emplace((aa.rhs0 | 1) - 1);
+      else if (IsInput(aa.rhs0 / 2)) {
+        saved_nodes.emplace(std::pair<int, int>{(aa.rhs0 | 1) - 1, 0});
+      } else {
+        saved_nodes.emplace(std::pair<int, int>{(aa.rhs0 | 1) - 1, 1});
+      }
+
+      if (IsAndGate(aa.rhs1, aig))
+        required_gates.emplace((aa.rhs1 | 1) - 1);
+      else if (IsInput(aa.rhs1 / 2)) {
+        saved_nodes.emplace(std::pair<int, int>{(aa.rhs1 | 1) - 1, 0});
+      } else {
+        saved_nodes.emplace(std::pair<int, int>{(aa.rhs1 | 1) - 1, 1});
+      }
+
+      if (aa.rhs0 % 2 == 0) {
+        saved_edges.emplace(std::tuple<int, int, bool>{aa.lhs, aa.rhs0, true});
+      } else {
+        saved_edges.emplace(std::tuple<int, int, bool>{aa.lhs, aa.rhs0 - 1, false});
+      }
+      if (aa.rhs1 % 2 == 0) {
+        saved_edges.emplace(std::tuple<int, int, bool>{aa.lhs, aa.rhs1, true});
+      } else {
+        saved_edges.emplace(std::tuple<int, int, bool>{aa.lhs, aa.rhs1 - 1, false});
+      }
+    }
+  }
+  for (auto i : saved_nodes) {
+    draw_node(visFile, i.first, i.second);
+  }
+  for (auto i : saved_edges) {
+    draw_edge(visFile, i);
+  }
+  visFile << "]" << std::endl;
+  visFile.close();
 }
 
 } // namespace car

@@ -89,7 +89,8 @@ public:
       // for (int i = 0; i < m_lemma_num_frame->size(); i++) {
       //   m_log << m_lemma_num_frame->at(i) << " " << m_good_lemma_num_frame->at(i) << std::endl;
       // }
-      m_log << "cls in fixpoint ratio:\t" << m_cls_in_fixpoint_ratio << std::endl;
+      // m_log << "cls in fixpoint ratio:\t" << m_cls_in_fixpoint_ratio << std::endl;
+      m_log << "monotone degree:\t" << 1- ((float)monotone_degree_un/(float) monotone_degree_all) << std::endl;
     }
     m_log << "Init Time:\t" << m_initTime << " seconds" << std::endl;
     m_log << "Total Time:\t" << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << " seconds" << std::endl;
@@ -198,6 +199,8 @@ public:
   sptr<std::vector<int>> m_lemma_num_frame;
   sptr<std::vector<int>> m_good_lemma_num_frame;
   double m_cls_in_fixpoint_ratio = 0;
+  int monotone_degree_all = 0;
+  int monotone_degree_un = 0;
 
 private:
   string GetFileName(string filePath) {

@@ -301,25 +301,44 @@ void OverSequenceSet::compute_cls_in_fixpoint_ratio(int lvl) {
 }
 
 
-void OverSequenceSet::compute_same_stat() {
-  // int cls_num = 0, cls_same_num = 0;
-  // std::set<cube, cubeComp> good_cls;
-  // std::set<cube, cubeComp> cls;
-  // int O_size = m_sequence.size();
-  // for (int i = 1; i < O_size - 1; i++) {
-  //   for (auto uc : m_sequence[i]) {
-  //     cls.insert(*uc);
-  //     if (good_cls.find(*uc) == good_cls.end() && m_sequence[i].find(uc) != m_sequence[i].end() && m_sequence[i + 1].find(uc) != m_sequence[i + 1].end())
-  //       good_cls.insert(*uc);
-  //   }
-  // }
-  // cls_num = cls.size();
-  // cls_same_num = good_cls.size();
-  // if (cls_num > 0)
-  //   m_log->set_o_same_rate((float)cls_same_num / (float)cls_num);
-  // else
-  //   m_log->set_o_same_rate(0);
+void OverSequenceSet::compute_monotone_degree_frame() {
+  int O_size = m_sequence.size();
+  sptr<InvSolver> mono_solver(new InvSolver(m_model));
+  int all_lemma_count = 0, unmon_lemma_count = 0;
+  for (int i = 2; i < O_size; i++) {
+    mono_solver.reset(new InvSolver(m_model));
+    all_lemma_count++;
+    std::vector<std::shared_ptr<std::vector<int>>> frame_i, frame_im1;
+    GetFrame(i, frame_i);
+    GetFrame(i - 1, frame_im1);
+    mono_solver->AddConstraintOr(frame_i);
+    mono_solver->AddConstraintAnd(frame_im1);
+    if (mono_solver->SolveWithAssumption()) {
+      unmon_lemma_count++;
+    }
+  }
+  m_log->monotone_degree_all = all_lemma_count;
+  m_log->monotone_degree_un = unmon_lemma_count;
+}
 
+
+void OverSequenceSet::compute_monotone_degree() {
+  int O_size = m_sequence.size();
+  int all_lemma_count = 0, unmon_lemma_count = 0;
+  for (int i = 2; i < O_size; i++) {
+    for (auto uc : m_sequence[i]) {
+      all_lemma_count++;
+      if (!IsBlockedByFrame_lazy(*uc, i - 1)) {
+        unmon_lemma_count++;
+      }
+    }
+  }
+  m_log->monotone_degree_all = all_lemma_count;
+  m_log->monotone_degree_un = unmon_lemma_count;
+}
+
+
+void OverSequenceSet::compute_same_stat() {
   int O_size = m_sequence.size();
   for (int i = 1; i < O_size - 1; i++) {
     m_log->m_lemma_num_frame->emplace_back(m_sequence[i].size());

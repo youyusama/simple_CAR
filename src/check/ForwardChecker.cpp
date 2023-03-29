@@ -7,8 +7,8 @@ sptr<Log> GLOBAL_LOG;
 sptr<OverSequenceSet> GLOBAL_OS;
 
 void signalHandler(int signum) {
-  // if (GLOBAL_LOG->need_same_stat() && GLOBAL_OS != nullptr)
-  //   GLOBAL_OS->compute_same_stat();
+  if (GLOBAL_LOG->need_same_stat() && GLOBAL_OS != nullptr)
+    GLOBAL_OS->compute_monotone_degree_frame();
   GLOBAL_LOG->PrintStatistics();
   exit(signum);
 }
@@ -47,7 +47,7 @@ bool ForwardChecker::Run() {
       m_vis->OutputGML(false);
     }
     if (m_log->need_same_stat() && GLOBAL_OS != nullptr)
-      m_overSequence->compute_same_stat();
+      m_overSequence->compute_monotone_degree_frame();
     m_log->PrintStatistics();
   }
   return true;

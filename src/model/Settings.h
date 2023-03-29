@@ -40,6 +40,7 @@ struct Settings {
   int Branching = 1;
   bool skip_refer = false;
   bool stat = false;
+  bool draw = false;
   int seed = 0;
   RestartCondition condition = RestartCondition::UcNums;
   RestartBehaviour behaviour = RestartBehaviour::BackToInit;

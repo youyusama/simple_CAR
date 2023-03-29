@@ -16,6 +16,7 @@ Settings GetArgv(int argc, char **argv);
 int main(int argc, char **argv) {
   Settings settings = GetArgv(argc, argv);
   shared_ptr<AigerModel> aigerModel(new AigerModel(settings));
+  if (settings.draw) return 0;
   BaseChecker *checker;
   if (settings.forward) {
     checker = new ForwardChecker(settings, aigerModel);
@@ -35,7 +36,7 @@ void PrintUsage() {
   printf("       -prop           active propagation\n");
   printf("       -br             branching (Default activated)\n");
   printf("       -sr             refer-skipping\n");
-  printf("       -seed           seed (works when >0) for random var ordering\n");
+  printf("       -seed           seed (works when > 0) for random var ordering\n");
   printf("       -end            state numeration from end of the sequence\n");
   printf("       -h              print help information\n");
   printf("       -debug          print debug info\n");
@@ -65,6 +66,8 @@ Settings GetArgv(int argc, char **argv) {
       settings.stat = true;
     } else if (strcmp(argv[i], "-sr") == 0) {
       settings.skip_refer = true;
+    } else if (strcmp(argv[i], "-draw") == 0) {
+      settings.draw = true;
     } else if (strcmp(argv[i], "-br") == 0) {
       settings.Branching = atoi(argv[i + 1]);
       i++;

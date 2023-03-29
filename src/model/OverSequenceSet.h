@@ -14,6 +14,7 @@
 #include "CarSolver.h"
 #include "Log.h"
 #include "MainSolver.h"
+#include "InvSolver.h"
 
 namespace car {
 
@@ -65,6 +66,10 @@ public:
   void compute_same_stat();
 
   void compute_cls_in_fixpoint_ratio(int lvl);
+
+  void compute_monotone_degree();
+
+  void compute_monotone_degree_frame();
 
   int effectiveLevel;
   bool isForward = false;

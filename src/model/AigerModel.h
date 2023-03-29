@@ -19,6 +19,7 @@ extern "C" {
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <tuple>
 
 typedef std::string string;
 typedef std::vector<int> cube;
@@ -150,6 +151,18 @@ private:
   void build_aiger_order(const aiger *aig);
 
   void create_sslv();
+
+  string GetFileName(string filePath) {
+    auto startIndex = filePath.find_last_of("/");
+    if (startIndex == string::npos) {
+      startIndex = 0;
+    } else {
+      startIndex++;
+    }
+    auto endIndex = filePath.find_last_of(".");
+    assert(endIndex != string::npos);
+    return filePath.substr(startIndex, endIndex - startIndex);
+  }
 
 #pragma endregion
 
