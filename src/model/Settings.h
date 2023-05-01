@@ -18,8 +18,8 @@ enum RestartBehaviour {
 
 struct Settings {
   bool debug = false;
-  bool forward = false;
-  bool propagation = false;
+  bool forward = true;
+  bool propagation = true;
   bool minimal_uc = false;
   bool ctg = true;
   bool restart = false;
@@ -37,7 +37,7 @@ struct Settings {
   float growthRate = 1.5;
   int threshold = 64;
   int timelimit = 0;
-  int Branching = 1;
+  int Branching = 0;
   bool skip_refer = false;
   bool stat = false;
   bool draw = false;

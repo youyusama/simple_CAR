@@ -73,8 +73,4 @@ bld/
 [Uu]nsafe/
 frame_vis/
 
-simplecar_cadical
-simplecar_minisat
-simplecar_minisat_i
-simplecar_minisat_ni
-notes.txt
+simplecar

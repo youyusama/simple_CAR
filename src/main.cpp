@@ -29,15 +29,14 @@ int main(int argc, char **argv) {
 }
 
 void PrintUsage() {
-  printf("Usage: simplecar <-f|-b> [<-prop>|...] aiger_file.aig output_path\n");
-  printf("       -timeout        set timeout\n");
-  printf("       -f              forward checking (Default = backward checking)\n");
-  printf("       -b              backward checking \n");
-  printf("       -prop           active propagation\n");
-  printf("       -br             branching (Default activated)\n");
-  printf("       -sr             refer-skipping\n");
+  printf("Usage: ./simplecar AIG_FILE.aig OUTPUT_PATH/\n");
+  printf("Configs:\n");
+  printf("       -timeout        set timeout (s)\n");
+  printf("       -f              forward searching (Default)\n");
+  printf("       -b              backward searching \n");
+  printf("       -br             branching (1: sum 2: VSIDS 3: ACIDS 0: static)\n");
+  printf("       -rs             refer-skipping\n");
   printf("       -seed           seed (works when > 0) for random var ordering\n");
-  printf("       -end            state numeration from end of the sequence\n");
   printf("       -h              print help information\n");
   printf("       -debug          print debug info\n");
   printf("NOTE: -f and -b cannot be used together!\n");
@@ -51,20 +50,18 @@ Settings GetArgv(int argc, char **argv) {
   Settings settings;
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-f") == 0) {
-      settings.forward = true;
+      settings.forward = true;  
     } else if (strcmp(argv[i], "-b") == 0) {
       settings.forward = false;
     } else if (strcmp(argv[i], "-timeout") == 0) {
       settings.timelimit = stoi(argv[++i]);
-    } else if (strcmp(argv[i], "-prop") == 0) {
-      settings.propagation = true;
     } else if (strcmp(argv[i], "-end") == 0) {
       settings.end = true;
     } else if (strcmp(argv[i], "-debug") == 0) {
       settings.debug = true;
     } else if (strcmp(argv[i], "-stat") == 0) {
       settings.stat = true;
-    } else if (strcmp(argv[i], "-sr") == 0) {
+    } else if (strcmp(argv[i], "-rs") == 0) {
       settings.skip_refer = true;
     } else if (strcmp(argv[i], "-draw") == 0) {
       settings.draw = true;
@@ -77,7 +74,7 @@ Settings GetArgv(int argc, char **argv) {
     } else if (!hasSetInputDir) {
       settings.aigFilePath = string(argv[i]);
       hasSetInputDir = true;
-    } else if (!hasSetOutputDir) {
+    } else if (!hasSetOutputDir) { 
       settings.outputDir = string(argv[i]);
       if (settings.outputDir[settings.outputDir.length() - 1] != '/') {
         settings.outputDir += "/";

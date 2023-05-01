@@ -67,7 +67,7 @@ GXX = g++
 simplecar: $(CSOURCES) $(CPPSOURCES)
 	$(GCC) $(CFLAG) $(CSOURCES)
 	$(GCC) $(CPPFLAG) -std=c++11 $(CPPSOURCES)
-	$(GXX) -o simplecar_minisat $(OBJS) $(LFLAG)
+	$(GXX) -o simplecar $(OBJS) $(LFLAG)
 	rm *.o
 
 .PHONY: simplecar
