@@ -89,7 +89,6 @@ public:
 
   void updateLitOrder(cube uc) {
     m_branching->update(&uc);
-    CAR_DEBUG_order("\nLit Order:\n", *m_branching->get_counts());
   }
 
   void decayLitOrder(cube *uc, int gap = 1) {
@@ -131,7 +130,7 @@ private:
     l_ass.reserve(state->latches->size());
     l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
     orderAssumption(l_ass, rev);
-    CAR_DEBUG_v("Assumption Detail: ", l_ass);
+    // CAR_DEBUG_v("Assumption Detail: ", l_ass);
 
     ass.reserve(ass.size() + l_ass.size());
     ass.insert(ass.end(), l_ass.begin(), l_ass.end());
@@ -249,6 +248,7 @@ private:
 
   bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl, std::unordered_set<int> required_lits) {
     int ctgs = 0;
+    CAR_DEBUG_v("down:", *uc);
     std::vector<int> ass;
     for (auto l : *uc) ass.emplace_back(m_model->GetPrime(l));
     sptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
@@ -279,9 +279,10 @@ private:
           m_log->StatMainSolver();
           ctgs++;
           auto uc_cts = m_mainSolver->Getuc(false);
-          if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1))
-            updateLitOrder(*uc);
           CAR_DEBUG_v("ctg Get UC:", *uc_cts);
+          if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1))
+            updateLitOrder(*uc_cts);
+          CAR_DEBUG_v("ctg Get mUC:", *uc_cts);
           if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
             m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1, m_branching);
         } else {

@@ -206,7 +206,7 @@ bool ForwardChecker::Check(int badId) {
       Propagation();
       m_log->StatPropagation();
     }
-    CAR_DEBUG_o("Frames: ", m_overSequence.get());
+    CAR_DEBUG_od("Frames: ", m_overSequence.get());
     m_mainSolver->simplify();
     m_overSequence->effectiveLevel++;
     m_startSovler->UpdateStartSolverFlag();
