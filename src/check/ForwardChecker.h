@@ -223,7 +223,8 @@ private:
     if (m_settings.skip_refer)
       for (auto b : *uc_blocker) required_lits.emplace(b);
     orderAssumption(*uc);
-    for (int i = uc->size() - 1; i > 0; i--) {
+    for (int i = uc->size() - 1; i >= 0; i--) {
+      if (uc->size()<2) break;
       if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
       sptr<cube> temp_uc(new cube());
       for (auto ll : *uc)
@@ -274,6 +275,7 @@ private:
         // int cts_lvl = frame_lvl - 1;
         GetAssumption(cts, cts_lvl, cts_ass);
         // F_i-1 & T & cts'
+        CAR_DEBUG_v("try ctg:", *cts->latches);
         m_log->Tick();
         if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
           m_log->StatMainSolver();
