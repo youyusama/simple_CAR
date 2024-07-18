@@ -37,6 +37,7 @@ void PrintUsage() {
   printf("       -br             branching (1: sum 2: VSIDS 3: ACIDS 0: static)\n");
   printf("       -rs             refer-skipping\n");
   printf("       -seed           seed (works when > 0) for random var ordering\n");
+  printf("       -is             internal signals\n");
   printf("       -h              print help information\n");
   printf("       -debug          print debug info\n");
   printf("NOTE: -f and -b cannot be used together!\n");
@@ -65,6 +66,8 @@ Settings GetArgv(int argc, char **argv) {
       settings.skip_refer = true;
     } else if (strcmp(argv[i], "-draw") == 0) {
       settings.draw = true;
+    } else if (strcmp(argv[i], "-is") == 0) {
+      settings.internalSignals = true;
     } else if (strcmp(argv[i], "-br") == 0) {
       settings.Branching = atoi(argv[i + 1]);
       i++;

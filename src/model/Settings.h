@@ -42,6 +42,7 @@ struct Settings {
   bool stat = false;
   bool draw = false;
   int seed = 0;
+  bool internalSignals = false;
   RestartCondition condition = RestartCondition::UcNums;
   RestartBehaviour behaviour = RestartBehaviour::BackToInit;
   std::string aigFilePath;
