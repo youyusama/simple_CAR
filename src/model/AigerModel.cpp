@@ -399,6 +399,8 @@ sptr<cube> AigerModel::getInnardsImplied(sptr<cube> uc) {
             det_aig.emplace(aiger_not(aa.lhs));
         } else if (det_aig.find(aiger_not(aa.rhs1)) != det_aig.end()) {
             det_aig.emplace(aiger_not(aa.lhs));
+        } else if (det_aig.find(aa.rhs0) != det_aig.end() && det_aig.find(aa.rhs1) != det_aig.end()) {
+            det_aig.emplace(aa.lhs);
         }
     }
 
@@ -415,6 +417,9 @@ int AigerModel::getClauseOfInnards(sptr<cube> innards, std::vector<cube> &clss) 
         if (m_innards->find(abs(v)) == m_innards->end()) {
             new_innards_aig.emplace(abs(v) * 2);
             m_innards->emplace(abs(v));
+            // compute innards logic level
+            int lvl = innLogiclvlDFS(abs(v) * 2);
+            m_innards_lvl.insert(std::pair<int, int>(abs(v), lvl));
         }
     }
     if (new_innards_aig.size() == 0) return 0;
@@ -431,7 +436,8 @@ int AigerModel::getClauseOfInnards(sptr<cube> innards, std::vector<cube> &clss) 
             }
             pl = GetPrime(GetCarId(aa.lhs));
             // primed right 0
-            if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
+            if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0)) ||
+                aiger_is_input(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
                 if (GetPrime(GetCarId(aa.rhs0)) == 0) {
                     (*m_maxId)++;
                     m_nextValueOfLatch.insert(std::pair<int, int>(GetCarId(aiger_strip(aa.rhs0)), *m_maxId));
@@ -440,13 +446,12 @@ int AigerModel::getClauseOfInnards(sptr<cube> innards, std::vector<cube> &clss) 
                 pr0 = GetPrime(GetCarId(aa.rhs0));
             } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
                 pr0 = GetPrime(GetCarId(aa.rhs0));
-            } else if (aiger_is_input(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
-                pr0 = GetTrueId();
             } else {
                 pr1 = GetTrueId();
             }
             // primed right 1
-            if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
+            if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1)) ||
+                aiger_is_input(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
                 if (GetPrime(GetCarId(aa.rhs1)) == 0) {
                     (*m_maxId)++;
                     m_nextValueOfLatch.insert(std::pair<int, int>(GetCarId(aiger_strip(aa.rhs1)), *m_maxId));
@@ -455,8 +460,6 @@ int AigerModel::getClauseOfInnards(sptr<cube> innards, std::vector<cube> &clss) 
                 pr1 = GetPrime(GetCarId(aa.rhs1));
             } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
                 pr1 = GetPrime(GetCarId(aa.rhs1));
-            } else if (aiger_is_input(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
-                pr1 = GetTrueId();
             } else {
                 pr1 = GetTrueId();
             }
@@ -469,6 +472,25 @@ int AigerModel::getClauseOfInnards(sptr<cube> innards, std::vector<cube> &clss) 
 
     return new_innards_aig.size();
 }
+
+
+int AigerModel::innLogiclvlDFS(unsigned aig_id) {
+    auto it = m_innards_lvl.find(aig_id / 2);
+    if (it != m_innards_lvl.end())
+        return it->second;
+    aiger_and *aa = aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aig_id));
+    if (aa) {
+        int l_lvl = innLogiclvlDFS(aa->rhs0);
+        int r_lvl = innLogiclvlDFS(aa->rhs1);
+        if (l_lvl > r_lvl)
+            return l_lvl + 1;
+        else
+            return r_lvl + 1;
+    } else {
+        return 0;
+    }
+}
+
 
 void AigerModel::collect_and_gates_for_pine_r(const aiger_and *aa, const aiger *aig) {
     if (aa != nullptr) {

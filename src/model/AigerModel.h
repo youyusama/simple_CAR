@@ -114,6 +114,14 @@ class AigerModel {
     int getClauseOfInnards(sptr<cube> innards, std::vector<cube> &clss);
 
     sptr<std::set<int>> getInnards() { return m_innards; };
+
+    int getInnardslvl(int id) {
+        std::unordered_map<int, int>::iterator it = m_innards_lvl.find(abs(id));
+        if (it == m_innards_lvl.end()) {
+            return 0;
+        }
+        return it->second;
+    }
 #pragma endregion
 
 #pragma region private methods
@@ -167,6 +175,8 @@ class AigerModel {
 
     void create_sslv();
 
+    int innLogiclvlDFS(unsigned aig_id);
+
     string GetFileName(string filePath) {
         auto startIndex = filePath.find_last_of("/");
         if (startIndex == string::npos) {
@@ -207,6 +217,7 @@ class AigerModel {
     std::unordered_map<int, std::vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
 
     sptr<std::set<int>> m_innards;
+    std::unordered_map<int, int> m_innards_lvl;
     sptr<std::vector<float>> m_aiger_order;
     sptr<SimpSolver> m_sslv;
 

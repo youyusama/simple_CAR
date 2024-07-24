@@ -72,6 +72,17 @@ class ForwardChecker : public BaseChecker {
     } litOrder;
 
 
+    struct InnOrder {
+        sptr<AigerModel> m;
+
+        InnOrder() {}
+
+        bool operator()(const int &inn_1, const int &inn_2) const {
+            return (m->getInnardslvl(inn_1) > m->getInnardslvl(inn_2));
+        }
+    } innOrder;
+
+
     struct BlockerOrder {
         sptr<Branching> branching;
 
@@ -105,7 +116,8 @@ class ForwardChecker : public BaseChecker {
         std::stable_sort(uc.begin(), uc.end(), litOrder);
         if (m_settings.internalSignals) {
             int num_v = m_model->GetNumInputs() + m_model->GetNumLatches();
-            std::partition(uc.begin(), uc.end(), [num_v](int n) { return abs(n) > num_v; });
+            auto it = std::partition(uc.begin(), uc.end(), [num_v](int n) { return abs(n) > num_v; });
+            std::sort(uc.begin(), it, innOrder);
         }
         if (rev) std::reverse(uc.begin(), uc.end());
     }
@@ -173,7 +185,8 @@ class ForwardChecker : public BaseChecker {
             // add !s' to clause
             std::vector<int> *neg_primed_s = new std::vector<int>();
             for (auto l : *s->latches) {
-                neg_primed_s->emplace_back(-l);
+                if (m_model->IsLatch(l))
+                    neg_primed_s->emplace_back(-l);
             }
             m_lifts->add_temp_clause(neg_primed_s, act, true);
             m_lifts->clean_assumptions();
@@ -192,13 +205,13 @@ class ForwardChecker : public BaseChecker {
         m_lifts->AddAssumption(act);
         ass.push_back(act);
         while (true) {
-            CAR_DEBUG_v("assumptions: ", ass);
-            CAR_DEBUG("");
+            // CAR_DEBUG_v("assumptions: ", ass);
+            // CAR_DEBUG("");
             bool res = m_lifts->SolveWithAssumption();
             assert(!res);
             std::shared_ptr<cube> temp_p = m_lifts->justGetUC(); // not muc
             if (temp_p->size() == partial_latch->size() && std::equal(temp_p->begin(), temp_p->end(), partial_latch->begin())) {
-                CAR_DEBUG_v("get predecessor uc: ", *temp_p);
+                // CAR_DEBUG_v("get predecessor uc: ", *temp_p);
                 break;
             } else {
                 partial_latch = temp_p;
@@ -339,64 +352,27 @@ class ForwardChecker : public BaseChecker {
     // @input:
     // @output:
     // ================================================================================
-    void ExtendLemma(sptr<cube> &uc) {
+    void ExtendCubeWithInnards(sptr<cube> &uc) {
         sptr<cube> innards = m_model->getInnardsImplied(uc);
         if (innards->size() > 0) {
-            cube temp;
-            for (auto i : *uc) temp.push_back(m_model->GetPrime(i));
-            CAR_DEBUG_v("primed uc: ", temp);
+            // cube temp;
+            // for (auto i : *uc) temp.push_back(m_model->GetPrime(i));
+            // CAR_DEBUG_v("primed uc: ", temp);
             uc->insert(uc->end(), innards->begin(), innards->end());
             CAR_DEBUG_v("innards: ", *innards);
             std::vector<cube> clss;
             int new_innards_num = m_model->getClauseOfInnards(innards, clss);
             CAR_DEBUG(std::to_string(new_innards_num) + " new innards\n");
-            temp.clear();
-            for (auto i : *innards) temp.push_back(m_model->GetPrime(i));
-            CAR_DEBUG_v("primed innards: ", temp);
-            CAR_DEBUG("clauses: ");
-            for (auto cls : clss) CAR_DEBUG_v("", cls);
+            // temp.clear();
+            // for (auto i : *innards) temp.push_back(m_model->GetPrime(i));
+            // CAR_DEBUG_v("primed innards: ", temp);
+            // CAR_DEBUG("clauses: ");
+            // for (auto cls : clss) CAR_DEBUG_v("", cls);
             for (auto cls : clss) {
                 m_mainSolver->AddClause(cls);
-                m_lifts->AddClause(cls);
             }
         }
     }
-
-
-    // ================================================================================
-    // @brief: generalize extended lemma with internal signals
-    // @input:
-    // @output:
-    // ================================================================================
-    void GeneralizeExtLemma(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
-        std::unordered_set<int> required_lits;
-        std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
-        cube *uc_blocker;
-        if (uc_blockers->size() > 0) {
-            if (m_settings.Branching > 0)
-                std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
-            uc_blocker = uc_blockers->at(0);
-        } else {
-            uc_blocker = new cube();
-        }
-        orderAssumption(*uc);
-        for (int i = uc->size() - 1; i >= 0; i--) {
-            if (uc->size() < 2) break;
-            if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
-            sptr<cube> temp_uc(new cube());
-            for (auto ll : *uc)
-                if (ll != uc->at(i)) temp_uc->emplace_back(ll);
-            if (down_ctg(temp_uc, frame_lvl, 3, required_lits)) {
-                uc->swap(*temp_uc);
-                orderAssumption(*uc);
-                i = uc->size();
-            } else {
-                required_lits.emplace(uc->at(i));
-            }
-        }
-        std::sort(uc->begin(), uc->end(), cmp);
-    }
-
 
     int m_minUpdateLevel;
     int m_badId;

@@ -178,16 +178,25 @@ bool ForwardChecker::Check(int badId) {
                     CAR_DEBUG_v("Get UC:", *uc);
                     m_log->Tick();
                     if (m_settings.internalSignals) {
-                        if (AddUnsatisfiableCore(uc, task.frameLevel + 1))
-                            m_overSequence->propagate_uc_from_lvl(uc, task.frameLevel + 1, m_branching);
-                        ExtendLemma(uc);
-                        GeneralizeExtLemma(uc, task.frameLevel);
+                        sptr<cube> inn_uc = std::make_shared<cube>();
+                        inn_uc->insert(inn_uc->end(), task.state->latches->begin(), task.state->latches->end());
+                        ExtendCubeWithInnards(inn_uc);
+                        if (inn_uc->size() > task.state->latches->size()) {
+                            generalize_ctg(inn_uc, task.frameLevel, 3);
+                            for (auto inn : *inn_uc)
+                                if (m_model->IsInnard(inn)) {
+                                    CAR_DEBUG_v("Get inn UC:", *inn_uc);
+                                    if (AddUnsatisfiableCore(inn_uc, task.frameLevel + 1))
+                                        m_overSequence->propagate_uc_from_lvl(inn_uc, task.frameLevel + 1, m_branching);
+                                    break;
+                                }
+                        }
                     } else {
                         if (m_settings.ctg)
                             if (generalize_ctg(uc, task.frameLevel))
                                 updateLitOrder(*uc);
-                        m_log->Statmuc();
                     }
+                    m_log->Statmuc();
                     CAR_DEBUG_v("Get UC:", *uc);
                     m_log->Tick();
                     if (AddUnsatisfiableCore(uc, task.frameLevel + 1))
@@ -250,6 +259,7 @@ void ForwardChecker::Init(int badId) {
     GLOBAL_OS = m_overSequence;
     m_branching.reset(new Branching(m_settings.Branching));
     litOrder.branching = m_branching;
+    innOrder.m = m_model;
     blockerOrder.branching = m_branching;
     if (m_settings.Visualization) {
         m_vis.reset(new Vis(m_settings, m_model));
