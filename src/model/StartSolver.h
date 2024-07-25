@@ -74,16 +74,6 @@ class StartSolver : public CarSolver {
                 latches->push_back(val);
             }
         }
-        sptr<std::set<int>> inn = m_model->getInnards();
-        if (inn->size() > 0) {
-            for (int i : *inn) {
-                if (model[i - 1] == l_True) {
-                    latches->emplace_back(i);
-                } else if (model[i - 1] == l_False) {
-                    latches->emplace_back(-i);
-                }
-            }
-        }
         std::shared_ptr<State> newState(new State(nullptr, inputs, latches, 0));
         return std::pair<sptr<cube>, sptr<cube>>(inputs, latches);
     }

@@ -152,17 +152,6 @@ std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> 
             }
         }
     }
-    sptr<std::set<int>> inn = m_model->getInnards();
-    if (inn->size() > 0) {
-        assert(m_isForward);
-        for (int i : *inn) {
-            if (model[i - 1] == l_True) {
-                latches->emplace_back(i);
-            } else if (model[i - 1] == l_False) {
-                latches->emplace_back(-i);
-            }
-        }
-    }
     return std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>>(inputs, latches);
 }
 

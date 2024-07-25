@@ -395,6 +395,8 @@ sptr<cube> AigerModel::getInnardsImplied(sptr<cube> uc) {
 
     for (int i = 0; i < m_aig->num_ands; ++i) {
         aiger_and &aa = m_aig->ands[i];
+        if (det_aig.find(aa.lhs) != det_aig.end() || det_aig.find(aiger_not(aa.lhs)) != det_aig.end())
+            continue;
         if (det_aig.find(aiger_not(aa.rhs0)) != det_aig.end()) {
             det_aig.emplace(aiger_not(aa.lhs));
         } else if (det_aig.find(aiger_not(aa.rhs1)) != det_aig.end()) {

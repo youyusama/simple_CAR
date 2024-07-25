@@ -170,8 +170,6 @@ class ForwardChecker : public BaseChecker {
     std::pair<sptr<cube>, sptr<cube>> get_predecessor(
         std::pair<sptr<cube>, sptr<cube>> t, sptr<State> s = nullptr) {
 
-        if (m_settings.internalSignals) return t;
-
         orderAssumption(*t.second);
         std::shared_ptr<cube> partial_latch(new cube(*t.second));
 

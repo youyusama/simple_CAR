@@ -181,15 +181,14 @@ bool ForwardChecker::Check(int badId) {
                         sptr<cube> inn_uc = std::make_shared<cube>();
                         inn_uc->insert(inn_uc->end(), task.state->latches->begin(), task.state->latches->end());
                         ExtendCubeWithInnards(inn_uc);
+                        m_log->StatInternalSignal();
                         if (inn_uc->size() > task.state->latches->size()) {
                             generalize_ctg(inn_uc, task.frameLevel, 3);
-                            for (auto inn : *inn_uc)
-                                if (m_model->IsInnard(inn)) {
-                                    CAR_DEBUG_v("Get inn UC:", *inn_uc);
-                                    if (AddUnsatisfiableCore(inn_uc, task.frameLevel + 1))
-                                        m_overSequence->propagate_uc_from_lvl(inn_uc, task.frameLevel + 1, m_branching);
-                                    break;
-                                }
+                            if (m_model->IsInnard(inn_uc->back())) {
+                                CAR_DEBUG_v("Get inn UC:", *inn_uc);
+                                if (AddUnsatisfiableCore(inn_uc, task.frameLevel + 1))
+                                    m_overSequence->propagate_uc_from_lvl(inn_uc, task.frameLevel + 1, m_branching);
+                            }
                         }
                     } else {
                         if (m_settings.ctg)
