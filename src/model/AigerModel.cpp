@@ -25,14 +25,14 @@ void AigerModel::Init(aiger *aig) {
     m_numLatches = aig->num_latches;
     m_numAnds = aig->num_ands;
     m_numConstraints = aig->num_constraints;
-    m_numOutputs = aig->num_outputs;
+    m_numOutputsBad = aig->num_outputs + aig->num_bad;
     m_maxId = aig->maxvar + 2;
     m_trueId = m_maxId - 1;
     m_falseId = m_maxId;
 
     CollectTrues(aig);
     CollectConstraints(aig);
-    CollectOutputs(aig);
+    CollectOutputsBad(aig);
     CollectInitialState(aig);
     CollectNextValueMapping(aig);
     CollectClauses(aig);
@@ -186,11 +186,14 @@ std::shared_ptr<std::vector<int>> AigerModel::Get_next_latches_for_pine(std::vec
     return next_latches;
 }
 
-
-void AigerModel::CollectOutputs(const aiger *aig) {
+void AigerModel::CollectOutputsBad(const aiger *aig) {
     for (int i = 0; i < aig->num_outputs; ++i) {
         int id = static_cast<int>(aig->outputs[i].lit);
-        m_outputs.push_back((id % 2 == 0) ? (id / 2) : -(id / 2));
+        m_outputsBad.push_back((id % 2 == 0) ? (id / 2) : -(id / 2));
+    }
+    for (int i = 0; i < aig->num_bad; ++i) {
+        int id = static_cast<int>(aig->bad[i].lit);
+        m_outputsBad.push_back((id % 2 == 0) ? (id / 2) : -(id / 2));
     }
 }
 
@@ -242,6 +245,10 @@ void AigerModel::CollectClauses(const aiger *aig) {
     std::vector<unsigned> gates;
     // gates.resize(max_id_ + 1, 0);
     // create clauses for constraints
+    for (int cons : m_constraints) {
+        m_clauses.emplace_back(std::vector<int>{cons});
+    }
+
     CollectNecessaryAndGatesFromConstrain(aig, aig->constraints, aig->num_constraints, exist_gates, gates);
 
     for (std::vector<unsigned>::iterator it = gates.begin(); it != gates.end(); it++) {
@@ -284,6 +291,19 @@ void AigerModel::CollectClauses(const aiger *aig) {
         }
         AddAndGateToClause(aa);
     }
+
+    // create clauses for bad
+    std::vector<unsigned>().swap(gates);
+    CollectNecessaryAndGates(aig, aig->bad, aig->num_bad, exist_gates, gates, false);
+
+    for (std::vector<unsigned>::iterator it = gates.begin(); it != gates.end(); it++) {
+        if (*it == 0) continue;
+        aiger_and *aa = aiger_is_and(const_cast<aiger *>(aig), *it);
+        if (aa == NULL) {
+            // placeholder
+        }
+        AddAndGateToClause(aa);
+    }
     m_latchesStart = m_clauses.size();
 
     // create clauses for latches
@@ -313,9 +333,9 @@ void AigerModel::CollectNecessaryAndGates(const aiger *aig, const aiger_symbol *
             aa = IsAndGate(as[i].lit, aig);
             if (aa == NULL) {
                 if (IsTrue(as[i].lit)) {
-                    m_outputs[i] = m_trueId;
+                    m_outputsBad[i] = m_trueId;
                 } else if (IsFalse(as[i].lit))
-                    m_outputs[i] = m_falseId;
+                    m_outputsBad[i] = m_falseId;
             }
         }
         FindAndGates(aa, aig, exist_gates, gates);
@@ -329,7 +349,7 @@ void AigerModel::CollectNecessaryAndGatesFromConstrain(const aiger *aig, const a
         aa = IsAndGate(as[i].lit, aig);
         if (aa == NULL) {
             if (IsFalse(as[i].lit)) {
-                m_outputs[i] = m_falseId;
+                m_outputsBad[i] = m_falseId;
             }
         }
         FindAndGates(aa, aig, exist_gates, gates);
@@ -480,9 +500,9 @@ void draw_edge(std::ofstream &visFile, std::tuple<int, int, bool> &t) {
 }
 
 
-std::vector<int> AigerModel::GetNegBad() {
+std::vector<int> AigerModel::GetNegBad() { // TODO
     cube res = cube();
-    res.emplace_back(-m_outputs[0]);
+    res.emplace_back(-m_outputsBad[0]);
     return res;
 }
 
@@ -522,15 +542,14 @@ void AigerModel::create_sslv() {
         while (p >= m_sslv->nVars()) m_sslv->newVar();
         m_sslv->setFrozen(p, true);
     }
-    int bad_var = abs(m_outputs[0]) - 1;
+    // TODO
+    int bad_var = abs(m_outputsBad[0]) - 1;
     while (bad_var >= m_sslv->nVars()) m_sslv->newVar();
     m_sslv->setFrozen(bad_var, true);
     for (int i = 0; i < m_clauses.size(); i++) {
         addClause(m_sslv, m_clauses[i]);
     }
-    // std::cout << m_sslv->nClauses() << std::endl;
     m_sslv->eliminate(true);
-    // std::cout << m_sslv->nClauses() << std::endl;
 }
 
 

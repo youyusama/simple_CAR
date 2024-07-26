@@ -69,15 +69,14 @@ class AigerModel {
 #pragma region get &set
     int GetNumInputs() { return m_numInputs; }
     int GetNumLatches() { return m_numLatches; }
-    int GetNumOutputs() { return m_numOutputs; }
-    int GetNumBads() { return m_numBads; }
+    int GetNumOutputsBad() { return m_numOutputsBad; }
     int GetMaxId() { return m_maxId; }
     int GetOutputsStart() { return m_outputsStart; }
     int GetLatchesStart() { return m_latchesStart; }
     int GetTrueId() { return m_trueId; }
     int GetFalseId() { return m_falseId; }
     std::vector<int> &GetInitialState() { return m_initialState; }
-    std::vector<int> &GetOutputs() { return m_outputs; }
+    std::vector<int> &GetOutputsBad() { return m_outputsBad; }
     std::vector<int> GetPrevious(int id) {
         if (m_preValueOfLatch.count(abs(id)) > 0) {
             return m_preValueOfLatch[abs(id)];
@@ -113,7 +112,7 @@ class AigerModel {
 
     void CollectConstraints(const aiger *aig);
 
-    void CollectOutputs(const aiger *aig);
+    void CollectOutputsBad(const aiger *aig);
 
     void CollectInitialState(const aiger *aig);
 
@@ -172,9 +171,8 @@ class AigerModel {
     int m_maxId;
     int m_numInputs;
     int m_numLatches;
-    int m_numOutputs;
+    int m_numOutputsBad;
     int m_numAnds;
-    int m_numBads;
     int m_numConstraints;
     int m_trueId;
     int m_falseId;
@@ -184,7 +182,7 @@ class AigerModel {
     std::unordered_map<int, std::pair<int, int>> m_ands_gates_for_pine;
 
     std::vector<int> m_initialState;
-    std::vector<int> m_outputs;
+    std::vector<int> m_outputsBad;
     std::vector<int> m_constraints;
     std::vector<std::vector<int>> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
     std::unordered_set<int> m_trues;         // variables that are always true

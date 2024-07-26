@@ -33,10 +33,8 @@ ForwardChecker::ForwardChecker(Settings settings, std::shared_ptr<AigerModel> mo
 }
 
 bool ForwardChecker::Run() {
-    for (int i = 0, maxI = m_model->GetOutputs().size(); i < maxI; ++i) {
-        int badId = m_model->GetOutputs().at(i);
-        bool result = Check(badId);
-        // PrintUC();
+    for (int i = 0; i < m_model->GetNumOutputsBad(); ++i) {
+        bool result = Check(m_model->GetOutputsBad()[i]);
         if (result) {
             m_log->PrintSafe(i);
         } else // unsafe

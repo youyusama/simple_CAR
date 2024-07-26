@@ -23,7 +23,7 @@ class Log {
         if (settings.debug) {
             m_debug.open(outPath + ".debug");
         }
-        m_timelimit = static_cast<double>(settings.timelimit / model->GetNumOutputs());
+        m_timelimit = static_cast<double>(settings.timelimit / model->GetNumOutputsBad());
         lastState = nullptr;
         m_begin = clock();
         m_restartTimes = 0;
