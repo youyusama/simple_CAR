@@ -7,8 +7,7 @@
 #include "CarSolver.h"
 #endif
 
-namespace car
-{
+namespace car {
 
 #ifdef CADICAL
 class InvSolver : public CarSolver_cadical
@@ -17,11 +16,12 @@ class InvSolver : public CarSolver
 #endif
 
 {
-public:
+  public:
     InvSolver(std::shared_ptr<AigerModel> model);
-private:
+
+  private:
 };
 
-}//namespace car
+} // namespace car
 
 #endif
