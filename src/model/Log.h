@@ -202,7 +202,6 @@ class Log {
     int monotone_degree_all = 0;
     int monotone_degree_un = 0;
 
-  private:
     string GetFileName(string filePath) {
         auto startIndex = filePath.find_last_of("/");
         if (startIndex == string::npos) {
@@ -215,6 +214,7 @@ class Log {
         return filePath.substr(startIndex, endIndex - startIndex);
     }
 
+  private:
     int m_mainSolverCalls = 0;
     int m_invSolverCalls = 0;
     int m_restartTimes = 0;

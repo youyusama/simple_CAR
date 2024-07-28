@@ -41,6 +41,7 @@ struct Settings {
     bool skip_refer = false;
     bool stat = false;
     bool draw = false;
+    bool witness = false;
     int seed = 0;
     RestartCondition condition = RestartCondition::UcNums;
     RestartBehaviour behaviour = RestartBehaviour::BackToInit;

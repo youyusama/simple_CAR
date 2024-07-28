@@ -7,16 +7,16 @@ AigerModel::AigerModel(Settings settings) {
     m_settings = settings;
     string aigFilePath = settings.aigFilePath;
 
-    aiger *aig = aiger_init();
-    aiger_open_and_read_from_file(aig, aigFilePath.c_str());
-    if (aiger_error(aig)) {
+    m_aig = aiger_init();
+    aiger_open_and_read_from_file(m_aig, aigFilePath.c_str());
+    if (aiger_error(m_aig)) {
         // placeholder
     }
-    if (!aiger_is_reencoded(aig)) {
-        aiger_reencode(aig);
+    if (!aiger_is_reencoded(m_aig)) {
+        aiger_reencode(m_aig);
     }
 
-    Init(aig);
+    Init(m_aig);
 }
 
 

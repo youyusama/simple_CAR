@@ -64,6 +64,8 @@ class AigerModel {
         return ((id % 2 == 0) ? (id / 2) : -(id / 2));
     }
 
+    aiger *GetAig() { return m_aig; }
+
     std::shared_ptr<std::vector<int>> Get_next_latches_for_pine(std::vector<int> &current_latches);
 
 #pragma region get &set
@@ -168,6 +170,7 @@ class AigerModel {
 
 #pragma region private member variables
     Settings m_settings;
+    aiger *m_aig;
     int m_maxId;
     int m_numInputs;
     int m_numLatches;

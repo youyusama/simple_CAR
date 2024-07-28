@@ -37,8 +37,8 @@ bool ForwardChecker::Run() {
         bool result = Check(m_model->GetOutputsBad()[i]);
         if (result) {
             m_log->PrintSafe(i);
-        } else // unsafe
-        {
+            OutputWitness(m_model->GetOutputsBad()[i]);
+        } else {
             m_log->PrintCounterExample(i, true);
         }
         if (m_settings.Visualization) {
@@ -104,7 +104,10 @@ bool ForwardChecker::Check(int badId) {
         m_log->Tick();
         std::shared_ptr<State> startState = EnumerateStartState();
         m_log->StatStartSolver();
-        if (startState == nullptr) return true;
+        if (startState == nullptr) {
+            m_overSequence->SetInvariantLevel(frameStep);
+            return true;
+        }
         CAR_DEBUG("\nstate from start solver\n");
         while (startState != nullptr) {
             workingStack.push(Task(startState, frameStep, true));
@@ -292,6 +295,7 @@ bool ForwardChecker::isInvExisted() {
             m_overSequence->compute_cls_in_fixpoint_ratio(i);
             m_overSequence->PrintFramesInfo();
             result = true;
+            m_overSequence->SetInvariantLevel(i - 1);
             break;
         }
     }
@@ -322,6 +326,79 @@ bool ForwardChecker::IsInvariant(int frameLevel) {
     m_invSolver->FlipLastConstrain();
     m_invSolver->AddConstraintOr(frame);
     return result;
+}
+
+
+void ForwardChecker::OutputWitness(int bad) {
+    string outPath = m_settings.outputDir + m_log->GetFileName(m_settings.aigFilePath) + ".w.aag";
+    aiger *model_aig = m_model->GetAig();
+
+    unsigned lvl_i = m_overSequence->GetInvariantLevel();
+    if (lvl_i == 0) {
+        aiger_open_and_write_to_file(model_aig, outPath.c_str());
+        return;
+    }
+
+    aiger *witness_aig = aiger_init();
+    // copy inputs
+    for (unsigned i = 0; i < model_aig->num_inputs; i++) {
+        aiger_symbol &input = model_aig->inputs[i];
+        aiger_add_input(witness_aig, input.lit, input.name);
+    }
+    // copy latches
+    for (unsigned i = 0; i < model_aig->num_latches; i++) {
+        aiger_symbol &latch = model_aig->latches[i];
+        aiger_add_latch(witness_aig, latch.lit, latch.next, latch.name);
+        aiger_add_reset(witness_aig, latch.lit, latch.reset);
+    }
+    // copy and gates
+    for (unsigned i = 0; i < model_aig->num_ands; i++) {
+        aiger_and &gate = model_aig->ands[i];
+        aiger_add_and(witness_aig, gate.lhs, gate.rhs0, gate.rhs1);
+    }
+    // copy constraints
+    for (unsigned i = 0; i < model_aig->num_constraints; i++) {
+        aiger_symbol &cons = model_aig->constraints[i];
+        aiger_add_constraint(witness_aig, cons.lit, cons.name);
+    }
+
+    assert(model_aig->maxvar == witness_aig->maxvar);
+
+    // P' = P & invariant
+    // P' = !bad & ( O_0 | O_1 | ... | O_i )
+    //             !( !O_0 & !O_1 & ...  & !O_i )
+    //                 O_i = c_1 & c_2 & ... & c_j
+    //                       c_j = !( l_1 & l_2 & .. & l_k )
+
+    std::vector<unsigned> inv_lits;
+    for (unsigned i = 0; i <= lvl_i; i++) {
+        std::vector<sptr<cube>> frame_i;
+        m_overSequence->GetFrame(i, frame_i);
+        std::vector<unsigned> frame_i_lits;
+        for (unsigned j = 0; j < frame_i.size(); j++) {
+            std::vector<unsigned> cube_j;
+            for (int l : *frame_i[j]) cube_j.push_back(l > 0 ? (2 * l) : (2 * -l + 1));
+            unsigned c_j = addCubeToANDGates(witness_aig, cube_j) ^ 1;
+            frame_i_lits.push_back(c_j);
+        }
+        unsigned O_i = addCubeToANDGates(witness_aig, frame_i_lits);
+        inv_lits.push_back(O_i ^ 1);
+    }
+    unsigned inv = addCubeToANDGates(witness_aig, inv_lits) ^ 1;
+    unsigned bad_lit = bad > 0 ? (2 * bad) : (2 * -bad) + 1;
+    unsigned p = aiger_not(bad_lit);
+    unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
+
+    if (model_aig->num_bad == 1) {
+        aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);
+    } else if (model_aig->num_outputs == 1) {
+        aiger_add_output(witness_aig, aiger_not(p_prime), model_aig->outputs[0].name);
+    } else {
+        assert(false);
+    }
+
+    aiger_reencode(witness_aig);
+    aiger_open_and_write_to_file(witness_aig, outPath.c_str());
 }
 
 

@@ -33,6 +33,10 @@ class OverSequenceSet {
         m_log = log;
     }
 
+    void SetInvariantLevel(unsigned lvl) { m_invariantLevel = lvl; }
+
+    unsigned GetInvariantLevel() { return m_invariantLevel; }
+
     bool Insert(std::shared_ptr<std::vector<int>> uc, int index);
 
     void Init_Frame_0(sptr<cube> latches);
@@ -128,6 +132,7 @@ class OverSequenceSet {
     CarSolver *m_blockSolver;
     std::vector<int> m_block_counter;
     sptr<Log> m_log;
+    unsigned m_invariantLevel;
 };
 
 } // namespace car

@@ -314,6 +314,26 @@ class ForwardChecker : public BaseChecker {
         }
     }
 
+    void OutputWitness(int bad);
+
+    // ================================================================================
+    // @brief: add the cube as and gates to the aiger model
+    // @input:
+    // @output:
+    // ================================================================================
+    unsigned addCubeToANDGates(aiger *circuit, std::vector<unsigned> cube) {
+        assert(cube.size() > 0);
+        unsigned res = cube[0];
+        assert(res / 2 <= circuit->maxvar);
+        for (unsigned i = 1; i < cube.size(); i++) {
+            assert(cube[i] / 2 <= circuit->maxvar);
+            unsigned new_gate = (circuit->maxvar + 1) * 2;
+            aiger_add_and(circuit, new_gate, res, cube[i]);
+            res = new_gate;
+        }
+        return res;
+    }
+
     int m_minUpdateLevel;
     int m_badId;
     std::shared_ptr<OverSequenceSet> m_overSequence;

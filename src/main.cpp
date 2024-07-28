@@ -38,6 +38,7 @@ void PrintUsage() {
     printf("       -rs             refer-skipping\n");
     printf("       -seed           seed (works when > 0) for random var ordering\n");
     printf("       -h              print help information\n");
+    printf("       -w              output witness\n");
     printf("       -debug          print debug info\n");
     printf("NOTE: -f and -b cannot be used together!\n");
     exit(0);
@@ -65,6 +66,8 @@ Settings GetArgv(int argc, char **argv) {
             settings.skip_refer = true;
         } else if (strcmp(argv[i], "-draw") == 0) {
             settings.draw = true;
+        } else if (strcmp(argv[i], "-w") == 0) {
+            settings.witness = true;
         } else if (strcmp(argv[i], "-br") == 0) {
             settings.Branching = atoi(argv[i + 1]);
             i++;

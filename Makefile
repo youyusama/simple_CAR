@@ -45,7 +45,6 @@ CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat/mini
  -D __STDC_FORMAT_MACROS \
  -c \
  -g \
- -DNDEBUG \
  -O3
 
 CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat -I./src/model -I./src/visualization -I./src/check \
@@ -54,11 +53,10 @@ CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat -I
 -c \
 -g \
 -fpermissive \
--DNDEBUG \
 -O3
 
 LFLAG = -g -lz -lpthread -L./ \
--DNDEBUG -static
+-static
 
 GCC = gcc
 
