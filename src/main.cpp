@@ -2,7 +2,6 @@
 #include "BackwardChecker.h"
 #include "ForwardChecker.h"
 #include "Settings.h"
-#include "restart.h"
 #include <cstdio>
 #include <memory>
 #include <string.h>
@@ -16,7 +15,6 @@ Settings GetArgv(int argc, char **argv);
 int main(int argc, char **argv) {
     Settings settings = GetArgv(argc, argv);
     shared_ptr<AigerModel> aigerModel(new AigerModel(settings));
-    if (settings.draw) return 0;
     BaseChecker *checker;
     if (settings.forward) {
         checker = new ForwardChecker(settings, aigerModel);
@@ -60,12 +58,8 @@ Settings GetArgv(int argc, char **argv) {
             settings.end = true;
         } else if (strcmp(argv[i], "-debug") == 0) {
             settings.debug = true;
-        } else if (strcmp(argv[i], "-stat") == 0) {
-            settings.stat = true;
         } else if (strcmp(argv[i], "-rs") == 0) {
             settings.skip_refer = true;
-        } else if (strcmp(argv[i], "-draw") == 0) {
-            settings.draw = true;
         } else if (strcmp(argv[i], "-w") == 0) {
             settings.witness = true;
         } else if (strcmp(argv[i], "-br") == 0) {
@@ -83,10 +77,7 @@ Settings GetArgv(int argc, char **argv) {
                 settings.outputDir += "/";
             }
             hasSetOutputDir = true;
-        } else if (settings.Visualization && !hasSetCexFile) {
-            settings.cexFilePath = string(argv[i]);
-            hasSetCexFile = true;
-        } else {
+        }  else {
             PrintUsage();
         }
     }

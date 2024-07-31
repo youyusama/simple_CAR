@@ -99,8 +99,6 @@ class AigerModel {
 
     std::vector<int> GetNegBad();
 
-    sptr<std::vector<float>> get_aiger_order();
-
     sptr<SimpSolver> get_sslv();
 #pragma endregion
 
@@ -138,19 +136,9 @@ class AigerModel {
 
     int ComputeAndGate_RECUR(aiger_and &aa, const aiger *aig);
 
-    void collect_and_gates_for_pine_r(const aiger_and *aa, const aiger *aig);
-
-    void Collect_and_gates_for_pine(const aiger *aig);
-
-    int compute_latch_r(int id, std::shared_ptr<std::unordered_map<int, int>> current_values);
-
     static bool cmp(int a, int b) {
         return abs(a) < abs(b);
     }
-
-    void print_aiger_gml(const aiger *aig);
-
-    void build_aiger_order(const aiger *aig);
 
     void create_sslv();
 
@@ -193,7 +181,6 @@ class AigerModel {
     std::unordered_map<int, int> m_nextValueOfGate;              // next value of and gate
     std::unordered_map<int, std::vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
 
-    sptr<std::vector<float>> m_aiger_order;
     sptr<SimpSolver> m_sslv;
 
 #pragma endregion

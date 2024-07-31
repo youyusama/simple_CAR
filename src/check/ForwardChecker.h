@@ -12,7 +12,6 @@
 #include "State.h"
 #include "Task.h"
 #include "UnderSequence.h"
-#include "Vis.h"
 #include "random"
 #include <memory>
 #include <unordered_set>
@@ -120,12 +119,6 @@ class ForwardChecker : public BaseChecker {
     int GetNewLevel(std::shared_ptr<State> state, int start = 0);
 
     void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass, bool rev = false) {
-        if (m_settings.incr) {
-            const std::vector<int> *uc_inc = m_overSequence->GetBlocker(state->latches, frameLevel);
-            ass.reserve(ass.size() + uc_inc->size());
-            ass.insert(ass.end(), uc_inc->begin(), uc_inc->end());
-        }
-
         std::vector<int> l_ass;
         l_ass.reserve(state->latches->size());
         l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
@@ -239,10 +232,8 @@ class ForwardChecker : public BaseChecker {
         }
         std::sort(uc->begin(), uc->end(), cmp);
         if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
-            m_log->StatGenGood(false);
             return false;
         } else {
-            m_log->StatGenGood(true);
             return true;
         }
     }
@@ -339,7 +330,6 @@ class ForwardChecker : public BaseChecker {
     std::shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
-    std::shared_ptr<Vis> m_vis;
     std::shared_ptr<Log> m_log;
     std::shared_ptr<AigerModel> m_model;
     std::shared_ptr<State> m_initialState;

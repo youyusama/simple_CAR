@@ -73,25 +73,7 @@ class Log {
         m_log << "Update uc takes:\t" << m_updateUcTime << " seconds" << std::endl;
         m_log << "muc takes:\t" << m_mucTime << " seconds" << std::endl;
         m_log << "partial takes:\t" << m_partialTime << " seconds" << std::endl;
-        if (m_settings.restart) m_log << "Restart Times:\t" << m_restartTimes << std::endl;
         if (m_settings.propagation) m_log << "Propagation Time:\t" << m_propagationTime << std::endl;
-        if (m_settings.pine) {
-            m_log << "Pine Times:\t" << m_pineTime << std::endl;
-            m_log << "Pine Called Times:\t" << m_pineCalled << std::endl;
-            m_log << "Pine uc is short Times:\t" << m_pineIsShort << std::endl;
-            m_log << "Pine l1 is <20% Times:\t" << m_pineL1isShort << std::endl;
-        }
-        if (m_settings.stat) {
-            m_log << "CLS in O same as parent rate:\t" << m_o_same_rate << std::endl;
-            m_log << "gen good lemma rate:\t" << (float)m_gen_good_times / (float)m_gen_times << std::endl;
-            m_log << "prop succ rate:\t" << (float)m_succ_prop_times / (float)m_prop_times << std::endl;
-            // m_log << "frame lemmas, good lemmas" << std::endl;
-            // for (int i = 0; i < m_lemma_num_frame->size(); i++) {
-            //   m_log << m_lemma_num_frame->at(i) << " " << m_good_lemma_num_frame->at(i) << std::endl;
-            // }
-            // m_log << "cls in fixpoint ratio:\t" << m_cls_in_fixpoint_ratio << std::endl;
-            m_log << "monotone degree:\t" << 1 - ((float)monotone_degree_un / (float)monotone_degree_all) << std::endl;
-        }
         m_log << "Init Time:\t" << m_initTime << " seconds" << std::endl;
         m_log << "Total Time:\t" << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << " seconds" << std::endl;
     }
@@ -166,27 +148,6 @@ class Log {
 
     void Statpartial() {
         m_partialTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
-    }
-
-    void StatSuccProp(bool is_succ) {
-        if (!m_settings.stat) return;
-        m_prop_times++;
-        if (is_succ)
-            m_succ_prop_times++;
-    }
-
-    void StatGenGood(bool is_good) {
-        if (!m_settings.stat) return;
-        m_gen_times++;
-        if (is_good)
-            m_gen_good_times++;
-    }
-
-    bool need_same_stat() {
-        if (m_settings.stat)
-            return true;
-        else
-            return false;
     }
 
     void set_o_same_rate(float rate);

@@ -7,8 +7,6 @@ sptr<Log> GLOBAL_LOG;
 sptr<OverSequenceSet> GLOBAL_OS;
 
 void signalHandler(int signum) {
-    if (GLOBAL_LOG->need_same_stat() && GLOBAL_OS != nullptr)
-        GLOBAL_OS->compute_monotone_degree_frame();
     GLOBAL_LOG->PrintStatistics();
     exit(signum);
 }
@@ -41,11 +39,6 @@ bool ForwardChecker::Run() {
         } else {
             m_log->PrintCounterExample(i, true);
         }
-        if (m_settings.Visualization) {
-            m_vis->OutputGML(false);
-        }
-        if (m_log->need_same_stat() && GLOBAL_OS != nullptr)
-            m_overSequence->compute_monotone_degree_frame();
         m_log->PrintStatistics();
     }
     return true;
@@ -114,9 +107,6 @@ bool ForwardChecker::Check(int badId) {
 
             while (!workingStack.empty()) {
                 if (m_settings.timelimit > 0 && m_log->IsTimeout()) {
-                    if (m_settings.Visualization) {
-                        m_vis->OutputGML(true);
-                    }
                     m_overSequence->PrintFramesInfo();
                     m_log->PrintSth("time out!!!");
                     m_log->Timeout();
@@ -163,9 +153,6 @@ bool ForwardChecker::Check(int badId) {
                     std::shared_ptr<State> newState(new State(task.state, pair.first, partial_pair.second, task.state->depth + 1));
                     m_underSequence.push(newState);
                     CAR_DEBUG_s("Get state: ", newState);
-                    if (m_settings.Visualization) {
-                        m_vis->addState(newState);
-                    }
                     int newFrameLevel = GetNewLevel(newState);
                     workingStack.emplace(newState, newFrameLevel, true);
                     continue;
@@ -212,18 +199,6 @@ bool ForwardChecker::Check(int badId) {
         m_overSequence->effectiveLevel++;
         m_startSovler->UpdateStartSolverFlag();
 
-        if (m_settings.pVisualization) {
-            m_vis->clear_tree();
-            for (int k = 1; k < m_overSequence->GetLength(); k++) {
-                std::vector<std::shared_ptr<std::vector<int>>> frame;
-                m_overSequence->GetFrame(k, frame);
-                for (auto uc : frame) {
-                    m_vis->add_tree_node(*uc, k);
-                }
-            }
-            m_vis->print_tree(frameStep);
-        }
-
         m_log->Tick();
         if (isInvExisted()) {
             m_log->StatInvSolver();
@@ -245,13 +220,6 @@ void ForwardChecker::Init(int badId) {
     m_branching.reset(new Branching(m_settings.Branching));
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
-    if (m_settings.Visualization) {
-        m_vis.reset(new Vis(m_settings, m_model));
-        m_vis->addState(m_initialState);
-    }
-    if (m_settings.pVisualization) {
-        m_vis.reset(new Vis(m_settings, m_model));
-    }
     m_overSequence->isForward = true;
     m_underSequence = UnderSequence();
     m_mainSolver.reset(new MainSolver(m_model, true, true));

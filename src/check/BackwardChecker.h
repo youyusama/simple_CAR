@@ -10,8 +10,6 @@
 #include "State.h"
 #include "Task.h"
 #include "UnderSequence.h"
-#include "Vis.h"
-#include "restart.h"
 #include <algorithm>
 #include <assert.h>
 #include <memory>
@@ -109,12 +107,6 @@ class BackwardChecker : public BaseChecker {
     int GetNewLevel(std::shared_ptr<State> state, int start = 0);
 
     void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass, bool rev = false) {
-        if (m_settings.incr) {
-            const std::vector<int> *uc_inc = m_overSequence->GetBlocker(state->latches, frameLevel);
-            ass.reserve(ass.size() + uc_inc->size());
-            ass.insert(ass.end(), uc_inc->begin(), uc_inc->end());
-        }
-
         std::vector<int> l_ass;
         l_ass.reserve(state->latches->size());
         l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
@@ -222,7 +214,6 @@ class BackwardChecker : public BaseChecker {
     sptr<Branching> m_branching;
     std::shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
-    std::shared_ptr<Vis> m_vis;
     Settings m_settings;
     std::shared_ptr<Log> m_log;
     std::shared_ptr<AigerModel> m_model;
@@ -230,8 +221,6 @@ class BackwardChecker : public BaseChecker {
     std::shared_ptr<CarSolver> m_mainSolver;
     std::shared_ptr<ISolver> m_invSolver;
     std::vector<std::shared_ptr<std::vector<int>>> m_rotation;
-    std::shared_ptr<Restart> m_restart;
-    int m_repeat_state_num = 0;
 };
 
 } // namespace car

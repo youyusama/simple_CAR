@@ -27,9 +27,6 @@ bool BackwardChecker::Run() {
         } else {
             m_log->PrintCounterExample(i, false);
         }
-        if (m_settings.Visualization) {
-            m_vis->OutputGML(false);
-        }
         m_log->PrintStatistics();
     }
     return true;
@@ -88,10 +85,7 @@ bool BackwardChecker::Check(int badId) {
         }
 
         while (!workingStack.empty()) {
-            if ((m_settings.timelimit > 0 && m_log->IsTimeout()) || (m_settings.Visualization && m_vis->isEnoughNodesForVis())) {
-                if (m_settings.Visualization) {
-                    m_vis->OutputGML(true);
-                }
+            if (m_settings.timelimit > 0 && m_log->IsTimeout()) {
                 m_overSequence->PrintFramesInfo();
                 m_log->PrintSth("time out!!!");
                 m_log->Timeout();
@@ -158,10 +152,6 @@ bool BackwardChecker::Check(int badId) {
                 std::shared_ptr<State> newState(new State(task.state, pair.first, pair.second, task.state->depth + 1));
                 CAR_DEBUG_s("Get state: ", newState);
                 m_underSequence.push(newState);
-
-                if (m_settings.Visualization) {
-                    m_vis->addState(newState);
-                }
                 m_log->Tick();
                 int newFrameLevel = GetNewLevel(newState);
                 CAR_DEBUG("state get new level " + std::to_string(newFrameLevel) + "\n");
@@ -218,10 +208,6 @@ void BackwardChecker::Init() {
     blockerOrder.branching = m_branching;
     m_underSequence = UnderSequence();
     m_underSequence.push(m_initialState);
-    if (m_settings.Visualization) {
-        m_vis.reset(new Vis(m_settings, m_model));
-        m_vis->addState(m_initialState);
-    }
     m_mainSolver.reset(new MainSolver(m_model, false, true));
     m_invSolver.reset(new InvSolver(m_model));
     m_overSequence->set_solver(m_mainSolver);

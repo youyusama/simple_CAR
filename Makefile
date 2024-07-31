@@ -1,5 +1,4 @@
 CSOURCES = \
-src/visualization/aigsim_for_vis.c\
 src/model/aiger.c
 
 CPPSOURCES = \
@@ -14,7 +13,6 @@ src/main.cpp\
 src/model/Branching.cpp\
 src/model/OverSequenceSet.cpp\
 src/model/Log.cpp\
-src/visualization/Vis.cpp\
 src/sat/minisat/core/Solver.cc\
 src/sat/minisat/simp/SimpSolver.cc\
 src/sat/minisat/utils/Options.cc\
@@ -28,26 +26,24 @@ AigerModel.o \
 State.o \
 main.o \
 aiger.o \
-aigsim_for_vis.o \
 MainSolver.o \
 InvSolver.o \
 Branching.o\
 OverSequenceSet.o \
 Log.o \
-Vis.o \
 SimpSolver.o\
 Solver.o \
 Options.o \
 System.o
 
-CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat/minisat -I./src/model -I./src/visualization -I./src/check -I./src/sat/cadical/src\
+CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat/minisat -I./src/model -I./src/check -I./src/sat/cadical/src\
  -D__STDC_LIMIT_MACROS \
  -D __STDC_FORMAT_MACROS \
  -c \
  -g \
  -O3
 
-CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat -I./src/model -I./src/visualization -I./src/check \
+CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat -I./src/model -I./src/check \
 -D__STDC_LIMIT_MACROS \
 -D __STDC_FORMAT_MACROS \
 -c \
