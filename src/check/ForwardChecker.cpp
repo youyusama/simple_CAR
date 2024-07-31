@@ -301,7 +301,11 @@ void ForwardChecker::OutputWitness(int bad) {
     string outPath = m_settings.outputDir + m_log->GetFileName(m_settings.aigFilePath) + ".w.aag";
     aiger *model_aig = m_model->GetAig();
 
-    unsigned lvl_i = m_overSequence->GetInvariantLevel();
+    unsigned lvl_i;
+    if (m_overSequence == nullptr)
+        lvl_i = 0;
+    else
+        lvl_i = m_overSequence->GetInvariantLevel();
     if (lvl_i == 0) {
         aiger_open_and_write_to_file(model_aig, outPath.c_str());
         return;

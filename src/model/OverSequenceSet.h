@@ -27,6 +27,7 @@ class OverSequenceSet {
         m_blockSolver = new BlockSolver(model);
         m_block_counter.clear();
         rep_counter = 0;
+        m_invariantLevel = 0;
     }
 
     void set_log(sptr<Log> log) {

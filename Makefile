@@ -36,23 +36,11 @@ Solver.o \
 Options.o \
 System.o
 
-CFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat/minisat -I./src/model -I./src/check -I./src/sat/cadical/src\
- -D__STDC_LIMIT_MACROS \
- -D __STDC_FORMAT_MACROS \
- -c \
- -g \
- -O3
+CFLAG = -c -g -O3 -s -DNDEBUG
 
-CPPFLAG = -I../ -I./src/sat/minisat/core -I./src/sat/minisat/simp -I./src/sat -I./src/model -I./src/check \
--D__STDC_LIMIT_MACROS \
--D __STDC_FORMAT_MACROS \
--c \
--g \
--fpermissive \
--O3
+CPPFLAG = -I./src/sat -I./src/model -I./src/check -c -g -fpermissive -O3 -s -DNDEBUG
 
-LFLAG = -g -lz -lpthread -L./ \
--static
+LFLAG = -g -lz -lpthread -L./ -static -flto
 
 GCC = gcc
 

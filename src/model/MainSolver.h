@@ -2,7 +2,7 @@
 #define MAINSOLVER_H
 
 #include "CarSolver.h"
-#include "SimpSolver.h"
+#include "../sat/minisat/simp/SimpSolver.h"
 
 namespace car {
 

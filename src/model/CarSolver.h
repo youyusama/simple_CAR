@@ -35,49 +35,13 @@ class CarSolver : public ISolver, public Minisat::Solver {
 
     std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> GetAssignment() override;
 
-    inline void AddConstraintOr(const std::vector<std::shared_ptr<std::vector<int>>> frame) {
-        std::vector<int> clause;
-        for (int i = 0; i < frame.size(); ++i) {
-            int flag = GetNewVar();
-            clause.push_back(flag);
-            for (int j = 0; j < frame[i]->size(); ++j) {
-                AddClause(std::vector<int>{-flag, (*frame[i])[j]});
-            }
-        }
-        AddClause(clause);
-    }
+    void AddConstraintOr(const std::vector<std::shared_ptr<std::vector<int>>> frame);
 
-    inline void AddConstraintAnd(const std::vector<std::shared_ptr<std::vector<int>>> frame) {
-        int flag = GetNewVar();
-        for (int i = 0; i < frame.size(); ++i) {
-            std::vector<int> clause;
-            for (int j = 0; j < frame[i]->size(); ++j) {
-                clause.push_back(-(*frame[i])[j]);
-            }
-            clause.push_back(-flag);
-            AddClause(clause);
-        }
-        AddAssumption(flag);
-    }
+    void AddConstraintAnd(const std::vector<std::shared_ptr<std::vector<int>>> frame);
 
-    inline void FlipLastConstrain() {
-        Lit lit = m_assumptions.last();
-        m_assumptions.pop();
-        releaseVar(~lit);
-        // m_assumptions.push(~lit);
-    }
+    void FlipLastConstrain();
 
-    std::shared_ptr<std::vector<int>> GetModel() {
-        std::shared_ptr<std::vector<int>> res(new std::vector<int>());
-        res->resize(nVars(), 0);
-        for (int i = 0; i < nVars(); i++) {
-            if (model[i] == l_True) {
-                res->at(i) = i + 1;
-            } else if (model[i] == l_False)
-                res->at(i) = -(i + 1);
-        }
-        return res;
-    }
+    std::shared_ptr<std::vector<int>> GetModel();
 
   protected:
     static bool cmp(int a, int b) {
