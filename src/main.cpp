@@ -6,41 +6,21 @@
 #include <memory>
 #include <string.h>
 
-using namespace car;
-using namespace std;
-
-void PrintUsage();
-Settings GetArgv(int argc, char **argv);
-
-int main(int argc, char **argv) {
-    Settings settings = GetArgv(argc, argv);
-    shared_ptr<AigerModel> aigerModel(new AigerModel(settings));
-    BaseChecker *checker;
-    if (settings.forward) {
-        checker = new ForwardChecker(settings, aigerModel);
-    } else {
-        checker = new BackwardChecker(settings, aigerModel);
-    }
-    checker->Run();
-    delete checker;
-    return 0;
-}
 
 void PrintUsage() {
-    printf("Usage: ./simplecar AIG_FILE.aig OUTPUT_PATH/\n");
-    printf("Configs:\n");
-    printf("       -timeout        set timeout (s)\n");
-    printf("       -f              forward searching (Default)\n");
-    printf("       -b              backward searching \n");
-    printf("       -br             branching (1: sum 2: VSIDS 3: ACIDS 0: static)\n");
-    printf("       -rs             refer-skipping\n");
-    printf("       -seed           seed (works when > 0) for random var ordering\n");
-    printf("       -h              print help information\n");
-    printf("       -w              output witness\n");
-    printf("       -debug          print debug info\n");
-    printf("NOTE: -f and -b cannot be used together!\n");
+    cout << "Usage: ./simplecar AIG_FILE.aig OUTPUT_PATH/" << endl;
+    cout << "Configs:" << endl;
+    cout << "       -f | -b         forward (default) | backward searching" << endl;
+    cout << "       -b               searching" << endl;
+    cout << "       -br             branching (1: sum 2: VSIDS 3: ACIDS 0: static)" << endl;
+    cout << "       -rs             refer-skipping" << endl;
+    cout << "       -seed           seed (works when > 0) for random var ordering" << endl;
+    cout << "       -h              print help information" << endl;
+    cout << "       -w              output witness" << endl;
+    cout << "       -debug          print debug info" << endl;
     exit(0);
 }
+
 
 Settings GetArgv(int argc, char **argv) {
     bool hasSetInputDir = false;
@@ -52,8 +32,6 @@ Settings GetArgv(int argc, char **argv) {
             settings.forward = true;
         } else if (strcmp(argv[i], "-b") == 0) {
             settings.forward = false;
-        } else if (strcmp(argv[i], "-timeout") == 0) {
-            settings.timelimit = stoi(argv[++i]);
         } else if (strcmp(argv[i], "-end") == 0) {
             settings.end = true;
         } else if (strcmp(argv[i], "-debug") == 0) {
@@ -77,9 +55,23 @@ Settings GetArgv(int argc, char **argv) {
                 settings.outputDir += "/";
             }
             hasSetOutputDir = true;
-        }  else {
+        } else {
             PrintUsage();
         }
     }
     return settings;
+}
+
+
+int main(int argc, char **argv) {
+    Settings settings = GetArgv(argc, argv);
+    shared_ptr<AigerModel> aigerModel(new AigerModel(settings));
+    shared_ptr<BaseChecker> checker;
+    if (settings.forward) {
+        checker = make_shared<ForwardChecker>(settings, aigerModel);
+    } else {
+        checker = make_shared<BackwardChecker>(settings, aigerModel);
+    }
+    checker->Run();
+    return 0;
 }

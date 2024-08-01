@@ -56,12 +56,12 @@ namespace car {
 
 class ForwardChecker : public BaseChecker {
   public:
-    ForwardChecker(Settings settings, std::shared_ptr<AigerModel> model);
+    ForwardChecker(Settings settings, shared_ptr<AigerModel> model);
     bool Run();
     bool Check(int badId);
 
     struct LitOrder {
-        sptr<Branching> branching;
+        shared_ptr<Branching> branching;
 
         LitOrder() {}
 
@@ -72,7 +72,7 @@ class ForwardChecker : public BaseChecker {
 
 
     struct BlockerOrder {
-        sptr<Branching> branching;
+        shared_ptr<Branching> branching;
 
         BlockerOrder() {}
 
@@ -95,20 +95,20 @@ class ForwardChecker : public BaseChecker {
     }
 
     // order according to preference
-    void orderAssumption(std::vector<int> &uc, bool rev = false) {
+    void orderAssumption(vector<int> &uc, bool rev = false) {
         if (m_settings.seed > 0) {
-            std::shuffle(uc.begin(), uc.end(), std::default_random_engine(m_settings.seed));
+            shuffle(uc.begin(), uc.end(), default_random_engine(m_settings.seed));
             return;
         }
         if (m_settings.Branching == 0) return;
-        std::stable_sort(uc.begin(), uc.end(), litOrder);
-        if (rev) std::reverse(uc.begin(), uc.end());
+        stable_sort(uc.begin(), uc.end(), litOrder);
+        if (rev) reverse(uc.begin(), uc.end());
     }
 
   private:
     void Init(int badId);
 
-    bool AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel);
+    bool AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel);
 
     bool ImmediateSatisfiable(int badId);
 
@@ -116,10 +116,10 @@ class ForwardChecker : public BaseChecker {
 
     bool IsInvariant(int frameLevel);
 
-    int GetNewLevel(std::shared_ptr<State> state, int start = 0);
+    int GetNewLevel(shared_ptr<State> state, int start = 0);
 
-    void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass, bool rev = false) {
-        std::vector<int> l_ass;
+    void GetAssumption(shared_ptr<State> state, int frameLevel, vector<int> &ass, bool rev = false) {
+        vector<int> l_ass;
         l_ass.reserve(state->latches->size());
         l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
         orderAssumption(l_ass, rev);
@@ -143,26 +143,26 @@ class ForwardChecker : public BaseChecker {
     // @input: pair<input, latch>
     // @output: pair<input, partial latch>
     // ================================================================================
-    std::pair<sptr<cube>, sptr<cube>> get_predecessor(
-        std::pair<sptr<cube>, sptr<cube>> t, sptr<State> s = nullptr) {
+    pair<shared_ptr<cube>, shared_ptr<cube>> get_predecessor(
+        pair<shared_ptr<cube>, shared_ptr<cube>> t, shared_ptr<State> s = nullptr) {
 
         orderAssumption(*t.second);
-        std::shared_ptr<cube> partial_latch(new cube(*t.second));
+        shared_ptr<cube> partial_latch(new cube(*t.second));
 
-        int act = m_lifts->get_temp_flag();
+        int act = m_lifts->GetTempFlag();
         if (s == nullptr) {
             // add !bad to assumption
-            std::vector<int> *neg_bad = new std::vector<int>(1, -m_badId);
-            m_lifts->add_temp_clause(neg_bad, act, false);
-            m_lifts->clean_assumptions();
+            vector<int> *neg_bad = new vector<int>(1, -m_badId);
+            m_lifts->AddTempClause(neg_bad, act, false);
+            m_lifts->CleanAssumptions();
         } else {
             // add !s' to clause
-            std::vector<int> *neg_primed_s = new std::vector<int>();
+            vector<int> *neg_primed_s = new vector<int>();
             for (auto l : *s->latches) {
                 neg_primed_s->emplace_back(-l);
             }
-            m_lifts->add_temp_clause(neg_primed_s, act, true);
-            m_lifts->clean_assumptions();
+            m_lifts->AddTempClause(neg_primed_s, act, true);
+            m_lifts->CleanAssumptions();
         }
         // add t
         for (auto l : *t.second) {
@@ -176,12 +176,12 @@ class ForwardChecker : public BaseChecker {
         while (true) {
             bool res = m_lifts->SolveWithAssumption();
             assert(!res);
-            std::shared_ptr<cube> temp_p = m_lifts->justGetUC(); // not muc
-            if (temp_p->size() == partial_latch->size() && std::equal(temp_p->begin(), temp_p->end(), partial_latch->begin()))
+            shared_ptr<cube> temp_p = m_lifts->justGetUC(); // not muc
+            if (temp_p->size() == partial_latch->size() && equal(temp_p->begin(), temp_p->end(), partial_latch->begin()))
                 break;
             else {
                 partial_latch = temp_p;
-                m_lifts->clean_assumptions();
+                m_lifts->CleanAssumptions();
                 // add t
                 for (auto l : *partial_latch) {
                     m_lifts->AddAssumption(l);
@@ -193,8 +193,8 @@ class ForwardChecker : public BaseChecker {
                 m_lifts->AddAssumption(act);
             }
         }
-        std::sort(partial_latch->begin(), partial_latch->end(), cmp);
-        return std::pair<std::shared_ptr<cube>, std::shared_ptr<cube>>(t.first, partial_latch);
+        sort(partial_latch->begin(), partial_latch->end(), cmp);
+        return pair<shared_ptr<cube>, shared_ptr<cube>>(t.first, partial_latch);
     }
 
     // ================================================================================
@@ -202,13 +202,13 @@ class ForwardChecker : public BaseChecker {
     // @input:
     // @output:
     // ================================================================================
-    bool generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
-        std::unordered_set<int> required_lits;
-        std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
+    bool generalize_ctg(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
+        unordered_set<int> required_lits;
+        vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
         cube *uc_blocker;
         if (uc_blockers->size() > 0) {
             if (m_settings.Branching > 0)
-                std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
+                stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
             uc_blocker = uc_blockers->at(0);
         } else {
             uc_blocker = new cube();
@@ -219,7 +219,7 @@ class ForwardChecker : public BaseChecker {
         for (int i = uc->size() - 1; i >= 0; i--) {
             if (uc->size() < 2) break;
             if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
-            sptr<cube> temp_uc(new cube());
+            shared_ptr<cube> temp_uc(new cube());
             for (auto ll : *uc)
                 if (ll != uc->at(i)) temp_uc->emplace_back(ll);
             if (down_ctg(temp_uc, frame_lvl, rec_lvl, required_lits)) {
@@ -230,7 +230,7 @@ class ForwardChecker : public BaseChecker {
                 required_lits.emplace(uc->at(i));
             }
         }
-        std::sort(uc->begin(), uc->end(), cmp);
+        sort(uc->begin(), uc->end(), cmp);
         if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
             return false;
         } else {
@@ -238,12 +238,12 @@ class ForwardChecker : public BaseChecker {
         }
     }
 
-    bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl, std::unordered_set<int> required_lits) {
+    bool down_ctg(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unordered_set<int> required_lits) {
         int ctgs = 0;
         CAR_DEBUG_v("down:", *uc);
-        std::vector<int> ass;
+        vector<int> ass;
         for (auto l : *uc) ass.emplace_back(m_model->GetPrime(l));
-        sptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
+        shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
         while (true) {
             // F_i & T & temp_uc'
             m_log->Tick();
@@ -258,11 +258,11 @@ class ForwardChecker : public BaseChecker {
                 return false;
             } else {
                 m_log->StatMainSolver();
-                std::pair<sptr<cube>, sptr<cube>> pair = m_mainSolver->GetAssignment();
-                std::pair<sptr<cube>, sptr<cube>> partial_pair = get_predecessor(pair, p_ucs);
-                sptr<State> cts(new State(nullptr, partial_pair.first, partial_pair.second, 0));
+                pair<shared_ptr<cube>, shared_ptr<cube>> s_pair = m_mainSolver->GetAssignment();
+                pair<shared_ptr<cube>, shared_ptr<cube>> partial_pair = get_predecessor(s_pair, p_ucs);
+                shared_ptr<State> cts(new State(nullptr, partial_pair.first, partial_pair.second, 0));
                 int cts_lvl = GetNewLevel(cts);
-                std::vector<int> cts_ass;
+                vector<int> cts_ass;
                 // int cts_lvl = frame_lvl - 1;
                 GetAssumption(cts, cts_lvl, cts_ass);
                 // F_i-1 & T & cts'
@@ -293,12 +293,12 @@ class ForwardChecker : public BaseChecker {
         }
     }
 
-    std::shared_ptr<State> EnumerateStartState() {
+    shared_ptr<State> EnumerateStartState() {
         if (m_startSovler->SolveWithAssumption()) {
-            std::pair<sptr<cube>, sptr<cube>> pair = m_startSovler->GetStartPair();
+            pair<shared_ptr<cube>, shared_ptr<cube>> pair = m_startSovler->GetStartPair();
             // CAR_DEBUG_v("From state: ", *pair.second);
             pair = get_predecessor(pair);
-            sptr<State> newState(new State(nullptr, pair.first, pair.second, 0));
+            shared_ptr<State> newState(new State(nullptr, pair.first, pair.second, 0));
             return newState;
         } else {
             return nullptr;
@@ -312,7 +312,7 @@ class ForwardChecker : public BaseChecker {
     // @input:
     // @output:
     // ================================================================================
-    unsigned addCubeToANDGates(aiger *circuit, std::vector<unsigned> cube) {
+    unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
         assert(cube.size() > 0);
         unsigned res = cube[0];
         assert(res / 2 <= circuit->maxvar);
@@ -327,17 +327,17 @@ class ForwardChecker : public BaseChecker {
 
     int m_minUpdateLevel;
     int m_badId;
-    std::shared_ptr<OverSequenceSet> m_overSequence;
+    shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
-    std::shared_ptr<Log> m_log;
-    std::shared_ptr<AigerModel> m_model;
-    std::shared_ptr<State> m_initialState;
-    std::shared_ptr<MainSolver> m_mainSolver;
-    std::shared_ptr<CarSolver> m_lifts;
-    std::shared_ptr<ISolver> m_invSolver;
-    std::shared_ptr<StartSolver> m_startSovler;
-    sptr<Branching> m_branching;
+    shared_ptr<Log> m_log;
+    shared_ptr<AigerModel> m_model;
+    shared_ptr<State> m_initialState;
+    shared_ptr<MainSolver> m_mainSolver;
+    shared_ptr<CarSolver> m_lifts;
+    shared_ptr<ISolver> m_invSolver;
+    shared_ptr<StartSolver> m_startSovler;
+    shared_ptr<Branching> m_branching;
 };
 
 

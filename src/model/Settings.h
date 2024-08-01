@@ -3,6 +3,8 @@
 
 #include <iostream>
 
+using namespace std;
+
 namespace car {
 
 struct Settings {
@@ -12,15 +14,13 @@ struct Settings {
     bool minimal_uc = false;
     bool ctg = true;
     bool end = false;
-    int threshold = 64;
-    int timelimit = 0;
     int Branching = 0;
     bool skip_refer = false;
     bool witness = false;
     int seed = 0;
-    std::string aigFilePath;
-    std::string outputDir;
-    std::string cexFilePath;
+    string aigFilePath;
+    string outputDir;
+    string cexFilePath;
 };
 
 } // namespace car

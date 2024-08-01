@@ -12,7 +12,7 @@ class StartSolver : public CarSolver {
     StartSolver(std::shared_ptr<AigerModel> model, int badId) {
         m_model = model;
         m_maxFlag = model->GetMaxId() + 1;
-        auto &clause = m_model->GetClause();
+        auto &clause = m_model->GetClauses();
         for (int i = 0; i < model->GetLatchesStart(); ++i) {
             CarSolver::AddClause(clause[i]);
         }
@@ -50,7 +50,7 @@ class StartSolver : public CarSolver {
         return newState;
     }
 
-    std::pair<sptr<cube>, sptr<cube>> GetStartPair() {
+    std::pair<shared_ptr<cube>, shared_ptr<cube>> GetStartPair() {
         assert(m_model->GetNumInputs() < nVars());
         std::shared_ptr<std::vector<int>> inputs(new std::vector<int>());
         std::shared_ptr<std::vector<int>> latches(new std::vector<int>());
@@ -76,7 +76,7 @@ class StartSolver : public CarSolver {
         }
 
         std::shared_ptr<State> newState(new State(nullptr, inputs, latches, 0));
-        return std::pair<sptr<cube>, sptr<cube>>(inputs, latches);
+        return std::pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
     }
 
     void UpdateStartSolverFlag() {

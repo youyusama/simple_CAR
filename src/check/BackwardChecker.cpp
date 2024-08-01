@@ -3,14 +3,14 @@
 #include <string>
 
 namespace car {
-BackwardChecker::BackwardChecker(Settings settings, std::shared_ptr<AigerModel> model) : m_settings(settings) {
+BackwardChecker::BackwardChecker(Settings settings, shared_ptr<AigerModel> model) : m_settings(settings) {
     m_model = model;
     State::numInputs = model->GetNumInputs();
     State::numLatches = model->GetNumLatches();
     m_log.reset(new Log(settings, model));
-    const std::vector<int> &init = model->GetInitialState();
-    std::shared_ptr<std::vector<int>> inputs(new std::vector<int>(State::numInputs, 0));
-    std::shared_ptr<std::vector<int>> latches(new std::vector<int>());
+    const vector<int> &init = model->GetInitialState();
+    shared_ptr<vector<int>> inputs(new vector<int>(State::numInputs, 0));
+    shared_ptr<vector<int>> latches(new vector<int>());
     latches->reserve(init.size());
 
     for (int i = 0; i < init.size(); ++i) {
@@ -20,8 +20,8 @@ BackwardChecker::BackwardChecker(Settings settings, std::shared_ptr<AigerModel> 
 }
 
 bool BackwardChecker::Run() {
-    for (int i = 0; i < m_model->GetNumOutputsBad(); ++i) {
-        bool result = Check(m_model->GetOutputsBad()[i]);
+    for (int i = 0; i < m_model->GetNumBad(); ++i) {
+        bool result = Check(m_model->GetBad());
         if (result) {
             m_log->PrintSafe(i);
         } else {
@@ -43,11 +43,11 @@ bool BackwardChecker::Check(int badId) {
 
     if (ImmediateSatisfiable(badId)) {
         CAR_DEBUG("Result >>> SAT <<<\n");
-        std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> pair;
+        pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> pair;
         pair = m_mainSolver->GetAssignment();
         CAR_DEBUG_v("Get Assignment:", *pair.second);
 
-        std::shared_ptr<State> newState(new State(m_initialState, pair.first, pair.second, 1));
+        shared_ptr<State> newState(new State(m_initialState, pair.first, pair.second, 1));
         m_log->lastState = newState;
         return false;
     }
@@ -65,7 +65,7 @@ bool BackwardChecker::Check(int badId) {
 
     // main stage
     int frameStep = 0;
-    std::stack<Task> workingStack;
+    stack<Task> workingStack;
     while (true) {
         m_overSequence->PrintFramesInfo();
         m_minUpdateLevel = m_overSequence->GetLength();
@@ -85,18 +85,12 @@ bool BackwardChecker::Check(int badId) {
         }
 
         while (!workingStack.empty()) {
-            if (m_settings.timelimit > 0 && m_log->IsTimeout()) {
-                m_overSequence->PrintFramesInfo();
-                m_log->PrintSth("time out!!!");
-                m_log->Timeout();
-            }
-
             Task &task = workingStack.top();
 
             if (!task.isLocated) {
                 m_log->Tick();
                 task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
-                CAR_DEBUG("state get new level " + std::to_string(task.frameLevel) + "\n");
+                CAR_DEBUG("state get new level " + to_string(task.frameLevel) + "\n");
                 m_log->StatGetNewLevel();
                 if (task.frameLevel > m_overSequence->effectiveLevel) {
                     workingStack.pop();
@@ -107,19 +101,19 @@ bool BackwardChecker::Check(int badId) {
 
             if (task.frameLevel == -1) {
                 m_log->Tick();
-                std::vector<int> assumption;
+                vector<int> assumption;
                 GetAssumption(task.state, task.frameLevel, assumption);
-                CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel) + "\n");
+                CAR_DEBUG("\nSAT CHECK on frame: " + to_string(task.frameLevel) + "\n");
                 CAR_DEBUG_s("From state: ", task.state);
                 // CAR_DEBUG_v("Assumption: ", assumption);
                 bool result = m_mainSolver->SolveWithAssumptionAndBad(assumption, badId);
                 m_log->StatMainSolver();
                 if (result) {
                     CAR_DEBUG("Result >>> SAT <<<\n");
-                    std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> pair;
+                    pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> pair;
                     pair = m_mainSolver->GetAssignment();
                     CAR_DEBUG_v("Get Assignment:", *pair.second);
-                    std::shared_ptr<State> newState(new State(task.state, pair.first, pair.second, task.state->depth + 1));
+                    shared_ptr<State> newState(new State(task.state, pair.first, pair.second, task.state->depth + 1));
                     m_log->lastState = newState;
                     m_overSequence->PrintFramesInfo();
                     return false;
@@ -136,9 +130,9 @@ bool BackwardChecker::Check(int badId) {
                 }
             }
 
-            std::vector<int> assumption;
+            vector<int> assumption;
             GetAssumption(task.state, task.frameLevel, assumption);
-            CAR_DEBUG("\nSAT CHECK on frame: " + std::to_string(task.frameLevel) + "\n");
+            CAR_DEBUG("\nSAT CHECK on frame: " + to_string(task.frameLevel) + "\n");
             CAR_DEBUG_s("From state: ", task.state);
             // CAR_DEBUG_v("Assumption: ", assumption);
             m_log->Tick();
@@ -147,14 +141,14 @@ bool BackwardChecker::Check(int badId) {
             if (result) {
                 // Solver return SAT, get a new State, then continue
                 CAR_DEBUG("Result >>> SAT <<<\n");
-                std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> pair;
+                pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> pair;
                 pair = m_mainSolver->GetAssignment();
-                std::shared_ptr<State> newState(new State(task.state, pair.first, pair.second, task.state->depth + 1));
+                shared_ptr<State> newState(new State(task.state, pair.first, pair.second, task.state->depth + 1));
                 CAR_DEBUG_s("Get state: ", newState);
                 m_underSequence.push(newState);
                 m_log->Tick();
                 int newFrameLevel = GetNewLevel(newState);
-                CAR_DEBUG("state get new level " + std::to_string(newFrameLevel) + "\n");
+                CAR_DEBUG("state get new level " + to_string(newFrameLevel) + "\n");
                 m_log->StatGetNewLevel();
                 workingStack.emplace(newState, newFrameLevel, true);
                 continue;
@@ -184,7 +178,7 @@ bool BackwardChecker::Check(int badId) {
             Propagation();
             m_log->StatPropagation();
         }
-        std::vector<std::shared_ptr<std::vector<int>>> lastFrame;
+        vector<shared_ptr<vector<int>>> lastFrame;
         frameStep++;
         m_mainSolver->simplify();
         m_overSequence->effectiveLevel++;
@@ -214,7 +208,7 @@ void BackwardChecker::Init() {
     m_log->ResetClock();
 }
 
-bool BackwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel) {
+bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
     m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
@@ -224,10 +218,10 @@ bool BackwardChecker::AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc,
 }
 
 bool BackwardChecker::ImmediateSatisfiable(int badId) {
-    std::vector<int> &init = *(m_initialState->latches);
-    std::vector<int> assumptions;
+    vector<int> &init = *(m_initialState->latches);
+    vector<int> assumptions;
     assumptions.resize((init.size()));
-    std::copy(init.begin(), init.end(), assumptions.begin());
+    copy(init.begin(), init.end(), assumptions.begin());
     bool result = m_mainSolver->SolveWithAssumptionAndBad(assumptions, badId);
     return result;
 }
@@ -239,7 +233,7 @@ bool BackwardChecker::isInvExisted() {
     bool result = false;
     for (int i = 0; i < m_overSequence->GetLength(); ++i) {
         if (IsInvariant(i)) {
-            m_log->PrintSth("Proof at frame " + std::to_string(i) + "\n");
+            m_log->PrintSth("Proof at frame " + to_string(i) + "\n");
             m_overSequence->PrintFramesInfo();
             result = true;
             break;
@@ -249,7 +243,7 @@ bool BackwardChecker::isInvExisted() {
     return result;
 }
 
-int BackwardChecker::GetNewLevel(std::shared_ptr<State> state, int start) {
+int BackwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
     for (int i = start; i < m_overSequence->GetLength(); ++i) {
         if (!m_overSequence->IsBlockedByFrame_lazy(*(state->latches), i)) {
             return i - 1;
@@ -259,7 +253,7 @@ int BackwardChecker::GetNewLevel(std::shared_ptr<State> state, int start) {
 }
 
 bool BackwardChecker::IsInvariant(int frameLevel) {
-    std::vector<std::shared_ptr<std::vector<int>>> frame;
+    vector<shared_ptr<vector<int>>> frame;
     m_overSequence->GetFrame(frameLevel, frame);
 
     if (frameLevel < m_minUpdateLevel) {

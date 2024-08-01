@@ -20,17 +20,16 @@ namespace car {
 
 class OverSequenceSet {
   public:
-    typedef std::vector<int> cube;
+    typedef vector<int> cube;
 
-    OverSequenceSet(std::shared_ptr<AigerModel> model) {
+    OverSequenceSet(shared_ptr<AigerModel> model) {
         m_model = model;
         m_blockSolver = new BlockSolver(model);
         m_block_counter.clear();
-        rep_counter = 0;
         m_invariantLevel = 0;
     }
 
-    void set_log(sptr<Log> log) {
+    void set_log(shared_ptr<Log> log) {
         m_log = log;
     }
 
@@ -38,29 +37,29 @@ class OverSequenceSet {
 
     unsigned GetInvariantLevel() { return m_invariantLevel; }
 
-    bool Insert(std::shared_ptr<std::vector<int>> uc, int index);
+    bool Insert(shared_ptr<vector<int>> uc, int index);
 
-    void Init_Frame_0(sptr<cube> latches);
+    void Init_Frame_0(shared_ptr<cube> latches);
 
-    void GetFrame(int frameLevel, std::vector<std::shared_ptr<std::vector<int>>> &out);
+    void GetFrame(int frameLevel, vector<shared_ptr<vector<int>>> &out);
 
-    bool IsBlockedByFrame_lazy(std::vector<int> &latches, int frameLevel);
+    bool IsBlockedByFrame_lazy(vector<int> &latches, int frameLevel);
 
-    bool IsBlockedByFrame_sat(std::vector<int> &latches, int frameLevel);
+    bool IsBlockedByFrame_sat(vector<int> &latches, int frameLevel);
 
-    bool IsBlockedByFrame(std::vector<int> &latches, int frameLevel);
+    bool IsBlockedByFrame(vector<int> &latches, int frameLevel);
 
     int GetLength();
 
-    void propagate(int level, sptr<Branching> b);
+    void propagate(int level, shared_ptr<Branching> b);
 
-    int propagate_uc_from_lvl(sptr<cube> uc, int lvl, sptr<Branching> b);
+    int propagate_uc_from_lvl(shared_ptr<cube> uc, int lvl, shared_ptr<Branching> b);
 
-    void set_solver(std::shared_ptr<CarSolver> slv);
+    void set_solver(shared_ptr<CarSolver> slv);
 
-    std::vector<int> *GetBlocker(std::shared_ptr<std::vector<int>> latches, int framelevel);
+    vector<int> *GetBlocker(shared_ptr<vector<int>> latches, int framelevel);
 
-    std::vector<cube *> *GetBlockers(std::shared_ptr<std::vector<int>> latches, int framelevel);
+    vector<cube *> *GetBlockers(shared_ptr<vector<int>> latches, int framelevel);
 
     void PrintFramesInfo();
 
@@ -68,17 +67,9 @@ class OverSequenceSet {
 
     void PrintOSequenceDetail();
 
-    void compute_same_stat();
-
-    void compute_cls_in_fixpoint_ratio(int lvl);
-
-    void compute_monotone_degree();
-
-    void compute_monotone_degree_frame();
-
     int effectiveLevel;
+
     bool isForward = false;
-    int rep_counter;
 
   private:
     static bool cmp(int a, int b) {
@@ -105,11 +96,11 @@ class OverSequenceSet {
         }
     };
 
-    std::set<cube, cubeComp> Ucs;
+    set<cube, cubeComp> Ucs;
 
     class BlockSolver : public CarSolver {
       public:
-        BlockSolver(std::shared_ptr<AigerModel> model) {
+        BlockSolver(shared_ptr<AigerModel> model) {
             m_isForward = true;
             m_model = model;
             m_maxFlag = model->GetMaxId() + 1;
@@ -123,16 +114,16 @@ class OverSequenceSet {
         }
     };
 
-    typedef std::set<cube *, cubepComp> frame;
+    typedef set<cube *, cubepComp> frame;
     void add_uc_to_frame(const cube *uc, frame &f);
 
-    std::shared_ptr<AigerModel> m_model;
+    shared_ptr<AigerModel> m_model;
 
-    std::shared_ptr<CarSolver> m_mainSolver;
-    std::vector<frame> m_sequence;
+    shared_ptr<CarSolver> m_mainSolver;
+    vector<frame> m_sequence;
     CarSolver *m_blockSolver;
-    std::vector<int> m_block_counter;
-    sptr<Log> m_log;
+    vector<int> m_block_counter;
+    shared_ptr<Log> m_log;
     unsigned m_invariantLevel;
 };
 

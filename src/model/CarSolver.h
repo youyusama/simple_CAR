@@ -5,6 +5,7 @@
 #include "AigerModel.h"
 #include "ISolver.h"
 #include <memory>
+
 using namespace Minisat;
 
 namespace car {
@@ -13,58 +14,51 @@ class CarSolver : public ISolver, public Minisat::Solver {
   public:
     CarSolver();
     ~CarSolver();
-    std::shared_ptr<std::vector<int>> GetUnsatisfiableCoreFromBad(int badId) override;
-    void AddClause(const std::vector<int> &clause) override;
-    void AddUnsatisfiableCore(const std::vector<int> &clause, int frameLevel) override;
-    std::shared_ptr<std::vector<int>> GetUnsatisfiableCore() override;
-    std::shared_ptr<cube> Getuc(bool minimal);
-    void Getmuc(LSet &ass);
-    void AddNewFrame(const std::vector<std::shared_ptr<std::vector<int>>> &frame, int frameLevel) override;
-    bool SolveWithAssumptionAndBad(std::vector<int> &assumption, int badId) override;
-    bool SolveWithAssumption() override;
+
+    void AddClause(const clause &cls) override;
+    void AddUnsatisfiableCore(const cube &uc, int frameLevel) override;
+    shared_ptr<cube> GetUnsatisfiableCore() override;
+    shared_ptr<cube> GetUnsatisfiableCoreFromBad(int badId) override;
+    void AddNewFrame(const vector<shared_ptr<cube>> &frame, int frameLevel) override;
     inline void AddAssumption(int id) override { m_assumptions.push(GetLit(id)); }
-    bool SolveWithAssumption(std::vector<int> &assumption, int frameLevel) override;
-    int get_temp_flag();
-    void add_temp_clause(std::vector<int> *cls, int temp_flag, bool is_primed);
-    void release_temp_cls(int temp_flag);
-    std::shared_ptr<std::vector<int>> justGetUC();
-    void clean_assumptions();
-    std::string ShowLatest5Clause();
+    bool SolveWithAssumption() override;
+    bool SolveWithAssumption(cube &assumption, int frameLevel) override;
+    bool SolveWithAssumptionAndBad(cube &assumption, int badId) override;
+    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment() override;
+    void AddConstraintOr(const vector<shared_ptr<cube>> frame) override;
+    void AddConstraintAnd(const vector<shared_ptr<cube>> frame) override;
+    void FlipLastConstrain() override;
 
-    std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> GetAssignment(std::ofstream &out) override;
+    int GetTempFlag();
 
-    std::pair<std::shared_ptr<std::vector<int>>, std::shared_ptr<std::vector<int>>> GetAssignment() override;
+    void AddTempClause(clause *cls, int temp_flag, bool is_primed);
 
-    void AddConstraintOr(const std::vector<std::shared_ptr<std::vector<int>>> frame);
+    void ReleaseTempClause(int temp_flag);
 
-    void AddConstraintAnd(const std::vector<std::shared_ptr<std::vector<int>>> frame);
+    shared_ptr<cube> justGetUC();
 
-    void FlipLastConstrain();
+    void CleanAssumptions();
 
-    std::shared_ptr<std::vector<int>> GetModel();
+    shared_ptr<cube> Getuc(bool minimal);
+
+    void Getmuc(LSet &ass);
+
+    shared_ptr<vector<int>> GetModel();
 
   protected:
-    static bool cmp(int a, int b) {
-        return abs(a) < abs(b);
-    }
     inline int GetLiteralId(const Lit &l);
     inline int GetFrameFlag(int frameLevel);
-
     inline Lit GetLit(int id) {
-        if (id == 0) {
-            // placeholder
-        }
         int var = abs(id) - 1;
         while (var >= nVars()) newVar();
         return ((id > 0) ? mkLit(var) : ~mkLit(var));
     };
-
     inline int GetNewVar() { return m_maxFlag++; }
 
     bool m_isForward = false;
     int m_maxFlag;
-    std::shared_ptr<AigerModel> m_model;
-    std::vector<int> m_frameFlags;
+    shared_ptr<AigerModel> m_model;
+    vector<int> m_frameFlags;
     vec<Lit> m_assumptions;
 };
 

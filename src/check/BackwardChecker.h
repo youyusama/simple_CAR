@@ -48,12 +48,12 @@ namespace car {
 
 class BackwardChecker : public BaseChecker {
   public:
-    BackwardChecker(Settings settings, std::shared_ptr<AigerModel> model);
+    BackwardChecker(Settings settings, shared_ptr<AigerModel> model);
     bool Run();
     bool Check(int badId);
 
     struct LitOrder {
-        sptr<Branching> branching;
+        shared_ptr<Branching> branching;
 
         LitOrder() {}
 
@@ -64,7 +64,7 @@ class BackwardChecker : public BaseChecker {
 
 
     struct BlockerOrder {
-        sptr<Branching> branching;
+        shared_ptr<Branching> branching;
 
         BlockerOrder() {}
 
@@ -87,16 +87,16 @@ class BackwardChecker : public BaseChecker {
     }
 
     // order according to preference
-    void orderAssumption(std::vector<int> &uc, bool rev = false) {
+    void orderAssumption(vector<int> &uc, bool rev = false) {
         if (m_settings.Branching == 0) return;
-        std::stable_sort(uc.begin(), uc.end(), litOrder);
-        if (rev) std::reverse(uc.begin(), uc.end());
+        stable_sort(uc.begin(), uc.end(), litOrder);
+        if (rev) reverse(uc.begin(), uc.end());
     }
 
   private:
     void Init();
 
-    bool AddUnsatisfiableCore(std::shared_ptr<std::vector<int>> uc, int frameLevel);
+    bool AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel);
 
     bool ImmediateSatisfiable(int badId);
 
@@ -104,10 +104,10 @@ class BackwardChecker : public BaseChecker {
 
     bool IsInvariant(int frameLevel);
 
-    int GetNewLevel(std::shared_ptr<State> state, int start = 0);
+    int GetNewLevel(shared_ptr<State> state, int start = 0);
 
-    void GetAssumption(std::shared_ptr<State> state, int frameLevel, std::vector<int> &ass, bool rev = false) {
-        std::vector<int> l_ass;
+    void GetAssumption(shared_ptr<State> state, int frameLevel, vector<int> &ass, bool rev = false) {
+        vector<int> l_ass;
         l_ass.reserve(state->latches->size());
         l_ass.insert(l_ass.end(), state->latches->begin(), state->latches->end());
         orderAssumption(l_ass, rev);
@@ -130,13 +130,13 @@ class BackwardChecker : public BaseChecker {
     // @input:
     // @output:
     // ================================================================================
-    bool generalize_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
-        std::unordered_set<int> required_lits;
-        std::vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
+    bool generalize_ctg(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1) {
+        unordered_set<int> required_lits;
+        vector<cube *> *uc_blockers = m_overSequence->GetBlockers(uc, frame_lvl);
         cube *uc_blocker;
         if (uc_blockers->size() > 0) {
             if (m_settings.Branching > 0)
-                std::stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
+                stable_sort(uc_blockers->begin(), uc_blockers->end(), blockerOrder);
             uc_blocker = uc_blockers->at(0);
         } else {
             uc_blocker = new cube();
@@ -146,7 +146,7 @@ class BackwardChecker : public BaseChecker {
         orderAssumption(*uc);
         for (int i = uc->size() - 1; i > 0; i--) {
             if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
-            sptr<cube> temp_uc(new cube());
+            shared_ptr<cube> temp_uc(new cube());
             for (auto ll : *uc)
                 if (ll != uc->at(i)) temp_uc->emplace_back(ll);
             if (down_ctg(temp_uc, frame_lvl, rec_lvl, required_lits)) {
@@ -157,18 +157,18 @@ class BackwardChecker : public BaseChecker {
                 required_lits.emplace(uc->at(i));
             }
         }
-        std::sort(uc->begin(), uc->end(), cmp);
+        sort(uc->begin(), uc->end(), cmp);
         if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
             return false;
         } else
             return true;
     }
 
-    bool down_ctg(sptr<cube> &uc, int frame_lvl, int rec_lvl, std::unordered_set<int> required_lits) {
+    bool down_ctg(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unordered_set<int> required_lits) {
         int ctgs = 0;
-        std::vector<int> ass;
+        vector<int> ass;
         for (auto l : *uc) ass.emplace_back(l);
-        sptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
+        shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
         while (true) {
             // F_i & T & temp_uc'
             if (!m_mainSolver->SolveWithAssumption(ass, frame_lvl)) {
@@ -179,10 +179,10 @@ class BackwardChecker : public BaseChecker {
             } else if (rec_lvl > 2)
                 return false;
             else {
-                std::pair<sptr<cube>, sptr<cube>> pair = m_mainSolver->GetAssignment();
-                sptr<State> cts(new State(nullptr, pair.first, pair.second, 0));
+                pair<shared_ptr<cube>, shared_ptr<cube>> pair = m_mainSolver->GetAssignment();
+                shared_ptr<State> cts(new State(nullptr, pair.first, pair.second, 0));
                 int cts_lvl = GetNewLevel(cts);
-                std::vector<int> cts_ass;
+                vector<int> cts_ass;
                 // int cts_lvl = frame_lvl - 1;
                 GetAssumption(cts, cts_lvl, cts_ass);
                 // F_i-1 & T & cts'
@@ -211,16 +211,16 @@ class BackwardChecker : public BaseChecker {
 
 
     int m_minUpdateLevel;
-    sptr<Branching> m_branching;
-    std::shared_ptr<OverSequenceSet> m_overSequence;
+    shared_ptr<Branching> m_branching;
+    shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
-    std::shared_ptr<Log> m_log;
-    std::shared_ptr<AigerModel> m_model;
-    std::shared_ptr<State> m_initialState;
-    std::shared_ptr<CarSolver> m_mainSolver;
-    std::shared_ptr<ISolver> m_invSolver;
-    std::vector<std::shared_ptr<std::vector<int>>> m_rotation;
+    shared_ptr<Log> m_log;
+    shared_ptr<AigerModel> m_model;
+    shared_ptr<State> m_initialState;
+    shared_ptr<CarSolver> m_mainSolver;
+    shared_ptr<ISolver> m_invSolver;
+    vector<shared_ptr<vector<int>>> m_rotation;
 };
 
 } // namespace car
