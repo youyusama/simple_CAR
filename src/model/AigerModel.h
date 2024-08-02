@@ -77,7 +77,7 @@ class AigerModel {
     inline cube &GetInitialState() { return m_initialState; }
     inline int &GetBad() { return m_bad; }
 
-    vector<int> GetPrevious(int id) {
+    inline vector<int> GetPrevious(int id) {
         if (m_preValueOfLatch.count(abs(id)) > 0) {
             return m_preValueOfLatch[abs(id)];
         } else {
@@ -85,11 +85,9 @@ class AigerModel {
         }
     }
 
-    int GetPrime(const int id) {
+    inline int GetPrime(const int id) {
         unordered_map<int, int>::iterator it = m_nextValueOfLatch.find(abs(id));
-        if (it == m_nextValueOfLatch.end()) {
-            return 0;
-        }
+        assert(it != m_nextValueOfLatch.end());
         return id > 0 ? it->second : -(it->second);
     }
 

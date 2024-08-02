@@ -256,38 +256,32 @@ int OverSequenceSet::propagate_uc_from_lvl(shared_ptr<cube> uc, int lvl, shared_
     return lvl + 1;
 }
 
-void OverSequenceSet::PrintFramesInfo() {
-    m_log->PrintSth("Frames " + to_string(m_sequence.size() - 1) + "\n");
-    for (int i = 0; i < m_sequence.size(); ++i) {
-        m_log->PrintSth(to_string(m_sequence[i].size()) + " ");
-    }
-    m_log->PrintSth("\n");
-}
 
-void OverSequenceSet::PrintOSequence() {
-    if (!m_log->IsDebug()) return;
+string OverSequenceSet::FramesInfo() {
+    string res;
+    res += "Frames " + to_string(m_sequence.size() - 1) + "\n";
     for (int i = 0; i < m_sequence.size(); ++i) {
-        m_log->DebugPrintSth(to_string(m_sequence[i].size()) + " ");
+        res += to_string(m_sequence[i].size()) + " ";
     }
-    m_log->DebugPrintSth("\n");
+    return res;
 }
 
 
-void OverSequenceSet::PrintOSequenceDetail() {
-    if (!m_log->IsDebug()) return;
+string OverSequenceSet::FramesDetail() {
+    string res;
     for (int i = 0; i < m_sequence.size(); ++i) {
-        m_log->DebugPrintSth("Frame " + to_string(i) + "\n");
+        res += "Frame " + to_string(i) + "\n";
         if (i != 0) {
             for (auto uc : m_sequence[i]) {
                 for (auto j : *uc) {
-                    m_log->DebugPrintSth(to_string(j) + " ");
+                    res += to_string(j) + " ";
                 }
-                m_log->DebugPrintSth("\n");
+                res += "\n";
             }
         }
-        m_log->DebugPrintSth("size: " + to_string(m_sequence[i].size()) + "\n");
+        res += "size: " + to_string(m_sequence[i].size()) + "\n";
     }
-    m_log->DebugPrintSth("\n");
+    return res;
 }
 
 } // namespace car

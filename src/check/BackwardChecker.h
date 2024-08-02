@@ -16,39 +16,12 @@
 
 
 namespace car {
-#define CAR_DEBUG_v(s, v)              \
-    do {                               \
-        m_log->DebugPrintVector(v, s); \
-    } while (0)
-
-
-#define CAR_DEBUG(s)             \
-    do {                         \
-        m_log->DebugPrintSth(s); \
-    } while (0)
-
-#define CAR_DEBUG_o(s, o)                 \
-    do {                                  \
-        m_log->DebugPrintSth(s);          \
-        m_overSequence->PrintOSequence(); \
-    } while (0)
-
-#define CAR_DEBUG_od(s, o)                      \
-    do {                                        \
-        m_log->DebugPrintSth(s);                \
-        m_overSequence->PrintOSequenceDetail(); \
-    } while (0)
-
-#define CAR_DEBUG_s(t, s)          \
-    do {                           \
-        m_log->DebugPrintSth(t);   \
-        m_log->PrintStateShort(s); \
-    } while (0)
-
 
 class BackwardChecker : public BaseChecker {
   public:
-    BackwardChecker(Settings settings, shared_ptr<AigerModel> model);
+    BackwardChecker(Settings settings,
+                    shared_ptr<AigerModel> model,
+                    shared_ptr<Log> log);
     bool Run();
     bool Check(int badId);
 
@@ -192,7 +165,7 @@ class BackwardChecker : public BaseChecker {
                     if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1)) {
                         updateLitOrder(*uc);
                     }
-                    CAR_DEBUG_v("ctg Get UC:", *uc_cts);
+                    m_log->L(3, "ctg Get gUC:", CubeToStr(*uc_cts));
                     if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
                         m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1, m_branching);
                 } else {
@@ -209,6 +182,27 @@ class BackwardChecker : public BaseChecker {
         }
     }
 
+    void OutputWitness(int bad);
+
+    void OutputCounterExample(int bad);
+
+    // ================================================================================
+    // @brief: add the cube as and gates to the aiger model
+    // @input:
+    // @output:
+    // ================================================================================
+    unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
+        assert(cube.size() > 0);
+        unsigned res = cube[0];
+        assert(res / 2 <= circuit->maxvar);
+        for (unsigned i = 1; i < cube.size(); i++) {
+            assert(cube[i] / 2 <= circuit->maxvar);
+            unsigned new_gate = (circuit->maxvar + 1) * 2;
+            aiger_add_and(circuit, new_gate, res, cube[i]);
+            res = new_gate;
+        }
+        return res;
+    }
 
     int m_minUpdateLevel;
     shared_ptr<Branching> m_branching;
@@ -221,6 +215,7 @@ class BackwardChecker : public BaseChecker {
     shared_ptr<CarSolver> m_mainSolver;
     shared_ptr<ISolver> m_invSolver;
     vector<shared_ptr<vector<int>>> m_rotation;
+    shared_ptr<State> m_lastState;
 };
 
 } // namespace car

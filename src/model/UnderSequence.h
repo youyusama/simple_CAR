@@ -15,22 +15,12 @@ class UnderSequence {
             }
         }
     }
+
     void push(shared_ptr<State> state) {
         while (m_sequence.size() <= state->depth) {
             m_sequence.emplace_back(vector<shared_ptr<State>>());
         }
         m_sequence[state->depth].push_back(state);
-    }
-
-    bool isRepeatedState(shared_ptr<State> state) {
-        for (int i = 0; i < m_sequence.size(); ++i) {
-            for (int j = 0; j < m_sequence[i].size(); j++) {
-                for (int k = 0; k < state->latches->size(); k++) {
-                    if (m_sequence[i][j]->latches->at(k) != state->latches->at(k)) return false;
-                }
-                return true;
-            }
-        }
     }
 
     int size() { return m_sequence.size(); }

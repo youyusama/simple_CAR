@@ -3,50 +3,35 @@
 #include <string>
 namespace car {
 
-shared_ptr<Log> GLOBAL_LOG;
-shared_ptr<OverSequenceSet> GLOBAL_OS;
-
-void signalHandler(int signum) {
-    GLOBAL_LOG->PrintStatistics();
-    exit(signum);
-}
-
-
-ForwardChecker::ForwardChecker(Settings settings, shared_ptr<AigerModel> model) : m_settings(settings) {
-    m_model = model;
+ForwardChecker::ForwardChecker(Settings settings,
+                               shared_ptr<AigerModel> model,
+                               shared_ptr<Log> log) : m_settings(settings),
+                                                      m_model(model),
+                                                      m_log(log) {
     State::numInputs = model->GetNumInputs();
     State::numLatches = model->GetNumLatches();
-    m_log.reset(new Log(settings, model));
+    m_lastState = nullptr;
     GLOBAL_LOG = m_log;
-
-    const vector<int> &init = model->GetInitialState();
-    shared_ptr<vector<int>> inputs(new vector<int>(State::numInputs, 0));
-    shared_ptr<vector<int>> latches(new vector<int>());
-    latches->reserve(init.size());
-
-    for (int i = 0; i < init.size(); ++i) {
-        latches->push_back(init[i]);
-    }
-    m_initialState.reset(new State(nullptr, inputs, latches, 0));
 }
 
 bool ForwardChecker::Run() {
-    for (int i = 0; i < m_model->GetNumBad(); ++i) {
-        bool result = Check(m_model->GetBad());
-        if (result) {
-            m_log->PrintSafe(i);
+    signal(SIGINT, signalHandler);
+
+    bool result = Check(m_model->GetBad());
+    if (result) {
+        m_log->L(0, "Safe");
+        if (m_settings.witness)
             OutputWitness(m_model->GetBad());
-        } else {
-            m_log->PrintCounterExample(i, true);
-        }
-        m_log->PrintStatistics();
+    } else {
+        m_log->L(0, "Unsafe");
+        if (m_settings.witness)
+            OutputCounterExample(m_model->GetBad());
     }
+    m_log->PrintStatistics();
     return true;
 }
 
 bool ForwardChecker::Check(int badId) {
-    signal(SIGINT, signalHandler);
-#pragma region early stage
     if (m_model->GetTrueId() == badId)
         return false;
     else if (m_model->GetFalseId() == badId)
@@ -54,16 +39,16 @@ bool ForwardChecker::Check(int badId) {
 
     Init(badId);
     if (ImmediateSatisfiable(badId)) {
-        CAR_DEBUG("Result >>> SAT <<<\n");
+        m_log->L(3, "Result >>> SAT <<<");
         auto pair = m_mainSolver->GetAssignment();
-        CAR_DEBUG_v("Get Assignment:", *pair.second);
+        m_log->L(3, "Get Assignment:", CubeToStr(*pair.second));
         m_initialState->inputs = pair.first;
-        m_log->lastState = m_initialState;
+        m_lastState = m_initialState;
         return false;
     }
 
     m_mainSolver->add_negation_bad();
-    CAR_DEBUG("Result >>> UNSAT <<<\n");
+    m_log->L(3, "Result >>> UNSAT <<<");
     // frame 0 is init state
     m_overSequence->Init_Frame_0(m_initialState->latches);
 
@@ -72,14 +57,14 @@ bool ForwardChecker::Check(int badId) {
     m_mainSolver->AddNewFrame(frame, 0);
     m_overSequence->effectiveLevel = 0;
     m_startSovler->UpdateStartSolverFlag();
-    CAR_DEBUG_o("Frames: ", m_overSequence.get());
+    m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
 #pragma endregion
 
     // main stage
     int frameStep = 0;
     stack<Task> workingStack;
     while (true) {
-        m_overSequence->PrintFramesInfo();
+        m_log->L(1, m_overSequence->FramesInfo());
         m_minUpdateLevel = m_overSequence->GetLength();
         if (m_settings.end) { // from the deep and the end
             for (int i = m_underSequence.size() - 1; i >= 0; i--) {
@@ -101,7 +86,7 @@ bool ForwardChecker::Check(int badId) {
             m_overSequence->SetInvariantLevel(frameStep);
             return true;
         }
-        CAR_DEBUG("\nstate from start solver\n");
+        m_log->L(3, "\nstate from start solver");
         while (startState != nullptr) {
             workingStack.push(Task(startState, frameStep, true));
 
@@ -109,10 +94,8 @@ bool ForwardChecker::Check(int badId) {
                 Task &task = workingStack.top();
 
                 if (!task.isLocated) {
-                    m_log->Tick();
                     task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
-                    CAR_DEBUG("state get new level " + to_string(task.frameLevel) + "\n");
-                    m_log->StatGetNewLevel();
+                    m_log->L(3, "state get new level ", task.frameLevel);
                     if (task.frameLevel > m_overSequence->effectiveLevel) {
                         workingStack.pop();
                         continue;
@@ -123,52 +106,45 @@ bool ForwardChecker::Check(int badId) {
                 if (task.frameLevel == -1) {
                     m_initialState->preState = task.state->preState;
                     m_initialState->inputs = task.state->inputs;
-                    m_log->lastState = m_initialState;
+                    m_lastState = m_initialState;
                     return false;
                 }
-                CAR_DEBUG("\nSAT CHECK on frame: " + to_string(task.frameLevel) + "\n");
-                CAR_DEBUG_s("From state: ", task.state);
-                CAR_DEBUG_v("State Detail: ", *task.state->latches);
+                m_log->L(3, "SAT CHECK on frame: ", task.frameLevel);
+                m_log->L(3, "From state: ", CubeToStrShort(*task.state->latches));
+                m_log->L(3, "State Detail: ", CubeToStr(*task.state->latches));
                 vector<int> assumption;
                 GetAssumption(task.state, task.frameLevel, assumption);
-                // CAR_DEBUG_v("Primed Assumption: ", assumption);
                 m_log->Tick();
                 bool result = m_mainSolver->SolveWithAssumption(assumption, task.frameLevel);
                 m_log->StatMainSolver();
                 if (result) {
                     // Solver return SAT, get a new State, then continue
-                    CAR_DEBUG("Result >>> SAT <<<\n");
+                    m_log->L(3, "Result >>> SAT <<<");
                     pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> pair, partial_pair;
                     pair = m_mainSolver->GetAssignment();
-                    // CAR_DEBUG_v("Get Assignment:", *pair.second);
-                    m_log->Tick();
                     partial_pair = get_predecessor(pair, task.state);
-                    m_log->Statpartial();
                     shared_ptr<State> newState(new State(task.state, pair.first, partial_pair.second, task.state->depth + 1));
                     m_underSequence.push(newState);
-                    CAR_DEBUG_s("Get state: ", newState);
+                    m_log->L(3, "Get state: ", CubeToStrShort(*newState->latches));
                     int newFrameLevel = GetNewLevel(newState);
                     workingStack.emplace(newState, newFrameLevel, true);
                     continue;
                 } else {
                     // Solver return UNSAT, get uc, then continue
-                    CAR_DEBUG("Result >>> UNSAT <<<\n");
-                    auto uc = m_mainSolver->Getuc(m_settings.minimal_uc);
-                    if (uc->empty()) {
-                        // placeholder, uc is empty => safe
-                    }
-                    CAR_DEBUG_v("Get UC:", *uc);
-                    m_log->Tick();
-                    if (m_settings.ctg)
-                        if (generalize_ctg(uc, task.frameLevel))
-                            updateLitOrder(*uc);
-                    m_log->Statmuc();
-                    CAR_DEBUG_v("Get UC:", *uc);
-                    m_log->Tick();
-                    if (AddUnsatisfiableCore(uc, task.frameLevel + 1))
+                    m_log->L(3, "Result >>> UNSAT <<<");
+                    auto uc = m_mainSolver->Getuc(false);
+                    assert(uc->size() > 0);
+                    m_log->L(3, "Get UC: ", CubeToStr(*uc));
+                    if (generalize_ctg(uc, task.frameLevel))
+                        updateLitOrder(*uc);
+                    m_log->L(3, "Get UC: ", CubeToStr(*uc));
+                    if (AddUnsatisfiableCore(uc, task.frameLevel + 1)) {
+                        m_log->Tick();
                         m_overSequence->propagate_uc_from_lvl(uc, task.frameLevel + 1, m_branching);
+                        m_log->StatPropagation();
+                    }
                     m_log->StatUpdateUc();
-                    CAR_DEBUG_o("Frames: ", m_overSequence.get());
+                    m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
                     task.frameLevel++;
                     continue;
                 }
@@ -176,19 +152,17 @@ bool ForwardChecker::Check(int badId) {
             m_log->Tick();
             startState = EnumerateStartState();
             m_log->StatStartSolver();
-            CAR_DEBUG("\nstate from start solver\n");
+            m_log->L(3, "\nstate from start solver");
         }
 
-        CAR_DEBUG("\nNew Frame Added\n");
-        vector<shared_ptr<vector<int>>> lastFrame;
         frameStep++;
+        m_log->L(3, "\nNew Frame Added");
 
-        if (m_settings.propagation) {
-            m_log->Tick();
-            Propagation();
-            m_log->StatPropagation();
-        }
-        CAR_DEBUG_od("Frames: ", m_overSequence.get());
+        m_log->Tick();
+        Propagation();
+        m_log->StatPropagation();
+
+        m_log->L(3, m_overSequence->FramesDetail());
         m_mainSolver->simplify();
         m_overSequence->effectiveLevel++;
         m_startSovler->UpdateStartSolverFlag();
@@ -204,13 +178,15 @@ bool ForwardChecker::Check(int badId) {
 
 
 void ForwardChecker::Init(int badId) {
-    m_log->ResetClock();
-    m_log->Tick();
+    const cube &init = m_model->GetInitialState();
+    shared_ptr<cube> inputs(new cube(State::numInputs, 0));
+    shared_ptr<cube> latches(new cube());
+    latches->reserve(init.size());
+    latches->insert(latches->end(), init.begin(), init.end());
+    m_initialState.reset(new State(nullptr, inputs, latches, 0));
+
     m_badId = badId;
-    // m_overSequence.reset(new OverSequenceNI(m_model));
     m_overSequence.reset(new OverSequenceSet(m_model));
-    m_overSequence->set_log(m_log);
-    GLOBAL_OS = m_overSequence;
     m_branching.reset(new Branching(m_settings.Branching));
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
@@ -221,10 +197,11 @@ void ForwardChecker::Init(int badId) {
     m_invSolver.reset(new InvSolver(m_model));
     m_startSovler.reset(new StartSolver(m_model, badId));
     m_overSequence->set_solver(m_mainSolver);
-    m_log->StatInit();
 }
 
 bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
+    m_log->Tick();
+
     m_mainSolver->AddUnsatisfiableCore(*uc, frameLevel);
     if (frameLevel > m_overSequence->effectiveLevel) {
         m_startSovler->AddClause(-m_startSovler->GetFlag(), *uc);
@@ -232,8 +209,9 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
     }
-
     m_overSequence->Insert(uc, frameLevel);
+
+    m_log->StatUpdateUc();
     return true;
 }
 
@@ -253,8 +231,8 @@ bool ForwardChecker::isInvExisted() {
     bool result = false;
     for (int i = 0; i < m_overSequence->GetLength(); ++i) {
         if (IsInvariant(i)) {
-            m_log->PrintSth("Proof at frame " + to_string(i) + "\n");
-            m_overSequence->PrintFramesInfo();
+            m_log->L(1, "Proof at frame ", i);
+            m_log->L(1, m_overSequence->FramesInfo());
             result = true;
             m_overSequence->SetInvariantLevel(i - 1);
             break;
@@ -265,11 +243,15 @@ bool ForwardChecker::isInvExisted() {
 }
 
 int ForwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
+    m_log->Tick();
+
     for (int i = start; i < m_overSequence->GetLength(); ++i) {
         if (!m_overSequence->IsBlockedByFrame_lazy(*(state->latches), i)) {
             return i - 1;
         }
     }
+
+    m_log->StatGetNewLevel();
     return m_overSequence->GetLength() - 1; // placeholder
 }
 
@@ -291,7 +273,17 @@ bool ForwardChecker::IsInvariant(int frameLevel) {
 
 
 void ForwardChecker::OutputWitness(int bad) {
-    string outPath = m_settings.outputDir + m_log->GetFileName(m_settings.aigFilePath) + ".w.aag";
+    // get outputfile
+    auto startIndex = m_settings.aigFilePath.find_last_of("/");
+    if (startIndex == string::npos) {
+        startIndex = 0;
+    } else {
+        startIndex++;
+    }
+    auto endIndex = m_settings.aigFilePath.find_last_of(".");
+    assert(endIndex != string::npos);
+    string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
+    string outPath = m_settings.outputDir + aigName + ".w.aag";
     aiger *model_aig = m_model->GetAig();
 
     unsigned lvl_i;
@@ -367,4 +359,36 @@ void ForwardChecker::OutputWitness(int bad) {
 }
 
 
+void ForwardChecker::OutputCounterExample(int bad) {
+    // get outputfile
+    auto startIndex = m_settings.aigFilePath.find_last_of("/");
+    if (startIndex == string::npos) {
+        startIndex = 0;
+    } else {
+        startIndex++;
+    }
+    auto endIndex = m_settings.aigFilePath.find_last_of(".");
+    assert(endIndex != string::npos);
+    string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
+    string cexPath = m_settings.outputDir + aigName + ".cex";
+    std::ofstream cexFile;
+    cexFile.open(cexPath);
+
+    assert(m_lastState != nullptr);
+
+    cexFile << "." << endl;
+    cexFile << "1" << endl
+            << "b0" << endl;
+
+    shared_ptr<State> state = m_lastState;
+    cexFile << state->GetValueOfLatches() << endl;
+    cexFile << state->GetValueOfInputs() << endl;
+    while (state->preState != nullptr) {
+        state = state->preState;
+        cexFile << state->GetValueOfInputs() << endl;
+    }
+
+    cexFile << "." << endl;
+    cexFile.close();
+}
 } // namespace car

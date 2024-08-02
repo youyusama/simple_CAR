@@ -17,46 +17,12 @@
 #include <unordered_set>
 
 namespace car {
-#define CAR_DEBUG_v(s, v)              \
-    do {                               \
-        m_log->DebugPrintVector(v, s); \
-    } while (0)
-
-
-#define CAR_DEBUG(s)             \
-    do {                         \
-        m_log->DebugPrintSth(s); \
-    } while (0)
-
-#define CAR_DEBUG_od(s, o)                      \
-    do {                                        \
-        m_log->DebugPrintSth(s);                \
-        m_overSequence->PrintOSequenceDetail(); \
-    } while (0)
-
-#define CAR_DEBUG_o(s, o)                 \
-    do {                                  \
-        m_log->DebugPrintSth(s);          \
-        m_overSequence->PrintOSequence(); \
-    } while (0)
-
-
-#define CAR_DEBUG_s(t, s)          \
-    do {                           \
-        m_log->DebugPrintSth(t);   \
-        m_log->PrintStateShort(s); \
-    } while (0)
-
-
-#define CAR_DEBUG_order(t, o)    \
-    do {                         \
-        m_log->DebugPrintSth(t); \
-        m_log->PrintLitOrder(o); \
-    } while (0)
 
 class ForwardChecker : public BaseChecker {
   public:
-    ForwardChecker(Settings settings, shared_ptr<AigerModel> model);
+    ForwardChecker(Settings settings,
+                   shared_ptr<AigerModel> model,
+                   shared_ptr<Log> log);
     bool Run();
     bool Check(int badId);
 
@@ -145,6 +111,7 @@ class ForwardChecker : public BaseChecker {
     // ================================================================================
     pair<shared_ptr<cube>, shared_ptr<cube>> get_predecessor(
         pair<shared_ptr<cube>, shared_ptr<cube>> t, shared_ptr<State> s = nullptr) {
+        m_log->Tick();
 
         orderAssumption(*t.second);
         shared_ptr<cube> partial_latch(new cube(*t.second));
@@ -194,6 +161,8 @@ class ForwardChecker : public BaseChecker {
             }
         }
         sort(partial_latch->begin(), partial_latch->end(), cmp);
+
+        m_log->StatLiftSolver();
         return pair<shared_ptr<cube>, shared_ptr<cube>>(t.first, partial_latch);
     }
 
@@ -240,7 +209,7 @@ class ForwardChecker : public BaseChecker {
 
     bool down_ctg(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unordered_set<int> required_lits) {
         int ctgs = 0;
-        CAR_DEBUG_v("down:", *uc);
+        m_log->L(3, "down:", CubeToStr(*uc));
         vector<int> ass;
         for (auto l : *uc) ass.emplace_back(m_model->GetPrime(l));
         shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
@@ -266,16 +235,16 @@ class ForwardChecker : public BaseChecker {
                 // int cts_lvl = frame_lvl - 1;
                 GetAssumption(cts, cts_lvl, cts_ass);
                 // F_i-1 & T & cts'
-                CAR_DEBUG_v("try ctg:", *cts->latches);
+                m_log->L(3, "try ctg:", CubeToStr(*cts->latches));
                 m_log->Tick();
                 if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
                     m_log->StatMainSolver();
                     ctgs++;
                     auto uc_cts = m_mainSolver->Getuc(false);
-                    CAR_DEBUG_v("ctg Get UC:", *uc_cts);
+                    m_log->L(3, "ctg Get UC:", CubeToStr(*uc_cts));
                     if (generalize_ctg(uc_cts, cts_lvl, rec_lvl + 1))
                         updateLitOrder(*uc_cts);
-                    CAR_DEBUG_v("ctg Get mUC:", *uc_cts);
+                    m_log->L(3, "ctg Get gUC:", CubeToStr(*uc_cts));
                     if (AddUnsatisfiableCore(uc_cts, cts_lvl + 1))
                         m_overSequence->propagate_uc_from_lvl(uc_cts, cts_lvl + 1, m_branching);
                 } else {
@@ -296,7 +265,6 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<State> EnumerateStartState() {
         if (m_startSovler->SolveWithAssumption()) {
             pair<shared_ptr<cube>, shared_ptr<cube>> pair = m_startSovler->GetStartPair();
-            // CAR_DEBUG_v("From state: ", *pair.second);
             pair = get_predecessor(pair);
             shared_ptr<State> newState(new State(nullptr, pair.first, pair.second, 0));
             return newState;
@@ -306,6 +274,8 @@ class ForwardChecker : public BaseChecker {
     }
 
     void OutputWitness(int bad);
+
+    void OutputCounterExample(int bad);
 
     // ================================================================================
     // @brief: add the cube as and gates to the aiger model
@@ -338,6 +308,7 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<ISolver> m_invSolver;
     shared_ptr<StartSolver> m_startSovler;
     shared_ptr<Branching> m_branching;
+    shared_ptr<State> m_lastState;
 };
 
 

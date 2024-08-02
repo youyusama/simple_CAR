@@ -13,7 +13,6 @@
 #include "Branching.h"
 #include "CarSolver.h"
 #include "InvSolver.h"
-#include "Log.h"
 #include "MainSolver.h"
 
 namespace car {
@@ -27,10 +26,6 @@ class OverSequenceSet {
         m_blockSolver = new BlockSolver(model);
         m_block_counter.clear();
         m_invariantLevel = 0;
-    }
-
-    void set_log(shared_ptr<Log> log) {
-        m_log = log;
     }
 
     void SetInvariantLevel(unsigned lvl) { m_invariantLevel = lvl; }
@@ -61,11 +56,9 @@ class OverSequenceSet {
 
     vector<cube *> *GetBlockers(shared_ptr<vector<int>> latches, int framelevel);
 
-    void PrintFramesInfo();
+    string FramesInfo();
 
-    void PrintOSequence();
-
-    void PrintOSequenceDetail();
+    string FramesDetail();
 
     int effectiveLevel;
 
@@ -123,7 +116,6 @@ class OverSequenceSet {
     vector<frame> m_sequence;
     CarSolver *m_blockSolver;
     vector<int> m_block_counter;
-    shared_ptr<Log> m_log;
     unsigned m_invariantLevel;
 };
 
