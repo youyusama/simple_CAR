@@ -54,8 +54,6 @@ bool BackwardChecker::Check(int badId) {
     m_log->Tick();
     auto uc = m_mainSolver->GetUnsatisfiableCoreFromBad(badId);
     m_log->StatMainSolver();
-    if (uc->empty())
-        return true;
     m_log->L(3, "Get UC:", CubeToStr(*uc));
     AddUnsatisfiableCore(uc, 0);
     m_overSequence->effectiveLevel = 0;
@@ -231,6 +229,7 @@ bool BackwardChecker::isInvExisted() {
             m_log->L(1, "Proof at frame ", i);
             m_log->L(1, m_overSequence->FramesInfo());
             result = true;
+            m_overSequence->SetInvariantLevel(i - 1);
             break;
         }
     }
