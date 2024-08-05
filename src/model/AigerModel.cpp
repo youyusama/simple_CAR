@@ -299,4 +299,9 @@ shared_ptr<SimpSolver> AigerModel::GetSimpSolver() {
     return m_simpSolver;
 }
 
+
+void AigerModel::GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map) {
+    map = m_preValueOfLatch;
+}
+
 } // namespace car

@@ -14,7 +14,7 @@ shared_ptr<Log> GLOBAL_LOG = nullptr;
 
 string CubeToStr(cube c) {
     string s;
-    for (int l : c) s.append(to_string(l));
+    for (int l : c) s.append(to_string(l) + " ");
     return s;
 }
 

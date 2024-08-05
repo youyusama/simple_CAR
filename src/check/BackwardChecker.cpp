@@ -19,6 +19,8 @@ bool BackwardChecker::Run() {
     signal(SIGINT, signalHandler);
 
     bool result = Check(m_model->GetBad());
+
+    m_log->PrintStatistics();
     if (result) {
         m_log->L(0, "Safe");
         if (m_settings.witness)
@@ -28,7 +30,7 @@ bool BackwardChecker::Run() {
         if (m_settings.witness)
             OutputCounterExample(m_model->GetBad());
     }
-    m_log->PrintStatistics();
+
     return true;
 }
 
@@ -53,12 +55,15 @@ bool BackwardChecker::Check(int badId) {
     m_log->L(3, "Result >>> UNSAT <<<");
     m_log->Tick();
     auto uc = m_mainSolver->GetUnsatisfiableCoreFromBad(badId);
+    if (uc->size() == 0) {
+        m_overSequence->SetInvariantLevel(-1);
+        return true;
+    }
     m_log->StatMainSolver();
     m_log->L(3, "Get UC:", CubeToStr(*uc));
     AddUnsatisfiableCore(uc, 0);
     m_overSequence->effectiveLevel = 0;
     m_log->L(3, m_overSequence->FramesInfo());
-#pragma endregion
 
     // main stage
     int frameStep = 0;
@@ -282,14 +287,11 @@ void BackwardChecker::OutputWitness(int bad) {
     aiger *model_aig = m_model->GetAig();
 
     unsigned lvl_i;
-    if (m_overSequence == nullptr)
-        lvl_i = 0;
-    else
-        lvl_i = m_overSequence->GetInvariantLevel();
-    if (lvl_i == 0) {
+    if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
         aiger_open_and_write_to_file(model_aig, outPath.c_str());
         return;
     }
+    lvl_i = m_overSequence->GetInvariantLevel();
 
     aiger *witness_aig = aiger_init();
     // copy inputs
@@ -371,7 +373,6 @@ void BackwardChecker::OutputCounterExample(int bad) {
 
     assert(m_lastState != nullptr);
 
-    cexFile << "." << endl;
     cexFile << "1" << endl
             << "b0" << endl;
 

@@ -18,6 +18,8 @@ bool ForwardChecker::Run() {
     signal(SIGINT, signalHandler);
 
     bool result = Check(m_model->GetBad());
+
+    m_log->PrintStatistics();
     if (result) {
         m_log->L(0, "Safe");
         if (m_settings.witness)
@@ -27,7 +29,7 @@ bool ForwardChecker::Run() {
         if (m_settings.witness)
             OutputCounterExample(m_model->GetBad());
     }
-    m_log->PrintStatistics();
+
     return true;
 }
 
@@ -58,7 +60,6 @@ bool ForwardChecker::Check(int badId) {
     m_overSequence->effectiveLevel = 0;
     m_startSovler->UpdateStartSolverFlag();
     m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
-#pragma endregion
 
     // main stage
     int frameStep = 0;
@@ -83,7 +84,7 @@ bool ForwardChecker::Check(int badId) {
         shared_ptr<State> startState = EnumerateStartState();
         m_log->StatStartSolver();
         if (startState == nullptr) {
-            m_overSequence->SetInvariantLevel(frameStep);
+            m_overSequence->SetInvariantLevel(-1);
             return true;
         }
         m_log->L(3, "\nstate from start solver");
@@ -287,14 +288,11 @@ void ForwardChecker::OutputWitness(int bad) {
     aiger *model_aig = m_model->GetAig();
 
     unsigned lvl_i;
-    if (m_overSequence == nullptr)
-        lvl_i = 0;
-    else
-        lvl_i = m_overSequence->GetInvariantLevel();
-    if (lvl_i == 0) {
+    if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
         aiger_open_and_write_to_file(model_aig, outPath.c_str());
         return;
     }
+    lvl_i = m_overSequence->GetInvariantLevel();
 
     aiger *witness_aig = aiger_init();
     // copy inputs
@@ -321,6 +319,36 @@ void ForwardChecker::OutputWitness(int bad) {
 
     assert(model_aig->maxvar == witness_aig->maxvar);
 
+    // same prime constraint
+    // if l1 and l2 have same prime l', then l1 and l2 shoud have same value, except the initial states
+    // sp_cons = init | cons
+    // init = l1 & l2 & ... & lk
+    // cons = ( x1 <-> x2 ) & ( x1 <-> x3 ) & ( ... )
+    unordered_map<int, vector<int>> map;
+    m_model->GetPreValueOfLatchMap(map);
+    vector<unsigned> cons_lits;
+    for (auto it = map.begin(); it != map.end(); it++) {
+        if (it->second.size() > 1) {
+            unsigned x0 = it->second[0] > 0 ? (2 * it->second[0]) : (2 * -it->second[0] + 1);
+            for (int i = 1; i < it->second.size(); i++) {
+                unsigned xi = it->second[i] > 0 ? (2 * it->second[i]) : (2 * -it->second[i] + 1);
+                cons_lits.push_back(addCubeToANDGates(witness_aig, {x0, xi ^ 1}) ^ 1);
+                cons_lits.push_back(addCubeToANDGates(witness_aig, {x0 ^ 1, xi}) ^ 1);
+            }
+        }
+    }
+    unsigned sp_cons;
+    if (cons_lits.size() > 0) {
+        vector<unsigned> init_lits;
+        for (auto l : m_model->GetInitialState()) {
+            int ll = l > 0 ? (2 * l) : (2 * -l + 1);
+            init_lits.push_back(ll);
+        }
+        unsigned init = addCubeToANDGates(witness_aig, init_lits);
+        unsigned cons = addCubeToANDGates(witness_aig, cons_lits);
+        sp_cons = addCubeToANDGates(witness_aig, {init ^ 1, cons ^ 1}) ^ 1;
+    }
+
     // P' = P & invariant
     // P' = !bad & ( O_0 | O_1 | ... | O_i )
     //             !( !O_0 & !O_1 & ...  & !O_i )
@@ -342,9 +370,14 @@ void ForwardChecker::OutputWitness(int bad) {
         inv_lits.push_back(O_i ^ 1);
     }
     unsigned inv = addCubeToANDGates(witness_aig, inv_lits) ^ 1;
-    unsigned bad_lit = bad > 0 ? (2 * bad) : (2 * -bad) + 1;
+    int bad_lit_int = bad > 0 ? (2 * bad) : (2 * -bad) + 1;
+    unsigned bad_lit = bad_lit_int;
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
+
+    if (cons_lits.size() > 0) {
+        p_prime = addCubeToANDGates(witness_aig, {p_prime, sp_cons});
+    }
 
     if (model_aig->num_bad == 1) {
         aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);
@@ -376,7 +409,6 @@ void ForwardChecker::OutputCounterExample(int bad) {
 
     assert(m_lastState != nullptr);
 
-    cexFile << "." << endl;
     cexFile << "1" << endl
             << "b0" << endl;
 

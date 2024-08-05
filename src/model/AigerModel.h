@@ -97,6 +97,8 @@ class AigerModel {
 
     shared_ptr<SimpSolver> GetSimpSolver();
 
+    void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
+
   private:
     void Init();
 

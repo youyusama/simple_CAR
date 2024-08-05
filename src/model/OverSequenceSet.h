@@ -28,9 +28,9 @@ class OverSequenceSet {
         m_invariantLevel = 0;
     }
 
-    void SetInvariantLevel(unsigned lvl) { m_invariantLevel = lvl; }
+    void SetInvariantLevel(int lvl) { m_invariantLevel = lvl; }
 
-    unsigned GetInvariantLevel() { return m_invariantLevel; }
+    int GetInvariantLevel() { return m_invariantLevel; }
 
     bool Insert(shared_ptr<vector<int>> uc, int index);
 
@@ -116,7 +116,7 @@ class OverSequenceSet {
     vector<frame> m_sequence;
     CarSolver *m_blockSolver;
     vector<int> m_block_counter;
-    unsigned m_invariantLevel;
+    int m_invariantLevel;
 };
 
 } // namespace car
