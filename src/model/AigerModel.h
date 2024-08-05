@@ -16,188 +16,140 @@ extern "C" {
 #include <queue>
 #include <set>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <tuple>
 
-typedef std::string string;
-typedef std::vector<int> cube;
-template <typename T>
-using sptr = std::shared_ptr<T>;
 using namespace Minisat;
+using namespace car;
+using namespace std;
+
+typedef vector<int> cube;
+typedef vector<int> clause;
 
 namespace car {
 
-class AigerModel {
-public:
-  AigerModel(Settings settings);
-
-  bool IsTrue(const unsigned id) {
-    return (id == 1) || (m_trues.find(id) != m_trues.end());
-  }
-
-  bool IsFalse(const unsigned id) {
-    return (id == 0) || (m_trues.find((id % 2 == 0) ? (id + 1) : (id - 1)) != m_trues.end());
-  }
-
-  bool IsLatch(int id) {
-    if (abs(id) > m_numInputs && abs(id) <= m_numInputs + m_numLatches) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  bool IsInput(int id) {
-    if (abs(id) > 0 && abs(id) <= m_numInputs) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  int GetCarId(const unsigned id) {
-    if (id == 0) {
-      // placeholder
-    }
-    return ((id % 2 == 0) ? (id / 2) : -(id / 2));
-  }
-
-  std::shared_ptr<std::vector<int>> Get_next_latches_for_pine(std::vector<int> &current_latches);
-
-#pragma region get &set
-  int GetNumInputs() { return m_numInputs; }
-  int GetNumLatches() { return m_numLatches; }
-  int GetNumOutputs() { return m_numOutputs; }
-  int GetMaxId() { return m_maxId; }
-  int GetOutputsStart() { return m_outputsStart; }
-  int GetLatchesStart() { return m_latchesStart; }
-  int GetTrueId() { return m_trueId; }
-  int GetFalseId() { return m_falseId; }
-  std::vector<int> &GetInitialState() { return m_initialState; }
-  std::vector<int> &GetOutputs() { return m_outputs; }
-  std::vector<int> GetPrevious(int id) {
-    if (m_preValueOfLatch.count(abs(id)) > 0) {
-      return m_preValueOfLatch[abs(id)];
-    } else {
-      return std::vector<int>();
-    }
-  }
-  int GetPrime(const int id) {
-    std::unordered_map<int, int>::iterator it = m_nextValueOfLatch.find(abs(id));
-    if (it == m_nextValueOfLatch.end()) {
-      return 0;
-    }
-    return id > 0 ? it->second : -(it->second);
-  }
-
-
-  std::vector<std::vector<int>> &GetClause() { return m_clauses; }
-
-  std::vector<int> GetNegBad();
-
-  sptr<std::vector<float>> get_aiger_order();
-
-  sptr<SimpSolver> get_sslv();
-#pragma endregion
-
-#pragma region private methods
-private:
-  void Init(aiger *aig);
-
-  void CollectTrues(const aiger *aig);
-
-  void CollectTrues_RECUR(const aiger *aig);
-
-  void CollectConstraints(const aiger *aig);
-
-  void CollectOutputs(const aiger *aig);
-
-  void CollectInitialState(const aiger *aig);
-
-  void CollectNextValueMapping(const aiger *aig);
-
-  void CollectClauses(const aiger *aig);
-
-  void CollectNecessaryAndGates(const aiger *aig, const aiger_symbol *as, const int as_size,
-                                std::unordered_set<unsigned> &exist_gates, std::vector<unsigned> &gates, bool next);
-
-  void CollectNecessaryAndGatesFromConstrain(const aiger *aig, const aiger_symbol *as, const int as_size,
-                                             std::unordered_set<unsigned> &exist_gates, std::vector<unsigned> &gates);
-
-  void FindAndGates(const aiger_and *aa, const aiger *aig, std::unordered_set<unsigned> &exist_gates, std::vector<unsigned> &gates);
-
-  void AddAndGateToClause(const aiger_and *aa);
-
-  inline void InsertIntoPreValueMapping(const int key, const int value);
-
-  inline aiger_and *IsAndGate(const unsigned id, const aiger *aig);
-
-  int ComputeAndGate_RECUR(aiger_and &aa, const aiger *aig);
-
-  void collect_and_gates_for_pine_r(const aiger_and *aa, const aiger *aig);
-
-  void Collect_and_gates_for_pine(const aiger *aig);
-
-  int compute_latch_r(int id, std::shared_ptr<std::unordered_map<int, int>> current_values);
-
-  static bool cmp(int a, int b) {
+inline bool cmp(int a, int b) {
     return abs(a) < abs(b);
-  }
+}
 
-  void print_aiger_gml(const aiger *aig);
+class AigerModel {
+  public:
+    AigerModel(Settings settings);
 
-  void build_aiger_order(const aiger *aig);
-
-  void create_sslv();
-
-  string GetFileName(string filePath) {
-    auto startIndex = filePath.find_last_of("/");
-    if (startIndex == string::npos) {
-      startIndex = 0;
-    } else {
-      startIndex++;
+    inline bool IsTrue(const unsigned lit) {
+        return (lit == 1) || (m_trues.find(lit) != m_trues.end());
     }
-    auto endIndex = filePath.find_last_of(".");
-    assert(endIndex != string::npos);
-    return filePath.substr(startIndex, endIndex - startIndex);
-  }
 
-#pragma endregion
+    inline bool IsFalse(const unsigned lit) {
+        return (lit == 0) || (m_trues.find(aiger_not(lit)) != m_trues.end());
+    }
 
-#pragma region private member variables
-  Settings m_settings;
-  int m_maxId;
-  int m_numInputs;
-  int m_numLatches;
-  int m_numAnds;
-  int m_numConstraints;
-  int m_numOutputs;
-  int m_trueId;
-  int m_falseId;
-  int m_outputsStart; // the index of cls_ to point the start position of outputs
-  int m_latchesStart; // the index of cls_ to point the start position of latches
+    inline bool IsLatch(int id) {
+        if (abs(id) > m_aig->num_inputs && abs(id) <= m_aig->num_inputs + m_aig->num_latches)
+            return true;
+        else
+            return false;
+    }
 
-  std::unordered_map<int, std::pair<int, int>> m_ands_gates_for_pine;
+    inline bool IsInput(int id) {
+        if (abs(id) > 0 && abs(id) <= m_aig->num_inputs)
+            return true;
+        else
+            return false;
+    }
 
-  std::vector<int> m_initialState;
-  std::vector<int> m_outputs;
-  std::vector<int> m_constraints;
-  std::vector<std::vector<int>> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
-  std::unordered_set<int> m_trues;         // variables that are always true
-  std::unordered_map<int, int> m_nextValueOfLatch;
-  std::unordered_map<int, int> m_nextValueOfGate;              // next value of and gate
-  std::unordered_map<int, std::vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
+    inline int GetCarId(const unsigned lit) {
+        return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
+    }
 
-  sptr<std::vector<float>> m_aiger_order;
-  sptr<SimpSolver> m_sslv;
+    inline aiger *GetAig() { return m_aig; }
 
-#pragma endregion
+    inline int GetNumInputs() { return m_aig->num_inputs; }
+    inline int GetNumLatches() { return m_aig->num_latches; }
+    inline int GetNumBad() { return m_aig->num_outputs + m_aig->num_bad; }
+    inline int GetMaxId() { return m_maxId; }
+    inline int GetOutputsStart() { return m_outputsStart; }
+    inline int GetLatchesStart() { return m_latchesStart; }
+    inline int GetTrueId() { return m_trueId; }
+    inline int GetFalseId() { return m_falseId; }
+    inline cube &GetInitialState() { return m_initialState; }
+    inline int &GetBad() { return m_bad; }
+
+    inline vector<int> GetPrevious(int id) {
+        if (m_preValueOfLatch.count(abs(id)) > 0) {
+            return m_preValueOfLatch[abs(id)];
+        } else {
+            return vector<int>();
+        }
+    }
+
+    inline int GetPrime(const int id) {
+        unordered_map<int, int>::iterator it = m_nextValueOfLatch.find(abs(id));
+        assert(it != m_nextValueOfLatch.end());
+        return id > 0 ? it->second : -(it->second);
+    }
+
+    vector<clause> &GetClauses() { return m_clauses; }
+
+    inline int GetProperty() { return -m_bad; }
+
+    shared_ptr<SimpSolver> GetSimpSolver();
+
+    void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
+
+    vector<int> GetConstraints() { return m_constraints; };
+
+  private:
+    void Init();
+
+    void CollectConstants();
+
+    void CollectConstraints();
+
+    void CollectBad();
+
+    void CollectInitialState();
+
+    void CollectNextValueMapping();
+
+    void CollectClauses();
+
+    void CollectNecessaryAndGates(const aiger_symbol *as, const int as_size,
+                                  std::unordered_set<unsigned> &exist_gates, std::vector<unsigned> &gates, bool next);
+
+    void CollectNecessaryAndGatesFromConstraints(unordered_set<unsigned> &exist_gates, vector<unsigned> &gates);
+
+    void FindAndGates(const aiger_and *aa, unordered_set<unsigned> &exist_gates, vector<unsigned> &gates);
+
+    void AddAndGateToClause(const aiger_and *aa);
+
+    inline void InsertIntoPreValueMapping(const int key, const int value);
+
+    inline aiger_and *IsAndGate(const unsigned id);
+
+    void CreateSimpSolver();
+
+    Settings m_settings;
+    aiger *m_aig;
+    int m_maxId;
+    int m_trueId;
+    int m_falseId;
+    int m_outputsStart; // the index of cls_ to point the start position of outputs
+    int m_latchesStart; // the index of cls_ to point the start position of latches
+
+    cube m_initialState;
+    int m_bad;
+    vector<int> m_constraints;
+    vector<clause> m_clauses;   // CNF, e.g. (a|b|c) * (-a|c)
+    unordered_set<int> m_trues; // variables that are always true
+    unordered_map<int, int> m_nextValueOfLatch;
+    unordered_map<int, int> m_nextValueOfGate;         // next value of and gate
+    unordered_map<int, vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
+
+    shared_ptr<SimpSolver> m_simpSolver;
 };
-
-
 } // namespace car
-
 
 #endif

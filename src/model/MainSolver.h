@@ -1,18 +1,18 @@
 #ifndef MAINSOLVER_H
 #define MAINSOLVER_H
 
+#include "../sat/minisat/simp/SimpSolver.h"
 #include "CarSolver.h"
-#include "SimpSolver.h"
 
 namespace car {
 
 class MainSolver : public CarSolver {
-public:
-  MainSolver(std::shared_ptr<AigerModel> model, bool isForward, bool by_sslv = false);
+  public:
+    MainSolver(shared_ptr<AigerModel> model, bool isForward, bool by_sslv = false);
 
-  void add_negation_bad();
+    void add_negation_bad();
 
-private:
+  private:
 };
 
 } // namespace car

@@ -1,5 +1,5 @@
 /***************************************************************************
-Copyright (c) 2006 - 2011, Armin Biere, Johannes Kepler University.
+Copyright (c) 2006 - 2018, Armin Biere, Johannes Kepler University.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
@@ -38,6 +38,10 @@ IN THE SOFTWARE.
 
 /*------------------------------------------------------------------------*/
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct aiger aiger;
 typedef struct aiger_and aiger_and;
 typedef struct aiger_symbol aiger_symbol;
@@ -51,6 +55,9 @@ typedef struct aiger_symbol aiger_symbol;
  */
 #define aiger_false 0
 #define aiger_true 1
+
+#define aiger_is_constant(l) \
+  ((l) == aiger_false || ((l) == aiger_true))
 
 #define aiger_sign(l) \
   (((unsigned)(l))&1)
@@ -161,7 +168,7 @@ struct aiger
 /*------------------------------------------------------------------------*/
 /* Version and CVS identifier.
  */
-const char *aiger_id (void);
+const char *aiger_id (void);  	     /* not working after moving to 'git' */
 const char *aiger_version (void);
 
 /*------------------------------------------------------------------------*/
@@ -352,5 +359,9 @@ int aiger_lit2tag (aiger *, unsigned lit);
 aiger_symbol *aiger_is_input (aiger *, unsigned lit);
 aiger_symbol *aiger_is_latch (aiger *, unsigned lit);
 aiger_and *aiger_is_and (aiger *, unsigned lit);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

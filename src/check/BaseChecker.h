@@ -7,10 +7,9 @@
 namespace car {
 
 class BaseChecker {
-public:
-  virtual bool Run() = 0;
-  virtual ~BaseChecker(){};
-  typedef std::vector<int> cube;
+  public:
+    virtual bool Run() = 0;
+    virtual ~BaseChecker() {};
 };
 
 } // namespace car
