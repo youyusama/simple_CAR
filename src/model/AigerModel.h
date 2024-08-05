@@ -99,6 +99,8 @@ class AigerModel {
 
     void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
 
+    vector<int> GetConstraints() { return m_constraints; };
+
   private:
     void Init();
 
@@ -126,8 +128,6 @@ class AigerModel {
     inline void InsertIntoPreValueMapping(const int key, const int value);
 
     inline aiger_and *IsAndGate(const unsigned id);
-
-    int ComputeAndGate_RECUR(aiger_and &aa);
 
     void CreateSimpSolver();
 

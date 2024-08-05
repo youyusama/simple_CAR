@@ -118,9 +118,11 @@ class ForwardChecker : public BaseChecker {
 
         int act = m_lifts->GetTempFlag();
         if (s == nullptr) {
-            // add !bad to assumption
-            vector<int> *neg_bad = new vector<int>(1, -m_badId);
-            m_lifts->AddTempClause(neg_bad, act, false);
+            // add !bad ( | !cons) to assumption
+            vector<int> constraints = m_model->GetConstraints();
+            clause cls = {-m_badId};
+            for (auto cons : constraints) cls.push_back(-cons);
+            m_lifts->AddTempClause(&cls, act, false);
             m_lifts->CleanAssumptions();
         } else {
             // add !s' to clause
