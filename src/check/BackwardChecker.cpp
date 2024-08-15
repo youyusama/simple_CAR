@@ -41,29 +41,30 @@ bool BackwardChecker::Check(int badId) {
         return true;
 
     Init();
+    m_log->L(3, "Initialized");
 
+    m_log->L(3, "Initial States Check");
     if (ImmediateSatisfiable(badId)) {
         m_log->L(3, "Result >>> SAT <<<");
-        pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> pair;
-        pair = m_mainSolver->GetAssignment();
-        m_log->L(3, "Get Assignment:", CubeToStr(*pair.second));
+        auto p = m_mainSolver->GetAssignment();
+        m_log->L(3, "Get Assignment:", CubeToStr(p.second));
 
-        shared_ptr<State> newState(new State(m_initialState, pair.first, pair.second, 1));
+        shared_ptr<State> newState(new State(m_initialState, p.first, p.second, 1));
         m_lastState = newState;
         return false;
     }
     m_log->L(3, "Result >>> UNSAT <<<");
     m_log->Tick();
-    auto uc = m_mainSolver->GetUnsatisfiableCoreFromBad(badId);
+    shared_ptr<cube> uc(new cube());
+    m_mainSolver->GetUnsatisfiableCoreFromBad(uc, badId);
     if (uc->size() == 0) {
         m_overSequence->SetInvariantLevel(-1);
         return true;
     }
     m_log->StatMainSolver();
-    m_log->L(3, "Get UC:", CubeToStr(*uc));
+    m_log->L(3, "Get UC:", CubeToStr(uc));
     AddUnsatisfiableCore(uc, 0);
     m_overSequence->effectiveLevel = 0;
-    m_log->L(3, m_overSequence->FramesInfo());
 
     // main stage
     int frameStep = 0;
@@ -91,7 +92,7 @@ bool BackwardChecker::Check(int badId) {
 
             if (!task.isLocated) {
                 task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
-                m_log->L(3, "state get new level ", task.frameLevel);
+                m_log->L(3, "State get new level ", task.frameLevel);
                 if (task.frameLevel > m_overSequence->effectiveLevel) {
                     workingStack.pop();
                     continue;
@@ -100,106 +101,117 @@ bool BackwardChecker::Check(int badId) {
             task.isLocated = false;
 
             if (task.frameLevel == -1) {
-                vector<int> assumption;
+                shared_ptr<cube> assumption(new cube());
                 GetAssumption(task.state, task.frameLevel, assumption);
                 m_log->L(3, "\nSAT CHECK on frame: ", task.frameLevel);
-                m_log->L(3, "From state: ", CubeToStr(*task.state->latches));
+                m_log->L(3, "From state: ", CubeToStr(task.state->latches));
                 m_log->Tick();
                 bool result = m_mainSolver->SolveWithAssumptionAndBad(assumption, badId);
                 m_log->StatMainSolver();
                 if (result) {
                     m_log->L(3, "Result >>> SAT <<<");
-                    pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> pair;
-                    pair = m_mainSolver->GetAssignment();
-                    m_log->L(3, "Get Assignment:", CubeToStr(*pair.second));
-                    shared_ptr<State> newState(new State(task.state, pair.first, pair.second, task.state->depth + 1));
+                    auto p = m_mainSolver->GetAssignment();
+                    m_log->L(3, "Get Assignment:", CubeToStr(p.second));
+                    shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
                     m_lastState = newState;
                     m_log->L(3, m_overSequence->FramesInfo());
                     return false;
                 } else {
                     m_log->L(3, "Result >>> UNSAT <<<");
-                    auto uc = m_mainSolver->GetUnsatisfiableCore();
-                    m_log->L(3, "Get UC:", CubeToStr(*uc));
-                    updateLitOrder(*uc);
+                    auto uc = m_mainSolver->Getuc(false);
+                    m_log->L(3, "Get UC:", CubeToStr(uc));
+                    m_branching->Update(uc);
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     task.frameLevel++;
                     continue;
                 }
             }
 
-            vector<int> assumption;
+            shared_ptr<cube> assumption(new cube());
             GetAssumption(task.state, task.frameLevel, assumption);
             m_log->L(3, "\nSAT CHECK on frame: ", task.frameLevel);
-            m_log->L(3, "From state: ", CubeToStr(*task.state->latches));
+            m_log->L(3, "From state: ", CubeToStr(task.state->latches));
             m_log->Tick();
             bool result = m_mainSolver->SolveWithAssumption(assumption, task.frameLevel);
             m_log->StatMainSolver();
             if (result) {
                 // Solver return SAT, get a new State, then continue
                 m_log->L(3, "Result >>> SAT <<<");
-                pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> pair;
-                pair = m_mainSolver->GetAssignment();
-                shared_ptr<State> newState(new State(task.state, pair.first, pair.second, task.state->depth + 1));
-                m_log->L(3, "Get state: ", CubeToStr(*newState->latches));
+                auto p = m_mainSolver->GetAssignment();
+                shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
+                m_log->L(3, "Get state: ", CubeToStr(newState->latches));
                 m_underSequence.push(newState);
                 int newFrameLevel = GetNewLevel(newState);
-                m_log->L(3, "state get new level ", newFrameLevel);
+                m_log->L(3, "State get new level ", newFrameLevel);
                 workingStack.emplace(newState, newFrameLevel, true);
                 continue;
             } else {
                 // Solver return UNSAT, get uc, then continue
                 m_log->L(3, "Result >>> UNSAT <<<");
                 auto uc = m_mainSolver->Getuc(false);
-                m_log->L(3, "Get UC:", CubeToStr(*uc));
-                if (generalize_ctg(uc, task.frameLevel))
-                    updateLitOrder(*uc);
-                m_log->L(3, "Get UC:", CubeToStr(*uc));
-                if (AddUnsatisfiableCore(uc, task.frameLevel + 1)) {
-                    m_log->Tick();
-                    m_overSequence->propagate_uc_from_lvl(uc, task.frameLevel + 1, m_branching);
-                    m_log->StatPropagation();
-                }
+                m_log->L(3, "Get UC:", CubeToStr(uc));
+                if (Generalize(uc, task.frameLevel))
+                    m_branching->Update(uc);
+                m_log->L(3, "Get Generalized UC:", CubeToStr(uc));
+                AddUnsatisfiableCore(uc, task.frameLevel + 1);
+                PropagateUp(uc, task.frameLevel + 1);
                 m_log->L(3, m_overSequence->FramesInfo());
                 task.frameLevel++;
                 continue;
             }
         }
-        m_log->L(3, "\nNew Frame Added");
-        m_log->Tick();
-        Propagation();
-        m_log->StatPropagation();
 
         frameStep++;
+        m_log->L(3, "\nNew Frame Added");
+
+        if (m_invSolver == nullptr) {
+            m_invSolver.reset(new InvSolver(m_model));
+        }
+        IsInvariant(0);
+        for (int i = 0; i < m_overSequence->GetLength() - 1; ++i) {
+            // propagation
+            if (i >= m_minUpdateLevel) {
+                shared_ptr<frame> fi = m_overSequence->GetFrame(i);
+                shared_ptr<frame> fi_plus_1 = m_overSequence->GetFrame(i + 1);
+                frame::iterator iter;
+                for (shared_ptr<cube> uc : *fi) {
+                    iter = fi_plus_1->find(uc);
+                    if (iter != fi_plus_1->end()) continue; // propagated
+                    if (Propagate(uc, i)) m_branching->Update(uc);
+                }
+            }
+
+            // invariant check
+            if (IsInvariant(i + 1)) {
+                m_log->L(1, "Proof at frame ", i + 1);
+                m_log->L(1, m_overSequence->FramesInfo());
+                m_overSequence->SetInvariantLevel(i);
+                return true;
+            }
+        }
+        m_invSolver = nullptr;
+
+        m_log->L(3, m_overSequence->FramesDetail());
         m_mainSolver->simplify();
         m_overSequence->effectiveLevel++;
-
-        m_log->Tick();
-        if (isInvExisted()) {
-            m_log->StatInvSolver();
-            return true;
-        }
-        m_log->StatInvSolver();
     }
 }
 
 
 void BackwardChecker::Init() {
-    const cube &init = m_model->GetInitialState();
     shared_ptr<cube> inputs(new cube(State::numInputs, 0));
-    shared_ptr<cube> latches(new cube());
-    latches->reserve(init.size());
-    latches->insert(latches->end(), init.begin(), init.end());
+    shared_ptr<cube> latches(new cube(m_model->GetInitialState()));
     m_initialState.reset(new State(nullptr, inputs, latches, 0));
 
-    m_overSequence.reset(new OverSequenceSet(m_model));
-    m_branching.reset(new Branching(m_settings.Branching));
-    litOrder.branching = m_branching;
-    blockerOrder.branching = m_branching;
+    m_overSequence = make_shared<OverSequenceSet>(m_model);
     m_underSequence = UnderSequence();
     m_underSequence.push(m_initialState);
-    m_mainSolver.reset(new MainSolver(m_model, false, true));
-    m_invSolver.reset(new InvSolver(m_model));
-    m_overSequence->set_solver(m_mainSolver);
+    m_branching = make_shared<Branching>(m_settings.Branching);
+    litOrder.branching = m_branching;
+    blockerOrder.branching = m_branching;
+
+    m_mainSolver = make_shared<MainSolver>(m_model, false, true);
+    m_invSolver = make_shared<InvSolver>(m_model);
 }
 
 bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
@@ -216,37 +228,18 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frame
 }
 
 bool BackwardChecker::ImmediateSatisfiable(int badId) {
-    vector<int> &init = *(m_initialState->latches);
-    vector<int> assumptions;
-    assumptions.resize((init.size()));
-    copy(init.begin(), init.end(), assumptions.begin());
+    shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
     bool result = m_mainSolver->SolveWithAssumptionAndBad(assumptions, badId);
     return result;
 }
 
-bool BackwardChecker::isInvExisted() {
-    if (m_invSolver == nullptr) {
-        m_invSolver.reset(new InvSolver(m_model));
-    }
-    bool result = false;
-    for (int i = 0; i < m_overSequence->GetLength(); ++i) {
-        if (IsInvariant(i)) {
-            m_log->L(1, "Proof at frame ", i);
-            m_log->L(1, m_overSequence->FramesInfo());
-            result = true;
-            m_overSequence->SetInvariantLevel(i - 1);
-            break;
-        }
-    }
-    m_invSolver = nullptr;
-    return result;
-}
 
 int BackwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
     m_log->Tick();
 
     for (int i = start; i < m_overSequence->GetLength(); ++i) {
-        if (!m_overSequence->IsBlockedByFrame_lazy(*(state->latches), i)) {
+        if (!m_overSequence->IsBlockedByFrame_lazy(state->latches, i)) {
+            m_log->StatGetNewLevel();
             return i - 1;
         }
     }
@@ -255,20 +248,152 @@ int BackwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
     return m_overSequence->GetLength() - 1; // placeholder
 }
 
+
 bool BackwardChecker::IsInvariant(int frameLevel) {
-    vector<shared_ptr<vector<int>>> frame;
-    m_overSequence->GetFrame(frameLevel, frame);
+    vector<shared_ptr<vector<int>>> frame_i;
+    m_overSequence->GetFrame(frameLevel, frame_i);
 
     if (frameLevel < m_minUpdateLevel) {
-        m_invSolver->AddConstraintOr(frame);
+        m_invSolver->AddConstraintOr(frame_i);
         return false;
     }
 
-    m_invSolver->AddConstraintAnd(frame);
+    m_invSolver->AddConstraintAnd(frame_i);
     bool result = !m_invSolver->SolveWithAssumption();
     m_invSolver->FlipLastConstrain();
-    m_invSolver->AddConstraintOr(frame);
+    m_invSolver->AddConstraintOr(frame_i);
     return result;
+}
+
+
+// ================================================================================
+// @brief: counter-example to generalization
+// @input:
+// @output:
+// ================================================================================
+bool BackwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
+    unordered_set<int> required_lits;
+
+    vector<shared_ptr<cube>> uc_blockers;
+    m_overSequence->GetBlockers(uc, frame_lvl, uc_blockers);
+    shared_ptr<cube> uc_blocker;
+    if (uc_blockers.size() > 0) {
+        if (m_settings.Branching > 0)
+            stable_sort(uc_blockers.begin(), uc_blockers.end(), blockerOrder);
+        uc_blocker = uc_blockers[0];
+    } else {
+        uc_blocker = make_shared<cube>();
+    }
+
+    if (m_settings.skip_refer)
+        for (auto b : *uc_blocker) required_lits.emplace(b);
+    orderAssumption(uc);
+    for (int i = uc->size() - 1; i > 0; i--) {
+        if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
+        shared_ptr<cube> temp_uc(new cube());
+        temp_uc->reserve(uc->size());
+        for (auto ll : *uc)
+            if (ll != uc->at(i)) temp_uc->emplace_back(ll);
+        if (Down(temp_uc, frame_lvl, rec_lvl, required_lits)) {
+            uc->swap(*temp_uc);
+            orderAssumption(uc);
+            i = uc->size();
+        } else {
+            required_lits.emplace(uc->at(i));
+        }
+    }
+    sort(uc->begin(), uc->end(), cmp);
+    if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
+        return false;
+    } else
+        return true;
+}
+
+
+bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unordered_set<int> required_lits) {
+    int ctgs = 0;
+    shared_ptr<cube> ass(new cube());
+    ass->reserve(uc->size());
+    for (auto l : *uc) ass->emplace_back(l);
+    shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
+    while (true) {
+        // F_i & T & temp_uc'
+        if (!m_mainSolver->SolveWithAssumption(ass, frame_lvl)) {
+            auto uc_ctg = m_mainSolver->Getuc(false);
+            if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
+            uc->swap(*uc_ctg);
+            return true;
+        } else if (rec_lvl > 2)
+            return false;
+        else {
+            auto p = m_mainSolver->GetAssignment();
+            shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
+            int cts_lvl = GetNewLevel(cts);
+            shared_ptr<cube> cts_ass(new cube());
+            // int cts_lvl = frame_lvl - 1;
+            GetAssumption(cts, cts_lvl, cts_ass);
+            // F_i-1 & T & cts'
+            if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveWithAssumption(cts_ass, cts_lvl)) {
+                ctgs++;
+                auto uc_cts = m_mainSolver->Getuc(false);
+                m_log->L(3, "CTG Get UC:", CubeToStr(uc_cts));
+                if (Generalize(uc_cts, cts_lvl, rec_lvl + 1)) m_branching->Update(uc_cts);
+                m_log->L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
+                AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
+                PropagateUp(uc_cts, cts_lvl + 1);
+            } else {
+                return false;
+            }
+        }
+    }
+}
+
+
+// ================================================================================
+// @brief: add the cube as and gates to the aiger model
+// @input:
+// @output:
+// ================================================================================
+unsigned BackwardChecker::addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
+    assert(cube.size() > 0);
+    unsigned res = cube[0];
+    assert(res / 2 <= circuit->maxvar);
+    for (unsigned i = 1; i < cube.size(); i++) {
+        assert(cube[i] / 2 <= circuit->maxvar);
+        unsigned new_gate = (circuit->maxvar + 1) * 2;
+        aiger_add_and(circuit, new_gate, res, cube[i]);
+        res = new_gate;
+    }
+    return res;
+}
+
+
+bool BackwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
+    m_log->Tick();
+
+    bool result;
+    if (!m_mainSolver->SolveWithAssumption(c, lvl)) {
+        AddUnsatisfiableCore(c, lvl + 1);
+        m_branching->Update(c);
+        result = true;
+    } else {
+        result = false;
+    }
+
+    m_log->StatPropagation();
+    return result;
+}
+
+
+int BackwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
+    while (lvl + 1 < m_overSequence->GetLength()) {
+        if (Propagate(c, lvl))
+            m_branching->Update(c);
+        else
+            break;
+        lvl++;
+    }
+    return lvl + 1;
 }
 
 
@@ -382,10 +507,10 @@ void BackwardChecker::OutputCounterExample(int bad) {
         trace.push(state);
         state = state->preState;
     }
-    cexFile << trace.top()->GetValueOfLatches() << endl;
+    cexFile << trace.top()->GetLatchesString() << endl;
     trace.pop();
     while (!trace.empty()) {
-        cexFile << trace.top()->GetValueOfInputs() << endl;
+        cexFile << trace.top()->GetInputsString() << endl;
         trace.pop();
     }
     cexFile << "." << endl;

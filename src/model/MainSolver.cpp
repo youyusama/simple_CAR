@@ -20,14 +20,14 @@ MainSolver::MainSolver(shared_ptr<AigerModel> model, bool isForward, bool by_ssl
         for (auto c = sslv->trailBegin(); c != sslv->trailEnd(); ++c)
             addClause(*c);
     } else {
-        auto &clause = m_model->GetClauses();
-        for (int i = 0; i < clause.size(); ++i) {
-            AddClause(clause[i]);
+        auto &clauses = m_model->GetClauses();
+        for (int i = 0; i < clauses.size(); ++i) {
+            AddClause(clauses[i]);
         }
     }
 }
 
-void MainSolver::add_negation_bad() {
+void MainSolver::AddNegationBad() {
     AddClause(clause{m_model->GetProperty()});
 }
 

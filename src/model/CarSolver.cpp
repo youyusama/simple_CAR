@@ -14,28 +14,24 @@ bool CarSolver::SolveWithAssumption() {
     lbool result = solveLimited(m_assumptions);
     if (result == l_True) {
         return true;
-    } else if (result == l_False) {
-        return false;
     } else {
-        assert(false);
+        assert(result == l_False);
         return false;
     }
 }
 
 
-bool CarSolver::SolveWithAssumption(cube &assumption, int frameLevel) {
+bool CarSolver::SolveWithAssumption(const shared_ptr<cube> assumption, int frameLevel) {
     m_assumptions.clear();
     m_assumptions.push(GetLit(GetFrameFlag(frameLevel)));
-    for (auto it = assumption.begin(); it != assumption.end(); ++it) {
-        m_assumptions.push(GetLit(*it));
+    for (auto it : *assumption) {
+        m_assumptions.push(GetLit(it));
     }
     lbool result = solveLimited(m_assumptions);
     if (result == l_True) {
         return true;
-    } else if (result == l_False) {
-        return false;
     } else {
-        assert(false);
+        assert(result == l_False);
         return false;
     }
 }
@@ -109,8 +105,10 @@ shared_ptr<vector<int>> CarSolver::GetModel() {
     for (int i = 0; i < nVars(); i++) {
         if (model[i] == l_True) {
             res->at(i) = i + 1;
-        } else if (model[i] == l_False)
+        } else {
+            assert(model[i] == l_False);
             res->at(i) = -(i + 1);
+        }
     }
     return res;
 }
@@ -125,7 +123,8 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CarSolver::GetAssignment() {
     for (int i = 0; i < m_model->GetNumInputs(); ++i) {
         if (model[i] == l_True) {
             inputs->emplace_back(i + 1);
-        } else if (model[i] == l_False) {
+        } else {
+            assert(model[i] == l_False);
             inputs->emplace_back(-i - 1);
         }
     }
@@ -133,7 +132,8 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CarSolver::GetAssignment() {
         if (m_isForward) {
             if (model[i] == l_True) {
                 latches->emplace_back(i + 1);
-            } else if (model[i] == l_False) {
+            } else {
+                assert(model[i] == l_False);
                 latches->emplace_back(-i - 1);
             }
         } else {
@@ -150,8 +150,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CarSolver::GetAssignment() {
 }
 
 
-shared_ptr<cube> CarSolver::GetUnsatisfiableCoreFromBad(int badId) {
-    shared_ptr<cube> uc(new cube());
+void CarSolver::GetUnsatisfiableCoreFromBad(shared_ptr<cube> uc, int badId) {
     uc->reserve(conflict.size());
     int val;
 
@@ -162,11 +161,9 @@ shared_ptr<cube> CarSolver::GetUnsatisfiableCoreFromBad(int badId) {
         }
     }
     sort(uc->begin(), uc->end(), cmp);
-    return uc;
 }
 
-shared_ptr<cube> CarSolver::GetUnsatisfiableCore() {
-    shared_ptr<cube> uc(new cube);
+void CarSolver::GetUnsatisfiableCore(shared_ptr<cube> uc) {
     uc->reserve(conflict.size());
     int val;
     if (m_isForward) {
@@ -193,7 +190,6 @@ shared_ptr<cube> CarSolver::GetUnsatisfiableCore() {
     }
 
     sort(uc->begin(), uc->end(), cmp);
-    return uc;
 }
 
 
@@ -312,19 +308,17 @@ void CarSolver::AddNewFrame(const vector<shared_ptr<cube>> &frame, int frameLeve
 }
 
 
-bool CarSolver::SolveWithAssumptionAndBad(cube &assumption, int badId) {
+bool CarSolver::SolveWithAssumptionAndBad(const shared_ptr<cube> assumption, int badId) {
     m_assumptions.clear();
     m_assumptions.push(GetLit(badId));
-    for (auto it = assumption.begin(); it != assumption.end(); ++it) {
-        m_assumptions.push(GetLit(*it));
+    for (auto it : *assumption) {
+        m_assumptions.push(GetLit(it));
     }
     lbool result = solveLimited(m_assumptions);
     if (result == l_True) {
         return true;
-    } else if (result == l_False) {
-        return false;
     } else {
-        assert(false);
+        assert(result == l_False);
         return false;
     }
 }

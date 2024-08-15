@@ -17,13 +17,13 @@ class CarSolver : public ISolver, public Minisat::Solver {
 
     void AddClause(const clause &cls) override;
     void AddUnsatisfiableCore(const cube &uc, int frameLevel) override;
-    shared_ptr<cube> GetUnsatisfiableCore() override;
-    shared_ptr<cube> GetUnsatisfiableCoreFromBad(int badId) override;
+    void GetUnsatisfiableCore(shared_ptr<cube> uc) override;
+    void GetUnsatisfiableCoreFromBad(shared_ptr<cube> uc, int badId) override;
     void AddNewFrame(const vector<shared_ptr<cube>> &frame, int frameLevel) override;
     inline void AddAssumption(int id) override { m_assumptions.push(GetLit(id)); }
     bool SolveWithAssumption() override;
-    bool SolveWithAssumption(cube &assumption, int frameLevel) override;
-    bool SolveWithAssumptionAndBad(cube &assumption, int badId) override;
+    bool SolveWithAssumption(const shared_ptr<cube> assumption, int frameLevel) override;
+    bool SolveWithAssumptionAndBad(const shared_ptr<cube> assumption, int badId) override;
     pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment() override;
     void AddConstraintOr(const vector<shared_ptr<cube>> frame) override;
     void AddConstraintAnd(const vector<shared_ptr<cube>> frame) override;

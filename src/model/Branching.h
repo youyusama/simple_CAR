@@ -10,13 +10,11 @@ class Branching {
   public:
     Branching(int type = 1);
     ~Branching();
-    void update(const cube *uc);
-    void decay();
-    void decay(const cube *uc, int gap);
-    int counts_len();
-    std::vector<float> *get_counts();
+    void Update(const shared_ptr<cube> uc);
+    void Decay();
+    void Decay(const shared_ptr<cube> uc, int gap);
 
-    inline float prior_of(int lit) {
+    inline float PriorityOf(int lit) {
         if (abs(lit) >= counts.size()) return 0;
         return counts[abs(lit)];
     }

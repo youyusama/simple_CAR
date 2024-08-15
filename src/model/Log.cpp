@@ -12,24 +12,24 @@ void signalHandler(int signum) {
 shared_ptr<Log> GLOBAL_LOG = nullptr;
 
 
-string CubeToStr(cube c) {
+string CubeToStr(const shared_ptr<cube> c) {
     string s;
-    for (int l : c) s.append(to_string(l) + " ");
+    for (int l : *c) s.append(to_string(l) + " ");
     return s;
 }
 
 
-void compress_vector(vector<int> &res, vector<int> &v) {
+void compress_vector(shared_ptr<cube> res, const shared_ptr<cube> v) {
     int count = 0;
     int tempi = 0;
-    for (int l : v) {
+    for (int l : *v) {
         if (l > 0)
             tempi = (tempi << 1) + 1;
         else
             tempi <<= 1;
         count++;
-        if (count == 32 || l == v.back()) {
-            res.emplace_back(tempi);
+        if (count == 32 || l == v->back()) {
+            res->emplace_back(tempi);
             tempi = 0;
             count = 0;
         }
@@ -37,8 +37,8 @@ void compress_vector(vector<int> &res, vector<int> &v) {
 }
 
 
-string CubeToStrShort(cube c) {
-    cube s;
+string CubeToStrShort(const shared_ptr<cube> c) {
+    shared_ptr<cube> s(new cube());
     compress_vector(s, c);
     return CubeToStr(s);
 }

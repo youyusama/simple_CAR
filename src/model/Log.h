@@ -15,11 +15,11 @@
 
 namespace car {
 
-string CubeToStr(cube c);
+string CubeToStr(const shared_ptr<cube> c);
 
-void compress_vector(vector<int> &res, vector<int> &v);
+void compress_vector(shared_ptr<cube> res, const shared_ptr<cube> v);
 
-string CubeToStrShort(cube c);
+string CubeToStrShort(const shared_ptr<cube> c);
 
 void signalHandler(int signum);
 

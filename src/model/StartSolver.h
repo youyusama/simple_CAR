@@ -9,28 +9,29 @@ namespace car {
 
 class StartSolver : public CarSolver {
   public:
-    StartSolver(std::shared_ptr<AigerModel> model, int badId) {
+    StartSolver(shared_ptr<AigerModel> model) {
         m_model = model;
         m_maxFlag = model->GetMaxId() + 1;
-        auto &clause = m_model->GetClauses();
+        auto &clauses = m_model->GetClauses();
         for (int i = 0; i < model->GetLatchesStart(); ++i) {
-            CarSolver::AddClause(clause[i]);
+            CarSolver::AddClause(clauses[i]);
         }
-        m_assumptions.push(GetLit(badId));
+        m_assumptions.push(GetLit(m_model->GetBad()));
     }
 
-    ~StartSolver() { ; };
+    ~StartSolver() {}
 
-    std::shared_ptr<State> GetStartState() {
+    pair<shared_ptr<cube>, shared_ptr<cube>> GetStartPair() {
         assert(m_model->GetNumInputs() < nVars());
-        std::shared_ptr<std::vector<int>> inputs(new std::vector<int>());
-        std::shared_ptr<std::vector<int>> latches(new std::vector<int>());
+        shared_ptr<cube> inputs(new cube());
+        shared_ptr<cube> latches(new cube());
         inputs->reserve(m_model->GetNumInputs());
         latches->reserve(m_model->GetNumLatches());
         for (int i = 0; i < m_model->GetNumInputs(); ++i) {
             if (model[i] == l_True) {
                 inputs->emplace_back(i + 1);
-            } else if (model[i] == l_False) {
+            } else {
+                assert(model[i] == l_False);
                 inputs->emplace_back(-i - 1);
             }
         }
@@ -38,45 +39,15 @@ class StartSolver : public CarSolver {
             int val;
             if (model[i] == l_True) {
                 val = i + 1;
-            } else if (model[i] == l_False) {
+            } else {
+                assert(model[i] == l_False);
                 val = -i - 1;
             }
             if (abs(val) <= end) {
                 latches->push_back(val);
             }
         }
-
-        std::shared_ptr<State> newState(new State(nullptr, inputs, latches, 0));
-        return newState;
-    }
-
-    std::pair<shared_ptr<cube>, shared_ptr<cube>> GetStartPair() {
-        assert(m_model->GetNumInputs() < nVars());
-        std::shared_ptr<std::vector<int>> inputs(new std::vector<int>());
-        std::shared_ptr<std::vector<int>> latches(new std::vector<int>());
-        inputs->reserve(m_model->GetNumInputs());
-        latches->reserve(m_model->GetNumLatches());
-        for (int i = 0; i < m_model->GetNumInputs(); ++i) {
-            if (model[i] == l_True) {
-                inputs->emplace_back(i + 1);
-            } else if (model[i] == l_False) {
-                inputs->emplace_back(-i - 1);
-            }
-        }
-        for (int i = m_model->GetNumInputs(), end = m_model->GetNumInputs() + m_model->GetNumLatches(); i < end; ++i) {
-            int val;
-            if (model[i] == l_True) {
-                val = i + 1;
-            } else if (model[i] == l_False) {
-                val = -i - 1;
-            }
-            if (abs(val) <= end) {
-                latches->push_back(val);
-            }
-        }
-
-        std::shared_ptr<State> newState(new State(nullptr, inputs, latches, 0));
-        return std::pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
+        return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
     }
 
     void UpdateStartSolverFlag() {
@@ -89,7 +60,7 @@ class StartSolver : public CarSolver {
         }
     }
 
-    void AddClause(int flag, std::vector<int> &clause) {
+    void AddClause(int flag, vector<int> &clause) {
         vec<Lit> literals;
         literals.push(GetLit(flag));
         for (int i = 0; i < clause.size(); ++i) {

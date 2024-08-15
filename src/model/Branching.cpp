@@ -12,12 +12,12 @@ Branching::Branching(int type) {
 Branching::~Branching() {}
 
 
-void Branching::update(const cube *uc) {
+void Branching::Update(const shared_ptr<cube> uc) {
     if (uc->size() == 0) return;
     conflict_index++;
     switch (branching_type) {
     case 1: {
-        decay();
+        Decay();
         break;
     }
     case 2: {
@@ -48,13 +48,13 @@ void Branching::update(const cube *uc) {
 }
 
 
-void Branching::decay() {
+void Branching::Decay() {
     for (int i = mini; i < counts.size(); i++)
         counts[i] *= 0.99;
 }
 
 
-void Branching::decay(const cube *uc, int gap = 1) {
+void Branching::Decay(const shared_ptr<cube> uc, int gap = 1) {
     if (uc->size() == 0) return;
     conflict_index++;
     // assumes cube is ordered
@@ -66,12 +66,4 @@ void Branching::decay(const cube *uc, int gap = 1) {
     }
 }
 
-int Branching::counts_len() {
-    return counts.size();
-}
-
-
-std::vector<float> *Branching::get_counts() {
-    return &counts;
-}
 } // namespace car

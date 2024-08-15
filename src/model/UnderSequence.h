@@ -8,6 +8,7 @@ namespace car {
 
 class UnderSequence {
   public:
+    UnderSequence() {}
     ~UnderSequence() {
         for (int i = 0; i < m_sequence.size(); ++i) {
             for (int j = 0; j < m_sequence[i].size(); ++j) {
