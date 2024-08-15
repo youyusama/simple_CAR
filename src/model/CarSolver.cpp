@@ -347,23 +347,18 @@ void CarSolver::ReleaseTempClause(int temp_flag) {
 }
 
 
-#pragma region private
-
-
 inline int CarSolver::GetFrameFlag(int frameLevel) {
     assert(frameLevel >= 0);
     while (m_frameFlags.size() <= frameLevel) {
-        m_frameFlags.emplace_back(m_maxFlag++);
+        m_frameFlags.emplace_back(GetNewVar());
     }
     return m_frameFlags[frameLevel];
 }
 
+
 inline int CarSolver::GetLiteralId(const Minisat::Lit &l) {
     return sign(l) ? -(var(l) + 1) : var(l) + 1;
 }
-
-
-#pragma endregion
 
 
 } // namespace car

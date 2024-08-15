@@ -13,7 +13,7 @@ class InvSolver : public CarSolver {
   public:
     InvSolver(std::shared_ptr<AigerModel> model) {
         m_model = model;
-        m_maxFlag = model->GetMaxId() + 1;
+        m_maxId = model->GetMaxId();
         auto &clauses = m_model->GetClauses();
         for (int i = 0, end = model->GetOutputsStart(); i < end; i++) {
             AddClause(clauses[i]);

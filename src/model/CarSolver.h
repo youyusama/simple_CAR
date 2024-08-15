@@ -53,10 +53,10 @@ class CarSolver : public ISolver, public Minisat::Solver {
         while (var >= nVars()) newVar();
         return ((id > 0) ? mkLit(var) : ~mkLit(var));
     };
-    inline int GetNewVar() { return m_maxFlag++; }
+    inline int GetNewVar() { return (++*m_maxId); }
 
     bool m_isForward = false;
-    int m_maxFlag;
+    shared_ptr<int> m_maxId;
     shared_ptr<AigerModel> m_model;
     vector<int> m_frameFlags;
     vec<Lit> m_assumptions;

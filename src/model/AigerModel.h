@@ -69,7 +69,7 @@ class AigerModel {
     inline int GetNumInputs() { return m_aig->num_inputs; }
     inline int GetNumLatches() { return m_aig->num_latches; }
     inline int GetNumBad() { return m_aig->num_outputs + m_aig->num_bad; }
-    inline int GetMaxId() { return m_maxId; }
+    inline shared_ptr<int> GetMaxId() { return m_maxId; }
     inline int GetOutputsStart() { return m_outputsStart; }
     inline int GetLatchesStart() { return m_latchesStart; }
     inline int GetTrueId() { return m_trueId; }
@@ -133,7 +133,7 @@ class AigerModel {
 
     Settings m_settings;
     aiger *m_aig;
-    int m_maxId;
+    shared_ptr<int> m_maxId;
     int m_trueId;
     int m_falseId;
     int m_outputsStart; // the index of cls_ to point the start position of outputs

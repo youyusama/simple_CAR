@@ -11,7 +11,7 @@ class StartSolver : public CarSolver {
   public:
     StartSolver(shared_ptr<AigerModel> model) {
         m_model = model;
-        m_maxFlag = model->GetMaxId() + 1;
+        m_maxId = model->GetMaxId();
         auto &clauses = m_model->GetClauses();
         for (int i = 0; i < model->GetLatchesStart(); ++i) {
             CarSolver::AddClause(clauses[i]);
@@ -52,11 +52,13 @@ class StartSolver : public CarSolver {
 
     void UpdateStartSolverFlag() {
         if (m_assumptions.size() <= 1) {
-            m_assumptions.push(GetLit(m_maxFlag));
+            m_flag = GetNewVar();
+            m_assumptions.push(GetLit(m_flag));
         } else {
             m_assumptions.pop();
-            m_assumptions.push(GetLit(-m_maxFlag));
-            m_assumptions.push(GetLit(++m_maxFlag));
+            m_assumptions.push(GetLit(-m_flag));
+            m_flag = GetNewVar();
+            m_assumptions.push(GetLit(m_flag));
         }
     }
 
@@ -70,7 +72,8 @@ class StartSolver : public CarSolver {
         assert(result != false);
     }
 
-    inline int GetFlag() { return m_maxFlag; }
+    inline int GetFlag() { return m_flag; }
+    int m_flag;
 
 }; // class StartSolver
 

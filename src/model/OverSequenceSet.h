@@ -46,7 +46,7 @@ class OverSequenceSet {
 
     OverSequenceSet(shared_ptr<AigerModel> model) {
         m_model = model;
-        m_blockSolver = make_shared<BlockSolver>(m_model->GetMaxId());
+        m_blockSolver = make_shared<BlockSolver>(m_model);
         m_blockCounter.clear();
         m_invariantLevel = 0;
     }
@@ -84,9 +84,9 @@ class OverSequenceSet {
 
     class BlockSolver : public CarSolver {
       public:
-        BlockSolver(int maxFlag) {
+        BlockSolver(shared_ptr<AigerModel> model) {
             m_isForward = true;
-            m_maxFlag = maxFlag + 1;
+            m_maxId = model->GetMaxId();
         };
     };
 

@@ -5,7 +5,7 @@ namespace car {
 MainSolver::MainSolver(shared_ptr<AigerModel> model, bool isForward, bool by_sslv) {
     m_isForward = isForward;
     m_model = model;
-    m_maxFlag = model->GetMaxId() + 1;
+    m_maxId = model->GetMaxId();
     if (by_sslv) {
         shared_ptr<SimpSolver> sslv = m_model->GetSimpSolver();
         while (nVars() < sslv->nVars()) newVar();
