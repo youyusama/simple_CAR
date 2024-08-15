@@ -85,7 +85,6 @@ class OverSequenceSet {
     class BlockSolver : public CarSolver {
       public:
         BlockSolver(shared_ptr<AigerModel> model) {
-            m_isForward = true;
             m_maxId = model->GetMaxId();
         };
     };

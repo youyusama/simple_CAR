@@ -2,8 +2,7 @@
 #include <fstream>
 
 namespace car {
-MainSolver::MainSolver(shared_ptr<AigerModel> model, bool isForward, bool by_sslv) {
-    m_isForward = isForward;
+MainSolver::MainSolver(shared_ptr<AigerModel> model, bool by_sslv) {
     m_model = model;
     m_maxId = model->GetMaxId();
     if (by_sslv) {

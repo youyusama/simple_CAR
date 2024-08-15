@@ -8,7 +8,7 @@ namespace car {
 
 class MainSolver : public CarSolver {
   public:
-    MainSolver(shared_ptr<AigerModel> model, bool isForward, bool by_sslv = false);
+    MainSolver(shared_ptr<AigerModel> model, bool by_sslv = false);
 
     void AddNegationBad();
 

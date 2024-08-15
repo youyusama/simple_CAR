@@ -62,7 +62,7 @@ class BackwardChecker : public BaseChecker {
         }
     } blockerOrder;
 
-    void orderAssumption(shared_ptr<cube> uc, bool rev = false) {
+    void OrderAssumption(shared_ptr<cube> uc, bool rev = false) {
         if (m_settings.seed > 0) {
             shuffle(uc->begin(), uc->end(), default_random_engine(m_settings.seed));
             return;
@@ -72,11 +72,11 @@ class BackwardChecker : public BaseChecker {
         if (rev) reverse(uc->begin(), uc->end());
     }
 
-    void GetAssumption(shared_ptr<State> state, int frameLevel, shared_ptr<cube> ass, bool rev = false) {
-        ass->reserve(state->latches->size());
-        ass->insert(ass->end(), state->latches->begin(), state->latches->end());
-        orderAssumption(ass, rev);
-        return;
+    void GetPrimed(shared_ptr<cube> c, shared_ptr<cube> p) {
+        copy(c->begin(), c->end(), back_inserter(*p));
+        for (auto &x : *p) {
+            x = m_model->GetPrime(x);
+        }
     }
 
     static bool cmp(int a, int b) {

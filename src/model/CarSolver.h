@@ -16,34 +16,19 @@ class CarSolver : public ISolver, public Minisat::Solver {
     ~CarSolver();
 
     void AddClause(const clause &cls) override;
-    void AddUnsatisfiableCore(const cube &uc, int frameLevel) override;
-    void GetUnsatisfiableCore(shared_ptr<cube> uc) override;
-    void GetUnsatisfiableCoreFromBad(shared_ptr<cube> uc, int badId) override;
-    void AddNewFrame(const vector<shared_ptr<cube>> &frame, int frameLevel) override;
     inline void AddAssumption(int id) override { m_assumptions.push(GetLit(id)); }
-    bool SolveWithAssumption() override;
-    bool SolveWithAssumption(const shared_ptr<cube> assumption, int frameLevel) override;
-    bool SolveWithAssumptionAndBad(const shared_ptr<cube> assumption, int badId) override;
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment() override;
+    void AddAssumption(const shared_ptr<cube> assumption) override;
+    bool Solve() override;
+    bool Solve(const shared_ptr<cube> assumption) override;
+    bool Solve(const shared_ptr<cube> assumption, int frameLevel) override;
+    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override;
+    shared_ptr<cube> GetUC(bool prime) override;
+    void AddUC(const cube &uc, int frameLevel) override;
     void AddConstraintOr(const vector<shared_ptr<cube>> frame) override;
     void AddConstraintAnd(const vector<shared_ptr<cube>> frame) override;
     void FlipLastConstrain() override;
 
-    int GetTempFlag();
-
-    void AddTempClause(clause *cls, int temp_flag, bool is_primed);
-
-    void ReleaseTempClause(int temp_flag);
-
-    shared_ptr<cube> justGetUC();
-
-    void CleanAssumptions();
-
-    shared_ptr<cube> Getuc(bool minimal);
-
-    void Getmuc(LSet &ass);
-
-    shared_ptr<vector<int>> GetModel();
+    inline int GetNewVar() { return (++*m_maxId); }
 
   protected:
     inline int GetLiteralId(const Lit &l);
@@ -53,9 +38,7 @@ class CarSolver : public ISolver, public Minisat::Solver {
         while (var >= nVars()) newVar();
         return ((id > 0) ? mkLit(var) : ~mkLit(var));
     };
-    inline int GetNewVar() { return (++*m_maxId); }
 
-    bool m_isForward = false;
     shared_ptr<int> m_maxId;
     shared_ptr<AigerModel> m_model;
     vector<int> m_frameFlags;

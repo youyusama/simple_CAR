@@ -62,24 +62,21 @@ class ForwardChecker : public BaseChecker {
         }
     } blockerOrder;
 
-    void orderAssumption(shared_ptr<cube> uc, bool rev = false) {
+    void OrderAssumption(shared_ptr<cube> c, bool rev = false) {
         if (m_settings.seed > 0) {
-            shuffle(uc->begin(), uc->end(), default_random_engine(m_settings.seed));
+            shuffle(c->begin(), c->end(), default_random_engine(m_settings.seed));
             return;
         }
         if (m_settings.Branching == 0) return;
-        stable_sort(uc->begin(), uc->end(), litOrder);
-        if (rev) reverse(uc->begin(), uc->end());
+        stable_sort(c->begin(), c->end(), litOrder);
+        if (rev) reverse(c->begin(), c->end());
     }
 
-    void GetAssumption(shared_ptr<State> state, int frameLevel, shared_ptr<cube> ass, bool rev = false) {
-        ass->reserve(state->latches->size());
-        ass->insert(ass->end(), state->latches->begin(), state->latches->end());
-        orderAssumption(ass, rev);
-        for (auto &x : *ass) {
+    void GetPrimed(shared_ptr<cube> c, shared_ptr<cube> p) {
+        copy(c->begin(), c->end(), back_inserter(*p));
+        for (auto &x : *p) {
             x = m_model->GetPrime(x);
         }
-        return;
     }
 
     static bool cmp(int a, int b) {

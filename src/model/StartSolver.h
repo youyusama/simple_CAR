@@ -62,16 +62,6 @@ class StartSolver : public CarSolver {
         }
     }
 
-    void AddClause(int flag, vector<int> &clause) {
-        vec<Lit> literals;
-        literals.push(GetLit(flag));
-        for (int i = 0; i < clause.size(); ++i) {
-            literals.push(GetLit(-clause[i]));
-        }
-        bool result = addClause(literals);
-        assert(result != false);
-    }
-
     inline int GetFlag() { return m_flag; }
     int m_flag;
 

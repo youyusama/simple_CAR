@@ -37,7 +37,7 @@ void OverSequenceSet::add_uc_to_frame(const shared_ptr<cube> uc, shared_ptr<fram
 
 
 bool OverSequenceSet::Insert(shared_ptr<cube> uc, int index, bool need_imply) {
-    m_blockSolver->AddUnsatisfiableCore(*uc, index);
+    m_blockSolver->AddUC(*uc, index);
     if (index >= m_sequence.size()) {
         shared_ptr<frame> new_frame(new frame);
         m_sequence.emplace_back(new_frame);
@@ -82,7 +82,7 @@ bool OverSequenceSet::IsBlockedByFrame(shared_ptr<cube> latches, int frameLevel)
 
 
 bool OverSequenceSet::IsBlockedByFrame_sat(shared_ptr<cube> latches, int frameLevel) {
-    bool result = m_blockSolver->SolveWithAssumption(latches, frameLevel);
+    bool result = m_blockSolver->Solve(latches, frameLevel);
     if (!result) {
         return true;
     } else {
@@ -94,7 +94,7 @@ bool OverSequenceSet::IsBlockedByFrame_sat(shared_ptr<cube> latches, int frameLe
 bool OverSequenceSet::IsBlockedByFrame_lazy(shared_ptr<cube> latches, int frameLevel) {
     int &counter = m_blockCounter[frameLevel];
     if (counter == -1) { // by sat
-        bool result = m_blockSolver->SolveWithAssumption(latches, frameLevel);
+        bool result = m_blockSolver->Solve(latches, frameLevel);
         if (!result) {
             return true;
         } else {
@@ -108,7 +108,7 @@ bool OverSequenceSet::IsBlockedByFrame_lazy(shared_ptr<cube> latches, int frameL
     clock_t start_time, sat_time, for_time;
     if (counter > 1000) {
         start_time = clock();
-        m_blockSolver->SolveWithAssumption(latches, frameLevel);
+        m_blockSolver->Solve(latches, frameLevel);
         sat_time = clock();
     }
     // by imply checking
