@@ -14,7 +14,7 @@ class StartSolver : public CarSolver {
         m_maxId = model->GetMaxId();
         m_flag = -1;
         auto &clauses = m_model->GetClauses();
-        for (int i = 0; i < clauses.size(); ++i) {
+        for (int i = 0; i < model->GetLatchesStart(); ++i) {
             CarSolver::AddClause(clauses[i]);
         }
         for (auto c : m_model->GetConstraints()) {

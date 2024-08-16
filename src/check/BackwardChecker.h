@@ -62,18 +62,16 @@ class BackwardChecker : public BaseChecker {
         }
     } blockerOrder;
 
-    void OrderAssumption(shared_ptr<cube> uc, bool rev = false) {
+    void OrderAssumption(shared_ptr<cube> uc) {
         if (m_settings.seed > 0) {
             shuffle(uc->begin(), uc->end(), default_random_engine(m_settings.seed));
             return;
         }
         if (m_settings.Branching == 0) return;
         stable_sort(uc->begin(), uc->end(), litOrder);
-        if (rev) reverse(uc->begin(), uc->end());
     }
 
-    void GetPrimed(shared_ptr<cube> c, shared_ptr<cube> p) {
-        copy(c->begin(), c->end(), back_inserter(*p));
+    inline void GetPrimed(shared_ptr<cube> p) {
         for (auto &x : *p) {
             x = m_model->GetPrime(x);
         }

@@ -115,9 +115,9 @@ bool ForwardChecker::Check(int badId) {
                 m_log->L(3, "SAT CHECK on frame: ", task.frameLevel);
                 m_log->L(3, "From state: ", CubeToStrShort(task.state->latches));
                 m_log->L(3, "State Detail: ", CubeToStr(task.state->latches));
-                shared_ptr<cube> assumption(new cube());
-                GetPrimed(task.state->latches, assumption);
+                shared_ptr<cube> assumption(new cube(*task.state->latches));
                 OrderAssumption(assumption);
+                GetPrimed(assumption);
                 m_log->Tick();
                 bool result = m_mainSolver->Solve(assumption, task.frameLevel);
                 m_log->StatMainSolver();
@@ -419,8 +419,8 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
 bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unordered_set<int> required_lits) {
     int ctgs = 0;
     m_log->L(3, "Down:", CubeToStr(uc));
-    shared_ptr<cube> assumption(new cube());
-    GetPrimed(uc, assumption);
+    shared_ptr<cube> assumption(new cube(*uc));
+    GetPrimed(assumption);
     shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
     while (true) {
         // F_i & T & temp_uc'
@@ -440,9 +440,9 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
             GeneralizePredecessor(p, p_ucs);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
             int cts_lvl = GetNewLevel(cts);
-            shared_ptr<cube> cts_ass(new cube());
-            GetPrimed(cts->latches, cts_ass);
+            shared_ptr<cube> cts_ass(new cube(*cts->latches));
             OrderAssumption(cts_ass);
+            GetPrimed(cts_ass);
             // F_i-1 & T & cts'
             m_log->L(3, "Try ctg:", CubeToStr(cts->latches));
             m_log->Tick();
@@ -469,11 +469,10 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
     m_log->Tick();
 
     bool result;
-    shared_ptr<cube> assumption(new cube());
-    GetPrimed(c, assumption);
+    shared_ptr<cube> assumption(new cube(*c));
+    GetPrimed(assumption);
     if (!m_mainSolver->Solve(assumption, lvl)) {
         AddUnsatisfiableCore(c, lvl + 1);
-        m_branching->Update(c);
         result = true;
     } else {
         result = false;

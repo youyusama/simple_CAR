@@ -220,8 +220,8 @@ void BackwardChecker::Init() {
 bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
     m_log->Tick();
 
-    shared_ptr<cube> puc(new cube());
-    GetPrimed(uc, puc);
+    shared_ptr<cube> puc(new cube(*uc));
+    GetPrimed(puc);
     m_mainSolver->AddUC(*puc, frameLevel);
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
@@ -377,7 +377,6 @@ bool BackwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
     bool result;
     if (!m_mainSolver->Solve(c, lvl)) {
         AddUnsatisfiableCore(c, lvl + 1);
-        m_branching->Update(c);
         result = true;
     } else {
         result = false;
