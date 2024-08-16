@@ -34,11 +34,11 @@ Solver.o \
 Options.o \
 System.o
 
-CFLAG = -c -g
-# CFLAG = -c -g -O3 -s -DNDEBUG
+# CFLAG = -c -g
+CFLAG = -c -g -O3 -s -DNDEBUG
 
-CPPFLAG = -I./src/sat -I./src/model -I./src/check -c -g -fpermissive
-# CPPFLAG = -I./src/sat -I./src/model -I./src/check -c -g -fpermissive -O3 -s -DNDEBUG
+# CPPFLAG = -I./src/sat -I./src/model -I./src/check -c -g -fpermissive
+CPPFLAG = -I./src/sat -I./src/model -I./src/check -c -g -fpermissive -O3 -s -DNDEBUG
 
 LFLAG = -g -lz -lpthread -L./ -static -flto
 

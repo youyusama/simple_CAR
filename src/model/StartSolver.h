@@ -12,9 +12,13 @@ class StartSolver : public CarSolver {
     StartSolver(shared_ptr<AigerModel> model) {
         m_model = model;
         m_maxId = model->GetMaxId();
+        m_flag = -1;
         auto &clauses = m_model->GetClauses();
-        for (int i = 0; i < model->GetLatchesStart(); ++i) {
+        for (int i = 0; i < clauses.size(); ++i) {
             CarSolver::AddClause(clauses[i]);
+        }
+        for (auto c : m_model->GetConstraints()) {
+            m_assumptions.push(GetLit(c));
         }
         m_assumptions.push(GetLit(m_model->GetBad()));
     }
@@ -51,7 +55,7 @@ class StartSolver : public CarSolver {
     }
 
     void UpdateStartSolverFlag() {
-        if (m_assumptions.size() <= 1) {
+        if (m_flag == -1) {
             m_flag = GetNewVar();
             m_assumptions.push(GetLit(m_flag));
         } else {

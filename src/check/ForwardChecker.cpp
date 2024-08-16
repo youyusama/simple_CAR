@@ -205,6 +205,9 @@ void ForwardChecker::Init(int badId) {
     blockerOrder.branching = m_branching;
 
     m_mainSolver = make_shared<MainSolver>(m_model, true);
+    for (auto c : m_model->GetConstraints()) {
+        m_mainSolver->AddClause(clause{c});
+    }
     m_lifts = make_shared<MainSolver>(m_model, true);
     m_invSolver = make_shared<InvSolver>(m_model);
     m_startSovler = make_shared<StartSolver>(m_model);
@@ -293,12 +296,33 @@ bool ForwardChecker::IsInvariant(int frameLevel) {
 void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &t, shared_ptr<State> s) {
     m_log->Tick();
 
+    shared_ptr<cube> partial_latch = make_shared<cube>(*t.second);
+    OrderAssumption(partial_latch);
+
+    // necessary cube for constraints
+    shared_ptr<cube> necessary(new cube());
+    if (s != nullptr && m_model->GetConstraints().size() > 0) {
+        shared_ptr<cube> assumption(new cube());
+        copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
+        copy(t.first->begin(), t.first->end(), back_inserter(*assumption));
+        int act = m_lifts->GetNewVar();
+        clause cls;
+        for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
+        cls.push_back(-act);
+        m_lifts->AddClause(cls);
+        assumption->push_back(act);
+
+        bool res = m_lifts->Solve(assumption);
+        assert(!res);
+        necessary = m_lifts->GetUC(false);
+        m_lifts->FlipLastConstrain();
+    }
+
     int act = m_lifts->GetNewVar();
     if (s == nullptr) {
         // add !bad ( | !cons) to assumption
-        vector<int> constraints = m_model->GetConstraints();
         clause cls = {-m_badId};
-        for (auto cons : constraints) cls.push_back(-cons);
+        for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
         cls.push_back(-act);
         m_lifts->AddClause(cls);
     } else {
@@ -312,13 +336,11 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         m_lifts->AddClause(cls);
     }
 
-    shared_ptr<cube> partial_latch(new cube(*t.second));
-    OrderAssumption(partial_latch);
-
     while (true) {
         shared_ptr<cube> assumption(new cube());
         copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
         copy(t.first->begin(), t.first->end(), back_inserter(*assumption));
+        copy(necessary->begin(), necessary->end(), back_inserter(*assumption));
         assumption->push_back(act);
 
         bool res = m_lifts->Solve(assumption);
@@ -334,6 +356,14 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
     m_lifts->FlipLastConstrain();
 
     sort(partial_latch->begin(), partial_latch->end(), cmp);
+    if (necessary->size() > 0) {
+        sort(necessary->begin(), necessary->end(), cmp);
+        shared_ptr<cube> merged = make_shared<cube>(partial_latch->size() + necessary->size());
+        merge(necessary->begin(), necessary->end(), partial_latch->begin(), partial_latch->end(), merged->begin(), cmp);
+        auto last = unique(merged->begin(), merged->end());
+        merged->erase(last, merged->end());
+        partial_latch = merged;
+    }
     t.second = partial_latch;
 
     m_log->StatLiftSolver();

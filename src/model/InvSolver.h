@@ -18,6 +18,9 @@ class InvSolver : public CarSolver {
         for (int i = 0, end = model->GetOutputsStart(); i < end; i++) {
             AddClause(clauses[i]);
         }
+        for (auto c : m_model->GetConstraints()) {
+            AddClause(clause{c});
+        }
     }
 
   private:

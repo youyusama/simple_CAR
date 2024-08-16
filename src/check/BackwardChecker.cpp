@@ -211,6 +211,9 @@ void BackwardChecker::Init() {
     blockerOrder.branching = m_branching;
 
     m_mainSolver = make_shared<MainSolver>(m_model, true);
+    for (auto c : m_model->GetConstraints()) {
+        m_mainSolver->AddClause(clause{c});
+    }
     m_invSolver = make_shared<InvSolver>(m_model);
 }
 

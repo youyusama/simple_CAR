@@ -11,7 +11,7 @@ string State::GetLatchesString() {
     result.reserve(numLatches);
     int j = 0;
     for (int i = 0; i < numLatches; ++i) {
-        if (numInputs + i + 1 < abs(latches->at(j))) {
+        if (j >= latches->size() || numInputs + i + 1 < abs(latches->at(j))) {
             result += "x";
         } else {
             result += (latches->at(j) > 0) ? "1" : "0";
