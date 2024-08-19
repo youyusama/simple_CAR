@@ -28,7 +28,7 @@ class CarSolver : public ISolver, public Minisat::Solver {
     void AddConstraintAnd(const vector<shared_ptr<cube>> frame) override;
     void FlipLastConstrain() override;
 
-    inline int GetNewVar() { return (++*m_maxId); }
+    inline int GetNewVar() { return ++m_maxId; }
 
   protected:
     inline int GetLiteralId(const Lit &l);
@@ -39,7 +39,7 @@ class CarSolver : public ISolver, public Minisat::Solver {
         return ((id > 0) ? mkLit(var) : ~mkLit(var));
     };
 
-    shared_ptr<int> m_maxId;
+    int m_maxId;
     shared_ptr<AigerModel> m_model;
     vector<int> m_frameFlags;
     vec<Lit> m_assumptions;

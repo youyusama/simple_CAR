@@ -25,10 +25,9 @@ AigerModel::AigerModel(Settings settings) {
 
 
 void AigerModel::Init() {
-    m_maxId = make_shared<int>(0);
-    *m_maxId = m_aig->maxvar + 2;
-    m_trueId = *m_maxId - 1;
-    m_falseId = *m_maxId;
+    m_maxId = m_aig->maxvar + 2;
+    m_trueId = m_maxId - 1;
+    m_falseId = m_maxId;
     CollectConstants();
     CollectConstraints();
     CollectBad();
@@ -116,15 +115,15 @@ void AigerModel::CollectClauses() {
 
     // if l1 and l2 have same prime l', then l1 and l2 shoud have same value, except the initial states
     if (m_settings.forward) {
-        int init = ++(*m_maxId);
-        int cons = ++(*m_maxId);
+        int init = ++m_maxId;
+        int cons = ++m_maxId;
         m_clauses.emplace_back(clause{init, cons});
         for (auto it = m_preValueOfLatch.begin(); it != m_preValueOfLatch.end(); it++) {
             if (it->second.size() > 1) {
-                (*m_maxId)++;
+                m_maxId++;
                 for (int p : it->second) {
-                    m_clauses.emplace_back(clause{-cons, -p, *m_maxId});
-                    m_clauses.emplace_back(clause{-cons, p, -*m_maxId});
+                    m_clauses.emplace_back(clause{-cons, -p, m_maxId});
+                    m_clauses.emplace_back(clause{-cons, p, -m_maxId});
                 }
             }
         }
