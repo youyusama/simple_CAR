@@ -30,6 +30,15 @@ class CarSolver : public ISolver, public Minisat::Solver {
 
     inline int GetNewVar() { return ++m_maxId; }
 
+    inline bool GetModelOfId(int id) {
+        if (model[id - 1] == l_True)
+            return true;
+        else {
+            assert(model[id - 1] == l_False);
+            return false;
+        }
+    };
+
   protected:
     inline int GetLiteralId(const Lit &l);
     inline int GetFrameFlag(int frameLevel);

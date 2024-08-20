@@ -91,6 +91,8 @@ class AigerModel {
         return id > 0 ? it->second : -(it->second);
     }
 
+    int GetPrimeK(const int id, int k);
+
     vector<clause> &GetClauses() { return m_clauses; }
 
     inline int GetProperty() { return -m_bad; }
@@ -147,6 +149,8 @@ class AigerModel {
     unordered_map<int, int> m_nextValueOfLatch;
     unordered_map<int, int> m_nextValueOfGate;         // next value of and gate
     unordered_map<int, vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
+
+    vector<unordered_map<int, int>> m_MapsOfLatchPrimeK;
 
     shared_ptr<SimpSolver> m_simpSolver;
 };

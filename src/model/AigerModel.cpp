@@ -33,6 +33,8 @@ void AigerModel::Init() {
     CollectBad();
     CollectInitialState();
     CollectNextValueMapping();
+    unordered_map<int, int> MapOfPrime = m_nextValueOfLatch;
+    m_MapsOfLatchPrimeK.push_back(MapOfPrime);
     CollectClauses();
     CreateSimpSolver();
 }
@@ -304,5 +306,23 @@ shared_ptr<SimpSolver> AigerModel::GetSimpSolver() {
 void AigerModel::GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map) {
     map = m_preValueOfLatch;
 }
+
+
+int AigerModel::GetPrimeK(const int id, int k) {
+    if (k == 0) return id;
+    if (k - 1 >= m_MapsOfLatchPrimeK.size())
+        m_MapsOfLatchPrimeK.push_back(unordered_map<int, int>());
+    if (IsLatch(id)) return GetPrimeK(GetPrime(id), k - 1);
+
+    unordered_map<int, int> &k_map = m_MapsOfLatchPrimeK[k - 1];
+    unordered_map<int, int>::iterator it = k_map.find(abs(id));
+    if (it != k_map.end())
+        return id > 0 ? it->second : -(it->second);
+    else {
+        auto res = k_map.insert(pair<int, int>(abs(id), ++m_maxId));
+        return id > 0 ? res.first->second : -(res.first->second);
+    }
+}
+
 
 } // namespace car
