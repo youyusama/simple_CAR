@@ -7,6 +7,7 @@ src/model/AigerModel.cpp\
 src/model/Log.cpp\
 src/check/BackwardChecker.cpp\
 src/check/ForwardChecker.cpp\
+src/check/BMC.cpp\
 src/model/MainSolver.cpp\
 src/model/State.cpp\
 src/main.cpp\
@@ -23,6 +24,7 @@ AigerModel.o \
 Log.o \
 BackwardChecker.o \
 ForwardChecker.o \
+BMC.o\
 State.o \
 main.o \
 aiger.o \

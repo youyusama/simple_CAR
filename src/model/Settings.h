@@ -9,7 +9,10 @@ namespace car {
 
 struct Settings {
     bool debug = false;
-    bool forward = true;
+    bool forward = false;
+    bool backward = false;
+    bool bmc = false;
+    int bmc_k = -1;
     bool end = false;
     int Branching = 0;
     bool skip_refer = false;
