@@ -33,6 +33,11 @@ Settings GetArgv(int argc, char **argv) {
             settings.backward = true;
         } else if (strcmp(argv[i], "-bmc") == 0) {
             settings.bmc = true;
+        } else if (strcmp(argv[i], "-cnf") == 0) {
+            settings.cnf = true;
+            settings.outputDir = string(argv[i + 1]);
+            if (settings.outputDir.back() != '/') settings.outputDir += "/";
+            i++;
         } else if (strcmp(argv[i], "-k") == 0) {
             settings.bmc_k = atoi(argv[i + 1]);
             i++;

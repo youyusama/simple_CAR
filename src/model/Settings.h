@@ -13,6 +13,7 @@ struct Settings {
     bool backward = false;
     bool bmc = false;
     int bmc_k = -1;
+    bool cnf = false;
     bool end = false;
     int Branching = 0;
     bool skip_refer = false;

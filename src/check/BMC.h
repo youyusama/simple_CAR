@@ -7,6 +7,27 @@
 
 namespace car {
 
+
+class CNFWriter {
+  public:
+    CNFWriter(string filePath) {
+        m_maxId = 0;
+        m_filePath = filePath;
+    };
+    void AppendClause(clause c) {
+        m_clauses.push_back(c);
+        for (int v : c)
+            if (abs(v) > m_maxId) m_maxId = abs(v);
+    }
+    void WriteFile();
+
+  private:
+    string m_filePath;
+    vector<clause> m_clauses;
+    int m_maxId;
+};
+
+
 class BMC : public BaseChecker {
   public:
     BMC(Settings settings,
@@ -31,6 +52,8 @@ class BMC : public BaseChecker {
     void GetClausesK(int m_k, shared_ptr<vector<clause>> clauses);
     int GetBadK(int m_k);
     vector<int> GetConstraintsK(int m_k);
+
+    shared_ptr<CNFWriter> m_cnfw;
 };
 
 } // namespace car

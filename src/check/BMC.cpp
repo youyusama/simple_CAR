@@ -17,8 +17,28 @@ BMC::BMC(Settings settings,
 
 bool BMC::Run() {
     signal(SIGINT, signalHandler);
+    if (m_settings.cnf) {
+        // get outputfile
+        auto startIndex = m_settings.aigFilePath.find_last_of("/");
+        if (startIndex == string::npos) {
+            startIndex = 0;
+        } else {
+            startIndex++;
+        }
+        auto endIndex = m_settings.aigFilePath.find_last_of(".");
+        assert(endIndex != string::npos);
+        string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
+        string cexPath = m_settings.outputDir + aigName + "." + to_string(m_maxK) + ".cnf";
+        m_cnfw = make_shared<CNFWriter>(cexPath);
+    }
 
     bool result = Check(m_model->GetBad());
+
+    if (m_settings.cnf) {
+        m_cnfw->WriteFile();
+        m_log->L(0, "CNF written.");
+        return true;
+    }
 
     m_log->PrintStatistics();
     if (result) {
@@ -45,29 +65,37 @@ bool BMC::Check(int badId) {
         // & T^k
         for (int i = 0; i < clauses->size(); ++i) {
             m_Solver->AddClause(clauses->at(i));
+            m_cnfw->AppendClause(clauses->at(i));
             m_log->L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
         }
 
-        // assume( bad^k & cons^k )
         int k_bad = GetBadK(m_k);
-        shared_ptr<cube> assumptions(new cube());
-        assumptions->push_back(k_bad);
-        for (auto c : GetConstraintsK(k_bad)) {
-            assumptions->push_back(c);
+        if (!m_settings.cnf || m_k == m_maxK) {
+            // assume( bad^k & cons^k )
+            shared_ptr<cube> assumptions(new cube());
+            assumptions->push_back(k_bad);
+            m_cnfw->AppendClause({k_bad});
+            for (auto c : GetConstraintsK(k_bad)) {
+                assumptions->push_back(c);
+                m_cnfw->AppendClause({c});
+            }
+            if (m_settings.cnf) return false;
+            m_log->L(3, "Assumption: ", CubeToStr(assumptions));
+            m_log->Tick();
+            bool sat = m_Solver->Solve(assumptions);
+            m_log->StatMainSolver();
+            if (sat) return true;
         }
-        m_log->L(3, "Assumption: ", CubeToStr(assumptions));
-        m_log->Tick();
-        bool sat = m_Solver->Solve(assumptions);
-        m_log->StatMainSolver();
-        if (sat) return true;
 
         // & cons^k
-        for (auto c : GetConstraintsK(k_bad)) {
+        for (auto c : GetConstraintsK(m_k)) {
             m_Solver->AddClause({c});
+            m_cnfw->AppendClause({c});
             m_log->L(3, "Add Clause: ", c);
         }
         // & !bad^k
         m_Solver->AddClause({-k_bad});
+        m_cnfw->AppendClause({-k_bad});
         m_log->L(3, "Add Clause: ", -k_bad);
         m_k++;
         if (m_maxK != -1 && m_k > m_maxK) return false;
@@ -82,6 +110,7 @@ void BMC::Init(int badId) {
     // send initial state
     for (auto l : m_model->GetInitialState()) {
         m_Solver->AddClause({l});
+        m_cnfw->AppendClause({l});
     }
 }
 
@@ -147,6 +176,19 @@ void BMC::OutputCounterExample(int bad) {
     cexFile << "." << endl;
     cexFile.close();
     return;
+}
+
+
+void CNFWriter::WriteFile() {
+    // get outputfile
+    std::ofstream cnfFile;
+    cnfFile.open(m_filePath);
+    cnfFile << "p cnf " << m_maxId << " " << m_clauses.size() << endl;
+    for (clause cls : m_clauses) {
+        for (int v : cls) cnfFile << v << " ";
+        cnfFile << "0" << endl;
+    }
+    cnfFile.close();
 }
 
 } // namespace car
