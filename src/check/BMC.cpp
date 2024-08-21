@@ -52,7 +52,7 @@ bool BMC::Check(int badId) {
         int k_bad = GetBadK(m_k);
         shared_ptr<cube> assumptions(new cube());
         assumptions->push_back(k_bad);
-        for (auto c : GetConstraintsK(k_bad)) {
+        for (auto c : GetConstraintsK(m_k)) {
             assumptions->push_back(c);
         }
         m_log->L(3, "Assumption: ", CubeToStr(assumptions));
@@ -62,7 +62,7 @@ bool BMC::Check(int badId) {
         if (sat) return true;
 
         // & cons^k
-        for (auto c : GetConstraintsK(k_bad)) {
+        for (auto c : GetConstraintsK(m_k)) {
             m_Solver->AddClause({c});
             m_log->L(3, "Add Clause: ", c);
         }

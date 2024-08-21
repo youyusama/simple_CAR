@@ -34,9 +34,7 @@ bool ForwardChecker::Run() {
 }
 
 bool ForwardChecker::Check(int badId) {
-    if (m_model->GetTrueId() == badId)
-        return false;
-    else if (m_model->GetFalseId() == badId)
+    if (m_model->GetFalseId() == badId)
         return true;
 
     Init(badId);
@@ -48,6 +46,7 @@ bool ForwardChecker::Check(int badId) {
         auto p = m_mainSolver->GetAssignment(false);
         m_log->L(3, "Get Assignment:", CubeToStr(p.second));
         m_initialState->inputs = p.first;
+        m_initialState->latches = p.second;
         m_lastState = m_initialState;
         return false;
     }

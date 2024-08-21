@@ -35,9 +35,7 @@ bool BackwardChecker::Run() {
 }
 
 bool BackwardChecker::Check(int badId) {
-    if (m_model->GetTrueId() == badId)
-        return false;
-    else if (m_model->GetFalseId() == badId)
+    if (m_model->GetFalseId() == badId)
         return true;
 
     Init();
