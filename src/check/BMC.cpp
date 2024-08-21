@@ -75,7 +75,7 @@ bool BMC::Check(int badId) {
             shared_ptr<cube> assumptions(new cube());
             assumptions->push_back(k_bad);
             m_cnfw->AppendClause({k_bad});
-            for (auto c : GetConstraintsK(k_bad)) {
+            for (auto c : GetConstraintsK(m_k)) {
                 assumptions->push_back(c);
                 m_cnfw->AppendClause({c});
             }
