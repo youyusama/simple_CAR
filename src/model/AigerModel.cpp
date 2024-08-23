@@ -33,6 +33,8 @@ void AigerModel::Init() {
     CollectBad();
     CollectInitialState();
     CollectNextValueMapping();
+    unordered_map<int, int> MapOfPrime = m_nextValueOfLatch;
+    m_MapsOfLatchPrimeK.push_back(MapOfPrime);
     CollectClauses();
     CreateSimpSolver();
 }
@@ -52,7 +54,8 @@ void AigerModel::CollectConstants() {
 
 void AigerModel::CollectConstraints() {
     for (int i = 0; i < m_aig->num_constraints; ++i) {
-        m_constraints.push_back(GetCarId(m_aig->constraints[i].lit));
+        if (!IsTrue(m_aig->constraints[i].lit))
+            m_constraints.push_back(GetCarId(m_aig->constraints[i].lit));
     }
 }
 
@@ -105,11 +108,6 @@ void AigerModel::CollectClauses() {
     // as the need for start solver construction
     unordered_set<unsigned> exist_gates;
     vector<unsigned> gates;
-
-    // create clauses for constraints
-    for (int cons : m_constraints) {
-        m_clauses.emplace_back(clause{cons});
-    }
 
     CollectNecessaryAndGatesFromConstraints(exist_gates, gates);
     for (auto it = gates.begin(); it != gates.end(); it++) {
@@ -284,6 +282,11 @@ void AigerModel::CreateSimpSolver() {
         }
         m_simpSolver->setFrozen(p, true);
     }
+    for (int i = 0; i < m_constraints.size(); i++) {
+        Var cons_var = abs(m_constraints[i]) - 1;
+        while (cons_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
+        m_simpSolver->setFrozen(cons_var, true);
+    }
     Var bad_var = abs(m_bad) - 1;
     while (bad_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
     m_simpSolver->setFrozen(bad_var, true);
@@ -303,5 +306,23 @@ shared_ptr<SimpSolver> AigerModel::GetSimpSolver() {
 void AigerModel::GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map) {
     map = m_preValueOfLatch;
 }
+
+
+int AigerModel::GetPrimeK(const int id, int k) {
+    if (k == 0) return id;
+    if (k - 1 >= m_MapsOfLatchPrimeK.size())
+        m_MapsOfLatchPrimeK.push_back(unordered_map<int, int>());
+    if (IsLatch(id)) return GetPrimeK(GetPrime(id), k - 1);
+
+    unordered_map<int, int> &k_map = m_MapsOfLatchPrimeK[k - 1];
+    unordered_map<int, int>::iterator it = k_map.find(abs(id));
+    if (it != k_map.end())
+        return id > 0 ? it->second : -(it->second);
+    else {
+        auto res = k_map.insert(pair<int, int>(abs(id), ++m_maxId));
+        return id > 0 ? res.first->second : -(res.first->second);
+    }
+}
+
 
 } // namespace car

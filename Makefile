@@ -3,16 +3,16 @@ src/model/aiger.c
 
 CPPSOURCES = \
 src/model/CarSolver.cpp\
+src/model/AigerModel.cpp\
+src/model/Log.cpp\
 src/check/BackwardChecker.cpp\
 src/check/ForwardChecker.cpp\
-src/model/AigerModel.cpp\
+src/check/BMC.cpp\
 src/model/MainSolver.cpp\
-src/model/InvSolver.cpp\
 src/model/State.cpp\
 src/main.cpp\
 src/model/Branching.cpp\
 src/model/OverSequenceSet.cpp\
-src/model/Log.cpp\
 src/sat/minisat/core/Solver.cc\
 src/sat/minisat/simp/SimpSolver.cc\
 src/sat/minisat/utils/Options.cc\
@@ -20,17 +20,17 @@ src/sat/minisat/utils/System.cc
 
 OBJS = \
 CarSolver.o \
+AigerModel.o \
+Log.o \
 BackwardChecker.o \
 ForwardChecker.o \
-AigerModel.o \
+BMC.o\
 State.o \
 main.o \
 aiger.o \
 MainSolver.o \
-InvSolver.o \
 Branching.o\
 OverSequenceSet.o \
-Log.o \
 SimpSolver.o\
 Solver.o \
 Options.o \

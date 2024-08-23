@@ -2,10 +2,9 @@
 #include <fstream>
 
 namespace car {
-MainSolver::MainSolver(shared_ptr<AigerModel> model, bool isForward, bool by_sslv) {
-    m_isForward = isForward;
+MainSolver::MainSolver(shared_ptr<AigerModel> model, bool by_sslv) {
     m_model = model;
-    m_maxFlag = model->GetMaxId() + 1;
+    m_maxId = model->GetMaxId();
     if (by_sslv) {
         shared_ptr<SimpSolver> sslv = m_model->GetSimpSolver();
         while (nVars() < sslv->nVars()) newVar();
@@ -20,14 +19,14 @@ MainSolver::MainSolver(shared_ptr<AigerModel> model, bool isForward, bool by_ssl
         for (auto c = sslv->trailBegin(); c != sslv->trailEnd(); ++c)
             addClause(*c);
     } else {
-        auto &clause = m_model->GetClauses();
-        for (int i = 0; i < clause.size(); ++i) {
-            AddClause(clause[i]);
+        auto &clauses = m_model->GetClauses();
+        for (int i = 0; i < clauses.size(); ++i) {
+            AddClause(clauses[i]);
         }
     }
 }
 
-void MainSolver::add_negation_bad() {
+void MainSolver::AddNegationBad() {
     AddClause(clause{m_model->GetProperty()});
 }
 

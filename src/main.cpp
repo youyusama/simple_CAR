@@ -1,4 +1,5 @@
 #include "AigerModel.h"
+#include "BMC.h"
 #include "BackwardChecker.h"
 #include "ForwardChecker.h"
 #include "Log.h"
@@ -11,7 +12,8 @@
 void PrintUsage() {
     cout << "Usage: ./simplecar AIG_FILE.aig" << endl;
     cout << "Configs:" << endl;
-    cout << "   -f | -b             forward (default) | backward searching" << endl;
+    cout << "   -f | -b             forward | backward CAR" << endl;
+    cout << "   -bmc                BMC" << endl;
     cout << "   -br n               branching (1: sum 2: VSIDS 3: ACIDS 0: static)" << endl;
     cout << "   -rs                 refer-skipping" << endl;
     cout << "   -seed n             seed (works when > 0) for random var ordering" << endl;
@@ -29,7 +31,12 @@ Settings GetArgv(int argc, char **argv) {
         if (strcmp(argv[i], "-f") == 0) {
             settings.forward = true;
         } else if (strcmp(argv[i], "-b") == 0) {
-            settings.forward = false;
+            settings.backward = true;
+        } else if (strcmp(argv[i], "-bmc") == 0) {
+            settings.bmc = true;
+        } else if (strcmp(argv[i], "-k") == 0) {
+            settings.bmc_k = atoi(argv[i + 1]);
+            i++;
         } else if (strcmp(argv[i], "-br") == 0) {
             settings.Branching = atoi(argv[i + 1]);
             i++;
@@ -65,8 +72,10 @@ int main(int argc, char **argv) {
     shared_ptr<BaseChecker> checker;
     if (settings.forward) {
         checker = make_shared<ForwardChecker>(settings, aigerModel, log);
-    } else {
+    } else if (settings.backward) {
         checker = make_shared<BackwardChecker>(settings, aigerModel, log);
+    } else if (settings.bmc) {
+        checker = make_shared<BMC>(settings, aigerModel, log);
     }
     checker->Run();
     return 0;
