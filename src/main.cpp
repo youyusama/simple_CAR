@@ -12,7 +12,8 @@
 void PrintUsage() {
     cout << "Usage: ./simplecar AIG_FILE.aig" << endl;
     cout << "Configs:" << endl;
-    cout << "   -f | -b             forward (default) | backward searching" << endl;
+    cout << "   -f | -b             forward | backward CAR" << endl;
+    cout << "   -bmc                BMC" << endl;
     cout << "   -br n               branching (1: sum 2: VSIDS 3: ACIDS 0: static)" << endl;
     cout << "   -rs                 refer-skipping" << endl;
     cout << "   -seed n             seed (works when > 0) for random var ordering" << endl;

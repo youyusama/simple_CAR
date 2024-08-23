@@ -7,6 +7,7 @@
 #include "signal.h"
 #include <assert.h>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -45,15 +46,15 @@ class Log {
         if (m_verbosity == 0) return;
         cout << endl
              << "TransSolver    called:\t" << m_mainSolverCalls << endl;
-        cout << "TransSolver    takes:\t" << m_mainSolverTime << endl;
-        cout << "LiftSolver     takes:\t" << m_liftSolverTime << endl;
-        cout << "InvSolver      takes:\t" << m_invSolverTime << endl;
-        cout << "StartSolver    takes:\t" << m_enumerateStartStateTime << endl;
-        cout << "Locating Level takes:\t" << m_getNewLevelTime << endl;
-        cout << "Updating UC    takes:\t" << m_updateUcTime << endl;
-        cout << "Propagation    takes:\t" << m_propagationTime << endl;
-        cout << "Initialization takes:\t" << m_initTime << endl;
-        cout << "Total Time     spent:\t" << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << endl;
+        cout << "TransSolver    takes:\t" << fixed << setprecision(3) << m_mainSolverTime << endl;
+        cout << "LiftSolver     takes:\t" << fixed << setprecision(3) << m_liftSolverTime << endl;
+        cout << "InvSolver      takes:\t" << fixed << setprecision(3) << m_invSolverTime << endl;
+        cout << "StartSolver    takes:\t" << fixed << setprecision(3) << m_enumerateStartStateTime << endl;
+        cout << "Locating Level takes:\t" << fixed << setprecision(3) << m_getNewLevelTime << endl;
+        cout << "Updating UC    takes:\t" << fixed << setprecision(3) << m_updateUcTime << endl;
+        cout << "Propagation    takes:\t" << fixed << setprecision(3) << m_propagationTime << endl;
+        cout << "Initialization takes:\t" << fixed << setprecision(3) << m_initTime << endl;
+        cout << "Total Time     spent:\t" << fixed << setprecision(3) << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << endl;
     }
 
     inline void Tick() {
