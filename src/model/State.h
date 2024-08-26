@@ -2,7 +2,6 @@
 #define STATE_H
 
 #include <memory>
-#include <stdlib.h>
 #include <string>
 #include <vector>
 

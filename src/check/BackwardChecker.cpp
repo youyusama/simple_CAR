@@ -104,7 +104,7 @@ bool BackwardChecker::Check(int badId) {
                 m_log->L(3, "\nSAT CHECK on frame: ", task.frameLevel);
                 m_log->L(3, "From state: ", CubeToStr(task.state->latches));
                 m_log->Tick();
-                bool result = m_mainSolver->Solve(assumption);
+                bool result = m_mainSolver->ISolver::Solve(assumption);
                 m_log->StatMainSolver();
                 if (result) {
                     m_log->L(3, "Result >>> SAT <<<");
@@ -208,7 +208,7 @@ void BackwardChecker::Init() {
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
 
-    m_mainSolver = make_shared<MainSolver>(m_model, true);
+    m_mainSolver = make_shared<MainSolver>(m_model);
     for (auto c : m_model->GetConstraints()) {
         m_mainSolver->AddClause(clause{c});
     }
@@ -233,7 +233,7 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frame
 bool BackwardChecker::ImmediateSatisfiable(int badId) {
     shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
     assumptions->push_back(badId);
-    bool result = m_mainSolver->Solve(assumptions);
+    bool result = m_mainSolver->ISolver::Solve(assumptions);
     return result;
 }
 
@@ -264,7 +264,6 @@ bool BackwardChecker::IsInvariant(int frameLevel) {
 
     m_invSolver->AddConstraintAnd(frame_i);
     bool result = !m_invSolver->Solve();
-    m_invSolver->FlipLastConstrain();
     m_invSolver->AddConstraintOr(frame_i);
     return result;
 }

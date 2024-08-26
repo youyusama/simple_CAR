@@ -77,7 +77,11 @@ bool BMC::Check(int badId) {
 
 void BMC::Init(int badId) {
     m_badId = badId;
-    m_Solver = make_shared<CarSolver>();
+#ifdef CADICAL
+    m_Solver = make_shared<CadicalSolver>();
+#else
+    m_Solver = make_shared<MinisatSolver>();
+#endif
 
     // send initial state
     for (auto l : m_model->GetInitialState()) {
@@ -133,13 +137,13 @@ void BMC::OutputCounterExample(int bad) {
 
     for (int i = 0; i < m_model->GetNumLatches(); i++) {
         int latch_id = m_model->GetNumInputs() + i + 1;
-        cexFile << m_Solver->GetModelOfId(latch_id) ? "1" : "0";
+        cexFile << m_Solver->GetModel(latch_id) ? "1" : "0";
     }
     cexFile << endl;
     for (int j = 0; j <= m_k; j++) {
         for (int i = 0; i < m_model->GetNumInputs(); i++) {
             int input_id = m_model->GetPrimeK(i + 1, j);
-            cexFile << m_Solver->GetModelOfId(input_id) ? "1" : "0";
+            cexFile << m_Solver->GetModel(input_id) ? "1" : "0";
         }
         cexFile << endl;
     }

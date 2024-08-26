@@ -108,8 +108,8 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<AigerModel> m_model;
     shared_ptr<State> m_initialState;
     shared_ptr<MainSolver> m_mainSolver;
-    shared_ptr<CarSolver> m_lifts;
-    shared_ptr<ISolver> m_invSolver;
+    shared_ptr<MainSolver> m_lifts;
+    shared_ptr<InvSolver> m_invSolver;
     shared_ptr<StartSolver> m_startSovler;
     shared_ptr<Branching> m_branching;
     shared_ptr<State> m_lastState;

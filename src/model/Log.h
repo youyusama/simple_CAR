@@ -6,12 +6,10 @@
 #include "State.h"
 #include "signal.h"
 #include <assert.h>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <sstream>
-#include <stack>
 #include <time.h>
 
 namespace car {

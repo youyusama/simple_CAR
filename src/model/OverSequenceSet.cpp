@@ -172,4 +172,42 @@ string OverSequenceSet::FramesDetail() {
     return res;
 }
 
+
+bool BlockSolver::Solve(const shared_ptr<cube> assumption, int frameLevel) {
+#ifdef CADICAL
+    assume(GetFrameFlag(frameLevel));
+    m_assumption = assumption;
+    for (auto it : *assumption) {
+        assume(it);
+    }
+#else
+    m_assumptions.clear();
+    m_assumptions.push(GetLit(GetFrameFlag(frameLevel)));
+    for (auto it : *assumption) {
+        m_assumptions.push(GetLit(it));
+    }
+#endif
+    return ISolver::Solve();
+}
+
+
+void BlockSolver::AddUC(const cube &uc, int frameLevel) {
+    int flag = GetFrameFlag(frameLevel);
+    clause cls;
+    cls.push_back(-flag);
+    for (int i = 0; i < uc.size(); ++i) {
+        cls.push_back(-uc[i]);
+    }
+    AddClause(cls);
+}
+
+
+inline int BlockSolver::GetFrameFlag(int frameLevel) {
+    assert(frameLevel >= 0);
+    while (m_frameFlags.size() <= frameLevel) {
+        m_frameFlags.emplace_back(GetNewVar());
+    }
+    return m_frameFlags[frameLevel];
+}
+
 } // namespace car

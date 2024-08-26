@@ -36,7 +36,10 @@ void AigerModel::Init() {
     unordered_map<int, int> MapOfPrime = m_nextValueOfLatch;
     m_MapsOfLatchPrimeK.push_back(MapOfPrime);
     CollectClauses();
+#ifdef CADICAL
+#else
     CreateSimpSolver();
+#endif
 }
 
 
