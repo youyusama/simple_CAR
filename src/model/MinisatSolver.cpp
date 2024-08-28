@@ -9,6 +9,7 @@ MinisatSolver::MinisatSolver() {
 MinisatSolver::~MinisatSolver() {}
 
 bool MinisatSolver::Solve() {
+    if (m_tempVar != 0) m_assumptions.push(GetLit(m_tempVar));
     lbool result = solveLimited(m_assumptions);
     if (result == l_True) {
         return true;
@@ -19,24 +20,23 @@ bool MinisatSolver::Solve() {
 }
 
 
-bool MinisatSolver::Solve(const shared_ptr<vector<int>> assumption) {
+bool MinisatSolver::Solve(const shared_ptr<cube> assumption) {
     m_assumptions.clear();
     for (auto it : *assumption) {
         m_assumptions.push(GetLit(it));
     }
-    if (m_tempVar != 0) m_assumptions.push(GetLit(m_tempVar));
     return Solve();
 }
 
 
-void MinisatSolver::AddAssumption(const shared_ptr<vector<int>> assumption) {
+void MinisatSolver::AddAssumption(const shared_ptr<cube> assumption) {
     for (auto it : *assumption) {
         m_assumptions.push(GetLit(it));
     }
 }
 
 
-void MinisatSolver::AddClause(const vector<int> &cls) {
+void MinisatSolver::AddClause(const cube &cls) {
     vec<Lit> literals;
     for (int i = 0; i < cls.size(); ++i) {
         literals.push(GetLit(cls[i]));
@@ -46,10 +46,10 @@ void MinisatSolver::AddClause(const vector<int> &cls) {
 }
 
 
-pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> MinisatSolver::GetAssignment(bool prime) {
+pair<shared_ptr<cube>, shared_ptr<cube>> MinisatSolver::GetAssignment(bool prime) {
     assert(m_model->GetNumInputs() < nVars());
-    shared_ptr<vector<int>> inputs(new vector<int>());
-    shared_ptr<vector<int>> latches(new vector<int>());
+    shared_ptr<cube> inputs(new cube());
+    shared_ptr<cube> latches(new cube());
     inputs->reserve(m_model->GetNumInputs());
     latches->reserve(m_model->GetNumLatches());
     for (int i = 0; i < m_model->GetNumInputs(); ++i) {
@@ -78,17 +78,17 @@ pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> MinisatSolver::GetAssignm
             }
         }
     }
-    return pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>>(inputs, latches);
+    return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
 }
 
 
-shared_ptr<vector<int>> MinisatSolver::GetUC(bool prime) {
-    shared_ptr<vector<int>> uc(new vector<int>());
+shared_ptr<cube> MinisatSolver::GetUC(bool prime) {
+    shared_ptr<cube> uc(new cube());
     uc->reserve(conflict.size());
     if (prime) {
         for (int i = 0; i < conflict.size(); ++i) {
             int val = -GetLiteralId(conflict[i]);
-            vector<int> ids = m_model->GetPrevious(val);
+            cube ids = m_model->GetPrevious(val);
             if (val > 0) {
                 for (auto x : ids) {
                     uc->push_back(x);
@@ -118,14 +118,16 @@ inline int MinisatSolver::GetLiteralId(const Minisat::Lit &l) {
 }
 
 
-void MinisatSolver::AddTempClause(const vector<int> &cls) {
+void MinisatSolver::AddTempClause(const cube &cls) {
     m_tempVar = GetNewVar();
-    vector<int> temp_cls = cls;
+    cube temp_cls = cls;
     temp_cls.push_back(-m_tempVar);
+    AddClause(temp_cls);
 }
 
 
 void MinisatSolver::ReleaseTempClause() {
+    assert(m_tempVar != 0);
     releaseVar(~GetLit(m_tempVar));
     m_tempVar = 0;
 }

@@ -21,7 +21,7 @@ class MainSolver :
   public:
     MainSolver(shared_ptr<AigerModel> model);
 
-    bool Solve(const shared_ptr<cube> assumption, int frameLevel);
+    bool SolveFrame(const shared_ptr<cube> assumption, int frameLevel);
 
     void AddUC(const cube &uc, int frameLevel);
 
@@ -30,7 +30,7 @@ class MainSolver :
   private:
     inline int GetFrameFlag(int frameLevel);
 
-    vector<int> m_frameFlags;
+    cube m_frameFlags;
 };
 
 } // namespace car

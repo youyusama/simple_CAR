@@ -13,16 +13,16 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     CadicalSolver();
     ~CadicalSolver();
 
-    void AddClause(const vector<int> &cls) override;
-    void AddAssumption(const shared_ptr<vector<int>> assumption) override;
+    void AddClause(const cube &cls) override;
+    void AddAssumption(const shared_ptr<cube> assumption) override;
     bool Solve() override;
-    bool Solve(const shared_ptr<vector<int>> assumption) override;
-    pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> GetAssignment(bool prime) override;
-    shared_ptr<vector<int>> GetUC(bool prime) override;
+    bool Solve(const shared_ptr<cube> assumption) override;
+    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override;
+    shared_ptr<cube> GetUC(bool prime) override;
     inline int GetNewVar() {
         return ++m_maxId;
     }
-    void AddTempClause(const vector<int> &cls) override;
+    void AddTempClause(const cube &cls) override;
     void ReleaseTempClause() override;
     inline bool GetModel(int id) {
         if (val(id) > 0)
@@ -36,8 +36,8 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
   protected:
     shared_ptr<AigerModel> m_model;
     int m_maxId;
-    shared_ptr<vector<int>> m_assumptions;
-    vector<int> m_tempClause;
+    shared_ptr<cube> m_assumptions;
+    cube m_tempClause;
 };
 
 } // namespace car

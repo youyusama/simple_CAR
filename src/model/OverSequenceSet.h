@@ -52,7 +52,7 @@ class BlockSolver :
     BlockSolver(shared_ptr<AigerModel> model) {
         m_maxId = model->GetMaxId();
     };
-    bool Solve(const shared_ptr<cube> assumption, int frameLevel);
+    bool SolveFrame(const shared_ptr<cube> assumption, int frameLevel);
     void AddUC(const cube &uc, int frameLevel);
 
   private:

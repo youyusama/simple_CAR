@@ -118,7 +118,7 @@ bool ForwardChecker::Check(int badId) {
                 OrderAssumption(assumption);
                 GetPrimed(assumption);
                 m_log->Tick();
-                bool result = m_mainSolver->Solve(assumption, task.frameLevel);
+                bool result = m_mainSolver->SolveFrame(assumption, task.frameLevel);
                 m_log->StatMainSolver();
                 if (result) {
                     // Solver return SAT, get a new State, then continue
@@ -235,7 +235,7 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
 bool ForwardChecker::ImmediateSatisfiable(int badId) {
     shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
     assumptions->push_back(badId);
-    bool result = m_mainSolver->ISolver::Solve(assumptions);
+    bool result = m_mainSolver->Solve(assumptions);
     return result;
 }
 
@@ -279,6 +279,7 @@ bool ForwardChecker::IsInvariant(int frameLevel) {
 
     m_invSolver->AddConstraintAnd(frame_i);
     bool result = !m_invSolver->Solve();
+    m_invSolver->FlipLastConstrain();
     m_invSolver->AddConstraintOr(frame_i);
 
     m_log->StatInvSolver();
@@ -303,25 +304,21 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         shared_ptr<cube> assumption(new cube());
         copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
         copy(t.first->begin(), t.first->end(), back_inserter(*assumption));
-        int act = m_lifts->GetNewVar();
         clause cls;
         for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
-        cls.push_back(-act);
-        m_lifts->AddClause(cls);
-        assumption->push_back(act);
+        m_lifts->AddTempClause(cls);
 
-        bool res = m_lifts->ISolver::Solve(assumption);
+        bool res = m_lifts->Solve(assumption);
         assert(!res);
         necessary = m_lifts->GetUC(false);
+        m_lifts->ReleaseTempClause();
     }
 
-    int act = m_lifts->GetNewVar();
     if (s == nullptr) {
         // add !bad ( | !cons) to assumption
         clause cls = {-m_badId};
         for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
-        cls.push_back(-act);
-        m_lifts->AddClause(cls);
+        m_lifts->AddTempClause(cls);
     } else {
         // add !s' to clause
         clause cls;
@@ -329,8 +326,7 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         for (auto l : *s->latches) {
             cls.emplace_back(m_model->GetPrime(-l));
         }
-        cls.push_back(-act);
-        m_lifts->AddClause(cls);
+        m_lifts->AddTempClause(cls);
     }
 
     while (true) {
@@ -338,9 +334,8 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
         copy(t.first->begin(), t.first->end(), back_inserter(*assumption));
         copy(necessary->begin(), necessary->end(), back_inserter(*assumption));
-        assumption->push_back(act);
 
-        bool res = m_lifts->ISolver::Solve(assumption);
+        bool res = m_lifts->Solve(assumption);
         assert(!res);
         shared_ptr<cube> temp_p = m_lifts->GetUC(false);
         if (temp_p->size() == partial_latch->size() &&
@@ -350,6 +345,8 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
             partial_latch = temp_p;
         }
     }
+
+    m_lifts->ReleaseTempClause();
 
     sort(partial_latch->begin(), partial_latch->end(), cmp);
     if (necessary->size() > 0) {
@@ -421,7 +418,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
     while (true) {
         // F_i & T & temp_uc'
         m_log->Tick();
-        if (!m_mainSolver->Solve(assumption, frame_lvl)) {
+        if (!m_mainSolver->SolveFrame(assumption, frame_lvl)) {
             m_log->StatMainSolver();
             auto uc_ctg = m_mainSolver->GetUC(true);
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
@@ -442,7 +439,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
             // F_i-1 & T & cts'
             m_log->L(3, "Try ctg:", CubeToStr(cts->latches));
             m_log->Tick();
-            if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->Solve(cts_ass, cts_lvl)) {
+            if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveFrame(cts_ass, cts_lvl)) {
                 m_log->StatMainSolver();
                 ctgs++;
                 auto uc_cts = m_mainSolver->GetUC(true);
@@ -467,7 +464,7 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
     bool result;
     shared_ptr<cube> assumption(new cube(*c));
     GetPrimed(assumption);
-    if (!m_mainSolver->Solve(assumption, lvl)) {
+    if (!m_mainSolver->SolveFrame(assumption, lvl)) {
         AddUnsatisfiableCore(c, lvl + 1);
         result = true;
     } else {

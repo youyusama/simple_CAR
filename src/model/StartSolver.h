@@ -1,7 +1,6 @@
 #ifndef STARTSOLVER_H
 #define STARTSOLVER_H
 
-#include "../sat/minisat/core/Solver.h"
 #include "AigerModel.h"
 #ifdef CADICAL
 #include "CadicalSolver.h"

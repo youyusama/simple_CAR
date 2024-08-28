@@ -2,13 +2,22 @@
 #include <algorithm>
 
 namespace car {
-CadicalSolver::CadicalSolver() {}
+CadicalSolver::CadicalSolver() {
+    m_assumptions = make_shared<cube>();
+    m_tempClause = cube();
+}
 
 CadicalSolver::~CadicalSolver() {}
 
 bool CadicalSolver::Solve() {
     for (auto it : *m_assumptions) {
         assume(it);
+    }
+    if (m_tempClause.size() > 0) {
+        for (int l : m_tempClause) {
+            constrain(l);
+        }
+        constrain(0);
     }
     int result = solve();
     if (result == 10) {
@@ -20,33 +29,29 @@ bool CadicalSolver::Solve() {
 }
 
 
-bool CadicalSolver::Solve(const shared_ptr<vector<int>> assumption) {
-    m_assumptions = assumption;
-    if (m_tempClause.size() > 0) {
-        for (int l : m_tempClause) {
-            constrain(l);
-        }
-        constrain(0);
-    }
+bool CadicalSolver::Solve(const shared_ptr<cube> assumption) {
+    m_assumptions->clear();
+    m_assumptions->resize(assumption->size());
+    std::copy(assumption->begin(), assumption->end(), m_assumptions->begin());
     return Solve();
 }
 
 
-void CadicalSolver::AddAssumption(const shared_ptr<vector<int>> assumption) {
+void CadicalSolver::AddAssumption(const shared_ptr<cube> assumption) {
     for (auto it : *assumption) {
         m_assumptions->push_back(it);
     }
 }
 
 
-void CadicalSolver::AddClause(const vector<int> &cls) {
+void CadicalSolver::AddClause(const cube &cls) {
     clause(cls);
 }
 
 
-pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> CadicalSolver::GetAssignment(bool prime) {
-    shared_ptr<vector<int>> inputs(new vector<int>());
-    shared_ptr<vector<int>> latches(new vector<int>());
+pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime) {
+    shared_ptr<cube> inputs(new cube());
+    shared_ptr<cube> latches(new cube());
     inputs->reserve(m_model->GetNumInputs());
     latches->reserve(m_model->GetNumLatches());
     for (int i = 1; i < m_model->GetNumInputs() + 1; ++i) {
@@ -67,23 +72,24 @@ pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>> CadicalSolver::GetAssignm
             }
         } else {
             int p = m_model->GetPrime(i);
-            if ((val(p) > 0 && p > 0) || (val(p) < 0 && p < 0)) {
+            if (val(p) > 0) {
                 latches->emplace_back(i);
             } else {
+                assert(val(p) < 0);
                 latches->emplace_back(-i);
             }
         }
     }
-    return pair<shared_ptr<vector<int>>, shared_ptr<vector<int>>>(inputs, latches);
+    return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
 }
 
 
-shared_ptr<vector<int>> CadicalSolver::GetUC(bool prime) {
-    shared_ptr<vector<int>> uc(new vector<int>());
+shared_ptr<cube> CadicalSolver::GetUC(bool prime) {
+    shared_ptr<cube> uc(new cube());
     if (prime) {
         for (auto v : *m_assumptions) {
             if (failed(v)) {
-                vector<int> ids = m_model->GetPrevious(v);
+                cube ids = m_model->GetPrevious(v);
                 if (v > 0) {
                     for (auto x : ids) {
                         uc->push_back(x);
@@ -108,7 +114,7 @@ shared_ptr<vector<int>> CadicalSolver::GetUC(bool prime) {
 }
 
 
-void CadicalSolver::AddTempClause(const vector<int> &cls) {
+void CadicalSolver::AddTempClause(const cube &cls) {
     m_tempClause = cls;
 }
 

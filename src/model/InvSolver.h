@@ -30,12 +30,12 @@ class InvSolver :
     }
 
     void AddConstraintOr(const vector<shared_ptr<cube>> frame) {
-        clause cls;
+        cube cls;
         for (int i = 0; i < frame.size(); ++i) {
             int flag = GetNewVar();
             cls.push_back(flag);
             for (int j = 0; j < frame[i]->size(); ++j) {
-                AddClause(clause{-flag, frame[i]->at(j)});
+                AddClause(cube{-flag, frame[i]->at(j)});
             }
         }
         AddClause(cls);
@@ -44,7 +44,7 @@ class InvSolver :
     void AddConstraintAnd(const vector<shared_ptr<cube>> frame) {
         int flag = GetNewVar();
         for (int i = 0; i < frame.size(); ++i) {
-            clause cls;
+            cube cls;
             for (int j = 0; j < frame[i]->size(); ++j) {
                 cls.push_back(-frame[i]->at(j));
             }
@@ -54,6 +54,19 @@ class InvSolver :
         shared_ptr<cube> f = make_shared<cube>();
         f->push_back(flag);
         AddAssumption(f);
+    }
+
+
+    void FlipLastConstrain() {
+#ifdef CADICAL
+        int v = m_assumptions->back();
+        m_assumptions->pop_back();
+        clause(-v);
+#else
+        Lit lit = m_assumptions.last();
+        m_assumptions.pop();
+        releaseVar(~lit);
+#endif
     }
 
   private:

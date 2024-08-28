@@ -27,13 +27,12 @@ MainSolver::MainSolver(shared_ptr<AigerModel> model) {
 }
 
 
-bool MainSolver::Solve(const shared_ptr<cube> assumption, int frameLevel) {
+bool MainSolver::SolveFrame(const shared_ptr<cube> assumption, int frameLevel) {
 #ifdef CADICAL
-    assume(GetFrameFlag(frameLevel));
-    m_assumption = assumption;
-    for (auto it : *assumption) {
-        assume(it);
-    }
+    m_assumptions->clear();
+    m_assumptions->push_back(GetFrameFlag(frameLevel));
+    m_assumptions->resize(assumption->size() + 1);
+    std::copy(assumption->begin(), assumption->end(), m_assumptions->begin() + 1);
 #else
     m_assumptions.clear();
     m_assumptions.push(GetLit(GetFrameFlag(frameLevel)));
@@ -41,13 +40,13 @@ bool MainSolver::Solve(const shared_ptr<cube> assumption, int frameLevel) {
         m_assumptions.push(GetLit(it));
     }
 #endif
-    return ISolver::Solve();
+    return Solve();
 }
 
 
 void MainSolver::AddUC(const cube &uc, int frameLevel) {
     int flag = GetFrameFlag(frameLevel);
-    clause cls;
+    cube cls;
     cls.push_back(-flag);
     for (int i = 0; i < uc.size(); ++i) {
         cls.push_back(-uc[i]);
@@ -57,7 +56,7 @@ void MainSolver::AddUC(const cube &uc, int frameLevel) {
 
 
 void MainSolver::AddNegationBad() {
-    AddClause(clause{m_model->GetProperty()});
+    AddClause(cube{m_model->GetProperty()});
 }
 
 

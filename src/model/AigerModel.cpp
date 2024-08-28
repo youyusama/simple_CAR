@@ -36,8 +36,7 @@ void AigerModel::Init() {
     unordered_map<int, int> MapOfPrime = m_nextValueOfLatch;
     m_MapsOfLatchPrimeK.push_back(MapOfPrime);
     CollectClauses();
-#ifdef CADICAL
-#else
+#ifndef CADICAL
     CreateSimpSolver();
 #endif
 }
@@ -254,7 +253,7 @@ inline aiger_and *AigerModel::IsAndGate(const unsigned lit) {
     return nullptr;
 }
 
-
+#ifndef CADICAL
 Lit getLit(shared_ptr<SimpSolver> sslv, int id) {
     int var = abs(id) - 1;
     while (var >= sslv->nVars()) sslv->newVar();
@@ -304,7 +303,7 @@ void AigerModel::CreateSimpSolver() {
 shared_ptr<SimpSolver> AigerModel::GetSimpSolver() {
     return m_simpSolver;
 }
-
+#endif
 
 void AigerModel::GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map) {
     map = m_preValueOfLatch;

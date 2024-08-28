@@ -4,8 +4,12 @@
 extern "C" {
 #include "aiger.h"
 }
+#ifndef CADICAL
 #include "../sat/minisat/core/Solver.h"
 #include "../sat/minisat/simp/SimpSolver.h"
+using namespace Minisat;
+#endif
+
 #include "Settings.h"
 #include <algorithm>
 #include <assert.h>
@@ -19,7 +23,6 @@ extern "C" {
 #include <unordered_set>
 #include <vector>
 
-using namespace Minisat;
 using namespace car;
 using namespace std;
 
@@ -94,9 +97,9 @@ class AigerModel {
     vector<clause> &GetClauses() { return m_clauses; }
 
     inline int GetProperty() { return -m_bad; }
-
+#ifndef CADICAL
     shared_ptr<SimpSolver> GetSimpSolver();
-
+#endif
     void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
 
     vector<int> GetConstraints() { return m_constraints; };
@@ -129,8 +132,6 @@ class AigerModel {
 
     inline aiger_and *IsAndGate(const unsigned id);
 
-    void CreateSimpSolver();
-
     Settings m_settings;
     aiger *m_aig;
     int m_maxId;
@@ -149,8 +150,10 @@ class AigerModel {
     unordered_map<int, vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
 
     vector<unordered_map<int, int>> m_MapsOfLatchPrimeK;
-
+#ifndef CADICAL
+    void CreateSimpSolver();
     shared_ptr<SimpSolver> m_simpSolver;
+#endif
 };
 } // namespace car
 
