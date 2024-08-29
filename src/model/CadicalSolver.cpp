@@ -110,6 +110,8 @@ shared_ptr<cube> CadicalSolver::GetUC(bool prime) {
     }
 
     sort(uc->begin(), uc->end(), cmp);
+    auto last = unique(uc->begin(), uc->end());
+    uc->erase(last, uc->end());
     return uc;
 }
 
