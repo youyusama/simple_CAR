@@ -296,13 +296,13 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
     m_log->Tick();
 
     shared_ptr<cube> partial_latch = make_shared<cube>(*t.second);
-    OrderAssumption(partial_latch);
 
     // necessary cube for constraints
     shared_ptr<cube> necessary(new cube());
     if (s != nullptr && m_model->GetConstraints().size() > 0) {
         shared_ptr<cube> assumption(new cube());
         copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
+        OrderAssumption(assumption);
         copy(t.first->begin(), t.first->end(), back_inserter(*assumption));
         clause cls;
         for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
@@ -332,6 +332,7 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
     while (true) {
         shared_ptr<cube> assumption(new cube());
         copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
+        OrderAssumption(assumption);
         copy(t.first->begin(), t.first->end(), back_inserter(*assumption));
         copy(necessary->begin(), necessary->end(), back_inserter(*assumption));
 
@@ -348,7 +349,6 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
 
     m_lifts->ReleaseTempClause();
 
-    sort(partial_latch->begin(), partial_latch->end(), cmp);
     if (necessary->size() > 0) {
         sort(necessary->begin(), necessary->end(), cmp);
         shared_ptr<cube> merged = make_shared<cube>(partial_latch->size() + necessary->size());
