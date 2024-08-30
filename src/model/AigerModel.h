@@ -17,6 +17,7 @@ using namespace Minisat;
 #include <iostream>
 #include <math.h>
 #include <memory>
+#include <set>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -61,6 +62,14 @@ class AigerModel {
             return false;
     }
 
+    inline bool IsInnard(int id) {
+        if (m_innards->find(abs(id)) != m_innards->end()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     inline int GetCarId(const unsigned lit) {
         return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
     }
@@ -71,6 +80,7 @@ class AigerModel {
     inline int GetNumLatches() { return m_aig->num_latches; }
     inline int GetNumBad() { return m_aig->num_outputs + m_aig->num_bad; }
     inline int GetMaxId() { return m_maxId; }
+    inline void SetMaxId(int new_id) { m_maxId = new_id; }
     inline int GetOutputsStart() { return m_outputsStart; }
     inline int GetLatchesStart() { return m_latchesStart; }
     inline int GetTrueId() { return m_trueId; }
@@ -88,7 +98,7 @@ class AigerModel {
 
     inline int GetPrime(const int id) {
         unordered_map<int, int>::iterator it = m_nextValueOfLatch.find(abs(id));
-        assert(it != m_nextValueOfLatch.end());
+        if (it == m_nextValueOfLatch.end()) return 0;
         return id > 0 ? it->second : -(it->second);
     }
 
@@ -103,6 +113,18 @@ class AigerModel {
     void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
 
     vector<int> GetConstraints() { return m_constraints; };
+
+    shared_ptr<cube> GetInnardsImplied(shared_ptr<cube> uc);
+
+    int GetClauseOfInnards(shared_ptr<cube> innards, vector<cube> &clss);
+
+    shared_ptr<set<int>> GetInnards() { return m_innards; };
+
+    int GetInnardslvl(int id) {
+        unordered_map<int, int>::iterator it = m_innards_lvl.find(abs(id));
+        if (it == m_innards_lvl.end()) return 0;
+        return it->second;
+    }
 
   private:
     void Init();
@@ -132,6 +154,8 @@ class AigerModel {
 
     inline aiger_and *IsAndGate(const unsigned id);
 
+    int InnardsLogiclvlDFS(unsigned aig_id);
+
     Settings m_settings;
     aiger *m_aig;
     int m_maxId;
@@ -150,6 +174,10 @@ class AigerModel {
     unordered_map<int, vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
 
     vector<unordered_map<int, int>> m_MapsOfLatchPrimeK;
+
+    shared_ptr<set<int>> m_innards;
+    unordered_map<int, int> m_innards_lvl;
+
 #ifndef CADICAL
     void CreateSimpSolver();
     shared_ptr<SimpSolver> m_simpSolver;

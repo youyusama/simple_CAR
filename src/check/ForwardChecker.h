@@ -47,6 +47,16 @@ class ForwardChecker : public BaseChecker {
         }
     } litOrder;
 
+    struct InnOrder {
+        shared_ptr<AigerModel> m;
+
+        InnOrder() {}
+
+        bool operator()(const int &inn_1, const int &inn_2) const {
+            return (m->GetInnardslvl(inn_1) > m->GetInnardslvl(inn_2));
+        }
+    } innOrder;
+
     struct BlockerOrder {
         shared_ptr<Branching> branching;
 
@@ -69,6 +79,11 @@ class ForwardChecker : public BaseChecker {
         }
         if (m_settings.Branching == 0) return;
         stable_sort(c->begin(), c->end(), litOrder);
+        if (m_settings.internalSignals) {
+            int num_v = m_model->GetNumInputs() + m_model->GetNumLatches();
+            auto it = partition(c->begin(), c->end(), [num_v](int n) { return abs(n) > num_v; });
+            stable_sort(c->begin(), it, innOrder);
+        }
     }
 
     inline void GetPrimed(shared_ptr<cube> p) {
@@ -98,6 +113,8 @@ class ForwardChecker : public BaseChecker {
     void OutputCounterExample(int bad);
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
+
+    void ExtendLemmaInternalSignals(shared_ptr<cube> lemma);
 
     int m_minUpdateLevel;
     int m_badId;

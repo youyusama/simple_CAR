@@ -137,6 +137,10 @@ bool ForwardChecker::Check(int badId) {
                     auto uc = m_mainSolver->GetUC(true);
                     assert(uc->size() > 0);
                     m_log->L(3, "Get UC: ", CubeToStr(uc));
+                    if (m_settings.internalSignals) {
+                        AddUnsatisfiableCore(uc, task.frameLevel + 1);
+                        ExtendLemmaInternalSignals(uc);
+                    }
                     if (Generalize(uc, task.frameLevel))
                         m_branching->Update(uc);
                     m_log->L(3, "Get Generalized UC: ", CubeToStr(uc));
@@ -202,6 +206,7 @@ void ForwardChecker::Init(int badId) {
     m_branching = make_shared<Branching>(m_settings.Branching);
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
+    innOrder.m = m_model;
 
     m_mainSolver = make_shared<MainSolver>(m_model);
     for (auto c : m_model->GetConstraints()) {
@@ -324,6 +329,7 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         clause cls;
         cls.reserve(s->latches->size() + 1);
         for (auto l : *s->latches) {
+            if (m_settings.internalSignals && !m_model->IsLatch(l)) continue;
             cls.emplace_back(m_model->GetPrime(-l));
         }
         m_lifts->AddTempClause(cls);
@@ -473,6 +479,26 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
 
     m_log->StatPropagation();
     return result;
+}
+
+
+// ================================================================================
+// @brief: extend lemma with internal signals
+// @input:
+// @output:
+// ================================================================================
+void ForwardChecker::ExtendLemmaInternalSignals(shared_ptr<cube> lemma) {
+    shared_ptr<cube> innards = m_model->GetInnardsImplied(lemma);
+    if (innards->size() > 0) {
+        lemma->insert(lemma->end(), innards->begin(), innards->end());
+        m_log->L(3, "Internal Signals: Extended lemma ", CubeToStr(lemma));
+        vector<cube> clss;
+        int new_innards_num = m_model->GetClauseOfInnards(innards, clss);
+        m_log->L(3, "Internal Signals: ", new_innards_num, " new innards");
+        for (auto cls : clss) {
+            m_mainSolver->AddClause(cls);
+        }
+    }
 }
 
 

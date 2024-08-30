@@ -29,6 +29,7 @@ OverSequenceSet.o
 ifdef CADICAL
 	CPPSOURCES += src/model/CadicalSolver.cpp
 	OBJS += CadicalSolver.o
+	OBJS += src/sat/cadical/build/libcadical.a
 else
 	CPPSOURCES += src/model/MinisatSolver.cpp
 	CPPSOURCES += src/sat/minisat/core/Solver.cc
@@ -55,7 +56,6 @@ LFLAG = -g -lz -lpthread -L./ -static -flto
 
 ifdef CADICAL
 	CPPFLAG += -DCADICAL
-	LFLAG += -L./src/sat/cadical/build -lcadical
 endif
 
 GCC = gcc

@@ -19,6 +19,7 @@ struct Settings {
     bool witness = false;
     int seed = 0;
     int verbosity = 0;
+    bool internalSignals = false;
     string aigFilePath;
     string outputDir;
 };
