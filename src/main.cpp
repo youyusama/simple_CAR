@@ -16,7 +16,7 @@ void PrintUsage() {
     cout << "   -bmc                BMC" << endl;
     cout << "   -br n               branching (1: sum 2: VSIDS 3: ACIDS 0: static)" << endl;
     cout << "   -rs                 refer-skipping" << endl;
-    cout << "   -is                 internal signals" << endl;
+    // cout << "   -is                 internal signals" << endl;
     cout << "   -seed n             seed (works when > 0) for random var ordering" << endl;
     cout << "   -w OUTPUT_PATH/     output witness" << endl;
     cout << "   -v n                verbosity" << endl;
@@ -44,7 +44,7 @@ Settings GetArgv(int argc, char **argv) {
         } else if (strcmp(argv[i], "-rs") == 0) {
             settings.skip_refer = true;
         } else if (strcmp(argv[i], "-is") == 0) {
-            settings.internalSignals = true;
+            settings.internalSignals = false; // disabled
         } else if (strcmp(argv[i], "-seed") == 0) {
             settings.seed = atoi(argv[i + 1]);
             i++;
