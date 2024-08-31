@@ -36,7 +36,10 @@ void AigerModel::Init() {
     unordered_map<int, int> MapOfPrime = m_nextValueOfLatch;
     m_MapsOfLatchPrimeK.push_back(MapOfPrime);
     CollectClauses();
+    m_innards = make_shared<set<int>>();
+#ifndef CADICAL
     CreateSimpSolver();
+#endif
 }
 
 
@@ -251,7 +254,7 @@ inline aiger_and *AigerModel::IsAndGate(const unsigned lit) {
     return nullptr;
 }
 
-
+#ifndef CADICAL
 Lit getLit(shared_ptr<SimpSolver> sslv, int id) {
     int var = abs(id) - 1;
     while (var >= sslv->nVars()) sslv->newVar();
@@ -301,7 +304,7 @@ void AigerModel::CreateSimpSolver() {
 shared_ptr<SimpSolver> AigerModel::GetSimpSolver() {
     return m_simpSolver;
 }
-
+#endif
 
 void AigerModel::GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map) {
     map = m_preValueOfLatch;
@@ -321,6 +324,115 @@ int AigerModel::GetPrimeK(const int id, int k) {
     else {
         auto res = k_map.insert(pair<int, int>(abs(id), ++m_maxId));
         return id > 0 ? res.first->second : -(res.first->second);
+    }
+}
+
+
+shared_ptr<cube> AigerModel::GetInnardsImplied(shared_ptr<cube> uc) {
+    shared_ptr<cube> innards(new cube());
+    set<unsigned> det_aig;
+    for (auto v : *uc) det_aig.emplace((v > 0) ? v * 2 : abs(v) * 2 + 1);
+
+    for (int i = 0; i < m_aig->num_ands; ++i) {
+        aiger_and &aa = m_aig->ands[i];
+        if (det_aig.find(aa.lhs) != det_aig.end() ||
+            det_aig.find(aiger_not(aa.lhs)) != det_aig.end())
+            continue;
+        if (det_aig.find(aiger_not(aa.rhs0)) != det_aig.end()) {
+            det_aig.emplace(aiger_not(aa.lhs));
+        } else if (det_aig.find(aiger_not(aa.rhs1)) != det_aig.end()) {
+            det_aig.emplace(aiger_not(aa.lhs));
+        } else if (det_aig.find(aa.rhs0) != det_aig.end() &&
+                   det_aig.find(aa.rhs1) != det_aig.end()) {
+            det_aig.emplace(aa.lhs);
+        }
+    }
+
+    for (auto aig : det_aig)
+        if (!IsLatch(GetCarId(aig))) innards->push_back(GetCarId(aig));
+
+    return innards;
+}
+
+
+int AigerModel::GetClauseOfInnards(shared_ptr<cube> innards, vector<cube> &clss) {
+    // get new included innards
+    set<unsigned> new_innards_aig;
+    for (auto v : *innards) {
+        if (m_innards->find(abs(v)) == m_innards->end()) {
+            new_innards_aig.emplace(abs(v) * 2);
+            m_innards->emplace(abs(v));
+            // compute innards logic level
+            int lvl = InnardsLogiclvlDFS(abs(v) * 2);
+            m_innards_lvl.insert(pair<int, int>(abs(v), lvl));
+        }
+    }
+    if (new_innards_aig.size() == 0) return 0;
+    // collect gates & clauses
+    for (int i = m_aig->num_ands - 1; i >= 0; i--) {
+        aiger_and &aa = m_aig->ands[i];
+        if (new_innards_aig.find(aa.lhs) != new_innards_aig.end()) {
+            int pl, pr0, pr1;
+            // primed left
+            if (GetPrime(GetCarId(aa.lhs)) == 0) {
+                m_maxId++;
+                m_nextValueOfLatch.insert(pair<int, int>(GetCarId(aa.lhs), m_maxId));
+                InsertIntoPreValueMapping(m_maxId, GetCarId(aa.lhs));
+            }
+            pl = GetPrime(GetCarId(aa.lhs));
+            // primed right 0
+            if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0)) ||
+                aiger_is_input(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
+                if (GetPrime(GetCarId(aa.rhs0)) == 0) {
+                    m_maxId++;
+                    m_nextValueOfLatch.insert(pair<int, int>(GetCarId(aiger_strip(aa.rhs0)), m_maxId));
+                    InsertIntoPreValueMapping(m_maxId, GetCarId(aiger_strip(aa.rhs0)));
+                }
+                pr0 = GetPrime(GetCarId(aa.rhs0));
+            } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
+                pr0 = GetPrime(GetCarId(aa.rhs0));
+            } else {
+                pr1 = GetTrueId();
+            }
+            // primed right 1
+            if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1)) ||
+                aiger_is_input(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
+                if (GetPrime(GetCarId(aa.rhs1)) == 0) {
+                    m_maxId++;
+                    m_nextValueOfLatch.insert(pair<int, int>(GetCarId(aiger_strip(aa.rhs1)), m_maxId));
+                    InsertIntoPreValueMapping(m_maxId, GetCarId(aiger_strip(aa.rhs1)));
+                }
+                pr1 = GetPrime(GetCarId(aa.rhs1));
+            } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
+                pr1 = GetPrime(GetCarId(aa.rhs1));
+            } else {
+                pr1 = GetTrueId();
+            }
+
+            clss.emplace_back(vector<int>{pl, -pr0, -pr1});
+            clss.emplace_back(vector<int>{-pl, pr0});
+            clss.emplace_back(vector<int>{-pl, pr1});
+        }
+    }
+
+    return new_innards_aig.size();
+}
+
+
+int AigerModel::InnardsLogiclvlDFS(unsigned aig_id) {
+    auto it = m_innards_lvl.find(aig_id / 2);
+    if (it != m_innards_lvl.end())
+        return it->second;
+    aiger_and *aa = aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aig_id));
+    if (aa) {
+        int l_lvl = InnardsLogiclvlDFS(aa->rhs0);
+        int r_lvl = InnardsLogiclvlDFS(aa->rhs1);
+        if (l_lvl > r_lvl)
+            return l_lvl + 1;
+        else
+            return r_lvl + 1;
+    } else {
+        return 0;
     }
 }
 

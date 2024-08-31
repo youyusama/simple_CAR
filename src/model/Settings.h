@@ -1,7 +1,7 @@
 #ifndef SETTINGS_H
 #define SETTINGS_H
 
-#include <iostream>
+#include <string>
 
 using namespace std;
 
@@ -19,6 +19,7 @@ struct Settings {
     bool witness = false;
     int seed = 0;
     int verbosity = 0;
+    bool internalSignals = false;
     string aigFilePath;
     string outputDir;
 };

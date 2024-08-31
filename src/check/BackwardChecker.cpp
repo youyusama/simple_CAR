@@ -130,7 +130,7 @@ bool BackwardChecker::Check(int badId) {
             m_log->L(3, "\nSAT CHECK on frame: ", task.frameLevel);
             m_log->L(3, "From state: ", CubeToStr(task.state->latches));
             m_log->Tick();
-            bool result = m_mainSolver->Solve(assumption, task.frameLevel);
+            bool result = m_mainSolver->SolveFrame(assumption, task.frameLevel);
             m_log->StatMainSolver();
             if (result) {
                 // Solver return SAT, get a new State, then continue
@@ -208,7 +208,7 @@ void BackwardChecker::Init() {
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
 
-    m_mainSolver = make_shared<MainSolver>(m_model, true);
+    m_mainSolver = make_shared<MainSolver>(m_model);
     for (auto c : m_model->GetConstraints()) {
         m_mainSolver->AddClause(clause{c});
     }
@@ -320,7 +320,7 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, uno
     shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
     while (true) {
         // F_i & T & temp_uc'
-        if (!m_mainSolver->Solve(assumption, frame_lvl)) {
+        if (!m_mainSolver->SolveFrame(assumption, frame_lvl)) {
             auto uc_ctg = m_mainSolver->GetUC(false);
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
             uc->swap(*uc_ctg);
@@ -334,7 +334,7 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, uno
             shared_ptr<cube> cts_ass(new cube(*cts->latches));
             OrderAssumption(cts_ass);
             // F_i-1 & T & cts'
-            if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->Solve(cts_ass, cts_lvl)) {
+            if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveFrame(cts_ass, cts_lvl)) {
                 ctgs++;
                 auto uc_cts = m_mainSolver->GetUC(false);
                 m_log->L(3, "CTG Get UC:", CubeToStr(uc_cts));
@@ -373,7 +373,7 @@ bool BackwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
     m_log->Tick();
 
     bool result;
-    if (!m_mainSolver->Solve(c, lvl)) {
+    if (!m_mainSolver->SolveFrame(c, lvl)) {
         AddUnsatisfiableCore(c, lvl + 1);
         result = true;
     } else {

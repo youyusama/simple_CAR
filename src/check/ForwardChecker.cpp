@@ -118,7 +118,7 @@ bool ForwardChecker::Check(int badId) {
                 OrderAssumption(assumption);
                 GetPrimed(assumption);
                 m_log->Tick();
-                bool result = m_mainSolver->Solve(assumption, task.frameLevel);
+                bool result = m_mainSolver->SolveFrame(assumption, task.frameLevel);
                 m_log->StatMainSolver();
                 if (result) {
                     // Solver return SAT, get a new State, then continue
@@ -137,6 +137,10 @@ bool ForwardChecker::Check(int badId) {
                     auto uc = m_mainSolver->GetUC(true);
                     assert(uc->size() > 0);
                     m_log->L(3, "Get UC: ", CubeToStr(uc));
+                    if (m_settings.internalSignals) {
+                        AddUnsatisfiableCore(uc, task.frameLevel + 1);
+                        ExtendLemmaInternalSignals(uc);
+                    }
                     if (Generalize(uc, task.frameLevel))
                         m_branching->Update(uc);
                     m_log->L(3, "Get Generalized UC: ", CubeToStr(uc));
@@ -202,12 +206,13 @@ void ForwardChecker::Init(int badId) {
     m_branching = make_shared<Branching>(m_settings.Branching);
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
+    innOrder.m = m_model;
 
-    m_mainSolver = make_shared<MainSolver>(m_model, true);
+    m_mainSolver = make_shared<MainSolver>(m_model);
     for (auto c : m_model->GetConstraints()) {
         m_mainSolver->AddClause(clause{c});
     }
-    m_lifts = make_shared<MainSolver>(m_model, true);
+    m_lifts = make_shared<MainSolver>(m_model);
     m_invSolver = make_shared<InvSolver>(m_model);
     m_startSovler = make_shared<StartSolver>(m_model);
 }
@@ -296,51 +301,46 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
     m_log->Tick();
 
     shared_ptr<cube> partial_latch = make_shared<cube>(*t.second);
-    OrderAssumption(partial_latch);
 
     // necessary cube for constraints
     shared_ptr<cube> necessary(new cube());
     if (s != nullptr && m_model->GetConstraints().size() > 0) {
         shared_ptr<cube> assumption(new cube());
         copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
+        OrderAssumption(assumption);
         copy(t.first->begin(), t.first->end(), back_inserter(*assumption));
-        int act = m_lifts->GetNewVar();
         clause cls;
         for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
-        cls.push_back(-act);
-        m_lifts->AddClause(cls);
-        assumption->push_back(act);
+        m_lifts->AddTempClause(cls);
 
         bool res = m_lifts->Solve(assumption);
         assert(!res);
         necessary = m_lifts->GetUC(false);
-        m_lifts->FlipLastConstrain();
+        m_lifts->ReleaseTempClause();
     }
 
-    int act = m_lifts->GetNewVar();
     if (s == nullptr) {
         // add !bad ( | !cons) to assumption
         clause cls = {-m_badId};
         for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
-        cls.push_back(-act);
-        m_lifts->AddClause(cls);
+        m_lifts->AddTempClause(cls);
     } else {
         // add !s' to clause
         clause cls;
         cls.reserve(s->latches->size() + 1);
         for (auto l : *s->latches) {
+            if (m_settings.internalSignals && !m_model->IsLatch(l)) continue;
             cls.emplace_back(m_model->GetPrime(-l));
         }
-        cls.push_back(-act);
-        m_lifts->AddClause(cls);
+        m_lifts->AddTempClause(cls);
     }
 
     while (true) {
         shared_ptr<cube> assumption(new cube());
         copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
+        OrderAssumption(assumption);
         copy(t.first->begin(), t.first->end(), back_inserter(*assumption));
         copy(necessary->begin(), necessary->end(), back_inserter(*assumption));
-        assumption->push_back(act);
 
         bool res = m_lifts->Solve(assumption);
         assert(!res);
@@ -352,9 +352,9 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
             partial_latch = temp_p;
         }
     }
-    m_lifts->FlipLastConstrain();
 
-    sort(partial_latch->begin(), partial_latch->end(), cmp);
+    m_lifts->ReleaseTempClause();
+
     if (necessary->size() > 0) {
         sort(necessary->begin(), necessary->end(), cmp);
         shared_ptr<cube> merged = make_shared<cube>(partial_latch->size() + necessary->size());
@@ -424,7 +424,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
     while (true) {
         // F_i & T & temp_uc'
         m_log->Tick();
-        if (!m_mainSolver->Solve(assumption, frame_lvl)) {
+        if (!m_mainSolver->SolveFrame(assumption, frame_lvl)) {
             m_log->StatMainSolver();
             auto uc_ctg = m_mainSolver->GetUC(true);
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
@@ -445,7 +445,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
             // F_i-1 & T & cts'
             m_log->L(3, "Try ctg:", CubeToStr(cts->latches));
             m_log->Tick();
-            if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->Solve(cts_ass, cts_lvl)) {
+            if (ctgs < 3 && cts_lvl >= 0 && !m_mainSolver->SolveFrame(cts_ass, cts_lvl)) {
                 m_log->StatMainSolver();
                 ctgs++;
                 auto uc_cts = m_mainSolver->GetUC(true);
@@ -470,7 +470,7 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
     bool result;
     shared_ptr<cube> assumption(new cube(*c));
     GetPrimed(assumption);
-    if (!m_mainSolver->Solve(assumption, lvl)) {
+    if (!m_mainSolver->SolveFrame(assumption, lvl)) {
         AddUnsatisfiableCore(c, lvl + 1);
         result = true;
     } else {
@@ -479,6 +479,26 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
 
     m_log->StatPropagation();
     return result;
+}
+
+
+// ================================================================================
+// @brief: extend lemma with internal signals
+// @input:
+// @output:
+// ================================================================================
+void ForwardChecker::ExtendLemmaInternalSignals(shared_ptr<cube> lemma) {
+    shared_ptr<cube> innards = m_model->GetInnardsImplied(lemma);
+    if (innards->size() > 0) {
+        lemma->insert(lemma->end(), innards->begin(), innards->end());
+        m_log->L(3, "Internal Signals: Extended lemma ", CubeToStr(lemma));
+        vector<cube> clss;
+        int new_innards_num = m_model->GetClauseOfInnards(innards, clss);
+        m_log->L(3, "Internal Signals: ", new_innards_num, " new innards");
+        for (auto cls : clss) {
+            m_mainSolver->AddClause(cls);
+        }
+    }
 }
 
 

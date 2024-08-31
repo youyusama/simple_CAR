@@ -2,7 +2,11 @@
 #define BMC_H
 
 #include "BaseChecker.h"
-#include "CarSolver.h"
+#ifdef CADICAL
+#include "CadicalSolver.h"
+#else
+#include "MinisatSolver.h"
+#endif
 #include "Log.h"
 
 namespace car {
@@ -24,7 +28,7 @@ class BMC : public BaseChecker {
     int m_maxK;
     shared_ptr<State> m_initialState;
     int m_badId;
-    shared_ptr<CarSolver> m_Solver;
+    shared_ptr<ISolver> m_Solver;
 
     void Init(int badId);
     void OutputCounterExample(int bad);
