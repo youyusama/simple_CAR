@@ -331,13 +331,11 @@ int AigerModel::GetPrimeK(const int id, int k) {
 shared_ptr<cube> AigerModel::GetInnardsImplied(shared_ptr<cube> uc) {
     shared_ptr<cube> innards(new cube());
     set<unsigned> det_aig;
+    for (auto c : m_trues) det_aig.emplace(c);
     for (auto v : *uc) det_aig.emplace((v > 0) ? v * 2 : abs(v) * 2 + 1);
 
     for (int i = 0; i < m_aig->num_ands; ++i) {
         aiger_and &aa = m_aig->ands[i];
-        if (det_aig.find(aa.lhs) != det_aig.end() ||
-            det_aig.find(aiger_not(aa.lhs)) != det_aig.end())
-            continue;
         if (det_aig.find(aiger_not(aa.rhs0)) != det_aig.end()) {
             det_aig.emplace(aiger_not(aa.lhs));
         } else if (det_aig.find(aiger_not(aa.rhs1)) != det_aig.end()) {
@@ -392,7 +390,7 @@ int AigerModel::GetClauseOfInnards(shared_ptr<cube> innards, vector<cube> &clss)
             } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
                 pr0 = GetPrime(GetCarId(aa.rhs0));
             } else {
-                pr1 = GetTrueId();
+                pr0 = GetCarId(aa.rhs0);
             }
             // primed right 1
             if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1)) ||
@@ -406,7 +404,7 @@ int AigerModel::GetClauseOfInnards(shared_ptr<cube> innards, vector<cube> &clss)
             } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
                 pr1 = GetPrime(GetCarId(aa.rhs1));
             } else {
-                pr1 = GetTrueId();
+                pr1 = GetCarId(aa.rhs1);
             }
 
             clss.emplace_back(vector<int>{pl, -pr0, -pr1});
