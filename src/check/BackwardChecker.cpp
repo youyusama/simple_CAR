@@ -190,7 +190,6 @@ bool BackwardChecker::Check(int badId) {
         m_invSolver = nullptr;
 
         m_log->L(3, m_overSequence->FramesDetail());
-        m_mainSolver->simplify();
         m_overSequence->effectiveLevel++;
     }
 }
