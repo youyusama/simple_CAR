@@ -108,6 +108,7 @@ bool ForwardChecker::Check(int badId) {
                 if (task.frameLevel == -1) {
                     m_initialState->preState = task.state->preState;
                     m_initialState->inputs = task.state->inputs;
+                    m_initialState->latches = task.state->latches;
                     m_lastState = m_initialState;
                     return false;
                 }
@@ -188,7 +189,6 @@ bool ForwardChecker::Check(int badId) {
         m_invSolver = nullptr;
 
         m_log->L(3, m_overSequence->FramesDetail());
-        m_mainSolver->simplify();
         m_overSequence->effectiveLevel++;
         m_startSovler->UpdateStartSolverFlag();
     }

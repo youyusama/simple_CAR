@@ -10,6 +10,7 @@ MainSolver::MainSolver(shared_ptr<AigerModel> model) {
     for (int i = 0; i < clauses.size(); ++i) {
         AddClause(clauses[i]);
     }
+    simplify();
 #else
     shared_ptr<SimpSolver> sslv = m_model->GetSimpSolver();
     while (nVars() < sslv->nVars()) newVar();
