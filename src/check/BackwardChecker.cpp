@@ -507,8 +507,21 @@ void BackwardChecker::OutputCounterExample(int bad) {
         trace.push(state);
         state = state->preState;
     }
-    cexFile << trace.top()->GetLatchesString() << endl;
+
+    // get determined initial state
+    shared_ptr<cube> assumption(new cube(*trace.top()->latches));
     trace.pop();
+    shared_ptr<cube> succ(new cube(*trace.top()->latches));
+    shared_ptr<cube> input(new cube(*trace.top()->inputs));
+    GetPrimed(succ);
+    assumption->insert(assumption->end(), succ->begin(), succ->end());
+    assumption->insert(assumption->end(), input->begin(), input->end());
+    bool sat = m_mainSolver->Solve(assumption);
+    assert(sat);
+    auto p = m_mainSolver->GetAssignment(false);
+    shared_ptr<State> initState(new State(nullptr, p.first, p.second, 0));
+
+    cexFile << initState->GetLatchesString() << endl;
     while (!trace.empty()) {
         cexFile << trace.top()->GetInputsString() << endl;
         trace.pop();
