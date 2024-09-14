@@ -353,9 +353,10 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         }
     }
 
-    // further generalization
+#ifdef CADICAL
+    // further generalization for CaDiCaL
     int try_limits, tried_times = 0;
-    try_limits = (1 + log2(partial_latch->size()));
+    try_limits = (1 + log10(partial_latch->size()));
     unordered_set<int> required_lits;
     OrderAssumption(partial_latch);
     for (int i = partial_latch->size() - 1; i >= 0; i--) {
@@ -380,6 +381,7 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         tried_times++;
     }
     sort(partial_latch->begin(), partial_latch->end(), cmp);
+#endif
 
     m_lifts->ReleaseTempClause();
 

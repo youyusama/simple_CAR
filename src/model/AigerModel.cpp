@@ -362,7 +362,6 @@ int AigerModel::GetClauseOfInnards(shared_ptr<cube> innards, vector<cube> &clss)
             m_innards->emplace(abs(v));
             // compute innards logic level
             int lvl = InnardsLogiclvlDFS(abs(v) * 2);
-            m_innards_lvl.insert(pair<int, int>(abs(v), lvl));
         }
     }
     if (new_innards_aig.size() == 0) return 0;
@@ -422,16 +421,19 @@ int AigerModel::InnardsLogiclvlDFS(unsigned aig_id) {
     if (it != m_innards_lvl.end())
         return it->second;
     aiger_and *aa = aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aig_id));
+    int lvl;
     if (aa) {
         int l_lvl = InnardsLogiclvlDFS(aa->rhs0);
         int r_lvl = InnardsLogiclvlDFS(aa->rhs1);
         if (l_lvl > r_lvl)
-            return l_lvl + 1;
+            lvl = l_lvl + 1;
         else
-            return r_lvl + 1;
+            lvl = r_lvl + 1;
     } else {
-        return 0;
+        lvl = 0;
     }
+    m_innards_lvl.insert(pair<int, int>(aig_id / 2, lvl));
+    return lvl;
 }
 
 
