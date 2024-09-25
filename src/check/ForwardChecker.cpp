@@ -352,37 +352,6 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
             partial_latch = temp_p;
         }
     }
-
-#ifdef CADICAL
-    // further generalization for CaDiCaL
-    int try_limits, tried_times = 0;
-    try_limits = (1 + log10(partial_latch->size()));
-    unordered_set<int> required_lits;
-    OrderAssumption(partial_latch);
-    for (int i = partial_latch->size() - 1; i >= 0; i--) {
-        if (partial_latch->size() < 2) break;
-        if (tried_times > try_limits) break;
-        if (required_lits.find(partial_latch->at(i)) != required_lits.end()) continue;
-        shared_ptr<cube> assumption(new cube());
-        for (int l : *partial_latch)
-            if (l != partial_latch->at(i)) assumption->push_back(l);
-        copy(t.first->begin(), t.first->end(), back_inserter(*assumption));
-        copy(necessary->begin(), necessary->end(), back_inserter(*assumption));
-
-        bool sat = m_lifts->Solve(assumption);
-        if (sat) {
-            required_lits.emplace(partial_latch->at(i));
-        } else {
-            shared_ptr<cube> temp_p = m_lifts->GetUC(false);
-            partial_latch->swap(*temp_p);
-            OrderAssumption(partial_latch);
-            i = partial_latch->size();
-        }
-        tried_times++;
-    }
-    sort(partial_latch->begin(), partial_latch->end(), cmp);
-#endif
-
     m_lifts->ReleaseTempClause();
 
     if (necessary->size() > 0) {
@@ -518,6 +487,8 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
 // @output:
 // ================================================================================
 void ForwardChecker::ExtendLemmaInternalSignals(shared_ptr<cube> lemma) {
+    m_log->Tick();
+
     shared_ptr<cube> innards = m_model->GetInnardsImplied(lemma);
     if (innards->size() > 0) {
         lemma->insert(lemma->end(), innards->begin(), innards->end());
@@ -529,6 +500,8 @@ void ForwardChecker::ExtendLemmaInternalSignals(shared_ptr<cube> lemma) {
             m_mainSolver->AddClause(cls);
         }
     }
+
+    m_log->StatInternalSignals();
 }
 
 
