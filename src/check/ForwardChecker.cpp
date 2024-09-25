@@ -332,6 +332,7 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
             if (m_settings.internalSignals && !m_model->IsLatch(l)) continue;
             cls.emplace_back(m_model->GetPrime(-l));
         }
+        if (m_settings.internalSignals && cls.size() == 0) return;
         m_lifts->AddTempClause(cls);
     }
 

@@ -347,7 +347,8 @@ shared_ptr<cube> AigerModel::GetInnardsImplied(shared_ptr<cube> uc) {
     }
 
     for (auto aig : det_aig)
-        if (!IsLatch(GetCarId(aig))) innards->push_back(GetCarId(aig));
+        if (!IsLatch(GetCarId(aig)) && !(IsTrue(aig) || IsFalse(aig)))
+            innards->push_back(GetCarId(aig));
 
     return innards;
 }
@@ -388,8 +389,11 @@ int AigerModel::GetClauseOfInnards(shared_ptr<cube> innards, vector<cube> &clss)
                 pr0 = GetPrime(GetCarId(aa.rhs0));
             } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
                 pr0 = GetPrime(GetCarId(aa.rhs0));
-            } else {
-                pr0 = GetCarId(aa.rhs0);
+            } else { // constant
+                if (IsTrue(aa.rhs0))
+                    pr0 = m_trueId;
+                else
+                    pr0 = m_falseId;
             }
             // primed right 1
             if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1)) ||
@@ -402,8 +406,11 @@ int AigerModel::GetClauseOfInnards(shared_ptr<cube> innards, vector<cube> &clss)
                 pr1 = GetPrime(GetCarId(aa.rhs1));
             } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
                 pr1 = GetPrime(GetCarId(aa.rhs1));
-            } else {
-                pr1 = GetCarId(aa.rhs1);
+            } else { // constant
+                if (IsTrue(aa.rhs0))
+                    pr1 = m_trueId;
+                else
+                    pr1 = m_falseId;
             }
 
             clss.emplace_back(vector<int>{pl, -pr0, -pr1});
