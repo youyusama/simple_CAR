@@ -52,6 +52,7 @@ class Log {
         cout << "Updating UC    takes:\t" << fixed << setprecision(3) << m_updateUcTime << endl;
         cout << "Propagation    takes:\t" << fixed << setprecision(3) << m_propagationTime << endl;
         cout << "Initialization takes:\t" << fixed << setprecision(3) << m_initTime << endl;
+        cout << "Innards        takes:\t" << fixed << setprecision(3) << m_internalSignalsTime << endl;
         cout << "Total Time     spent:\t" << fixed << setprecision(3) << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << endl;
     }
 
@@ -92,6 +93,10 @@ class Log {
         m_updateUcTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
     }
 
+    void StatInternalSignals() {
+        m_internalSignalsTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+    }
+
   private:
     template <typename T, typename... Args>
     void logHelper(std::ostringstream &oss, const T &first, const Args &...args) {
@@ -117,6 +122,7 @@ class Log {
     double m_propagationTime = 0;
     double m_enumerateStartStateTime = 0;
     double m_initTime = 0;
+    double m_internalSignalsTime = 0;
 
     clock_t m_tick;
     clock_t m_begin;
