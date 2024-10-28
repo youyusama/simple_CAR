@@ -35,8 +35,11 @@ void AigerModel::Init() {
     CollectNextValueMapping();
     unordered_map<int, int> MapOfPrime = m_nextValueOfLatch;
     m_MapsOfLatchPrimeK.push_back(MapOfPrime);
-    CollectClauses();
     m_innards = make_shared<set<int>>();
+    if (m_settings.internalSignals) {
+        CollectInnards();
+    }
+    CollectClauses();
 #ifndef CADICAL
     CreateSimpSolver();
 #endif
@@ -155,6 +158,20 @@ void AigerModel::CollectClauses() {
         aiger_and *aa = aiger_is_and(m_aig, *it);
         AddAndGateToClause(aa);
     }
+    // create clauses for innards
+    if (m_settings.internalSignals) {
+        gates.clear();
+        for (int i = 0; i < m_aig->num_ands; ++i) {
+            aiger_and &aa = m_aig->ands[i];
+            if (m_innards->find(GetCarId(aa.lhs)) != m_innards->end())
+                FindAndGates(&aa, exist_gates, gates);
+        }
+        for (auto it = gates.begin(); it != gates.end(); it++) {
+            if (*it == 0) continue;
+            aiger_and *aa = aiger_is_and(m_aig, *it);
+            AddAndGateToClause(aa);
+        }
+    }
 
     m_latchesStart = m_clauses.size();
 
@@ -165,6 +182,11 @@ void AigerModel::CollectClauses() {
         if (*it == 0) continue;
         aiger_and *aa = aiger_is_and(m_aig, *it);
         AddAndGateToClause(aa);
+    }
+
+    // create clauses for innards transition relation
+    if (m_settings.internalSignals) {
+        CollectInnardsClauses();
     }
 
     // create clauses for true and false
@@ -293,6 +315,14 @@ void AigerModel::CreateSimpSolver() {
     Var bad_var = abs(m_bad) - 1;
     while (bad_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
     m_simpSolver->setFrozen(bad_var, true);
+
+    if (m_settings.internalSignals) {
+        for (int i : *m_innards) {
+            Var inn_var = abs(GetPrime(i)) - 1;
+            while (inn_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
+            m_simpSolver->setFrozen(inn_var, true);
+        }
+    }
 
     for (int i = 0; i < m_clauses.size(); i++) {
         addClause(m_simpSolver, m_clauses[i]);
@@ -441,6 +471,69 @@ int AigerModel::InnardsLogiclvlDFS(unsigned aig_id) {
     }
     m_innards_lvl.insert(pair<int, int>(aig_id / 2, lvl));
     return lvl;
+}
+
+
+void AigerModel::CollectInnards() {
+    for (int i = 0; i < m_aig->num_ands; ++i) {
+        // input-free innard check
+        aiger_and &aa = m_aig->ands[i];
+        int l = GetCarId(aa.lhs);
+        int r0 = GetCarId(aa.rhs0);
+        int r1 = GetCarId(aa.rhs1);
+        bool b0 = IsConstant(r0) || IsLatch(r0) || m_innards->find(abs(r0)) != m_innards->end();
+        bool b1 = IsConstant(r1) || IsLatch(r1) || m_innards->find(abs(r1)) != m_innards->end();
+        if (b0 && b1) {
+            m_innards->emplace(l);
+            InnardsLogiclvlDFS(aa.lhs);
+        }
+    }
+}
+
+
+void AigerModel::CollectInnardsClauses() {
+    for (int i = 0; i < m_aig->num_ands; ++i) {
+        aiger_and &aa = m_aig->ands[i];
+        if (m_innards->find(GetCarId(aa.lhs)) == m_innards->end())
+            continue;
+
+        // add clauses
+        int pl, pr0, pr1;
+        // primed left
+        if (GetPrime(GetCarId(aa.lhs)) == 0) {
+            m_maxId++;
+            m_nextValueOfLatch.insert(pair<int, int>(GetCarId(aa.lhs), m_maxId));
+            InsertIntoPreValueMapping(m_maxId, GetCarId(aa.lhs));
+        }
+        pl = GetPrime(GetCarId(aa.lhs));
+        // primed right 0
+        if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
+            pr0 = GetPrime(GetCarId(aa.rhs0));
+        } else if (IsConstant(GetCarId(aa.rhs0))) { // constant
+            if (IsTrue(aa.rhs0))
+                pr0 = m_trueId;
+            else
+                pr0 = m_falseId;
+        } else if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
+            assert(GetPrime(GetCarId(aa.rhs0)) != 0);
+            pr0 = GetPrime(GetCarId(aa.rhs0));
+        }
+        // primed right 1
+        if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
+            pr1 = GetPrime(GetCarId(aa.rhs1));
+        } else if (IsConstant(GetCarId(aa.rhs1))) { // constant
+            if (IsTrue(aa.rhs1))
+                pr1 = m_trueId;
+            else
+                pr1 = m_falseId;
+        } else if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
+            assert(GetPrime(GetCarId(aa.rhs1)) != 0);
+            pr1 = GetPrime(GetCarId(aa.rhs1));
+        }
+        m_clauses.emplace_back(vector<int>{pl, -pr0, -pr1});
+        m_clauses.emplace_back(vector<int>{-pl, pr0});
+        m_clauses.emplace_back(vector<int>{-pl, pr1});
+    }
 }
 
 

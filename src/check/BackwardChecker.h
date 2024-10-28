@@ -47,6 +47,16 @@ class BackwardChecker : public BaseChecker {
         }
     } litOrder;
 
+    struct InnOrder {
+        shared_ptr<AigerModel> m;
+
+        InnOrder() {}
+
+        bool operator()(const int &inn_1, const int &inn_2) const {
+            return (m->GetInnardslvl(inn_1) > m->GetInnardslvl(inn_2));
+        }
+    } innOrder;
+
     struct BlockerOrder {
         shared_ptr<Branching> branching;
 
@@ -65,6 +75,10 @@ class BackwardChecker : public BaseChecker {
     void OrderAssumption(shared_ptr<cube> uc) {
         if (m_settings.seed > 0) {
             shuffle(uc->begin(), uc->end(), default_random_engine(m_settings.seed));
+            return;
+        }
+        if (m_settings.internalSignals) {
+            stable_sort(uc->begin(), uc->end(), innOrder);
             return;
         }
         if (m_settings.Branching == 0) return;
@@ -94,6 +108,8 @@ class BackwardChecker : public BaseChecker {
     void OutputCounterExample(int bad);
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
+
+    bool CheckBad(shared_ptr<State> s);
 
     int m_minUpdateLevel;
     shared_ptr<Branching> m_branching;
