@@ -103,6 +103,10 @@ class AigerModel {
 
     vector<int> GetConstraints() { return m_constraints; };
 
+    void GenerateBMCLEC();
+
+    unsigned GetLitPrimeK(aiger *aig, const unsigned lit, const int k);
+
   private:
     void Init();
 
@@ -151,6 +155,8 @@ class AigerModel {
     unordered_map<int, vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
 
     vector<unordered_map<int, int>> m_MapsOfLatchPrimeK;
+
+    vector<unordered_map<unsigned, unsigned>> m_MapsOfLitPrimeK;
 
     shared_ptr<SimpSolver> m_simpSolver;
 };

@@ -12,6 +12,8 @@ struct Settings {
     bool forward = false;
     bool backward = false;
     bool bmc = false;
+    bool bmc_lec = false;
+    bool bmc_lec_aag = false;
     int bmc_k = -1;
     bool cnf = false;
     bool end = false;

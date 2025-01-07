@@ -325,4 +325,88 @@ int AigerModel::GetPrimeK(const int id, int k) {
 }
 
 
+void AigerModel::GenerateBMCLEC() {
+    int bound_k = m_settings.bmc_k;
+
+    // get outputfile
+    auto startIndex = m_settings.aigFilePath.find_last_of("/");
+    if (startIndex == string::npos) {
+        startIndex = 0;
+    } else {
+        startIndex++;
+    }
+    auto endIndex = m_settings.aigFilePath.find_last_of(".");
+    assert(endIndex != string::npos);
+    string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
+    string outputPath = m_settings.outputDir + aigName + "." + to_string(bound_k) + ".aag";
+
+    // circuit
+    aiger *lec_aig = aiger_init();
+    lec_aig->maxvar = m_aig->maxvar + 1;
+    // free latches as inputs
+    for (unsigned i = 0; i < m_aig->num_latches; i++) {
+        aiger_symbol &latch = m_aig->latches[i];
+        if (latch.reset != 0 && latch.reset != 1) {
+            aiger_add_input(lec_aig, latch.lit, "");
+        }
+    }
+    for (int k = 0; k <= bound_k; k++) {
+        // inputs
+        for (unsigned i = 0; i < m_aig->num_inputs; i++) {
+            aiger_symbol &input = m_aig->inputs[i];
+            unsigned input_lit_k = GetLitPrimeK(lec_aig, input.lit, k);
+            // cout << "add input " << input.lit << " " << input_lit_k << endl;
+            aiger_add_input(lec_aig, input_lit_k, "");
+        }
+    }
+    for (int k = 0; k <= bound_k; k++) {
+        // and gates
+        for (unsigned i = 0; i < m_aig->num_ands; i++) {
+            aiger_and &gate = m_aig->ands[i];
+            unsigned rhs0_lit_k = GetLitPrimeK(lec_aig, gate.rhs0, k);
+            unsigned rhs1_lit_k = GetLitPrimeK(lec_aig, gate.rhs1, k);
+            unsigned lhs_lit_k = GetLitPrimeK(lec_aig, gate.lhs, k);
+            // cout << "-" << endl;
+            // cout << "add and " << gate.lhs << " " << gate.rhs0 << " " << gate.rhs1 << endl;
+            // cout << "add and " << lhs_lit_k << " " << rhs0_lit_k << " " << rhs1_lit_k << endl;
+            aiger_add_and(lec_aig, lhs_lit_k, rhs0_lit_k, rhs1_lit_k);
+        }
+    }
+    aiger_symbol &output = m_aig->outputs[0];
+    unsigned output_lit_k = GetLitPrimeK(lec_aig, output.lit, bound_k);
+    aiger_add_output(lec_aig, output_lit_k, "");
+
+    aiger_reencode(lec_aig);
+    aiger_open_and_write_to_file(lec_aig, outputPath.c_str());
+}
+
+
+unsigned AigerModel::GetLitPrimeK(aiger *aig, const unsigned lit, const int k) {
+    if (lit == 0 || lit == 1) return lit;
+    aiger_symbol *latch = aiger_is_latch(m_aig, lit);
+    if (k == 0) {
+        if (latch != nullptr) {
+            return latch->reset;
+        } else {
+            return lit;
+        }
+    }
+    if (k - 1 >= m_MapsOfLitPrimeK.size())
+        m_MapsOfLitPrimeK.push_back(unordered_map<unsigned, unsigned>());
+    if (latch != nullptr) {
+        return GetLitPrimeK(aig, aiger_sign(lit) == 0 ? latch->next : aiger_not(latch->next), k - 1);
+    }
+
+    unordered_map<unsigned, unsigned> &k_map = m_MapsOfLitPrimeK[k - 1];
+    unordered_map<unsigned, unsigned>::iterator it = k_map.find(aiger_strip(lit));
+    if (it != k_map.end())
+        return aiger_sign(lit) == 0 ? it->second : aiger_not(it->second);
+    else {
+        unsigned new_lit = (++m_aig->maxvar) * 2;
+        auto res = k_map.insert(pair<unsigned, unsigned>(aiger_strip(lit), new_lit));
+        return aiger_sign(lit) == 0 ? res.first->second : aiger_not(res.first->second);
+    }
+}
+
+
 } // namespace car

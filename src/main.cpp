@@ -38,6 +38,13 @@ Settings GetArgv(int argc, char **argv) {
             settings.outputDir = string(argv[i + 1]);
             if (settings.outputDir.back() != '/') settings.outputDir += "/";
             i++;
+        } else if (strcmp(argv[i], "-bmc_lec") == 0) {
+            settings.bmc_lec = true;
+        } else if (strcmp(argv[i], "-bmc_lec_aag") == 0) {
+            settings.bmc_lec_aag = true;
+            settings.outputDir = string(argv[i + 1]);
+            if (settings.outputDir.back() != '/') settings.outputDir += "/";
+            i++;
         } else if (strcmp(argv[i], "-k") == 0) {
             settings.bmc_k = atoi(argv[i + 1]);
             i++;
@@ -80,6 +87,9 @@ int main(int argc, char **argv) {
         checker = make_shared<BackwardChecker>(settings, aigerModel, log);
     } else if (settings.bmc) {
         checker = make_shared<BMC>(settings, aigerModel, log);
+    } else if (settings.bmc_lec) {
+        aigerModel->GenerateBMCLEC();
+        return 0;
     }
     checker->Run();
     return 0;

@@ -30,6 +30,8 @@ bool BMC::Run() {
         string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
         string cexPath = m_settings.outputDir + aigName + "." + to_string(m_maxK) + ".cnf";
         m_cnfw = make_shared<CNFWriter>(cexPath);
+    } else {
+        m_cnfw = make_shared<CNFWriter>("");
     }
 
     bool result = Check(m_model->GetBad());
