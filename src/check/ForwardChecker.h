@@ -77,13 +77,12 @@ class ForwardChecker : public BaseChecker {
             shuffle(c->begin(), c->end(), default_random_engine(m_settings.seed));
             return;
         }
+        if (m_settings.internalSignals) {
+            stable_sort(c->begin(), c->end(), innOrder);
+            return;
+        }
         if (m_settings.Branching == 0) return;
         stable_sort(c->begin(), c->end(), litOrder);
-        if (m_settings.internalSignals) {
-            int num_v = m_model->GetNumInputs() + m_model->GetNumLatches();
-            auto it = partition(c->begin(), c->end(), [num_v](int n) { return abs(n) > num_v; });
-            stable_sort(c->begin(), it, innOrder);
-        }
     }
 
     inline void GetPrimed(shared_ptr<cube> p) {
@@ -115,6 +114,8 @@ class ForwardChecker : public BaseChecker {
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
 
     void ExtendLemmaInternalSignals(shared_ptr<cube> lemma);
+
+    bool CheckInit(shared_ptr<State> s);
 
     int m_minUpdateLevel;
     int m_badId;

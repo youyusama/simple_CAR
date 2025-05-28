@@ -80,6 +80,24 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime
             }
         }
     }
+    for (int i : *m_model->GetInnards()) {
+        if (!prime) {
+            if (val(i) > 0) {
+                latches->emplace_back(i);
+            } else {
+                assert(val(i) < 0);
+                latches->emplace_back(-i);
+            }
+        } else {
+            int p = m_model->GetPrime(i);
+            if (val(p) > 0) {
+                latches->emplace_back(i);
+            } else {
+                assert(val(p) < 0);
+                latches->emplace_back(-i);
+            }
+        }
+    }
     return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
 }
 
@@ -103,7 +121,7 @@ shared_ptr<cube> CadicalSolver::GetUC(bool prime) {
         }
     } else {
         for (auto v : *m_assumptions) {
-            if (failed(v) && m_model->IsLatch(v)) {
+            if (failed(v) && (m_model->IsLatch(v) || m_model->IsInnard(v))) {
                 uc->emplace_back(v);
             }
         }

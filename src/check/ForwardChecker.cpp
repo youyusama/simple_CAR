@@ -38,11 +38,11 @@ bool ForwardChecker::Check(int badId) {
         return true;
 
     Init(badId);
-    m_log->L(3, "Initialized");
+    m_log->L(2, "Initialized");
 
-    m_log->L(3, "Initial States Check");
+    m_log->L(2, "Initial States Check");
     if (ImmediateSatisfiable(badId)) {
-        m_log->L(3, "Result >>> SAT <<<");
+        m_log->L(2, "Result >>> SAT <<<");
         auto p = m_mainSolver->GetAssignment(false);
         m_log->L(3, "Get Assignment:", CubeToStr(p.second));
         m_initialState->inputs = p.first;
@@ -51,7 +51,7 @@ bool ForwardChecker::Check(int badId) {
         return false;
     }
 
-    m_log->L(3, "Result >>> UNSAT <<<");
+    m_log->L(2, "Result >>> UNSAT <<<");
     // initialize frame 0
     for (int l : *m_initialState->latches) {
         shared_ptr<cube> neg_init_l(new cube{-l});
@@ -88,7 +88,7 @@ bool ForwardChecker::Check(int badId) {
             m_overSequence->SetInvariantLevel(-1);
             return true;
         }
-        m_log->L(3, "\nState from start solver");
+        m_log->L(2, "\nState from start solver");
         while (startState != nullptr) {
             workingStack.push(Task(startState, frameStep, true));
 
@@ -106,14 +106,16 @@ bool ForwardChecker::Check(int badId) {
                 task.isLocated = false;
 
                 if (task.frameLevel == -1) {
+                    if (m_settings.internalSignals)
+                        if (!CheckInit(task.state)) continue;
                     m_initialState->preState = task.state->preState;
                     m_initialState->inputs = task.state->inputs;
                     m_initialState->latches = task.state->latches;
                     m_lastState = m_initialState;
                     return false;
                 }
-                m_log->L(3, "SAT CHECK on frame: ", task.frameLevel);
-                m_log->L(3, "From state: ", CubeToStrShort(task.state->latches));
+                m_log->L(2, "SAT CHECK on frame: ", task.frameLevel);
+                m_log->L(2, "From state: ", CubeToStrShort(task.state->latches));
                 m_log->L(3, "State Detail: ", CubeToStr(task.state->latches));
                 shared_ptr<cube> assumption(new cube(*task.state->latches));
                 OrderAssumption(assumption);
@@ -123,28 +125,25 @@ bool ForwardChecker::Check(int badId) {
                 m_log->StatMainSolver();
                 if (result) {
                     // Solver return SAT, get a new State, then continue
-                    m_log->L(3, "Result >>> SAT <<<");
+                    m_log->L(2, "Result >>> SAT <<<");
                     auto p = m_mainSolver->GetAssignment(false);
                     GeneralizePredecessor(p, task.state);
                     shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
                     m_underSequence.push(newState);
                     m_log->L(3, "Get state: ", CubeToStrShort(newState->latches));
+                    m_log->L(3, "State Detail: ", CubeToStr(newState->latches));
                     int newFrameLevel = GetNewLevel(newState);
                     workingStack.emplace(newState, newFrameLevel, true);
                     continue;
                 } else {
                     // Solver return UNSAT, get uc, then continue
-                    m_log->L(3, "Result >>> UNSAT <<<");
+                    m_log->L(2, "Result >>> UNSAT <<<");
                     auto uc = m_mainSolver->GetUC(true);
                     assert(uc->size() > 0);
                     m_log->L(3, "Get UC: ", CubeToStr(uc));
-                    if (m_settings.internalSignals) {
-                        AddUnsatisfiableCore(uc, task.frameLevel + 1);
-                        ExtendLemmaInternalSignals(uc);
-                    }
                     if (Generalize(uc, task.frameLevel))
                         m_branching->Update(uc);
-                    m_log->L(3, "Get Generalized UC: ", CubeToStr(uc));
+                    m_log->L(2, "Get Generalized UC: ", CubeToStr(uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     PropagateUp(uc, task.frameLevel + 1);
                     m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
@@ -155,11 +154,11 @@ bool ForwardChecker::Check(int badId) {
             m_log->Tick();
             startState = EnumerateStartState();
             m_log->StatStartSolver();
-            m_log->L(3, "\nState from start solver");
+            m_log->L(2, "\nState from start solver");
         }
 
         frameStep++;
-        m_log->L(3, "\nNew Frame Added");
+        m_log->L(2, "\nNew Frame Added");
 
         if (m_invSolver == nullptr) {
             m_invSolver.reset(new InvSolver(m_model));
@@ -329,10 +328,8 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         clause cls;
         cls.reserve(s->latches->size() + 1);
         for (auto l : *s->latches) {
-            if (m_settings.internalSignals && !m_model->IsLatch(l)) continue;
             cls.emplace_back(m_model->GetPrime(-l));
         }
-        if (m_settings.internalSignals && cls.size() == 0) return;
         m_lifts->AddTempClause(cls);
     }
 
@@ -460,6 +457,57 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
                 return false;
             }
         }
+    }
+}
+
+
+bool ForwardChecker::CheckInit(shared_ptr<State> s) {
+    m_log->L(2, "SAT CHECK init ");
+    m_log->L(2, "From state: ", CubeToStrShort(s->latches));
+    m_log->L(3, "State Detail: ", CubeToStr(s->latches));
+    shared_ptr<cube> assumption(new cube(*s->latches));
+    OrderAssumption(assumption);
+    m_log->Tick();
+    bool result = m_mainSolver->SolveFrame(assumption, 0);
+    m_log->StatMainSolver();
+    if (result) {
+        // Solver return SAT
+        m_log->L(2, "Result >>> SAT <<<");
+        return true;
+    } else {
+        // Solver return UNSAT, get uc, then continue
+        m_log->L(2, "Result >>> UNSAT <<<");
+        auto uc = m_mainSolver->GetUC(false);
+        assert(uc->size() > 0);
+        // Generalization
+        unordered_set<int> required_lits;
+        for (int i = uc->size() - 1; i >= 0; i--) {
+            if (uc->size() < 2) break;
+            if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
+            shared_ptr<cube> temp_uc(new cube());
+            temp_uc->reserve(uc->size());
+            for (auto ll : *uc)
+                if (ll != uc->at(i)) temp_uc->emplace_back(ll);
+            assumption->clear();
+            copy(temp_uc->begin(), temp_uc->end(), back_inserter(*assumption));
+            OrderAssumption(assumption);
+            m_log->Tick();
+            bool result = m_mainSolver->SolveFrame(assumption, 0);
+            m_log->StatMainSolver();
+            if (!result) {
+                auto new_uc = m_mainSolver->GetUC(false);
+                uc->swap(*new_uc);
+                OrderAssumption(uc);
+                i = uc->size();
+            } else {
+                required_lits.emplace(uc->at(i));
+            }
+        }
+        m_log->L(2, "Get UC: ", CubeToStr(uc));
+        AddUnsatisfiableCore(uc, 0);
+        PropagateUp(uc, 0);
+        m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
+        return false;
     }
 }
 

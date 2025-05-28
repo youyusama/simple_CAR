@@ -48,6 +48,14 @@ class AigerModel {
         return (lit == 0) || (m_trues.find(aiger_not(lit)) != m_trues.end());
     }
 
+    inline bool IsConstant(const int id) {
+        unsigned lit = id > 0 ? id * 2 : -id * 2 + 1;
+        if (IsTrue(lit) || IsFalse(lit))
+            return true;
+        else
+            return false;
+    }
+
     inline bool IsLatch(int id) {
         if (abs(id) > m_aig->num_inputs && abs(id) <= m_aig->num_inputs + m_aig->num_latches)
             return true;
@@ -71,6 +79,10 @@ class AigerModel {
     }
 
     inline int GetCarId(const unsigned lit) {
+        if (lit == 0)
+            return m_falseId;
+        else if (lit == 1)
+            return m_trueId;
         return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
     }
 
@@ -80,7 +92,6 @@ class AigerModel {
     inline int GetNumLatches() { return m_aig->num_latches; }
     inline int GetNumBad() { return m_aig->num_outputs + m_aig->num_bad; }
     inline int GetMaxId() { return m_maxId; }
-    inline void SetMaxId(int new_id) { m_maxId = new_id; }
     inline int GetOutputsStart() { return m_outputsStart; }
     inline int GetLatchesStart() { return m_latchesStart; }
     inline int GetTrueId() { return m_trueId; }
@@ -155,6 +166,10 @@ class AigerModel {
     inline aiger_and *IsAndGate(const unsigned id);
 
     int InnardsLogiclvlDFS(unsigned aig_id);
+
+    void CollectInnards();
+
+    void CollectInnardsClauses();
 
     Settings m_settings;
     aiger *m_aig;

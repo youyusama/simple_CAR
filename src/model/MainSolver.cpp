@@ -63,11 +63,9 @@ void MainSolver::AddNegationBad() {
 
 inline int MainSolver::GetFrameFlag(int frameLevel) {
     assert(frameLevel >= 0);
-    m_maxId = m_model->GetMaxId();
     while (m_frameFlags.size() <= frameLevel) {
         m_frameFlags.emplace_back(GetNewVar());
     }
-    m_model->SetMaxId(m_maxId);
     return m_frameFlags[frameLevel];
 }
 

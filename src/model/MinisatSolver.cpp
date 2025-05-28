@@ -78,6 +78,24 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinisatSolver::GetAssignment(bool prime
             }
         }
     }
+    for (int i : *m_model->GetInnards()) {
+        if (!prime) {
+            if (model[i - 1] == l_True) {
+                latches->emplace_back(i);
+            } else {
+                assert(model[i - 1] == l_False);
+                latches->emplace_back(-i);
+            }
+        } else {
+            int p = m_model->GetPrime(i);
+            lbool val = model[abs(p) - 1];
+            if ((val == l_True && p > 0) || (val == l_False && p < 0)) {
+                latches->emplace_back(i);
+            } else {
+                latches->emplace_back(-i);
+            }
+        }
+    }
     return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
 }
 
@@ -102,7 +120,7 @@ shared_ptr<cube> MinisatSolver::GetUC(bool prime) {
     } else {
         for (int i = 0; i < conflict.size(); ++i) {
             int val = -GetLiteralId(conflict[i]);
-            if (m_model->IsLatch(val)) {
+            if (m_model->IsLatch(val) || m_model->IsInnard(val)) {
                 uc->emplace_back(val);
             }
         }
