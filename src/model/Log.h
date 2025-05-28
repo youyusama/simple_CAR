@@ -1,7 +1,7 @@
 #ifndef LOG_H
 #define LOG_H
 
-#include "AigerModel.h"
+#include "Model.h"
 #include "Settings.h"
 #include "State.h"
 #include "signal.h"

@@ -21,7 +21,7 @@ namespace car {
 class ForwardChecker : public BaseChecker {
   public:
     ForwardChecker(Settings settings,
-                   shared_ptr<AigerModel> model,
+                   shared_ptr<Model> model,
                    shared_ptr<Log> log);
     bool Run();
     bool Check(int badId);
@@ -48,7 +48,7 @@ class ForwardChecker : public BaseChecker {
     } litOrder;
 
     struct InnOrder {
-        shared_ptr<AigerModel> m;
+        shared_ptr<Model> m;
 
         InnOrder() {}
 
@@ -123,7 +123,7 @@ class ForwardChecker : public BaseChecker {
     UnderSequence m_underSequence;
     Settings m_settings;
     shared_ptr<Log> m_log;
-    shared_ptr<AigerModel> m_model;
+    shared_ptr<Model> m_model;
     shared_ptr<State> m_initialState;
     shared_ptr<MainSolver> m_mainSolver;
     shared_ptr<MainSolver> m_lifts;

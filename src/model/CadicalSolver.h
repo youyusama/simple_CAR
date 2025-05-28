@@ -2,8 +2,8 @@
 #define CADICALSOLVER_H
 
 #include "../sat/cadical/src/cadical.hpp"
-#include "AigerModel.h"
 #include "ISolver.h"
+#include "Model.h"
 #include <memory>
 
 namespace car {
@@ -34,7 +34,7 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     }
 
   protected:
-    shared_ptr<AigerModel> m_model;
+    shared_ptr<Model> m_model;
     int m_maxId;
     shared_ptr<cube> m_assumptions;
     cube m_tempClause;

@@ -1,9 +1,9 @@
-#include "AigerModel.h"
+#include "Model.h"
 
 
 namespace car {
 
-AigerModel::AigerModel(Settings settings) {
+Model::Model(Settings settings) {
     m_settings = settings;
     string aigFilePath = settings.aigFilePath;
 
@@ -24,7 +24,7 @@ AigerModel::AigerModel(Settings settings) {
 }
 
 
-void AigerModel::Init() {
+void Model::Init() {
     m_maxId = m_aig->maxvar + 2;
     m_trueId = m_maxId - 1;
     m_falseId = m_maxId;
@@ -32,9 +32,8 @@ void AigerModel::Init() {
     CollectConstraints();
     CollectBad();
     CollectInitialState();
+    m_primeMaps.push_back(unordered_map<int, int>());
     CollectNextValueMapping();
-    unordered_map<int, int> MapOfPrime = m_nextValueOfLatch;
-    m_MapsOfLatchPrimeK.push_back(MapOfPrime);
     m_innards = make_shared<set<int>>();
     if (m_settings.internalSignals) {
         CollectInnards();
@@ -46,7 +45,7 @@ void AigerModel::Init() {
 }
 
 
-void AigerModel::CollectConstants() {
+void Model::CollectConstants() {
     for (int i = 0; i < m_aig->num_ands; ++i) {
         aiger_and &aa = m_aig->ands[i];
         if (IsTrue(aa.rhs0) && IsTrue(aa.rhs1)) {
@@ -58,7 +57,7 @@ void AigerModel::CollectConstants() {
 }
 
 
-void AigerModel::CollectConstraints() {
+void Model::CollectConstraints() {
     for (int i = 0; i < m_aig->num_constraints; ++i) {
         if (!IsTrue(m_aig->constraints[i].lit))
             m_constraints.push_back(GetCarId(m_aig->constraints[i].lit));
@@ -66,7 +65,7 @@ void AigerModel::CollectConstraints() {
 }
 
 
-void AigerModel::CollectBad() {
+void Model::CollectBad() {
     for (int i = 0; i < m_aig->num_outputs; ++i) {
         m_bad = GetCarId(m_aig->outputs[i].lit);
     }
@@ -76,7 +75,7 @@ void AigerModel::CollectBad() {
 }
 
 
-void AigerModel::CollectInitialState() {
+void Model::CollectInitialState() {
     for (int i = 0; i < m_aig->num_latches; ++i) {
         if (m_aig->latches[i].reset == 0)
             m_initialState.push_back(-(m_aig->latches[i].lit >> 1));
@@ -89,27 +88,27 @@ void AigerModel::CollectInitialState() {
 }
 
 
-void AigerModel::CollectNextValueMapping() {
+void Model::CollectNextValueMapping() {
     for (int i = 0; i < m_aig->num_latches; i++) {
         int var = m_aig->latches[i].lit >> 1;
         assert(var == m_aig->num_inputs + i + 1);
 
-        // pay attention to the special case when nextVal = 0 or 1
+        // todo: try removing these constant check, seems useless
         if (IsFalse(m_aig->latches[i].next)) {
-            m_nextValueOfLatch.insert(pair<int, int>(var, m_falseId));
+            m_primeMaps[0].insert(pair<int, int>(var, m_falseId));
             InsertIntoPreValueMapping(m_falseId, var);
         } else if (IsTrue(m_aig->latches[i].next)) {
-            m_nextValueOfLatch.insert(pair<int, int>(var, m_trueId));
+            m_primeMaps[0].insert(pair<int, int>(var, m_trueId));
             InsertIntoPreValueMapping(m_trueId, var);
         } else {
             int nextVal = GetCarId(m_aig->latches[i].next);
-            m_nextValueOfLatch.insert(pair<int, int>(var, nextVal));
+            m_primeMaps[0].insert(pair<int, int>(var, nextVal));
             InsertIntoPreValueMapping(abs(nextVal), (nextVal > 0) ? var : -var);
         }
     }
 }
 
-void AigerModel::CollectClauses() {
+void Model::CollectClauses() {
     // contraints, outputs and latches gates are stored in order,
     // as the need for start solver construction
     unordered_set<unsigned> exist_gates;
@@ -121,12 +120,13 @@ void AigerModel::CollectClauses() {
         AddAndGateToClause(aa);
     }
 
+    // todo: add this constraint inside forward checker
     // if l1 and l2 have same prime l', then l1 and l2 shoud have same value, except the initial states
     if (m_settings.forward) {
         int init = ++m_maxId;
         int cons = ++m_maxId;
         m_clauses.emplace_back(clause{init, cons});
-        for (auto it = m_preValueOfLatch.begin(); it != m_preValueOfLatch.end(); it++) {
+        for (auto it = m_preValueOfLatchMap.begin(); it != m_preValueOfLatchMap.end(); it++) {
             if (it->second.size() > 1) {
                 m_maxId++;
                 for (int p : it->second) {
@@ -195,8 +195,8 @@ void AigerModel::CollectClauses() {
 }
 
 
-void AigerModel::CollectNecessaryAndGates(const aiger_symbol *as, const int as_size,
-                                          unordered_set<unsigned> &exist_gates, vector<unsigned> &gates, bool next) {
+void Model::CollectNecessaryAndGates(const aiger_symbol *as, const int as_size,
+                                     unordered_set<unsigned> &exist_gates, vector<unsigned> &gates, bool next) {
     for (int i = 0; i < as_size; ++i) {
         aiger_and *aa;
         if (next)
@@ -215,7 +215,7 @@ void AigerModel::CollectNecessaryAndGates(const aiger_symbol *as, const int as_s
 }
 
 
-void AigerModel::CollectNecessaryAndGatesFromConstraints(unordered_set<unsigned> &exist_gates, vector<unsigned> &gates) {
+void Model::CollectNecessaryAndGatesFromConstraints(unordered_set<unsigned> &exist_gates, vector<unsigned> &gates) {
     for (int i = 0; i < m_aig->num_constraints; ++i) {
         aiger_and *aa = IsAndGate(m_aig->constraints[i].lit);
         if (aa == NULL) {
@@ -228,7 +228,7 @@ void AigerModel::CollectNecessaryAndGatesFromConstraints(unordered_set<unsigned>
 }
 
 
-void AigerModel::FindAndGates(const aiger_and *aa, unordered_set<unsigned> &exist_gates, vector<unsigned> &gates) {
+void Model::FindAndGates(const aiger_and *aa, unordered_set<unsigned> &exist_gates, vector<unsigned> &gates) {
     if (aa == NULL || aa == nullptr) {
         return;
     }
@@ -245,7 +245,7 @@ void AigerModel::FindAndGates(const aiger_and *aa, unordered_set<unsigned> &exis
 }
 
 
-void AigerModel::AddAndGateToClause(const aiger_and *aa) {
+void Model::AddAndGateToClause(const aiger_and *aa) {
     if (IsTrue(aa->rhs0)) {
         m_clauses.emplace_back(clause{GetCarId(aa->lhs), -GetCarId(aa->rhs1)});
         m_clauses.emplace_back(clause{-GetCarId(aa->lhs), GetCarId(aa->rhs1)});
@@ -260,17 +260,17 @@ void AigerModel::AddAndGateToClause(const aiger_and *aa) {
 }
 
 
-inline void AigerModel::InsertIntoPreValueMapping(const int key, const int value) {
-    auto it = m_preValueOfLatch.find(key);
-    if (it == m_preValueOfLatch.end()) {
-        m_preValueOfLatch.insert(pair<int, vector<int>>(key, vector<int>{value}));
+inline void Model::InsertIntoPreValueMapping(const int key, const int value) {
+    auto it = m_preValueOfLatchMap.find(key);
+    if (it == m_preValueOfLatchMap.end()) {
+        m_preValueOfLatchMap.insert(pair<int, vector<int>>(key, vector<int>{value}));
     } else {
         it->second.emplace_back(value);
     }
 }
 
 
-inline aiger_and *AigerModel::IsAndGate(const unsigned lit) {
+inline aiger_and *Model::IsAndGate(const unsigned lit) {
     if (!IsTrue(lit) && !IsFalse(lit))
         return aiger_is_and(m_aig, aiger_strip(lit));
     return nullptr;
@@ -294,7 +294,7 @@ void addClause(shared_ptr<SimpSolver> sslv, const clause &cls) {
 }
 
 
-void AigerModel::CreateSimpSolver() {
+void Model::CreateSimpSolver() {
     m_simpSolver = make_shared<SimpSolver>();
     for (int i = 0; i < m_aig->num_inputs + m_aig->num_latches; i++) {
         Var nv = m_simpSolver->newVar();
@@ -331,23 +331,23 @@ void AigerModel::CreateSimpSolver() {
 }
 
 
-shared_ptr<SimpSolver> AigerModel::GetSimpSolver() {
+shared_ptr<SimpSolver> Model::GetSimpSolver() {
     return m_simpSolver;
 }
 #endif
 
-void AigerModel::GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map) {
-    map = m_preValueOfLatch;
+void Model::GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map) {
+    map = m_preValueOfLatchMap;
 }
 
 
-int AigerModel::GetPrimeK(const int id, int k) {
+int Model::GetPrimeK(const int id, int k) {
     if (k == 0) return id;
-    if (k - 1 >= m_MapsOfLatchPrimeK.size())
-        m_MapsOfLatchPrimeK.push_back(unordered_map<int, int>());
+    if (k >= m_primeMaps.size())
+        m_primeMaps.push_back(unordered_map<int, int>());
     if (IsLatch(id)) return GetPrimeK(GetPrime(id), k - 1);
 
-    unordered_map<int, int> &k_map = m_MapsOfLatchPrimeK[k - 1];
+    unordered_map<int, int> &k_map = m_primeMaps[k - 1];
     unordered_map<int, int>::iterator it = k_map.find(abs(id));
     if (it != k_map.end())
         return id > 0 ? it->second : -(it->second);
@@ -358,7 +358,7 @@ int AigerModel::GetPrimeK(const int id, int k) {
 }
 
 
-shared_ptr<cube> AigerModel::GetInnardsImplied(shared_ptr<cube> uc) {
+shared_ptr<cube> Model::GetInnardsImplied(shared_ptr<cube> uc) {
     shared_ptr<cube> innards(new cube());
     set<unsigned> det_aig;
     for (auto c : m_trues) det_aig.emplace(c);
@@ -384,76 +384,7 @@ shared_ptr<cube> AigerModel::GetInnardsImplied(shared_ptr<cube> uc) {
 }
 
 
-int AigerModel::GetClauseOfInnards(shared_ptr<cube> innards, vector<cube> &clss) {
-    // get new included innards
-    set<unsigned> new_innards_aig;
-    for (auto v : *innards) {
-        if (m_innards->find(abs(v)) == m_innards->end()) {
-            new_innards_aig.emplace(abs(v) * 2);
-            m_innards->emplace(abs(v));
-            // compute innards logic level
-            int lvl = InnardsLogiclvlDFS(abs(v) * 2);
-        }
-    }
-    if (new_innards_aig.size() == 0) return 0;
-    // collect gates & clauses
-    for (int i = m_aig->num_ands - 1; i >= 0; i--) {
-        aiger_and &aa = m_aig->ands[i];
-        if (new_innards_aig.find(aa.lhs) != new_innards_aig.end()) {
-            int pl, pr0, pr1;
-            // primed left
-            if (GetPrime(GetCarId(aa.lhs)) == 0) {
-                m_maxId++;
-                m_nextValueOfLatch.insert(pair<int, int>(GetCarId(aa.lhs), m_maxId));
-                InsertIntoPreValueMapping(m_maxId, GetCarId(aa.lhs));
-            }
-            pl = GetPrime(GetCarId(aa.lhs));
-            // primed right 0
-            if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0)) ||
-                aiger_is_input(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
-                if (GetPrime(GetCarId(aa.rhs0)) == 0) {
-                    m_maxId++;
-                    m_nextValueOfLatch.insert(pair<int, int>(GetCarId(aiger_strip(aa.rhs0)), m_maxId));
-                    InsertIntoPreValueMapping(m_maxId, GetCarId(aiger_strip(aa.rhs0)));
-                }
-                pr0 = GetPrime(GetCarId(aa.rhs0));
-            } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs0))) {
-                pr0 = GetPrime(GetCarId(aa.rhs0));
-            } else { // constant
-                if (IsTrue(aa.rhs0))
-                    pr0 = m_trueId;
-                else
-                    pr0 = m_falseId;
-            }
-            // primed right 1
-            if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1)) ||
-                aiger_is_input(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
-                if (GetPrime(GetCarId(aa.rhs1)) == 0) {
-                    m_maxId++;
-                    m_nextValueOfLatch.insert(pair<int, int>(GetCarId(aiger_strip(aa.rhs1)), m_maxId));
-                    InsertIntoPreValueMapping(m_maxId, GetCarId(aiger_strip(aa.rhs1)));
-                }
-                pr1 = GetPrime(GetCarId(aa.rhs1));
-            } else if (aiger_is_latch(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
-                pr1 = GetPrime(GetCarId(aa.rhs1));
-            } else { // constant
-                if (IsTrue(aa.rhs0))
-                    pr1 = m_trueId;
-                else
-                    pr1 = m_falseId;
-            }
-
-            clss.emplace_back(vector<int>{pl, -pr0, -pr1});
-            clss.emplace_back(vector<int>{-pl, pr0});
-            clss.emplace_back(vector<int>{-pl, pr1});
-        }
-    }
-
-    return new_innards_aig.size();
-}
-
-
-int AigerModel::InnardsLogiclvlDFS(unsigned aig_id) {
+int Model::InnardsLogiclvlDFS(unsigned aig_id) {
     auto it = m_innards_lvl.find(aig_id / 2);
     if (it != m_innards_lvl.end())
         return it->second;
@@ -474,7 +405,7 @@ int AigerModel::InnardsLogiclvlDFS(unsigned aig_id) {
 }
 
 
-void AigerModel::CollectInnards() {
+void Model::CollectInnards() {
     for (int i = 0; i < m_aig->num_ands; ++i) {
         // input-free innard check
         aiger_and &aa = m_aig->ands[i];
@@ -491,7 +422,7 @@ void AigerModel::CollectInnards() {
 }
 
 
-void AigerModel::CollectInnardsClauses() {
+void Model::CollectInnardsClauses() {
     for (int i = 0; i < m_aig->num_ands; ++i) {
         aiger_and &aa = m_aig->ands[i];
         if (m_innards->find(GetCarId(aa.lhs)) == m_innards->end())
@@ -502,7 +433,7 @@ void AigerModel::CollectInnardsClauses() {
         // primed left
         if (GetPrime(GetCarId(aa.lhs)) == 0) {
             m_maxId++;
-            m_nextValueOfLatch.insert(pair<int, int>(GetCarId(aa.lhs), m_maxId));
+            m_primeMaps[0].insert(pair<int, int>(GetCarId(aa.lhs), m_maxId));
             InsertIntoPreValueMapping(m_maxId, GetCarId(aa.lhs));
         }
         pl = GetPrime(GetCarId(aa.lhs));

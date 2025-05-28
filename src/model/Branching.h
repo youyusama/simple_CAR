@@ -1,7 +1,7 @@
 #ifndef BRANCHING_H
 #define BRANCHING_H
 
-#include "AigerModel.h"
+#include "Model.h"
 #include "Settings.h"
 
 namespace car {

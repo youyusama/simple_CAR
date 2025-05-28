@@ -36,9 +36,9 @@ inline bool cmp(int a, int b) {
     return abs(a) < abs(b);
 }
 
-class AigerModel {
+class Model {
   public:
-    AigerModel(Settings settings);
+    Model(Settings settings);
 
     inline bool IsTrue(const unsigned lit) {
         return (lit == 1) || (m_trues.find(lit) != m_trues.end());
@@ -100,16 +100,16 @@ class AigerModel {
     inline int &GetBad() { return m_bad; }
 
     inline vector<int> GetPrevious(int id) {
-        if (m_preValueOfLatch.count(abs(id)) > 0) {
-            return m_preValueOfLatch[abs(id)];
+        if (m_preValueOfLatchMap.count(abs(id)) > 0) {
+            return m_preValueOfLatchMap[abs(id)];
         } else {
             return vector<int>();
         }
     }
 
     inline int GetPrime(const int id) {
-        unordered_map<int, int>::iterator it = m_nextValueOfLatch.find(abs(id));
-        if (it == m_nextValueOfLatch.end()) return 0;
+        unordered_map<int, int>::iterator it = m_primeMaps[0].find(abs(id));
+        assert(it != m_primeMaps[0].end());
         return id > 0 ? it->second : -(it->second);
     }
 
@@ -184,11 +184,9 @@ class AigerModel {
     vector<int> m_constraints;
     vector<clause> m_clauses;   // CNF, e.g. (a|b|c) * (-a|c)
     unordered_set<int> m_trues; // variables that are always true
-    unordered_map<int, int> m_nextValueOfLatch;
-    unordered_map<int, int> m_nextValueOfGate;         // next value of and gate
-    unordered_map<int, vector<int>> m_preValueOfLatch; // e.g. 6 16, 8 16. 16 -> 6,8
 
-    vector<unordered_map<int, int>> m_MapsOfLatchPrimeK;
+    vector<unordered_map<int, int>> m_primeMaps;
+    unordered_map<int, vector<int>> m_preValueOfLatchMap;
 
     shared_ptr<set<int>> m_innards;
     unordered_map<int, int> m_innards_lvl;

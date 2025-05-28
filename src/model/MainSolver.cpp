@@ -2,7 +2,7 @@
 #include <fstream>
 
 namespace car {
-MainSolver::MainSolver(shared_ptr<AigerModel> model) {
+MainSolver::MainSolver(shared_ptr<Model> model) {
     m_model = model;
     m_maxId = model->GetMaxId();
 #ifdef CADICAL

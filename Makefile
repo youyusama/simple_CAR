@@ -2,7 +2,7 @@ CSOURCES = \
 src/model/aiger.c
 
 CPPSOURCES = \
-src/model/AigerModel.cpp\
+src/model/Model.cpp\
 src/model/Log.cpp\
 src/check/BackwardChecker.cpp\
 src/check/ForwardChecker.cpp\
@@ -15,7 +15,7 @@ src/model/OverSequenceSet.cpp
 
 OBJS = \
 aiger.o\
-AigerModel.o \
+Model.o \
 Log.o\
 BackwardChecker.o\
 ForwardChecker.o\

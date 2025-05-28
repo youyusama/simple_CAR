@@ -19,7 +19,7 @@ class MainSolver :
 #endif
 {
   public:
-    MainSolver(shared_ptr<AigerModel> model);
+    MainSolver(shared_ptr<Model> model);
 
     bool SolveFrame(const shared_ptr<cube> assumption, int frameLevel);
 

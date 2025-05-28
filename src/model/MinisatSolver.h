@@ -2,8 +2,8 @@
 #define MINISATSOLVER_H
 
 #include "../sat/minisat/core/Solver.h"
-#include "AigerModel.h"
 #include "ISolver.h"
+#include "Model.h"
 #include <memory>
 
 using namespace Minisat;
@@ -43,7 +43,7 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
         return ((id > 0) ? mkLit(var) : ~mkLit(var));
     };
 
-    shared_ptr<AigerModel> m_model;
+    shared_ptr<Model> m_model;
     int m_maxId;
     vec<Lit> m_assumptions;
     int m_tempVar;

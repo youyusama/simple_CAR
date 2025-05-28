@@ -14,7 +14,7 @@ namespace car {
 class BMC : public BaseChecker {
   public:
     BMC(Settings settings,
-        shared_ptr<AigerModel> model,
+        shared_ptr<Model> model,
         shared_ptr<Log> log);
 
     bool Run();
@@ -23,7 +23,7 @@ class BMC : public BaseChecker {
   private:
     Settings m_settings;
     shared_ptr<Log> m_log;
-    shared_ptr<AigerModel> m_model;
+    shared_ptr<Model> m_model;
     int m_k;
     int m_maxK;
     shared_ptr<State> m_initialState;

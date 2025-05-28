@@ -17,7 +17,7 @@ class InvSolver :
 #endif
 {
   public:
-    InvSolver(std::shared_ptr<AigerModel> model) {
+    InvSolver(std::shared_ptr<Model> model) {
         m_model = model;
         m_maxId = model->GetMaxId();
         auto &clauses = m_model->GetClauses();

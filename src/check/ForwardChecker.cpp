@@ -4,7 +4,7 @@
 namespace car {
 
 ForwardChecker::ForwardChecker(Settings settings,
-                               shared_ptr<AigerModel> model,
+                               shared_ptr<Model> model,
                                shared_ptr<Log> log) : m_settings(settings),
                                                       m_model(model),
                                                       m_log(log) {
@@ -527,30 +527,6 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
 
     m_log->StatPropagation();
     return result;
-}
-
-
-// ================================================================================
-// @brief: extend lemma with internal signals
-// @input:
-// @output:
-// ================================================================================
-void ForwardChecker::ExtendLemmaInternalSignals(shared_ptr<cube> lemma) {
-    m_log->Tick();
-
-    shared_ptr<cube> innards = m_model->GetInnardsImplied(lemma);
-    if (innards->size() > 0) {
-        lemma->insert(lemma->end(), innards->begin(), innards->end());
-        m_log->L(3, "Internal Signals: Extended lemma ", CubeToStr(lemma));
-        vector<cube> clss;
-        int new_innards_num = m_model->GetClauseOfInnards(innards, clss);
-        m_log->L(3, "Internal Signals: ", new_innards_num, " new innards");
-        for (auto cls : clss) {
-            m_mainSolver->AddClause(cls);
-        }
-    }
-
-    m_log->StatInternalSignals();
 }
 
 

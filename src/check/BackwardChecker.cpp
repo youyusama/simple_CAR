@@ -5,7 +5,7 @@
 namespace car {
 
 BackwardChecker::BackwardChecker(Settings settings,
-                                 shared_ptr<AigerModel> model,
+                                 shared_ptr<Model> model,
                                  shared_ptr<Log> log) : m_settings(settings),
                                                         m_model(model),
                                                         m_log(log) {

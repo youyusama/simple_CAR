@@ -1,7 +1,7 @@
 #ifndef STARTSOLVER_H
 #define STARTSOLVER_H
 
-#include "AigerModel.h"
+#include "Model.h"
 #ifdef CADICAL
 #include "CadicalSolver.h"
 #else
@@ -18,7 +18,7 @@ class StartSolver :
 #endif
 {
   public:
-    StartSolver(shared_ptr<AigerModel> model) {
+    StartSolver(shared_ptr<Model> model) {
         m_model = model;
         m_maxId = model->GetMaxId();
         m_flag = -1;

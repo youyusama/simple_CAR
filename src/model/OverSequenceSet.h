@@ -49,7 +49,7 @@ class BlockSolver :
 #endif
 {
   public:
-    BlockSolver(shared_ptr<AigerModel> model) {
+    BlockSolver(shared_ptr<Model> model) {
         m_maxId = model->GetMaxId();
     };
     bool SolveFrame(const shared_ptr<cube> assumption, int frameLevel);
@@ -65,7 +65,7 @@ class OverSequenceSet {
   public:
     typedef vector<int> cube;
 
-    OverSequenceSet(shared_ptr<AigerModel> model) {
+    OverSequenceSet(shared_ptr<Model> model) {
         m_model = model;
         m_blockSolver = make_shared<BlockSolver>(m_model);
         m_blockCounter.clear();
@@ -103,7 +103,7 @@ class OverSequenceSet {
 
     void add_uc_to_frame(const shared_ptr<cube> uc, shared_ptr<frame> f);
 
-    shared_ptr<AigerModel> m_model;
+    shared_ptr<Model> m_model;
     set<shared_ptr<cube>, cubePtrComp> m_UCSet;
     vector<shared_ptr<frame>> m_sequence;
     shared_ptr<BlockSolver> m_blockSolver;
