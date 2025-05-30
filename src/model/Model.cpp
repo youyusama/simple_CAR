@@ -10,11 +10,15 @@ Model::Model(Settings settings) {
     m_aig = aiger_init();
     aiger_open_and_read_from_file(m_aig, aigFilePath.c_str());
     if (aiger_error(m_aig)) {
-        cout << "aiger error" << endl;
+        cout << "aiger parse error" << endl;
         exit(0);
     }
-    if (GetNumBad() > 1) {
+    int num_bad = GetNumBad();
+    if (num_bad > 1) {
         cout << "aiger has more than one property to check" << endl;
+        exit(0);
+    } else if (num_bad == 0) {
+        cout << "aiger has no safety property to check" << endl;
         exit(0);
     }
     if (!aiger_is_reencoded(m_aig)) {
@@ -32,7 +36,6 @@ void Model::Init() {
     CollectConstraints();
     CollectBad();
     CollectInitialState();
-    m_primeMaps.push_back(unordered_map<int, int>());
     CollectNextValueMapping();
     m_innards = make_shared<set<int>>();
     if (m_settings.internalSignals) {
@@ -59,8 +62,7 @@ void Model::CollectConstants() {
 
 void Model::CollectConstraints() {
     for (int i = 0; i < m_aig->num_constraints; ++i) {
-        if (!IsTrue(m_aig->constraints[i].lit))
-            m_constraints.push_back(GetCarId(m_aig->constraints[i].lit));
+        m_constraints.push_back(GetCarId(m_aig->constraints[i].lit));
     }
 }
 
@@ -81,43 +83,49 @@ void Model::CollectInitialState() {
             m_initialState.push_back(-(m_aig->latches[i].lit >> 1));
         else if (m_aig->latches[i].reset == 1)
             m_initialState.push_back(m_aig->latches[i].lit >> 1);
-        else {
-            // placeholder
-        }
     }
 }
 
 
 void Model::CollectNextValueMapping() {
-    for (int i = 0; i < m_aig->num_latches; i++) {
-        int var = m_aig->latches[i].lit >> 1;
-        assert(var == m_aig->num_inputs + i + 1);
+    m_primeMaps.push_back(unordered_map<int, int>());
+    unordered_map<int, int> &prime_map = m_primeMaps[0];
 
-        // todo: try removing these constant check, seems useless
-        if (IsFalse(m_aig->latches[i].next)) {
-            m_primeMaps[0].insert(pair<int, int>(var, m_falseId));
-            InsertIntoPreValueMapping(m_falseId, var);
-        } else if (IsTrue(m_aig->latches[i].next)) {
-            m_primeMaps[0].insert(pair<int, int>(var, m_trueId));
-            InsertIntoPreValueMapping(m_trueId, var);
-        } else {
-            int nextVal = GetCarId(m_aig->latches[i].next);
-            m_primeMaps[0].insert(pair<int, int>(var, nextVal));
-            InsertIntoPreValueMapping(abs(nextVal), (nextVal > 0) ? var : -var);
-        }
+    for (int i = 0; i < m_aig->num_latches; i++) {
+        int id = m_aig->latches[i].lit >> 1;
+
+        int next_id = GetCarId(m_aig->latches[i].next);
+        prime_map.insert(pair<int, int>(id, next_id));
+        InsertIntoPreValueMapping(abs(next_id), (next_id > 0) ? id : -id);
     }
 }
 
 void Model::CollectClauses() {
-    // contraints, outputs and latches gates are stored in order,
-    // as the need for start solver construction
-    unordered_set<unsigned> exist_gates;
-    vector<unsigned> gates;
+    // get coi gates for transition relations, constraints, and property
+    set<unsigned> coi_lits;
 
-    CollectNecessaryAndGatesFromConstraints(exist_gates, gates);
-    for (auto it = gates.begin(); it != gates.end(); it++) {
-        aiger_and *aa = aiger_is_and(m_aig, *it);
-        AddAndGateToClause(aa);
+    for (int i = 0; i < m_aig->num_latches; i++) {
+        coi_lits.insert(aiger_strip(m_aig->latches[i].next));
+    }
+    for (int i = 0; i < m_aig->num_constraints; i++) {
+        coi_lits.insert(aiger_strip(m_aig->constraints[i].lit));
+    }
+    coi_lits.insert(abs(m_bad) * 2);
+
+    vector<unsigned> coi_gates;
+    for (int i = m_aig->num_ands - 1; i >= 0; i--) {
+        aiger_and &a = m_aig->ands[i];
+        if (coi_lits.find(a.lhs) != coi_lits.end()) {
+            coi_gates.push_back(a.lhs);
+            coi_lits.insert(aiger_strip(a.rhs0));
+            coi_lits.insert(aiger_strip(a.rhs1));
+        }
+    }
+
+    for (unsigned and_gate : coi_gates) {
+        aiger_and *a = aiger_is_and(m_aig, and_gate);
+        assert(a != nullptr);
+        AddAndGateToClause(a);
     }
 
     // todo: add this constraint inside forward checker
@@ -140,108 +148,9 @@ void Model::CollectClauses() {
         }
     }
 
-    m_outputsStart = m_clauses.size();
-
-    // create clauses for outputs
-    gates.clear();
-    CollectNecessaryAndGates(m_aig->outputs, m_aig->num_outputs, exist_gates, gates, false);
-    for (auto it = gates.begin(); it != gates.end(); it++) {
-        if (*it == 0) continue;
-        aiger_and *aa = aiger_is_and(m_aig, *it);
-        AddAndGateToClause(aa);
-    }
-    // create clauses for bad
-    gates.clear();
-    CollectNecessaryAndGates(m_aig->bad, m_aig->num_bad, exist_gates, gates, false);
-    for (auto it = gates.begin(); it != gates.end(); it++) {
-        if (*it == 0) continue;
-        aiger_and *aa = aiger_is_and(m_aig, *it);
-        AddAndGateToClause(aa);
-    }
-    // create clauses for innards
-    if (m_settings.internalSignals) {
-        gates.clear();
-        for (int i = 0; i < m_aig->num_ands; ++i) {
-            aiger_and &aa = m_aig->ands[i];
-            if (m_innards->find(GetCarId(aa.lhs)) != m_innards->end())
-                FindAndGates(&aa, exist_gates, gates);
-        }
-        for (auto it = gates.begin(); it != gates.end(); it++) {
-            if (*it == 0) continue;
-            aiger_and *aa = aiger_is_and(m_aig, *it);
-            AddAndGateToClause(aa);
-        }
-    }
-
-    m_latchesStart = m_clauses.size();
-
-    // create clauses for latches
-    vector<unsigned>().swap(gates);
-    CollectNecessaryAndGates(m_aig->latches, m_aig->num_latches, exist_gates, gates, true);
-    for (auto it = gates.begin(); it != gates.end(); it++) {
-        if (*it == 0) continue;
-        aiger_and *aa = aiger_is_and(m_aig, *it);
-        AddAndGateToClause(aa);
-    }
-
-    // create clauses for innards transition relation
-    if (m_settings.internalSignals) {
-        CollectInnardsClauses();
-    }
-
     // create clauses for true and false
     m_clauses.emplace_back(clause{m_trueId});
     m_clauses.emplace_back(clause{-m_falseId});
-}
-
-
-void Model::CollectNecessaryAndGates(const aiger_symbol *as, const int as_size,
-                                     unordered_set<unsigned> &exist_gates, vector<unsigned> &gates, bool next) {
-    for (int i = 0; i < as_size; ++i) {
-        aiger_and *aa;
-        if (next)
-            aa = IsAndGate(as[i].next);
-        else {
-            aa = IsAndGate(as[i].lit);
-            if (aa == NULL) {
-                if (IsTrue(as[i].lit)) {
-                    m_bad = m_trueId;
-                } else if (IsFalse(as[i].lit))
-                    m_bad = m_falseId;
-            }
-        }
-        FindAndGates(aa, exist_gates, gates);
-    }
-}
-
-
-void Model::CollectNecessaryAndGatesFromConstraints(unordered_set<unsigned> &exist_gates, vector<unsigned> &gates) {
-    for (int i = 0; i < m_aig->num_constraints; ++i) {
-        aiger_and *aa = IsAndGate(m_aig->constraints[i].lit);
-        if (aa == NULL) {
-            if (IsFalse(m_aig->constraints[i].lit)) {
-                m_bad = m_falseId;
-            }
-        }
-        FindAndGates(aa, exist_gates, gates);
-    }
-}
-
-
-void Model::FindAndGates(const aiger_and *aa, unordered_set<unsigned> &exist_gates, vector<unsigned> &gates) {
-    if (aa == NULL || aa == nullptr) {
-        return;
-    }
-    if (exist_gates.find(aa->lhs) != exist_gates.end()) {
-        return;
-    }
-    gates.emplace_back(aa->lhs);
-    exist_gates.emplace(aa->lhs);
-    aiger_and *aa0 = IsAndGate(aa->rhs0);
-    FindAndGates(aa0, exist_gates, gates);
-
-    aiger_and *aa1 = IsAndGate(aa->rhs1);
-    FindAndGates(aa1, exist_gates, gates);
 }
 
 
@@ -269,12 +178,6 @@ inline void Model::InsertIntoPreValueMapping(const int key, const int value) {
     }
 }
 
-
-inline aiger_and *Model::IsAndGate(const unsigned lit) {
-    if (!IsTrue(lit) && !IsFalse(lit))
-        return aiger_is_and(m_aig, aiger_strip(lit));
-    return nullptr;
-}
 
 #ifndef CADICAL
 Lit getLit(shared_ptr<SimpSolver> sslv, int id) {
@@ -355,32 +258,6 @@ int Model::GetPrimeK(const int id, int k) {
         auto res = k_map.insert(pair<int, int>(abs(id), ++m_maxId));
         return id > 0 ? res.first->second : -(res.first->second);
     }
-}
-
-
-shared_ptr<cube> Model::GetInnardsImplied(shared_ptr<cube> uc) {
-    shared_ptr<cube> innards(new cube());
-    set<unsigned> det_aig;
-    for (auto c : m_trues) det_aig.emplace(c);
-    for (auto v : *uc) det_aig.emplace((v > 0) ? v * 2 : abs(v) * 2 + 1);
-
-    for (int i = 0; i < m_aig->num_ands; ++i) {
-        aiger_and &aa = m_aig->ands[i];
-        if (det_aig.find(aiger_not(aa.rhs0)) != det_aig.end()) {
-            det_aig.emplace(aiger_not(aa.lhs));
-        } else if (det_aig.find(aiger_not(aa.rhs1)) != det_aig.end()) {
-            det_aig.emplace(aiger_not(aa.lhs));
-        } else if (det_aig.find(aa.rhs0) != det_aig.end() &&
-                   det_aig.find(aa.rhs1) != det_aig.end()) {
-            det_aig.emplace(aa.lhs);
-        }
-    }
-
-    for (auto aig : det_aig)
-        if (!IsLatch(GetCarId(aig)) && !(IsTrue(aig) || IsFalse(aig)))
-            innards->push_back(GetCarId(aig));
-
-    return innards;
 }
 
 

@@ -23,7 +23,7 @@ class StartSolver :
         m_maxId = model->GetMaxId();
         m_flag = -1;
         auto &clauses = m_model->GetClauses();
-        for (int i = 0; i < model->GetLatchesStart(); ++i) {
+        for (int i = 0; i < clauses.size(); ++i) {
             AddClause(clauses[i]);
         }
         shared_ptr<cube> assumption(new cube());

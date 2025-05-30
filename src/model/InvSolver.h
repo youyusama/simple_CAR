@@ -20,13 +20,13 @@ class InvSolver :
     InvSolver(std::shared_ptr<Model> model) {
         m_model = model;
         m_maxId = model->GetMaxId();
-        auto &clauses = m_model->GetClauses();
-        for (int i = 0, end = model->GetOutputsStart(); i < end; i++) {
-            AddClause(clauses[i]);
-        }
-        for (auto c : m_model->GetConstraints()) {
-            AddClause({c});
-        }
+        // auto &clauses = m_model->GetClauses();
+        // for (int i = 0, end = model->GetOutputsStart(); i < end; i++) {
+        //     AddClause(clauses[i]);
+        // }
+        // for (auto c : m_model->GetConstraints()) {
+        //     AddClause({c});
+        // }
     }
 
     void AddConstraintOr(const vector<shared_ptr<cube>> frame) {

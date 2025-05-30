@@ -92,8 +92,6 @@ class Model {
     inline int GetNumLatches() { return m_aig->num_latches; }
     inline int GetNumBad() { return m_aig->num_outputs + m_aig->num_bad; }
     inline int GetMaxId() { return m_maxId; }
-    inline int GetOutputsStart() { return m_outputsStart; }
-    inline int GetLatchesStart() { return m_latchesStart; }
     inline int GetTrueId() { return m_trueId; }
     inline int GetFalseId() { return m_falseId; }
     inline cube &GetInitialState() { return m_initialState; }
@@ -125,10 +123,6 @@ class Model {
 
     vector<int> GetConstraints() { return m_constraints; };
 
-    shared_ptr<cube> GetInnardsImplied(shared_ptr<cube> uc);
-
-    int GetClauseOfInnards(shared_ptr<cube> innards, vector<cube> &clss);
-
     shared_ptr<set<int>> GetInnards() { return m_innards; };
 
     int GetInnardslvl(int id) {
@@ -152,18 +146,16 @@ class Model {
 
     void CollectClauses();
 
-    void CollectNecessaryAndGates(const aiger_symbol *as, const int as_size,
-                                  std::unordered_set<unsigned> &exist_gates, std::vector<unsigned> &gates, bool next);
+    // void CollectNecessaryAndGates(const aiger_symbol *as, const int as_size,
+    //                               std::unordered_set<unsigned> &exist_gates, std::vector<unsigned> &gates, bool next);
 
-    void CollectNecessaryAndGatesFromConstraints(unordered_set<unsigned> &exist_gates, vector<unsigned> &gates);
+    // void CollectNecessaryAndGatesFromConstraints(unordered_set<unsigned> &exist_gates, vector<unsigned> &gates);
 
-    void FindAndGates(const aiger_and *aa, unordered_set<unsigned> &exist_gates, vector<unsigned> &gates);
+    // void FindAndGates(const aiger_and *aa, unordered_set<unsigned> &exist_gates, vector<unsigned> &gates);
 
     void AddAndGateToClause(const aiger_and *aa);
 
     inline void InsertIntoPreValueMapping(const int key, const int value);
-
-    inline aiger_and *IsAndGate(const unsigned id);
 
     int InnardsLogiclvlDFS(unsigned aig_id);
 
