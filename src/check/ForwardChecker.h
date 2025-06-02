@@ -2,16 +2,9 @@
 #define FORWARDCHECKER_H
 
 #include "BaseChecker.h"
-#include "Branching.h"
-#include "ISolver.h"
-#include "InvSolver.h"
+#include "IncrCheckerHelpers.h"
 #include "Log.h"
-#include "MainSolver.h"
-#include "OverSequenceSet.h"
-#include "StartSolver.h"
-#include "State.h"
-#include "Task.h"
-#include "UnderSequence.h"
+#include "SATSolver.h"
 #include "random"
 #include <memory>
 #include <unordered_set>
@@ -125,10 +118,10 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<Log> m_log;
     shared_ptr<Model> m_model;
     shared_ptr<State> m_initialState;
-    shared_ptr<MainSolver> m_mainSolver;
-    shared_ptr<MainSolver> m_lifts;
-    shared_ptr<InvSolver> m_invSolver;
-    shared_ptr<StartSolver> m_startSovler;
+    shared_ptr<SATSolver> m_mainSolver;
+    shared_ptr<SATSolver> m_lifts;
+    shared_ptr<SATSolver> m_invSolver;
+    shared_ptr<SATSolver> m_startSovler;
     shared_ptr<Branching> m_branching;
     shared_ptr<State> m_lastState;
 };

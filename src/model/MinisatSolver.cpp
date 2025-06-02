@@ -2,7 +2,9 @@
 #include <algorithm>
 
 namespace car {
-MinisatSolver::MinisatSolver() {
+MinisatSolver::MinisatSolver(shared_ptr<Model> m) {
+    m_model = m;
+    m_maxId = m_model->GetMaxId();
     m_tempVar = 0;
 }
 
@@ -148,6 +150,23 @@ void MinisatSolver::ReleaseTempClause() {
     assert(m_tempVar != 0);
     releaseVar(~GetLit(m_tempVar));
     m_tempVar = 0;
+}
+
+
+void MinisatSolver::ClearAssumption() {
+    m_assumptions.clear();
+}
+
+
+void MinisatSolver::PushAssumption(int a) {
+    m_assumptions.push(GetLit(a));
+}
+
+
+int MinisatSolver::PopAssumption() {
+    Lit p = m_assumptions.last();
+    m_assumptions.pop();
+    return GetLiteralId(p);
 }
 
 } // namespace car

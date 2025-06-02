@@ -1,9 +1,9 @@
 #ifndef MINISATSOLVER_H
 #define MINISATSOLVER_H
 
-#include "../sat/minisat/core/Solver.h"
 #include "ISolver.h"
 #include "Model.h"
+#include "minisat/core/Solver.h"
 #include <memory>
 
 using namespace Minisat;
@@ -12,7 +12,7 @@ namespace car {
 
 class MinisatSolver : public ISolver, public Minisat::Solver {
   public:
-    MinisatSolver();
+    MinisatSolver(shared_ptr<Model> m);
     ~MinisatSolver();
 
     void AddClause(const cube &cls) override;
@@ -34,6 +34,9 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
             return false;
         }
     }
+    void ClearAssumption();
+    void PushAssumption(int a);
+    int PopAssumption();
 
   protected:
     inline int GetLiteralId(const Lit &l);

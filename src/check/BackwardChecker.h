@@ -2,14 +2,9 @@
 #define BACKWARDCHECKER_H
 
 #include "BaseChecker.h"
-#include "ISolver.h"
-#include "InvSolver.h"
+#include "IncrCheckerHelpers.h"
 #include "Log.h"
-#include "MainSolver.h"
-#include "OverSequenceSet.h"
-#include "State.h"
-#include "Task.h"
-#include "UnderSequence.h"
+#include "SATSolver.h"
 #include "random"
 #include <algorithm>
 #include <assert.h>
@@ -119,8 +114,8 @@ class BackwardChecker : public BaseChecker {
     shared_ptr<Log> m_log;
     shared_ptr<Model> m_model;
     shared_ptr<State> m_initialState;
-    shared_ptr<MainSolver> m_mainSolver;
-    shared_ptr<InvSolver> m_invSolver;
+    shared_ptr<SATSolver> m_mainSolver;
+    shared_ptr<SATSolver> m_invSolver;
     vector<shared_ptr<vector<int>>> m_rotation;
     shared_ptr<State> m_lastState;
 };

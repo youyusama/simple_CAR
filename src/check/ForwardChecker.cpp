@@ -58,7 +58,7 @@ bool ForwardChecker::Check(int badId) {
         m_overSequence->Insert(neg_init_l, 0, false);
         m_mainSolver->AddUC(*neg_init_l, 0);
     }
-    m_mainSolver->AddNegationBad();
+    m_mainSolver->AddProperty();
     m_overSequence->effectiveLevel = 0;
     m_startSovler->UpdateStartSolverFlag();
 
@@ -161,7 +161,7 @@ bool ForwardChecker::Check(int badId) {
         m_log->L(2, "\nNew Frame Added");
 
         if (m_invSolver == nullptr) {
-            m_invSolver.reset(new InvSolver(m_model));
+            m_invSolver.reset(new SATSolver(m_model, m_settings.solver));
         }
         IsInvariant(0);
         for (int i = 0; i < m_overSequence->GetLength() - 1; ++i) {
@@ -207,13 +207,15 @@ void ForwardChecker::Init(int badId) {
     blockerOrder.branching = m_branching;
     innOrder.m = m_model;
 
-    m_mainSolver = make_shared<MainSolver>(m_model);
-    for (auto c : m_model->GetConstraints()) {
-        m_mainSolver->AddClause(clause{c});
-    }
-    m_lifts = make_shared<MainSolver>(m_model);
-    m_invSolver = make_shared<InvSolver>(m_model);
-    m_startSovler = make_shared<StartSolver>(m_model);
+    m_mainSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_mainSolver->AddTrans();
+    m_mainSolver->AddConstraints();
+    m_lifts = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_lifts->AddTrans();
+    m_invSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_startSovler = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_startSovler->AddTrans();
+    m_startSovler->PushAssumption(m_badId);
 }
 
 bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
@@ -224,7 +226,7 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
         clause cls;
         cls.reserve(uc->size() + 1);
         for (auto l : *uc) cls.push_back(-l);
-        cls.push_back(-m_startSovler->GetFlag());
+        cls.push_back(-m_startSovler->GetStartSolverFlag());
         m_startSovler->AddClause(cls);
     }
     if (frameLevel < m_minUpdateLevel) {
@@ -246,7 +248,7 @@ bool ForwardChecker::ImmediateSatisfiable(int badId) {
 
 shared_ptr<State> ForwardChecker::EnumerateStartState() {
     if (m_startSovler->Solve()) {
-        auto p = m_startSovler->GetStartPair();
+        auto p = m_startSovler->GetAssignment(false);
         GeneralizePredecessor(p);
         shared_ptr<State> newState(new State(nullptr, p.first, p.second, 0));
         return newState;

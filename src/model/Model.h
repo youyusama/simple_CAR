@@ -4,11 +4,9 @@
 extern "C" {
 #include "aiger.h"
 }
-#ifndef CADICAL
-#include "../sat/minisat/core/Solver.h"
-#include "../sat/minisat/simp/SimpSolver.h"
-using namespace Minisat;
-#endif
+
+// #include "minisat/core/Solver.h"
+// #include "minisat/simp/SimpSolver.h"
 
 #include "Settings.h"
 #include <algorithm>
@@ -24,7 +22,6 @@ using namespace Minisat;
 #include <unordered_set>
 #include <vector>
 
-using namespace car;
 using namespace std;
 
 typedef vector<int> cube;
@@ -96,6 +93,7 @@ class Model {
     inline int GetFalseId() { return m_falseId; }
     inline cube &GetInitialState() { return m_initialState; }
     inline int &GetBad() { return m_bad; }
+    inline int GetProperty() { return -m_bad; }
 
     inline vector<int> GetPrevious(int id) {
         if (m_preValueOfLatchMap.count(abs(id)) > 0) {
@@ -115,10 +113,8 @@ class Model {
 
     vector<clause> &GetClauses() { return m_clauses; }
 
-    inline int GetProperty() { return -m_bad; }
-#ifndef CADICAL
-    shared_ptr<SimpSolver> GetSimpSolver();
-#endif
+    // shared_ptr<Minisat::SimpSolver> GetSimpSolver();
+
     void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
 
     vector<int> GetConstraints() { return m_constraints; };
@@ -145,13 +141,6 @@ class Model {
     void CollectNextValueMapping();
 
     void CollectClauses();
-
-    // void CollectNecessaryAndGates(const aiger_symbol *as, const int as_size,
-    //                               std::unordered_set<unsigned> &exist_gates, std::vector<unsigned> &gates, bool next);
-
-    // void CollectNecessaryAndGatesFromConstraints(unordered_set<unsigned> &exist_gates, vector<unsigned> &gates);
-
-    // void FindAndGates(const aiger_and *aa, unordered_set<unsigned> &exist_gates, vector<unsigned> &gates);
 
     void AddAndGateToClause(const aiger_and *aa);
 
@@ -183,10 +172,8 @@ class Model {
     shared_ptr<set<int>> m_innards;
     unordered_map<int, int> m_innards_lvl;
 
-#ifndef CADICAL
-    void CreateSimpSolver();
-    shared_ptr<SimpSolver> m_simpSolver;
-#endif
+    // void CreateSimpSolver();
+    // shared_ptr<Minisat::SimpSolver> m_simpSolver;
 };
 } // namespace car
 

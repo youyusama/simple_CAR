@@ -42,9 +42,7 @@ void Model::Init() {
         CollectInnards();
     }
     CollectClauses();
-#ifndef CADICAL
-    CreateSimpSolver();
-#endif
+    // CreateSimpSolver();
 }
 
 
@@ -179,65 +177,64 @@ inline void Model::InsertIntoPreValueMapping(const int key, const int value) {
 }
 
 
-#ifndef CADICAL
-Lit getLit(shared_ptr<SimpSolver> sslv, int id) {
-    int var = abs(id) - 1;
-    while (var >= sslv->nVars()) sslv->newVar();
-    return ((id > 0) ? mkLit(var) : ~mkLit(var));
-};
+// Minisat::Lit getLit(shared_ptr<Minisat::SimpSolver> sslv, int id) {
+//     int var = abs(id) - 1;
+//     while (var >= sslv->nVars()) sslv->newVar();
+//     return ((id > 0) ? Minisat::mkLit(var) : ~Minisat::mkLit(var));
+// };
 
 
-void addClause(shared_ptr<SimpSolver> sslv, const clause &cls) {
-    vec<Lit> literals;
-    for (int i = 0; i < cls.size(); ++i) {
-        literals.push(getLit(sslv, cls[i]));
-    }
-    bool result = sslv->addClause(literals);
-    assert(result != false);
-}
+// void addClause(shared_ptr<Minisat::SimpSolver> sslv, const clause &cls) {
+//     Minisat::vec<Minisat::Lit> literals;
+//     for (int i = 0; i < cls.size(); ++i) {
+//         literals.push(getLit(sslv, cls[i]));
+//     }
+//     bool result = sslv->addClause(literals);
+//     assert(result != false);
+// }
 
 
-void Model::CreateSimpSolver() {
-    m_simpSolver = make_shared<SimpSolver>();
-    for (int i = 0; i < m_aig->num_inputs + m_aig->num_latches; i++) {
-        Var nv = m_simpSolver->newVar();
-        m_simpSolver->setFrozen(nv, true);
-    }
-    for (int i = m_aig->num_inputs + 1; i < m_aig->num_inputs + m_aig->num_latches + 1; i++) {
-        Var p = abs(GetPrime(i)) - 1;
-        while (p >= m_simpSolver->nVars()) {
-            m_simpSolver->newVar();
-        }
-        m_simpSolver->setFrozen(p, true);
-    }
-    for (int i = 0; i < m_constraints.size(); i++) {
-        Var cons_var = abs(m_constraints[i]) - 1;
-        while (cons_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
-        m_simpSolver->setFrozen(cons_var, true);
-    }
-    Var bad_var = abs(m_bad) - 1;
-    while (bad_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
-    m_simpSolver->setFrozen(bad_var, true);
+// void Model::CreateSimpSolver() {
+//     m_simpSolver = make_shared<Minisat::SimpSolver>();
+//     for (int i = 0; i < m_aig->num_inputs + m_aig->num_latches; i++) {
+//         Minisat::Var nv = m_simpSolver->newVar();
+//         m_simpSolver->setFrozen(nv, true);
+//     }
+//     for (int i = m_aig->num_inputs + 1; i < m_aig->num_inputs + m_aig->num_latches + 1; i++) {
+//         Minisat::Var p = abs(GetPrime(i)) - 1;
+//         while (p >= m_simpSolver->nVars()) {
+//             m_simpSolver->newVar();
+//         }
+//         m_simpSolver->setFrozen(p, true);
+//     }
+//     for (int i = 0; i < m_constraints.size(); i++) {
+//         Minisat::Var cons_var = abs(m_constraints[i]) - 1;
+//         while (cons_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
+//         m_simpSolver->setFrozen(cons_var, true);
+//     }
+//     Minisat::Var bad_var = abs(m_bad) - 1;
+//     while (bad_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
+//     m_simpSolver->setFrozen(bad_var, true);
 
-    if (m_settings.internalSignals) {
-        for (int i : *m_innards) {
-            Var inn_var = abs(GetPrime(i)) - 1;
-            while (inn_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
-            m_simpSolver->setFrozen(inn_var, true);
-        }
-    }
+//     if (m_settings.internalSignals) {
+//         for (int i : *m_innards) {
+//             Minisat::Var inn_var = abs(GetPrime(i)) - 1;
+//             while (inn_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
+//             m_simpSolver->setFrozen(inn_var, true);
+//         }
+//     }
 
-    for (int i = 0; i < m_clauses.size(); i++) {
-        addClause(m_simpSolver, m_clauses[i]);
-    }
-    m_simpSolver->eliminate(true);
-}
+//     for (int i = 0; i < m_clauses.size(); i++) {
+//         addClause(m_simpSolver, m_clauses[i]);
+//     }
+//     m_simpSolver->eliminate(true);
+// }
 
 
-shared_ptr<SimpSolver> Model::GetSimpSolver() {
-    return m_simpSolver;
-}
-#endif
+// shared_ptr<Minisat::SimpSolver> Model::GetSimpSolver() {
+//     return m_simpSolver;
+// }
+
 
 void Model::GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map) {
     map = m_preValueOfLatchMap;

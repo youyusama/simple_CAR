@@ -7,11 +7,9 @@ src/model/Log.cpp\
 src/check/BackwardChecker.cpp\
 src/check/ForwardChecker.cpp\
 src/check/BMC.cpp\
-src/model/MainSolver.cpp\
-src/model/State.cpp\
-src/main.cpp\
-src/model/Branching.cpp\
-src/model/OverSequenceSet.cpp
+src/model/SATSolver.cpp\
+src/model/IncrCheckerHelpers.cpp\
+src/main.cpp
 
 OBJS = \
 aiger.o\
@@ -20,28 +18,27 @@ Log.o\
 BackwardChecker.o\
 ForwardChecker.o\
 BMC.o\
-MainSolver.o\
-State.o\
-main.o\
-Branching.o\
-OverSequenceSet.o
+SATSolver.o\
+IncrCheckerHelpers.o\
+main.o
 
 ifdef CADICAL
 	CPPSOURCES += src/model/CadicalSolver.cpp
 	OBJS += CadicalSolver.o
 	OBJS += src/sat/cadical/build/libcadical.a
-else
-	CPPSOURCES += src/model/MinisatSolver.cpp
-	CPPSOURCES += src/sat/minisat/core/Solver.cc
-	CPPSOURCES += src/sat/minisat/simp/SimpSolver.cc
-	CPPSOURCES += src/sat/minisat/utils/Options.cc
-	CPPSOURCES += src/sat/minisat/utils/System.cc
-	OBJS += MinisatSolver.o
-	OBJS += SimpSolver.o
-	OBJS += Solver.o
-	OBJS += Options.o
-	OBJS += System.o
 endif
+
+CPPSOURCES += src/model/MinisatSolver.cpp
+CPPSOURCES += src/sat/minisat/core/Solver.cc
+CPPSOURCES += src/sat/minisat/simp/SimpSolver.cc
+CPPSOURCES += src/sat/minisat/utils/Options.cc
+CPPSOURCES += src/sat/minisat/utils/System.cc
+OBJS += MinisatSolver.o
+OBJS += Solver.o
+OBJS += SimpSolver.o
+OBJS += Options.o
+OBJS += System.o
+
 
 CFLAG = -c -g
 

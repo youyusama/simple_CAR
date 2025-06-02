@@ -142,7 +142,7 @@ bool BackwardChecker::Check(int badId) {
         m_log->L(2, "\nNew Frame Added");
 
         if (m_invSolver == nullptr) {
-            m_invSolver.reset(new InvSolver(m_model));
+            m_invSolver.reset(new SATSolver(m_model, m_settings.solver));
         }
         IsInvariant(0);
         for (int i = 0; i < m_overSequence->GetLength() - 1; ++i) {
@@ -187,11 +187,10 @@ void BackwardChecker::Init() {
     blockerOrder.branching = m_branching;
     innOrder.m = m_model;
 
-    m_mainSolver = make_shared<MainSolver>(m_model);
-    for (auto c : m_model->GetConstraints()) {
-        m_mainSolver->AddClause(clause{c});
-    }
-    m_invSolver = make_shared<InvSolver>(m_model);
+    m_mainSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_mainSolver->AddTrans();
+    m_mainSolver->AddConstraints();
+    m_invSolver = make_shared<SATSolver>(m_model, m_settings.solver);
 }
 
 bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
