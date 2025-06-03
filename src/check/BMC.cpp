@@ -3,7 +3,7 @@
 namespace car {
 
 BMC::BMC(Settings settings,
-         shared_ptr<AigerModel> model,
+         shared_ptr<Model> model,
          shared_ptr<Log> log) : m_settings(settings),
                                 m_model(model),
                                 m_log(log) {
@@ -77,11 +77,7 @@ bool BMC::Check(int badId) {
 
 void BMC::Init(int badId) {
     m_badId = badId;
-#ifdef CADICAL
-    m_Solver = make_shared<CadicalSolver>();
-#else
-    m_Solver = make_shared<MinisatSolver>();
-#endif
+    m_Solver = make_shared<SATSolver>(m_model, m_settings.solver);
 
     // send initial state
     for (auto l : m_model->GetInitialState()) {

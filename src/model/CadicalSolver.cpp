@@ -2,7 +2,9 @@
 #include <algorithm>
 
 namespace car {
-CadicalSolver::CadicalSolver() {
+CadicalSolver::CadicalSolver(shared_ptr<Model> m) {
+    m_model = m;
+    m_maxId = m_model->GetMaxId();
     m_assumptions = make_shared<cube>();
     m_tempClause = cube();
 }
@@ -141,6 +143,23 @@ void CadicalSolver::AddTempClause(const cube &cls) {
 
 void CadicalSolver::ReleaseTempClause() {
     m_tempClause.clear();
+}
+
+
+void CadicalSolver::ClearAssumption() {
+    m_assumptions->clear();
+}
+
+
+void CadicalSolver::PushAssumption(int a) {
+    m_assumptions->push_back(a);
+}
+
+
+int CadicalSolver::PopAssumption() {
+    int p = m_assumptions->back();
+    m_assumptions->pop_back();
+    return p;
 }
 
 

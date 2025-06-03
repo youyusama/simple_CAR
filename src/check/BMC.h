@@ -2,19 +2,15 @@
 #define BMC_H
 
 #include "BaseChecker.h"
-#ifdef CADICAL
-#include "CadicalSolver.h"
-#else
-#include "MinisatSolver.h"
-#endif
 #include "Log.h"
+#include "SATSolver.h"
 
 namespace car {
 
 class BMC : public BaseChecker {
   public:
     BMC(Settings settings,
-        shared_ptr<AigerModel> model,
+        shared_ptr<Model> model,
         shared_ptr<Log> log);
 
     bool Run();
@@ -23,12 +19,12 @@ class BMC : public BaseChecker {
   private:
     Settings m_settings;
     shared_ptr<Log> m_log;
-    shared_ptr<AigerModel> m_model;
+    shared_ptr<Model> m_model;
     int m_k;
     int m_maxK;
     shared_ptr<State> m_initialState;
     int m_badId;
-    shared_ptr<ISolver> m_Solver;
+    shared_ptr<SATSolver> m_Solver;
 
     void Init(int badId);
     void OutputCounterExample(int bad);

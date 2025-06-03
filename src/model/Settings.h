@@ -20,6 +20,7 @@ struct Settings {
     int seed = 0;
     int verbosity = 0;
     bool internalSignals = false;
+    int solver = 0;
     string aigFilePath;
     string outputDir;
 };

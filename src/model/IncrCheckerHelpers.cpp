@@ -1,6 +1,72 @@
-#include "OverSequenceSet.h"
+#include "IncrCheckerHelpers.h"
 
 namespace car {
+
+Branching::Branching(int type) {
+    branching_type = type;
+    conflict_index = 1;
+    mini = 1 << 20;
+    counts.clear();
+}
+
+
+Branching::~Branching() {}
+
+
+void Branching::Update(const shared_ptr<cube> uc) {
+    if (uc->size() == 0) return;
+    conflict_index++;
+    switch (branching_type) {
+    case 1: {
+        Decay();
+        break;
+    }
+    case 2: {
+        if (conflict_index == 256) {
+            for (int i = mini; i < counts.size(); i++)
+                counts[i] *= 0.5;
+            conflict_index = 0;
+        }
+        break;
+    }
+    }
+    // assumes cube is ordered
+    int sz = abs(uc->back());
+    if (sz >= counts.size()) counts.resize(sz + 1);
+    if (mini > abs(uc->at(0))) mini = abs(uc->at(0));
+    for (auto l : *uc) {
+        switch (branching_type) {
+        case 1:
+        case 2: {
+            counts[abs(l)]++;
+            break;
+        }
+        case 3:
+            counts[abs(l)] = (counts[abs(l)] + conflict_index) / 2.0;
+            break;
+        }
+    }
+}
+
+
+void Branching::Decay() {
+    for (int i = mini; i < counts.size(); i++)
+        counts[i] *= 0.99;
+}
+
+
+void Branching::Decay(const shared_ptr<cube> uc, int gap = 1) {
+    if (uc->size() == 0) return;
+    conflict_index++;
+    // assumes cube is ordered
+    int sz = abs(uc->back());
+    if (sz >= counts.size()) counts.resize(sz + 1);
+    if (mini > abs(uc->at(0))) mini = abs(uc->at(0));
+    for (auto l : *uc) {
+        counts[abs(l)] *= 1 - 0.01 * (gap - 1);
+    }
+}
+
 
 static bool _cmp(int a, int b) {
     if (abs(a) != abs(b))
@@ -173,40 +239,34 @@ string OverSequenceSet::FramesDetail() {
 }
 
 
-bool BlockSolver::SolveFrame(const shared_ptr<cube> assumption, int frameLevel) {
-#ifdef CADICAL
-    m_assumptions->clear();
-    m_assumptions->push_back(GetFrameFlag(frameLevel));
-    m_assumptions->resize(assumption->size() + 1);
-    std::copy(assumption->begin(), assumption->end(), m_assumptions->begin() + 1);
-#else
-    m_assumptions.clear();
-    m_assumptions.push(GetLit(GetFrameFlag(frameLevel)));
-    for (auto it : *assumption) {
-        m_assumptions.push(GetLit(it));
+int State::numInputs = -1;
+int State::numLatches = -1;
+
+
+string State::GetLatchesString() {
+    string result = "";
+    result.reserve(numLatches);
+    int j = 0;
+    for (int i = 0; i < numLatches; ++i) {
+        if (j >= latches->size() || numInputs + i + 1 < abs(latches->at(j))) {
+            result += "x";
+        } else {
+            result += (latches->at(j) > 0) ? "1" : "0";
+            ++j;
+        }
     }
-#endif
-    return Solve();
+    return result;
 }
 
 
-void BlockSolver::AddUC(const cube &uc, int frameLevel) {
-    int flag = GetFrameFlag(frameLevel);
-    cube cls;
-    cls.push_back(-flag);
-    for (int i = 0; i < uc.size(); ++i) {
-        cls.push_back(-uc[i]);
+string State::GetInputsString() {
+    string result = "";
+    result.reserve(numInputs);
+    for (int i = 0; i < numInputs; ++i) {
+        result += (inputs->at(i) > 0) ? "1" : "0";
     }
-    AddClause(cls);
+    return result;
 }
 
-
-inline int BlockSolver::GetFrameFlag(int frameLevel) {
-    assert(frameLevel >= 0);
-    while (m_frameFlags.size() <= frameLevel) {
-        m_frameFlags.emplace_back(GetNewVar());
-    }
-    return m_frameFlags[frameLevel];
-}
 
 } // namespace car

@@ -1,19 +1,21 @@
-#include "AigerModel.h"
 #include "BMC.h"
 #include "BackwardChecker.h"
 #include "ForwardChecker.h"
 #include "Log.h"
+#include "Model.h"
 #include "Settings.h"
 #include <cstdio>
 #include <memory>
 #include <string.h>
 
+using namespace car;
 
 void PrintUsage() {
     cout << "Usage: ./simplecar AIG_FILE.aig" << endl;
     cout << "Configs:" << endl;
     cout << "   -f | -b             forward | backward CAR" << endl;
     cout << "   -bmc                BMC" << endl;
+    cout << "   -slv                Solver (1: minisat 2: CaDiCaL)" << endl;
     cout << "   -br n               branching (1: sum 2: VSIDS 3: ACIDS 0: static)" << endl;
     cout << "   -rs                 refer-skipping" << endl;
     cout << "   -is                 internal signals" << endl;
@@ -37,6 +39,9 @@ Settings GetArgv(int argc, char **argv) {
             settings.bmc = true;
         } else if (strcmp(argv[i], "-k") == 0) {
             settings.bmc_k = atoi(argv[i + 1]);
+            i++;
+        } else if (strcmp(argv[i], "-slv") == 0) {
+            settings.solver = atoi(argv[i + 1]);
             i++;
         } else if (strcmp(argv[i], "-br") == 0) {
             settings.Branching = atoi(argv[i + 1]);
@@ -70,7 +75,7 @@ Settings GetArgv(int argc, char **argv) {
 int main(int argc, char **argv) {
     Settings settings = GetArgv(argc, argv);
     shared_ptr<Log> log(new Log(settings.verbosity));
-    shared_ptr<AigerModel> aigerModel(new AigerModel(settings));
+    shared_ptr<Model> aigerModel(new Model(settings));
     log->StatInit();
     shared_ptr<BaseChecker> checker;
     if (settings.forward) {

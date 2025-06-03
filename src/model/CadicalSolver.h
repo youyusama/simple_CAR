@@ -1,16 +1,16 @@
 #ifndef CADICALSOLVER_H
 #define CADICALSOLVER_H
 
-#include "../sat/cadical/src/cadical.hpp"
-#include "AigerModel.h"
 #include "ISolver.h"
+#include "Model.h"
+#include "cadical/src/cadical.hpp"
 #include <memory>
 
 namespace car {
 
 class CadicalSolver : public ISolver, public CaDiCaL::Solver {
   public:
-    CadicalSolver();
+    CadicalSolver(shared_ptr<Model> m);
     ~CadicalSolver();
 
     void AddClause(const cube &cls) override;
@@ -32,9 +32,12 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
             return false;
         }
     }
+    void ClearAssumption();
+    void PushAssumption(int a);
+    int PopAssumption();
 
   protected:
-    shared_ptr<AigerModel> m_model;
+    shared_ptr<Model> m_model;
     int m_maxId;
     shared_ptr<cube> m_assumptions;
     cube m_tempClause;

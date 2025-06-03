@@ -1,7 +1,7 @@
 #ifndef BASECHECKER_H
 #define BASECHECKER_H
 
-#include "AigerModel.h"
+#include "Model.h"
 #include "Settings.h"
 
 namespace car {
