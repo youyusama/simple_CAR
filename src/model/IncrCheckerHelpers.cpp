@@ -118,15 +118,8 @@ bool OverSequenceSet::Insert(shared_ptr<cube> uc, int index, bool need_imply) {
 }
 
 
-void OverSequenceSet::GetFrame(int frameLevel, vector<shared_ptr<cube>> &f) {
-    if (frameLevel >= m_sequence.size()) return;
-    shared_ptr<frame> &frame_i = m_sequence[frameLevel];
-    copy(frame_i->begin(), frame_i->end(), back_inserter(f));
-    return;
-}
-
-
 bool OverSequenceSet::IsBlockedByFrame(shared_ptr<cube> latches, int frameLevel) {
+    if (frameLevel >= m_sequence.size()) return false;
     // by for checking
     int latch_index, num_inputs;
     num_inputs = m_model->GetNumInputs();
@@ -148,6 +141,7 @@ bool OverSequenceSet::IsBlockedByFrame(shared_ptr<cube> latches, int frameLevel)
 
 
 bool OverSequenceSet::IsBlockedByFrame_sat(shared_ptr<cube> latches, int frameLevel) {
+    if (frameLevel >= m_sequence.size()) return false;
     bool result = m_blockSolver->SolveFrame(latches, frameLevel);
     if (!result) {
         return true;
@@ -158,6 +152,7 @@ bool OverSequenceSet::IsBlockedByFrame_sat(shared_ptr<cube> latches, int frameLe
 
 
 bool OverSequenceSet::IsBlockedByFrame_lazy(shared_ptr<cube> latches, int frameLevel) {
+    if (frameLevel >= m_sequence.size()) return false;
     int &counter = m_blockCounter[frameLevel];
     if (counter == -1) { // by sat
         bool result = m_blockSolver->SolveFrame(latches, frameLevel);
@@ -189,11 +184,6 @@ bool OverSequenceSet::IsBlockedByFrame_lazy(shared_ptr<cube> latches, int frameL
             counter = -1;
     }
     return false;
-}
-
-
-int OverSequenceSet::GetLength() {
-    return m_sequence.size();
 }
 
 
@@ -262,8 +252,14 @@ string State::GetLatchesString() {
 string State::GetInputsString() {
     string result = "";
     result.reserve(numInputs);
-    for (int i = 0; i < numInputs; ++i) {
-        result += (inputs->at(i) > 0) ? "1" : "0";
+    int j = 0;
+    for (int i = 1; i <= numInputs; ++i) {
+        if (j >= inputs->size() || i < abs(inputs->at(j))) {
+            result += "x";
+        } else {
+            result += (inputs->at(j) > 0) ? "1" : "0";
+            ++j;
+        }
     }
     return result;
 }

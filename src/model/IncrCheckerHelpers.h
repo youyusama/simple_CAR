@@ -71,8 +71,6 @@ class OverSequenceSet {
 
     bool Insert(shared_ptr<cube> uc, int index, bool need_imply = true);
 
-    void GetFrame(int frameLevel, vector<shared_ptr<cube>> &f);
-
     shared_ptr<frame> GetFrame(int lvl) { return m_sequence[lvl]; };
 
     bool IsBlockedByFrame_lazy(shared_ptr<cube> latches, int frameLevel);
@@ -81,15 +79,11 @@ class OverSequenceSet {
 
     bool IsBlockedByFrame(shared_ptr<cube> latches, int frameLevel);
 
-    int GetLength();
-
     void GetBlockers(shared_ptr<cube> latches, int framelevel, vector<shared_ptr<cube>> &b);
 
     string FramesInfo();
 
     string FramesDetail();
-
-    int effectiveLevel;
 
   private:
     bool is_imply(shared_ptr<cube> a, shared_ptr<cube> b);

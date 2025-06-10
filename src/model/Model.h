@@ -127,6 +127,8 @@ class Model {
         return it->second;
     }
 
+    shared_ptr<vector<int>> GetCOIInputs() { return m_COIInputs; };
+
   private:
     void Init();
 
@@ -152,6 +154,8 @@ class Model {
 
     void CollectInnardsClauses();
 
+    void CollectCOIInputs();
+
     Settings m_settings;
     aiger *m_aig;
     int m_maxId;
@@ -174,6 +178,8 @@ class Model {
 
     // void CreateSimpSolver();
     // shared_ptr<Minisat::SimpSolver> m_simpSolver;
+
+    shared_ptr<vector<int>> m_COIInputs;
 };
 } // namespace car
 
