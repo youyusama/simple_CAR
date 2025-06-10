@@ -61,25 +61,23 @@ bool BackwardChecker::Check(int badId) {
     m_log->StatMainSolver();
     m_log->L(2, "Get UC:", CubeToStr(uc));
     AddUnsatisfiableCore(uc, 0);
-    m_overSequence->effectiveLevel = 0;
 
     // main stage
-    int frameStep = 0;
+    m_k = 0;
     stack<Task> workingStack;
     while (true) {
-        m_log->L(1, m_overSequence->FramesInfo());
-        m_minUpdateLevel = m_overSequence->GetLength();
+        m_minUpdateLevel = m_k + 1;
         if (m_settings.end) // from the deep and the end
         {
             for (int i = m_underSequence.size() - 1; i >= 0; i--) {
                 for (int j = m_underSequence[i].size() - 1; j >= 0; j--) {
-                    workingStack.emplace(m_underSequence[i][j], frameStep, false);
+                    workingStack.emplace(m_underSequence[i][j], m_k - 1, false);
                 }
             }
         } else { // from the shallow and the start
             for (int i = 0; i < m_underSequence.size(); i++) {
                 for (int j = 0; j < m_underSequence[i].size(); j++) {
-                    workingStack.emplace(m_underSequence[i][j], frameStep, false);
+                    workingStack.emplace(m_underSequence[i][j], m_k - 1, false);
                 }
             }
         }
@@ -90,7 +88,7 @@ bool BackwardChecker::Check(int badId) {
             if (!task.isLocated) {
                 task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
                 m_log->L(3, "State get new level ", task.frameLevel);
-                if (task.frameLevel > m_overSequence->effectiveLevel) {
+                if (task.frameLevel >= m_k) {
                     workingStack.pop();
                     continue;
                 }
@@ -138,14 +136,11 @@ bool BackwardChecker::Check(int badId) {
             }
         }
 
-        frameStep++;
-        m_log->L(2, "\nNew Frame Added");
-
         if (m_invSolver == nullptr) {
             m_invSolver.reset(new SATSolver(m_model, m_settings.solver));
         }
         IsInvariant(0);
-        for (int i = 0; i < m_overSequence->GetLength() - 1; ++i) {
+        for (int i = 0; i < m_k; ++i) {
             // propagation
             if (i >= m_minUpdateLevel) {
                 shared_ptr<frame> fi = m_overSequence->GetFrame(i);
@@ -168,8 +163,11 @@ bool BackwardChecker::Check(int badId) {
         }
         m_invSolver = nullptr;
 
+        m_log->L(1, m_overSequence->FramesInfo());
         m_log->L(3, m_overSequence->FramesDetail());
-        m_overSequence->effectiveLevel++;
+
+        m_k++;
+        m_log->L(2, "\nNew Frame Added");
     }
 }
 
@@ -219,7 +217,7 @@ bool BackwardChecker::ImmediateSatisfiable(int badId) {
 int BackwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
     m_log->Tick();
 
-    for (int i = start; i < m_overSequence->GetLength(); ++i) {
+    for (int i = start; i <= m_k; ++i) {
         if (!m_overSequence->IsBlockedByFrame_lazy(state->latches, i)) {
             m_log->StatGetNewLevel();
             return i - 1;
@@ -227,24 +225,60 @@ int BackwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
     }
 
     m_log->StatGetNewLevel();
-    return m_overSequence->GetLength() - 1; // placeholder
+    return m_k;
 }
 
 
 bool BackwardChecker::IsInvariant(int frameLevel) {
-    vector<shared_ptr<vector<int>>> frame_i;
-    m_overSequence->GetFrame(frameLevel, frame_i);
+    shared_ptr<frame> frame_i = m_overSequence->GetFrame(frameLevel);
 
     if (frameLevel < m_minUpdateLevel) {
-        m_invSolver->AddConstraintOr(frame_i);
+        AddConstraintOr(frame_i);
         return false;
     }
 
-    m_invSolver->AddConstraintAnd(frame_i);
+    AddConstraintAnd(frame_i);
     bool result = !m_invSolver->Solve();
     m_invSolver->FlipLastConstrain();
-    m_invSolver->AddConstraintOr(frame_i);
+    AddConstraintOr(frame_i);
     return result;
+}
+
+
+// ================================================================================
+// @brief: add constraint | O_i
+// @input:
+// @output:
+// ================================================================================
+void BackwardChecker::AddConstraintOr(const shared_ptr<frame> f) {
+    cube cls;
+    for (shared_ptr<cube> frame_cube : *f) {
+        int flag = m_invSolver->GetNewVar();
+        cls.push_back(flag);
+        for (int i = 0; i < frame_cube->size(); i++) {
+            m_invSolver->AddClause(cube{-flag, frame_cube->at(i)});
+        }
+    }
+    m_invSolver->AddClause(cls);
+}
+
+
+// ================================================================================
+// @brief: add constraint & !O_i
+// @input:
+// @output:
+// ================================================================================
+void BackwardChecker::AddConstraintAnd(const shared_ptr<frame> f) {
+    int flag = m_invSolver->GetNewVar();
+    for (shared_ptr<cube> frame_cube : *f) {
+        cube cls;
+        for (int i = 0; i < frame_cube->size(); i++) {
+            cls.push_back(-frame_cube->at(i));
+        }
+        cls.push_back(-flag);
+        m_invSolver->AddClause(cls);
+    }
+    m_invSolver->AddAssumption(make_shared<cube>(cube{flag}));
 }
 
 
@@ -373,6 +407,7 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
                 required_lits.emplace(uc->at(i));
             }
         }
+        sort(uc->begin(), uc->end(), cmp);
         m_log->L(2, "Get UC:", CubeToStr(uc));
         m_branching->Update(uc);
         AddUnsatisfiableCore(uc, 0);
@@ -418,7 +453,7 @@ bool BackwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
 
 
 int BackwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
-    while (lvl + 1 < m_overSequence->GetLength()) {
+    while (lvl < m_k) {
         if (Propagate(c, lvl))
             m_branching->Update(c);
         else
@@ -483,12 +518,11 @@ void BackwardChecker::OutputWitness(int bad) {
 
     vector<unsigned> inv_lits;
     for (unsigned i = 0; i <= lvl_i; i++) {
-        vector<shared_ptr<cube>> frame_i;
-        m_overSequence->GetFrame(i, frame_i);
+        shared_ptr<frame> frame_i = m_overSequence->GetFrame(i);
         vector<unsigned> frame_i_lits;
-        for (unsigned j = 0; j < frame_i.size(); j++) {
+        for (shared_ptr<cube> frame_cube : *frame_i) {
             vector<unsigned> cube_j;
-            for (int l : *frame_i[j]) cube_j.push_back(l > 0 ? (2 * l) : (2 * -l + 1));
+            for (int l : *frame_cube) cube_j.push_back(l > 0 ? (2 * l) : (2 * -l + 1));
             unsigned c_j = addCubeToANDGates(witness_aig, cube_j) ^ 1;
             frame_i_lits.push_back(c_j);
         }

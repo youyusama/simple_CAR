@@ -42,6 +42,7 @@ void Model::Init() {
         CollectInnards();
     }
     CollectClauses();
+    CollectCOIInputs();
     // CreateSimpSolver();
 }
 
@@ -149,6 +150,34 @@ void Model::CollectClauses() {
     // create clauses for true and false
     m_clauses.emplace_back(clause{m_trueId});
     m_clauses.emplace_back(clause{-m_falseId});
+}
+
+
+void Model::CollectCOIInputs() {
+    set<unsigned> coi_lits;
+    for (int i = 0; i < m_aig->num_constraints; i++) {
+        coi_lits.insert(aiger_strip(m_aig->constraints[i].lit));
+    }
+    coi_lits.insert(abs(m_bad) * 2);
+
+    vector<unsigned> coi_gates;
+    for (int i = m_aig->num_ands - 1; i >= 0; i--) {
+        aiger_and &a = m_aig->ands[i];
+        if (coi_lits.find(a.lhs) != coi_lits.end()) {
+            coi_gates.push_back(a.lhs);
+            coi_lits.insert(aiger_strip(a.rhs0));
+            coi_lits.insert(aiger_strip(a.rhs1));
+        }
+    }
+
+    m_COIInputs = make_shared<vector<int>>();
+    for (unsigned lit : coi_lits) {
+        unsigned inputs_max = m_aig->num_inputs * 2;
+        if (lit > 0 && lit <= inputs_max) {
+            m_COIInputs->push_back(GetCarId(lit));
+        } else if (lit > 0)
+            break;
+    }
 }
 
 

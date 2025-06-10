@@ -40,11 +40,13 @@ void MinisatSolver::AddAssumption(const shared_ptr<cube> assumption) {
 
 void MinisatSolver::AddClause(const cube &cls) {
     vec<Lit> literals;
-    for (int i = 0; i < cls.size(); ++i) {
-        literals.push(GetLit(cls[i]));
+    for (int l : cls) {
+        literals.push(GetLit(l));
+        if (abs(l) > m_maxId) m_maxId = abs(l) + 1;
     }
     bool result = addClause(literals);
-    assert(result != false);
+    // result may be false when the clause is already conflict
+    // assert(result != false);
 }
 
 

@@ -47,6 +47,8 @@ void CadicalSolver::AddAssumption(const shared_ptr<cube> assumption) {
 
 
 void CadicalSolver::AddClause(const cube &cls) {
+    for (int l : cls)
+        if (abs(l) > m_maxId) m_maxId = abs(l) + 1;
     clause(cls);
 }
 

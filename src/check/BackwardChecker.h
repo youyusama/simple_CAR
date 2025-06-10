@@ -106,7 +106,12 @@ class BackwardChecker : public BaseChecker {
 
     bool CheckBad(shared_ptr<State> s);
 
+    void AddConstraintOr(const shared_ptr<frame> f);
+
+    void AddConstraintAnd(const shared_ptr<frame> f);
+
     int m_minUpdateLevel;
+    int m_k;
     shared_ptr<Branching> m_branching;
     shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;

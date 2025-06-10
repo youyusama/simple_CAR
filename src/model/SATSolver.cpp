@@ -47,6 +47,49 @@ void SATSolver::AddConstraints() {
 
 
 // ================================================================================
+// @brief: add transition relation to solver, & T
+// @input:
+// @output:
+// ================================================================================
+void SATSolver::AddTransK(int k) {
+    vector<clause> &clauses = m_model->GetClauses();
+    for (int i = 0; i < clauses.size(); ++i) {
+        clause &ori = clauses[i];
+        clause cls_k;
+        for (int v : ori) {
+            cls_k.push_back(m_model->GetPrimeK(v, k));
+        }
+        AddClause(cls_k);
+    }
+}
+
+
+// ================================================================================
+// @brief: add constraints to solver
+// @input:
+// @output:
+// ================================================================================
+void SATSolver::AddConstraintsK(int k) {
+    for (auto c : m_model->GetConstraints()) {
+        AddClause(clause{m_model->GetPrimeK(c, k)});
+    }
+}
+
+
+void SATSolver::AddBad() {
+    int bad = m_model->GetBad();
+    AddClause(clause{bad});
+}
+
+
+void SATSolver::AddBadk(int k) {
+    int bad = m_model->GetBad();
+    int bad_k = m_model->GetPrimeK(bad, k);
+    AddClause(clause{bad_k});
+}
+
+
+// ================================================================================
 // @brief: assume state and give frame level, check satisfiability, & F_i & ass
 // @input:
 // @output:
@@ -67,6 +110,7 @@ bool SATSolver::SolveFrame(const shared_ptr<cube> assumption, int lvl) {
 void SATSolver::AddUC(const cube &uc, int lvl) {
     int flag = GetFrameFlag(lvl);
     clause cls;
+    cls.reserve(uc.size() + 1);
     cls.push_back(-flag);
     for (int i = 0; i < uc.size(); ++i) {
         cls.push_back(-uc[i]);
@@ -82,45 +126,6 @@ void SATSolver::AddUC(const cube &uc, int lvl) {
 // ================================================================================
 void SATSolver::AddProperty() {
     AddClause(clause{m_model->GetProperty()});
-}
-
-
-// ================================================================================
-// @brief: add constraint | O_i
-// @input:
-// @output:
-// ================================================================================
-void SATSolver::AddConstraintOr(const vector<shared_ptr<cube>> frame) {
-    cube cls;
-    for (int i = 0; i < frame.size(); ++i) {
-        int flag = GetNewVar();
-        cls.push_back(flag);
-        for (int j = 0; j < frame[i]->size(); ++j) {
-            AddClause(cube{-flag, frame[i]->at(j)});
-        }
-    }
-    AddClause(cls);
-}
-
-
-// ================================================================================
-// @brief: add constraint & !O_i
-// @input:
-// @output:
-// ================================================================================
-void SATSolver::AddConstraintAnd(const vector<shared_ptr<cube>> frame) {
-    int flag = GetNewVar();
-    for (int i = 0; i < frame.size(); ++i) {
-        cube cls;
-        for (int j = 0; j < frame[i]->size(); ++j) {
-            cls.push_back(-frame[i]->at(j));
-        }
-        cls.push_back(-flag);
-        AddClause(cls);
-    }
-    shared_ptr<cube> f = make_shared<cube>();
-    f->push_back(flag);
-    AddAssumption(f);
 }
 
 
@@ -143,16 +148,11 @@ void SATSolver::FlipLastConstrain() {
 void SATSolver::UpdateStartSolverFlag() {
     if (m_frameFlags.size() > 0) {
         int last_flag = PopAssumption();
-        PushAssumption(-last_flag);
+        AddClause({-last_flag});
     }
     int flag = GetNewVar();
     m_frameFlags.push_back(flag);
     PushAssumption(flag);
-}
-
-
-int SATSolver::GetStartSolverFlag() {
-    return m_frameFlags.back();
 }
 
 

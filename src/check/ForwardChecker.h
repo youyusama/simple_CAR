@@ -88,7 +88,7 @@ class ForwardChecker : public BaseChecker {
         return abs(a) < abs(b);
     }
 
-    void GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &t, shared_ptr<State> s = nullptr);
+    void GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &s, shared_ptr<State> t);
 
     bool Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1);
 
@@ -106,12 +106,15 @@ class ForwardChecker : public BaseChecker {
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
 
-    void ExtendLemmaInternalSignals(shared_ptr<cube> lemma);
-
     bool CheckInit(shared_ptr<State> s);
+
+    void AddConstraintOr(const shared_ptr<frame> f);
+
+    void AddConstraintAnd(const shared_ptr<frame> f);
 
     int m_minUpdateLevel;
     int m_badId;
+    int m_k;
     shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
@@ -119,9 +122,10 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<Model> m_model;
     shared_ptr<State> m_initialState;
     shared_ptr<SATSolver> m_mainSolver;
-    shared_ptr<SATSolver> m_lifts;
+    shared_ptr<SATSolver> m_liftSolver;
+    shared_ptr<SATSolver> m_badPredLiftSolver;
     shared_ptr<SATSolver> m_invSolver;
-    shared_ptr<SATSolver> m_startSovler;
+    shared_ptr<SATSolver> m_startSolver;
     shared_ptr<Branching> m_branching;
     shared_ptr<State> m_lastState;
 };

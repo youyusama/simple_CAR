@@ -72,7 +72,15 @@ class SATSolver : public ISolver {
     // SAT interface for IC3/CAR
     void AddTrans();
 
+    void AddTransK(int k);
+
     void AddConstraints();
+
+    void AddConstraintsK(int k);
+
+    void AddBad();
+
+    void AddBadk(int k);
 
     bool SolveFrame(const shared_ptr<cube> assumption, int lvl);
 
@@ -80,17 +88,9 @@ class SATSolver : public ISolver {
 
     void AddProperty();
 
-    void AddConstraintOr(const vector<shared_ptr<cube>> frame);
-
-    void AddConstraintAnd(const vector<shared_ptr<cube>> frame);
-
     void FlipLastConstrain();
 
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetStartPair();
-
     void UpdateStartSolverFlag();
-
-    int GetStartSolverFlag();
 
   protected:
     shared_ptr<Model> m_model;
