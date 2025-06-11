@@ -16,10 +16,12 @@ class ForwardChecker : public BaseChecker {
     ForwardChecker(Settings settings,
                    shared_ptr<Model> model,
                    shared_ptr<Log> log);
-    bool Run();
-    bool Check(int badId);
+    CheckResult Run();
+    void Witness();
 
   private:
+    bool Check(int badId);
+
     void Init(int badId);
 
     bool AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel);
@@ -66,15 +68,15 @@ class ForwardChecker : public BaseChecker {
     } blockerOrder;
 
     void OrderAssumption(shared_ptr<cube> c) {
-        if (m_settings.seed > 0) {
-            shuffle(c->begin(), c->end(), default_random_engine(m_settings.seed));
+        if (m_settings.randomSeed > 0) {
+            shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.internalSignals) {
             stable_sort(c->begin(), c->end(), innOrder);
             return;
         }
-        if (m_settings.Branching == 0) return;
+        if (m_settings.branching == 0) return;
         stable_sort(c->begin(), c->end(), litOrder);
     }
 
@@ -112,6 +114,7 @@ class ForwardChecker : public BaseChecker {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
+    CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_badId;
     int m_k;

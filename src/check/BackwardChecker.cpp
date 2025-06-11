@@ -15,23 +15,25 @@ BackwardChecker::BackwardChecker(Settings settings,
     GLOBAL_LOG = m_log;
 }
 
-bool BackwardChecker::Run() {
+CheckResult BackwardChecker::Run() {
     signal(SIGINT, signalHandler);
 
-    bool result = Check(m_model->GetBad());
+    if (Check(m_model->GetBad()))
+        m_checkResult = CheckResult::Safe;
+    else
+        m_checkResult = CheckResult::Unsafe;
 
     m_log->PrintStatistics();
-    if (result) {
-        m_log->L(0, "Safe");
-        if (m_settings.witness)
-            OutputWitness(m_model->GetBad());
-    } else {
-        m_log->L(0, "Unsafe");
-        if (m_settings.witness)
-            OutputCounterExample(m_model->GetBad());
-    }
 
-    return true;
+    return m_checkResult;
+}
+
+void BackwardChecker::Witness() {
+    if (m_checkResult == CheckResult::Safe) {
+        OutputWitness(m_model->GetBad());
+    } else if (m_checkResult == CheckResult::Unsafe) {
+        OutputCounterExample(m_model->GetBad());
+    }
 }
 
 bool BackwardChecker::Check(int badId) {
@@ -180,7 +182,7 @@ void BackwardChecker::Init() {
     m_overSequence = make_shared<OverSequenceSet>(m_model);
     m_underSequence = UnderSequence();
     m_underSequence.push(m_initialState);
-    m_branching = make_shared<Branching>(m_settings.Branching);
+    m_branching = make_shared<Branching>(m_settings.branching);
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
     innOrder.m = m_model;
@@ -294,14 +296,14 @@ bool BackwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lv
     m_overSequence->GetBlockers(uc, frame_lvl, uc_blockers);
     shared_ptr<cube> uc_blocker;
     if (uc_blockers.size() > 0) {
-        if (m_settings.Branching > 0)
+        if (m_settings.branching > 0)
             stable_sort(uc_blockers.begin(), uc_blockers.end(), blockerOrder);
         uc_blocker = uc_blockers[0];
     } else {
         uc_blocker = make_shared<cube>();
     }
 
-    if (m_settings.skip_refer)
+    if (m_settings.referSkipping)
         for (auto b : *uc_blocker) required_lits.emplace(b);
     OrderAssumption(uc);
     for (int i = uc->size() - 1; i > 0; i--) {
@@ -475,7 +477,7 @@ void BackwardChecker::OutputWitness(int bad) {
     auto endIndex = m_settings.aigFilePath.find_last_of(".");
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
-    string outPath = m_settings.outputDir + aigName + ".w.aag";
+    string outPath = m_settings.witnessOutputDir + aigName + ".w.aag";
     aiger *model_aig = m_model->GetAig();
 
     unsigned lvl_i;
@@ -549,7 +551,7 @@ void BackwardChecker::OutputWitness(int bad) {
 
 void BackwardChecker::OutputCounterExample(int bad) {
     // get outputfile
-    auto startIndex = m_settings.aigFilePath.find_last_of("/");
+    auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
     if (startIndex == string::npos) {
         startIndex = 0;
     } else {
@@ -558,7 +560,7 @@ void BackwardChecker::OutputCounterExample(int bad) {
     auto endIndex = m_settings.aigFilePath.find_last_of(".");
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
-    string cexPath = m_settings.outputDir + aigName + ".cex";
+    string cexPath = m_settings.witnessOutputDir + aigName + ".cex";
     std::ofstream cexFile;
     cexFile.open(cexPath);
 

@@ -22,6 +22,7 @@ set(DIRS
 
 set(SRCS
     src/model/aiger.c
+    src/model/Settings.cpp
     src/model/Model.cpp
     src/model/Log.cpp
     src/check/BackwardChecker.cpp

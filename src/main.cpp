@@ -10,81 +10,42 @@
 
 using namespace car;
 
-void PrintUsage() {
-    cout << "Usage: ./simplecar AIG_FILE.aig" << endl;
-    cout << "Configs:" << endl;
-    cout << "   -f | -b             forward | backward CAR" << endl;
-    cout << "   -bmc                BMC" << endl;
-    cout << "   -slv                Solver (1: minisat 2: CaDiCaL)" << endl;
-    cout << "   -br n               branching (1: sum 2: VSIDS 3: ACIDS 0: static)" << endl;
-    cout << "   -rs                 refer-skipping" << endl;
-    cout << "   -is                 internal signals" << endl;
-    cout << "   -seed n             seed (works when > 0) for random var ordering" << endl;
-    cout << "   -w OUTPUT_PATH/     output witness" << endl;
-    cout << "   -v n                verbosity" << endl;
-    cout << "   -h                  print help information" << endl;
-    exit(0);
-}
-
-
-Settings GetArgv(int argc, char **argv) {
-    bool hasInputFile = false;
-    Settings settings;
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-f") == 0) {
-            settings.forward = true;
-        } else if (strcmp(argv[i], "-b") == 0) {
-            settings.backward = true;
-        } else if (strcmp(argv[i], "-bmc") == 0) {
-            settings.bmc = true;
-        } else if (strcmp(argv[i], "-k") == 0) {
-            settings.bmc_k = atoi(argv[i + 1]);
-            i++;
-        } else if (strcmp(argv[i], "-slv") == 0) {
-            settings.solver = atoi(argv[i + 1]);
-            i++;
-        } else if (strcmp(argv[i], "-br") == 0) {
-            settings.Branching = atoi(argv[i + 1]);
-            i++;
-        } else if (strcmp(argv[i], "-rs") == 0) {
-            settings.skip_refer = true;
-        } else if (strcmp(argv[i], "-is") == 0) {
-            settings.internalSignals = true;
-        } else if (strcmp(argv[i], "-seed") == 0) {
-            settings.seed = atoi(argv[i + 1]);
-            i++;
-        } else if (strcmp(argv[i], "-w") == 0) {
-            settings.witness = true;
-            settings.outputDir = string(argv[i + 1]);
-            if (settings.outputDir.back() != '/') settings.outputDir += "/";
-            i++;
-        } else if (strcmp(argv[i], "-v") == 0) {
-            settings.verbosity = atoi(argv[i + 1]);
-            i++;
-        } else if (!hasInputFile) {
-            settings.aigFilePath = string(argv[i]);
-            hasInputFile = true;
-        } else {
-            PrintUsage();
-        }
-    }
-    return settings;
-}
-
-
 int main(int argc, char **argv) {
-    Settings settings = GetArgv(argc, argv);
+    Settings settings;
+    if (!ParseSettings(argc, argv, settings)) return EXIT_FAILURE;
+
     shared_ptr<Log> log(new Log(settings.verbosity));
     shared_ptr<Model> aigerModel(new Model(settings));
     log->StatInit();
     shared_ptr<BaseChecker> checker;
-    if (settings.forward) {
+    switch (settings.alg) {
+    case MCAlgorithm::FCAR:
         checker = make_shared<ForwardChecker>(settings, aigerModel, log);
-    } else if (settings.backward) {
+        break;
+    case MCAlgorithm::BCAR:
         checker = make_shared<BackwardChecker>(settings, aigerModel, log);
-    } else if (settings.bmc) {
+        break;
+    case MCAlgorithm::BMC:
         checker = make_shared<BMC>(settings, aigerModel, log);
+        break;
+    default:
+        return EXIT_FAILURE;
     }
-    checker->Run();
+    CheckResult res = checker->Run();
+    switch (res) {
+    case CheckResult::Safe:
+        std::cout << "Safe" << std::endl;
+        break;
+    case CheckResult::Unsafe:
+        std::cout << "Unsafe" << std::endl;
+        break;
+    case CheckResult::Unknown:
+        std::cout << "Unknown" << std::endl;
+        break;
+    default:
+        break;
+    }
+    if (settings.witnessOutputDir.size() > 0)
+        checker->Witness();
     return 0;
 }

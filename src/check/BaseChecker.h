@@ -6,10 +6,14 @@
 
 namespace car {
 
+enum class CheckResult { Safe,
+                         Unsafe,
+                         Unknown };
+
 class BaseChecker {
   public:
-    virtual bool Run() = 0;
-    virtual ~BaseChecker() {};
+    virtual CheckResult Run() = 0;
+    virtual void Witness() = 0;
 };
 
 } // namespace car

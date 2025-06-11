@@ -11,25 +11,26 @@ BMC::BMC(Settings settings,
     State::numLatches = model->GetNumLatches();
     GLOBAL_LOG = m_log;
     m_k = 0;
-    m_maxK = m_settings.bmc_k;
+    m_maxK = m_settings.bmcK;
+    m_checkResult = CheckResult::Unknown;
 }
 
 
-bool BMC::Run() {
+CheckResult BMC::Run() {
     signal(SIGINT, signalHandler);
 
-    bool result = Check(m_model->GetBad());
+    if (Check(m_model->GetBad()))
+        m_checkResult = CheckResult::Unsafe;
 
     m_log->PrintStatistics();
-    if (result) {
-        m_log->L(0, "Unsafe");
-        if (m_settings.witness)
-            OutputCounterExample(m_model->GetBad());
-    } else {
-        m_log->L(0, "Unknown");
-    }
 
-    return true;
+    return m_checkResult;
+}
+
+void BMC::Witness() {
+    if (m_checkResult == CheckResult::Unsafe) {
+        OutputCounterExample(m_model->GetBad());
+    }
 }
 
 
@@ -115,7 +116,7 @@ vector<int> BMC::GetConstraintsK(int m_k) {
 
 void BMC::OutputCounterExample(int bad) {
     // get outputfile
-    auto startIndex = m_settings.aigFilePath.find_last_of("/");
+    auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
     if (startIndex == string::npos) {
         startIndex = 0;
     } else {
@@ -124,7 +125,7 @@ void BMC::OutputCounterExample(int bad) {
     auto endIndex = m_settings.aigFilePath.find_last_of(".");
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
-    string cexPath = m_settings.outputDir + aigName + ".cex";
+    string cexPath = m_settings.witnessOutputDir + aigName + ".cex";
     std::ofstream cexFile;
     cexFile.open(cexPath);
 

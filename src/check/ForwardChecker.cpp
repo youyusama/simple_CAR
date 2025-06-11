@@ -12,25 +12,28 @@ ForwardChecker::ForwardChecker(Settings settings,
     State::numLatches = model->GetNumLatches();
     m_lastState = nullptr;
     GLOBAL_LOG = m_log;
+    m_checkResult = CheckResult::Unknown;
 }
 
-bool ForwardChecker::Run() {
+CheckResult ForwardChecker::Run() {
     signal(SIGINT, signalHandler);
 
-    bool result = Check(m_model->GetBad());
+    if (Check(m_model->GetBad()))
+        m_checkResult = CheckResult::Safe;
+    else
+        m_checkResult = CheckResult::Unsafe;
 
     m_log->PrintStatistics();
-    if (result) {
-        m_log->L(0, "Safe");
-        if (m_settings.witness)
-            OutputWitness(m_model->GetBad());
-    } else {
-        m_log->L(0, "Unsafe");
-        if (m_settings.witness)
-            OutputCounterExample(m_model->GetBad());
-    }
 
-    return true;
+    return m_checkResult;
+}
+
+void ForwardChecker::Witness() {
+    if (m_checkResult == CheckResult::Safe) {
+        OutputWitness(m_model->GetBad());
+    } else if (m_checkResult == CheckResult::Unsafe) {
+        OutputCounterExample(m_model->GetBad());
+    }
 }
 
 bool ForwardChecker::Check(int badId) {
@@ -203,7 +206,7 @@ void ForwardChecker::Init(int badId) {
     m_badId = badId;
     m_overSequence = make_shared<OverSequenceSet>(m_model);
     m_underSequence = UnderSequence();
-    m_branching = make_shared<Branching>(m_settings.Branching);
+    m_branching = make_shared<Branching>(m_settings.branching);
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
     innOrder.m = m_model;
@@ -445,14 +448,14 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
     m_overSequence->GetBlockers(uc, frame_lvl, uc_blockers);
     shared_ptr<cube> uc_blocker;
     if (uc_blockers.size() > 0) {
-        if (m_settings.Branching > 0)
+        if (m_settings.branching > 0)
             stable_sort(uc_blockers.begin(), uc_blockers.end(), blockerOrder);
         uc_blocker = uc_blockers[0];
     } else {
         uc_blocker = make_shared<cube>();
     }
 
-    if (m_settings.skip_refer)
+    if (m_settings.referSkipping)
         for (auto b : *uc_blocker) required_lits.emplace(b);
     OrderAssumption(uc);
     for (int i = uc->size() - 1; i >= 0; i--) {
@@ -640,7 +643,7 @@ void ForwardChecker::OutputWitness(int bad) {
     auto endIndex = m_settings.aigFilePath.find_last_of(".");
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
-    string outPath = m_settings.outputDir + aigName + ".w.aag";
+    string outPath = m_settings.witnessOutputDir + aigName + ".w.aag";
     aiger *model_aig = m_model->GetAig();
 
     unsigned lvl_i;
@@ -749,7 +752,7 @@ void ForwardChecker::OutputWitness(int bad) {
 
 void ForwardChecker::OutputCounterExample(int bad) {
     // get outputfile
-    auto startIndex = m_settings.aigFilePath.find_last_of("/");
+    auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
     if (startIndex == string::npos) {
         startIndex = 0;
     } else {
@@ -758,7 +761,7 @@ void ForwardChecker::OutputCounterExample(int bad) {
     auto endIndex = m_settings.aigFilePath.find_last_of(".");
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
-    string cexPath = m_settings.outputDir + aigName + ".cex";
+    string cexPath = m_settings.witnessOutputDir + aigName + ".cex";
     std::ofstream cexFile;
     cexFile.open(cexPath);
 
