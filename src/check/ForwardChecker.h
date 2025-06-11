@@ -114,6 +114,8 @@ class ForwardChecker : public BaseChecker {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
+    void AddSamePrimeConstraints(shared_ptr<SATSolver> slv);
+
     CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_badId;

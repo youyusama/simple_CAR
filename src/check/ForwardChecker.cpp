@@ -215,6 +215,7 @@ void ForwardChecker::Init(int badId) {
     m_mainSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_mainSolver->AddTrans();
     m_mainSolver->AddConstraints();
+    AddSamePrimeConstraints(m_mainSolver);
     // lift
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_liftSolver->AddTrans();
@@ -228,6 +229,7 @@ void ForwardChecker::Init(int badId) {
     m_startSolver->AddProperty();
     m_startSolver->AddConstraints();
     m_startSolver->AddConstraintsK(1);
+    AddSamePrimeConstraints(m_startSolver);
     // bad predecessor lift
     m_badPredLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_badPredLiftSolver->AddTrans();
@@ -610,6 +612,34 @@ int ForwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
         lvl++;
     }
     return lvl + 1;
+}
+
+
+void ForwardChecker::AddSamePrimeConstraints(shared_ptr<SATSolver> slv) {
+    // if l_1 and l_2 have the same primed value l',
+    // then l_1 and l_2 shoud have same value, except the initial states
+    int init = slv->GetNewVar();
+    int cons = slv->GetNewVar();
+
+    // init | cons
+    slv->AddClause(clause{init, cons});
+
+    unordered_map<int, vector<int>> preValueMap;
+    m_model->GetPreValueOfLatchMap(preValueMap);
+    for (auto it = preValueMap.begin(); it != preValueMap.end(); it++) {
+        if (it->second.size() > 1) {
+            // cons -> ( p <-> v )
+            int v = slv->GetNewVar();
+            for (int p : it->second) {
+                slv->AddClause(clause{-cons, -p, v});
+                slv->AddClause(clause{-cons, p, -v});
+            }
+        }
+    }
+    // init -> i
+    for (int i : m_model->GetInitialState()) {
+        slv->AddClause(clause{-init, i});
+    }
 }
 
 

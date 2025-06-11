@@ -127,26 +127,6 @@ void Model::CollectClauses() {
         AddAndGateToClause(a);
     }
 
-    // todo: add this constraint inside forward checker
-    // if l1 and l2 have same prime l', then l1 and l2 shoud have same value, except the initial states
-    // if (m_settings.forward) {
-    //     int init = ++m_maxId;
-    //     int cons = ++m_maxId;
-    //     m_clauses.emplace_back(clause{init, cons});
-    //     for (auto it = m_preValueOfLatchMap.begin(); it != m_preValueOfLatchMap.end(); it++) {
-    //         if (it->second.size() > 1) {
-    //             m_maxId++;
-    //             for (int p : it->second) {
-    //                 m_clauses.emplace_back(clause{-cons, -p, m_maxId});
-    //                 m_clauses.emplace_back(clause{-cons, p, -m_maxId});
-    //             }
-    //         }
-    //     }
-    //     for (int i : m_initialState) {
-    //         m_clauses.emplace_back(clause{-init, i});
-    //     }
-    // }
-
     // create clauses for true and false
     m_clauses.emplace_back(clause{m_trueId});
     m_clauses.emplace_back(clause{-m_falseId});
