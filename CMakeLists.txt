@@ -37,6 +37,9 @@ set(SRCS
     src/sat/minisat/simp/SimpSolver.cc
     src/sat/minisat/utils/Options.cc
     src/sat/minisat/utils/System.cc
+    # minicore
+    src/model/MinicoreSolver.cpp
+    src/sat/minicore/src/solver.cpp
 )
 
 # cadical

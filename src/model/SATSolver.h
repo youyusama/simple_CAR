@@ -5,6 +5,7 @@
 #include "CadicalSolver.h"
 #endif
 #include "ISolver.h"
+#include "MinicoreSolver.h"
 #include "MinisatSolver.h"
 #include "Model.h"
 #include <memory>
@@ -13,7 +14,7 @@ namespace car {
 
 class SATSolver : public ISolver {
   public:
-    SATSolver(shared_ptr<Model> model, int slv_kind);
+    SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind);
     ~SATSolver() {}
 
     // general SAT interface

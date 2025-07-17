@@ -132,6 +132,8 @@ bool ForwardChecker::Check(int badId) {
                     // Solver return SAT, get a new State, then continue
                     m_log->L(2, "Result >>> SAT <<<");
                     auto p = m_mainSolver->GetAssignment(false);
+                    m_log->L(3, "Input Detail: ", CubeToStr(p.first));
+                    m_log->L(3, "State Detail: ", CubeToStr(p.second));
                     GeneralizePredecessor(p, task.state);
                     shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
                     m_underSequence.push(newState);
@@ -162,7 +164,7 @@ bool ForwardChecker::Check(int badId) {
         }
 
         if (m_invSolver == nullptr) {
-            m_invSolver.reset(new SATSolver(m_model, m_settings.solver));
+            m_invSolver.reset(new SATSolver(m_model, MCSATSolver::minisat));
         }
         IsInvariant(0);
         for (int i = 0; i < m_k; ++i) {
@@ -217,12 +219,12 @@ void ForwardChecker::Init(int badId) {
     m_mainSolver->AddConstraints();
     AddSamePrimeConstraints(m_mainSolver);
     // lift
-    m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_liftSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
     m_liftSolver->AddTrans();
     // inv
-    m_invSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
     // s & T & c & P & T' & c' & bad'
-    m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
     m_startSolver->AddTrans();
     m_startSolver->AddTransK(1);
     m_startSolver->AddBadk(1);
@@ -231,7 +233,7 @@ void ForwardChecker::Init(int badId) {
     m_startSolver->AddConstraintsK(1);
     AddSamePrimeConstraints(m_startSolver);
     // bad predecessor lift
-    m_badPredLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_badPredLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
     m_badPredLiftSolver->AddTrans();
     m_badPredLiftSolver->AddTransK(1);
 }

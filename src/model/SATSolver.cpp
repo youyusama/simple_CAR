@@ -2,18 +2,21 @@
 
 namespace car {
 
-SATSolver::SATSolver(shared_ptr<Model> model, int slv_kind) {
+SATSolver::SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind) {
     m_model = model;
 
     switch (slv_kind) {
-    case 0:
+    case MCSATSolver::minisat:
         m_slv = make_shared<MinisatSolver>(m_model);
         break;
 #ifdef CADICAL
-    case 1:
+    case MCSATSolver::cadical:
         m_slv = make_shared<CadicalSolver>(m_model);
         break;
 #endif
+    case MCSATSolver::minicore:
+        m_slv = make_shared<MinicoreSolver>(m_model);
+        break;
     default:
         assert(false);
         break;

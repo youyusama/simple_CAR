@@ -12,12 +12,16 @@ enum class MCAlgorithm { FCAR,
                          BCAR,
                          BMC };
 
+enum class MCSATSolver { minisat,
+                         cadical,
+                         minicore };
+
 struct Settings {
     int verbosity = 0;
     string aigFilePath;
     string witnessOutputDir = "";
 
-    int solver = 0;
+    MCSATSolver solver = MCSATSolver::minisat;
     MCAlgorithm alg = MCAlgorithm::FCAR;
     int bmcK = -1;
     bool end = false;

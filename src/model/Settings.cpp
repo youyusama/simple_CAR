@@ -24,6 +24,15 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
             }))
         ->default_val("fcar");
 
+    app.add_option("-s", settings.solver, "Main SAT Solver")
+        ->transform(CLI::CheckedTransformer(
+            std::map<std::string, MCSATSolver>{
+                {"minisat", MCSATSolver::minisat},
+                {"cadical", MCSATSolver::cadical},
+                {"minicore", MCSATSolver::minicore},
+            }))
+        ->default_val("minisat");
+
     app.add_option("-k", settings.bmcK, "BMC bound")
         ->default_val(-1);
 
