@@ -43,54 +43,67 @@ class Log {
     void PrintStatistics() {
         if (m_verbosity == 0) return;
         cout << endl
-             << "TransSolver    called:\t" << m_mainSolverCalls << endl;
-        cout << "TransSolver    takes:\t" << fixed << setprecision(3) << m_mainSolverTime << endl;
-        cout << "LiftSolver     takes:\t" << fixed << setprecision(3) << m_liftSolverTime << endl;
-        cout << "InvSolver      takes:\t" << fixed << setprecision(3) << m_invSolverTime << endl;
-        cout << "StartSolver    takes:\t" << fixed << setprecision(3) << m_enumerateStartStateTime << endl;
-        cout << "Locating Level takes:\t" << fixed << setprecision(3) << m_getNewLevelTime << endl;
-        cout << "Updating UC    takes:\t" << fixed << setprecision(3) << m_updateUcTime << endl;
-        cout << "Propagation    takes:\t" << fixed << setprecision(3) << m_propagationTime << endl;
-        cout << "Initialization takes:\t" << fixed << setprecision(3) << m_initTime << endl;
-        cout << "Innards        takes:\t" << fixed << setprecision(3) << m_internalSignalsTime << endl;
-        cout << "Total Time     spent:\t" << fixed << setprecision(3) << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << endl;
+             << "TransSolver    called: " << left << setw(12) << m_mainSolverCalls
+             << "takes: " << fixed << setprecision(3) << m_mainSolverTime << endl;
+        cout << "Propagation    called: " << left << setw(12) << m_propagation
+             << "takes: " << fixed << setprecision(3) << m_propagationTime << endl;
+        cout << "LiftSolver     called: " << left << setw(12) << m_liftSolverCalls
+             << "takes: " << fixed << setprecision(3) << m_liftSolverTime << endl;
+        cout << "InvSolver      called: " << left << setw(12) << m_invSolverCalls
+             << "takes: " << fixed << setprecision(3) << m_invSolverTime << endl;
+        cout << "StartSolver    called: " << left << setw(12) << m_enumerateStartState
+             << "takes: " << fixed << setprecision(3) << m_enumerateStartStateTime << endl;
+        cout << "Locating lvl   called: " << left << setw(12) << m_getNewLevel
+             << "takes: " << fixed << setprecision(3) << m_getNewLevelTime << endl;
+        cout << "Updating UC    called: " << left << setw(12) << m_updateUc
+             << "takes: " << fixed << setprecision(3) << m_updateUcTime << endl;
+
+        cout << "Initialization takes: " << fixed << setprecision(3) << m_initTime << endl;
+        cout << "Innards        takes: " << fixed << setprecision(3) << m_internalSignalsTime << endl;
+        cout << "Total Time     spent: " << fixed << setprecision(3) << static_cast<double>(clock() - m_begin) / CLOCKS_PER_SEC << endl;
     }
 
     inline void Tick() {
         m_tick = clock();
     }
 
-    void StatMainSolver() {
+    inline void StatMainSolver() {
         m_mainSolverTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
         m_mainSolverCalls++;
     }
 
-    void StatInvSolver() {
+    inline void StatInvSolver() {
         m_invSolverTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+        m_invSolverCalls++;
     }
 
-    void StatLiftSolver() {
+    inline void StatLiftSolver() {
         m_liftSolverTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+        m_liftSolverCalls++;
     }
 
     void StatInit() {
         m_initTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
     }
 
-    void StatGetNewLevel() {
+    inline void StatGetNewLevel() {
         m_getNewLevelTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+        m_getNewLevel++;
     }
 
-    void StatPropagation() {
+    inline void StatPropagation() {
         m_propagationTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+        m_propagation++;
     }
 
-    void StatStartSolver() {
+    inline void StatStartSolver() {
         m_enumerateStartStateTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+        m_enumerateStartState++;
     }
 
-    void StatUpdateUc() {
+    inline void StatUpdateUc() {
         m_updateUcTime += static_cast<double>(clock() - m_tick) / CLOCKS_PER_SEC;
+        m_updateUc++;
     }
 
     void StatInternalSignals() {
@@ -111,16 +124,21 @@ class Log {
 
     int m_verbosity;
 
-    int m_mainSolverCalls = 0;
-    int m_invSolverCalls = 0;
-    int m_restartTimes = 0;
+    uint32_t m_mainSolverCalls = 0;
     double m_mainSolverTime = 0;
-    double m_liftSolverTime = 0;
+    uint32_t m_invSolverCalls = 0;
     double m_invSolverTime = 0;
-    double m_getNewLevelTime = 0;
-    double m_updateUcTime = 0;
+    uint32_t m_propagation = 0;
     double m_propagationTime = 0;
+    uint32_t m_enumerateStartState = 0;
     double m_enumerateStartStateTime = 0;
+    uint32_t m_liftSolverCalls = 0;
+    double m_liftSolverTime = 0;
+    uint32_t m_getNewLevel = 0;
+    double m_getNewLevelTime = 0;
+    uint32_t m_updateUc = 0;
+    double m_updateUcTime = 0;
+
     double m_initTime = 0;
     double m_internalSignalsTime = 0;
 
