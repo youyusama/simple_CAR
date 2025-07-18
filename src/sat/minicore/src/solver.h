@@ -29,12 +29,13 @@ class Solver {
 
     // Problem specification:
     //
-    Var newVar();           // Add a new variable with parameters specifying variable mode.
-    void releaseVar(Lit l); // Make literal true and promise to never refer to variable again.
+    Var newVar(); // Add a new variable with parameters specifying variable mode.
 
     bool addClause(const std::vector<Lit> &ps); // Add a clause to the solver.
     bool addClause_(std::vector<Lit> &ps);      // Add a clause to the solver without making superflous internal copy. Will
                                                 // change the passed vector 'ps'.
+
+    bool addTempClause(const std::vector<Lit> &ps); // Add a temp clause that only effects next solve
 
     // Solving:
     //
@@ -90,11 +91,12 @@ class Solver {
 
     // Solver state:
     //
-    std::vector<CRef> clauses;    // List of problem clauses.
-    std::vector<CRef> learnts;    // List of learnt clauses.
-    std::vector<Lit> trail;       // Assignment stack; stores all assigments made in the order they were made.
-    std::vector<int> trail_lim;   // Separator indices for different decision levels in 'trail'.
-    std::vector<Lit> assumptions; // Current set of assumptions provided to solve by the user.
+    std::vector<CRef> clauses;      // List of problem clauses.
+    std::vector<CRef> learnts;      // List of learnt clauses.
+    std::vector<CRef> temp_clauses; // List of clauses learnt from the temp clause.
+    std::vector<Lit> trail;         // Assignment stack; stores all assigments made in the order they were made.
+    std::vector<int> trail_lim;     // Separator indices for different decision levels in 'trail'.
+    std::vector<Lit> assumptions;   // Current set of assumptions provided to solve by the user.
 
     std::vector<lbool> assigns;   // The current assignments.
     std::vector<char> polarity;   // The preferred polarity of each variable.
@@ -115,9 +117,8 @@ class Solver {
     bool remove_satisfied;    // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
     Var next_var;             // Next variable to be created.
     Var alloced_var;          // Variable with structure created.
-
-    std::vector<Var> released_vars;
-    std::vector<Var> free_vars;
+    Var temp_cls_act_var;     // Variable to activate temp clause.
+    bool temp_cls_activated;  // A temp clause is added.
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
@@ -148,7 +149,7 @@ class Solver {
     lbool solve_();                              // Main solve method (assumptions given in 'assumptions').
     void reduceDB();                             // Reduce the set of learnt clauses.
     void removeSatisfied(std::vector<CRef> &cs); // Shrink 'cs' to contain only non-satisfied clauses.
-    void rebuildOrder();
+    void removeTempLearnt();                     // Remove the clauses learnt from the temp clause.
 
     // Maintaining Variable/Clause activity:
     //
@@ -157,12 +158,13 @@ class Solver {
 
     // Operations on clauses:
     //
-    void attachClause(CRef cr);            // Attach a clause to watcher lists.
-    void detachClause(CRef cr);            // Detach a clause to watcher lists.
-    void removeClause(CRef cr);            // Detach and free a clause.
-    bool isRemoved(CRef cr) const;         // Test if a clause has been removed.
-    bool locked(const Clause &c) const;    // Returns TRUE if a clause is a reason for some implication in the current state.
-    bool satisfied(const Clause &c) const; // Returns TRUE if a clause is satisfied in the current state.
+    void attachClause(CRef cr);                            // Attach a clause to watcher lists.
+    void detachClause(CRef cr);                            // Detach a clause to watcher lists.
+    void removeClause(CRef cr);                            // Detach and free a clause.
+    bool isRemoved(CRef cr) const;                         // Test if a clause has been removed.
+    bool locked(const Clause &c) const;                    // Returns TRUE if a clause is a reason for some implication in the current state.
+    bool satisfied(const Clause &c) const;                 // Returns TRUE if a clause is satisfied in the current state.
+    bool deducedByTemp(const std::vector<Lit> &cls) const; // If a clause is deduced by the temp clause.
 
     // Misc:
     //
@@ -241,7 +243,13 @@ inline bool Solver::solve() {
     return solve_() == l_True;
 }
 inline bool Solver::solve(const std::vector<Lit> &assumps) {
-    assumptions = assumps;
+    if (temp_cls_activated) {
+        assumptions.clear();
+        assumptions.emplace_back(mkLit(temp_cls_act_var));
+        assumptions.resize(assumps.size() + 1);
+        std::copy(assumps.begin(), assumps.end(), assumptions.begin() + 1);
+    } else
+        assumptions = assumps;
     return solve_() == l_True;
 }
 inline lbool Solver::solve_main() {

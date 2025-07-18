@@ -219,7 +219,7 @@ void ForwardChecker::Init(int badId) {
     m_mainSolver->AddConstraints();
     AddSamePrimeConstraints(m_mainSolver);
     // lift
-    m_liftSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
+    m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_liftSolver->AddTrans();
     // inv
     m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);

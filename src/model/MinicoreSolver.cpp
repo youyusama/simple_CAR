@@ -5,14 +5,15 @@ namespace car {
 MinicoreSolver::MinicoreSolver(shared_ptr<Model> m) {
     m_model = m;
     m_maxId = m_model->GetMaxId();
-    m_tempVar = 0;
     // verbosity = 1;
 }
 
 MinicoreSolver::~MinicoreSolver() {}
 
 bool MinicoreSolver::Solve() {
-    if (m_tempVar != 0) m_assumptions.emplace_back(GetLit(m_tempVar));
+    if (!m_tempClause.empty()) {
+        addTempClause(m_tempClause);
+    }
     return solve(m_assumptions);
 }
 
@@ -133,17 +134,16 @@ inline int MinicoreSolver::GetLiteralId(const minicore::Lit &l) {
 
 
 void MinicoreSolver::AddTempClause(const cube &cls) {
-    m_tempVar = GetNewVar();
-    cube temp_cls = cls;
-    temp_cls.push_back(-m_tempVar);
-    AddClause(temp_cls);
+    m_tempClause.clear();
+    for (int l : cls) {
+        m_tempClause.emplace_back(GetLit(l));
+        if (abs(l) > m_maxId) m_maxId = abs(l) + 1;
+    }
 }
 
 
 void MinicoreSolver::ReleaseTempClause() {
-    assert(m_tempVar != 0);
-    releaseVar(~GetLit(m_tempVar));
-    m_tempVar = 0;
+    m_tempClause.clear();
 }
 
 

@@ -46,7 +46,7 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     shared_ptr<Model> m_model;
     int m_maxId;
     vector<minicore::Lit> m_assumptions;
-    int m_tempVar;
+    vector<minicore::Lit> m_tempClause;
 };
 
 } // namespace car

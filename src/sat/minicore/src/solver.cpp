@@ -28,7 +28,9 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0) {
+                   ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false) {
+
+    temp_cls_act_var = newVar(); // let 0 be the temp clause activator
 }
 
 
@@ -37,12 +39,7 @@ Solver::~Solver() {
 
 
 Var Solver::newVar() {
-    Var v;
-    if (free_vars.size() > 0) {
-        v = free_vars.back();
-        free_vars.pop_back();
-    } else
-        v = next_var++;
+    Var v = next_var++;
 
     if (alloced_var < next_var) {
         alloced_var += 128;
@@ -57,14 +54,6 @@ Var Solver::newVar() {
     dec_vars++;
     order_list.init_var(v);
     return v;
-}
-
-
-void Solver::releaseVar(Lit l) {
-    if (value(l) == l_Undef) {
-        addClause({l});
-        released_vars.emplace_back(var(l));
-    }
 }
 
 
@@ -93,6 +82,25 @@ bool Solver::addClause_(std::vector<Lit> &ps) {
         clauses.emplace_back(cr);
         attachClause(cr);
     }
+
+    return true;
+}
+
+
+bool Solver::addTempClause(const std::vector<Lit> &cls) {
+    assert(decisionLevel() == 0);
+    if (!ok) return false;
+    assert(!temp_cls_activated);
+    temp_cls_activated = true;
+
+    std::vector<Lit> temp_cls;
+    temp_cls.emplace_back(mkLit(temp_cls_act_var, true));
+    temp_cls.resize(cls.size() + 1);
+    std::copy(cls.begin(), cls.end(), temp_cls.begin() + 1);
+    // add temp
+    CRef cr = ca->alloc(temp_cls, false);
+    attachClause(cr);
+    temp_clauses.emplace_back(cr);
 
     return true;
 }
@@ -137,6 +145,15 @@ void Solver::removeClause(CRef cr) {
 bool Solver::satisfied(const Clause &c) const {
     for (size_t i = 0; i < c.size(); i++)
         if (value(c[i]) == l_True)
+            return true;
+    return false;
+}
+
+
+bool Solver::deducedByTemp(const std::vector<Lit> &cls) const {
+    Lit neg_a = mkLit(temp_cls_act_var, true);
+    for (Lit l : cls)
+        if (l == neg_a)
             return true;
     return false;
 }
@@ -455,10 +472,11 @@ void Solver::removeSatisfied(std::vector<CRef> &cs) {
 }
 
 
-void Solver::rebuildOrder() {
-    for (Var v = 0; v < nVars(); v++)
-        if (value(v) == l_Undef)
-            order_list.insert(v);
+void Solver::removeTempLearnt() {
+    for (CRef cls : temp_clauses) {
+        removeClause(cls);
+    }
+    temp_clauses.clear();
 }
 
 
@@ -475,29 +493,8 @@ bool Solver::simplify() {
     removeSatisfied(learnts);
     if (remove_satisfied) { // Can be turned off.
         removeSatisfied(clauses);
-
-        // Remove all released variables from the trail:
-        for (size_t i = 0; i < released_vars.size(); i++) {
-            assert(seen[released_vars[i]] == 0);
-            seen[released_vars[i]] = 1;
-        }
-
-        size_t i, j;
-        for (i = j = 0; i < trail.size(); i++)
-            if (seen[var(trail[i])] == 0)
-                trail[j++] = trail[i];
-        trail.resize(j);
-        qhead = trail.size();
-
-        for (size_t i = 0; i < released_vars.size(); i++)
-            seen[released_vars[i]] = 0;
-
-        // Released variables are now ready to be reused:
-        std::copy(released_vars.begin(), released_vars.end(), std::back_inserter(free_vars));
-        released_vars.clear();
     }
     checkGarbage();
-    rebuildOrder();
 
     simpDB_assigns = nAssigns();
     simpDB_props = clauses_literals + learnts_literals; // (shouldn't depend on stats really, but it will do for now)
@@ -529,7 +526,10 @@ lbool Solver::search(int nof_conflicts) {
                 uncheckedEnqueue(learnt_clause[0]);
             } else {
                 CRef cr = ca->alloc(learnt_clause, true);
-                learnts.emplace_back(cr);
+                if (deducedByTemp(learnt_clause))
+                    temp_clauses.emplace_back(cr);
+                else
+                    learnts.emplace_back(cr);
                 attachClause(cr);
                 claBumpActivity(ca->get_clause(cr));
                 uncheckedEnqueue(learnt_clause[0], cr);
@@ -667,21 +667,26 @@ lbool Solver::solve_() {
 
     if (verbosity >= 1) {
         std::cout << "===============================================================================\n";
-        // printStats();
-        // if (status == l_True)
-        //     std::cerr << "sat";
-        // else if (status == l_False)
-        //     std::cerr << "unsat";
-        // else
-        //     std::cerr << "unknow";
+        printStats();
+        if (status == l_True)
+            std::cout << "sat";
+        else if (status == l_False)
+            std::cout << "unsat";
+        else
+            std::cout << "unknow";
+        std::cout << std::endl;
+        for (auto i : conflict) {
+            std::cout << i.x << " ";
+        }
         // for (int i = 0; i < nVars(); i++) {
         //     if (value(i) == l_True)
-        //         std::cerr << i << " ";
+        //         std::cout << i << " ";
         //     else if (value(i) == l_False)
-        //         std::cerr << -i << " ";
+        //         std::cout << -i << " ";
         //     else
-        //         std::cerr << "u" << i << " ";
+        //         std::cout << "u" << i << " ";
         // }
+        std::cout << std::endl;
     }
 
 
@@ -692,6 +697,10 @@ lbool Solver::solve_() {
         ok = false;
 
     cancelUntil(0);
+    if (temp_cls_activated) {
+        removeTempLearnt();
+        temp_cls_activated = false;
+    }
     // order_list.print();
     return status;
 }
