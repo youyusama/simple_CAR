@@ -85,7 +85,7 @@ class SATSolver : public ISolver {
 
     bool SolveFrame(const shared_ptr<cube> assumption, int lvl);
 
-    void AddUC(const cube &uc, int lvl);
+    void AddUC(const cube &uc, int lvl = 0);
 
     void AddProperty();
 

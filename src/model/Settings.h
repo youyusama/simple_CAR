@@ -29,6 +29,7 @@ struct Settings {
     int randomSeed = 0;
     bool referSkipping = false;
     bool internalSignals = false;
+    bool multipleSolvers = true;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

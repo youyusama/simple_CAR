@@ -116,6 +116,12 @@ class ForwardChecker : public BaseChecker {
 
     void AddSamePrimeConstraints(shared_ptr<SATSolver> slv);
 
+    bool IsReachable(int lvl, const shared_ptr<cube> assumption);
+
+    pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
+
+    shared_ptr<cube> GetUnsatCore(int lvl);
+
     CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_badId;
@@ -126,7 +132,7 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<Log> m_log;
     shared_ptr<Model> m_model;
     shared_ptr<State> m_initialState;
-    shared_ptr<SATSolver> m_mainSolver;
+    vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_liftSolver;
     shared_ptr<SATSolver> m_badPredLiftSolver;
     shared_ptr<SATSolver> m_invSolver;
