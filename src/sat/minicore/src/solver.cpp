@@ -28,7 +28,7 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false) {
+                   solveInDomain(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
 }
@@ -50,6 +50,8 @@ Var Solver::newVar() {
         polarity.resize(alloced_var, true);
         order_list.resize(alloced_var);
         trail.reserve(alloced_var);
+        permanent_domain.resize(alloced_var, false);
+        temporary_domain.resize(alloced_var, false);
     }
     dec_vars++;
     order_list.init_var(v);
@@ -178,7 +180,7 @@ Lit Solver::pickBranchLit() {
     Var next = var_Undef;
 
     // Activity based decision:
-    while (next == var_Undef || value(next) != l_Undef) {
+    while (next == var_Undef || value(next) != l_Undef || !inDomain(next)) {
         if (order_list.empty()) {
             next = var_Undef;
             break;
@@ -379,7 +381,7 @@ CRef Solver::propagate() {
         while (i != ws.end()) {
             // Try to avoid inspecting the clause:
             Lit blocker = i->blocker;
-            if (value(blocker) == l_True) {
+            if (value(blocker) == l_True || !inDomain(var(blocker))) {
                 *j++ = *i++;
                 continue;
             }
@@ -396,7 +398,8 @@ CRef Solver::propagate() {
             // If 0th watch is true, then clause is already satisfied.
             Lit first = c[0];
             Watcher w = Watcher(cr, first);
-            if (first != blocker && value(first) == l_True) {
+            if (first != blocker &&
+                (value(first) == l_True || !inDomain(var(blocker)))) {
                 *j++ = w;
                 continue;
             }
@@ -566,9 +569,9 @@ lbool Solver::search(int nof_conflicts) {
                 return l_Undef;
             }
 
-            // Simplify the set of problem clauses:
-            if (decisionLevel() == 0 && !simplify())
-                return l_False;
+            // // Simplify the set of problem clauses:
+            // if (decisionLevel() == 0 && !simplify())
+            //     return l_False;
 
             if (learnts.size() > max_learnts + nAssigns()) {
                 // Reduce the set of learnt clauses:
@@ -657,6 +660,12 @@ lbool Solver::solve_() {
         std::cout << "===============================================================================\n";
     }
 
+    for (int i = 0; i < nVars(); i++) {
+        if (inDomain(i)) {
+            insertVarOrder(i);
+        }
+    }
+
     // Search:
     int curr_restarts = 0;
     while (status == l_Undef) {
@@ -675,17 +684,30 @@ lbool Solver::solve_() {
         else
             std::cout << "unknow";
         std::cout << std::endl;
+
+        std::cout << "unsat core: ";
         for (auto i : conflict) {
             std::cout << i.x << " ";
         }
-        // for (int i = 0; i < nVars(); i++) {
-        //     if (value(i) == l_True)
-        //         std::cout << i << " ";
-        //     else if (value(i) == l_False)
-        //         std::cout << -i << " ";
-        //     else
-        //         std::cout << "u" << i << " ";
-        // }
+        std::cout << std::endl;
+
+        for (int i = 0; i < nVars(); i++) {
+            if (inDomain(i)) {
+                if (value(i) == l_True)
+                    std::cout << "[" << i << "] ";
+                else if (value(i) == l_False)
+                    std::cout << "[" << -i << "] ";
+                else
+                    std::cout << "[" << "u" << i << "] ";
+            } else {
+                if (value(i) == l_True)
+                    std::cout << i << " ";
+                else if (value(i) == l_False)
+                    std::cout << -i << " ";
+                else
+                    std::cout << "u" << i << " ";
+            }
+        }
         std::cout << std::endl;
     }
 

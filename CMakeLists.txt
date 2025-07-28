@@ -55,4 +55,6 @@ endif()
 add_executable(simpleCAR ${SRCS})
 target_include_directories(simpleCAR PUBLIC ${DIRS})
 target_link_libraries(simpleCAR PUBLIC ${LIBS})
-target_link_options(simpleCAR PUBLIC -s -static -flto)
+target_link_options(simpleCAR PUBLIC 
+    $<$<CONFIG:Release>:-s -static -flto>
+)

@@ -30,7 +30,10 @@ typedef vector<int> clause;
 namespace car {
 
 inline bool cmp(int a, int b) {
-    return abs(a) < abs(b);
+    if (abs(a) != abs(b))
+        return abs(a) < abs(b);
+    else
+        return a < b;
 }
 
 class Model {
@@ -128,6 +131,8 @@ class Model {
     }
 
     shared_ptr<vector<int>> GetCOIInputs() { return m_COIInputs; };
+
+    shared_ptr<cube> GetCOIDomain(const shared_ptr<cube> c);
 
   private:
     void Init();

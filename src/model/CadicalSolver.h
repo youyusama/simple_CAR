@@ -36,6 +36,11 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     void PushAssumption(int a);
     int PopAssumption();
 
+    // not available
+    inline void SetDomain(const shared_ptr<cube> domain) {}
+    inline void SetTempDomain(const shared_ptr<cube> domain) {}
+    inline void ResetTempDomain() {}
+
   protected:
     shared_ptr<Model> m_model;
     int m_maxId;

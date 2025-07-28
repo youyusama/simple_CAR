@@ -103,6 +103,10 @@ class Solver {
     std::vector<VarData> vardata; // Stores reason and level for each variable.
     OccLists watches;             // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
 
+    bool solveInDomain;                 // Deciside in domain.
+    std::vector<bool> permanent_domain; // A variable is a decision variable in all queries.
+    std::vector<bool> temporary_domain; // A variable is a decision variable in the next query.
+
     DecisionList order_list; // A priority queue of variables ordered with respect to the variable activity.
 
     // VarOrderLt var_order_lt; // Compare function for var on activity order
@@ -174,6 +178,13 @@ class Solver {
     size_t level(Var x) const;
     double progressEstimate() const;
     void relocAll(std::shared_ptr<ClauseAllocator> new_ca);
+
+    // Incremental modelchecking decision domain:
+    //
+    bool inDomain(Var x) const;
+    void setDomain(const std::vector<Var> dvars);
+    void setTempDomain(const std::vector<Var> dvars);
+    void resetTempDomain();
 
     // Static helpers:
     //
@@ -257,6 +268,20 @@ inline lbool Solver::solve_main() {
     return solve_();
 }
 inline bool Solver::okay() const { return ok; }
+
+inline bool Solver::inDomain(Var x) const { return !solveInDomain || permanent_domain[x] || temporary_domain[x]; }
+
+inline void Solver::setDomain(const std::vector<Var> dvars) {
+    for (Var x : dvars) permanent_domain[x] = true;
+}
+
+inline void Solver::setTempDomain(const std::vector<Var> dvars) {
+    for (Var x : dvars) temporary_domain[x] = true;
+}
+
+inline void Solver::resetTempDomain() {
+    std::fill(temporary_domain.begin(), temporary_domain.end(), false);
+}
 
 } // namespace minicore
 

@@ -617,11 +617,11 @@ class DecisionList {
     }
 
     void print() {
-        for (auto i : list_) std::cout << i << " ";
+        for (auto i : list_) {
+            std::cout << "var(" << i << ", " << act_[i] << ", " << present_flags_[i] << ") ";
+        }
         std::cout << std::endl;
         std::cout << "next_search: " << *next_search_ << std::endl;
-        for (auto i : act_) std::cout << i << " ";
-        std::cout << std::endl;
     }
 
   private:

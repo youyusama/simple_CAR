@@ -86,10 +86,6 @@ class ForwardChecker : public BaseChecker {
         }
     }
 
-    static bool cmp(int a, int b) {
-        return abs(a) < abs(b);
-    }
-
     void GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &s, shared_ptr<State> t);
 
     bool Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1);
@@ -120,7 +116,9 @@ class ForwardChecker : public BaseChecker {
 
     pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
 
-    shared_ptr<cube> GetUnsatCore(int lvl);
+    shared_ptr<cube> GetUnsatCore(int lvl, const shared_ptr<cube> state);
+
+    void MakeSubset(shared_ptr<cube> c1, shared_ptr<cube> c2);
 
     CheckResult m_checkResult;
     int m_minUpdateLevel;

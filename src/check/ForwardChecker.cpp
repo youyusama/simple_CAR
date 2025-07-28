@@ -60,8 +60,8 @@ bool ForwardChecker::Check(int badId) {
     for (int l : *m_initialState->latches) {
         shared_ptr<cube> neg_init_l(new cube{-l});
         m_overSequence->Insert(neg_init_l, 0, false);
-        m_transSolvers[0]->AddUC(*neg_init_l);
-        m_startSolver->AddUC(*neg_init_l, 0);
+        m_transSolvers[0]->AddUC(neg_init_l);
+        m_startSolver->AddUC(neg_init_l, 0);
     }
     m_transSolvers[0]->AddProperty();
 
@@ -145,7 +145,7 @@ bool ForwardChecker::Check(int badId) {
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     m_log->L(2, "Result >>> UNSAT <<<");
-                    auto uc = GetUnsatCore(task.frameLevel);
+                    auto uc = GetUnsatCore(task.frameLevel, task.state->latches);
                     assert(uc->size() > 0);
                     m_log->L(3, "Get UC: ", CubeToStr(uc));
                     if (Generalize(uc, task.frameLevel))
@@ -249,12 +249,12 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
             AddSamePrimeConstraints(m_transSolvers.back());
             m_transSolvers.back()->AddProperty();
         }
-        m_transSolvers[frameLevel]->AddUC(*uc);
+        m_transSolvers[frameLevel]->AddUC(uc);
     } else
-        m_transSolvers[0]->AddUC(*uc, frameLevel);
+        m_transSolvers[0]->AddUC(uc, frameLevel);
 
     if (frameLevel >= m_k) {
-        m_startSolver->AddUC(*uc, frameLevel);
+        m_startSolver->AddUC(uc, frameLevel);
     }
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
@@ -268,6 +268,7 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
 bool ForwardChecker::ImmediateSatisfiable(int badId) {
     shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
     assumptions->push_back(badId);
+    m_transSolvers[0]->SetTempDomainCOI(assumptions);
     bool result = m_transSolvers[0]->Solve(assumptions);
     return result;
 }
@@ -427,6 +428,8 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
     }
     for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
     m_liftSolver->AddTempClause(cls);
+    m_liftSolver->ResetTempDomain();
+    m_liftSolver->SetTempDomainCOI(make_shared<cube>(cls));
 
     while (true) {
         shared_ptr<cube> assumption(new cube());
@@ -508,7 +511,8 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
         m_log->Tick();
         if (!IsReachable(frame_lvl, assumption)) {
             m_log->StatMainSolver();
-            auto uc_ctg = GetUnsatCore(frame_lvl);
+            sort(uc->begin(), uc->end(), cmp);
+            auto uc_ctg = GetUnsatCore(frame_lvl, uc);
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
             uc->swap(*uc_ctg);
             return true;
@@ -530,7 +534,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
             if (ctgs < 3 && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass)) {
                 m_log->StatMainSolver();
                 ctgs++;
-                auto uc_cts = m_transSolvers[cts_lvl]->GetUC(true);
+                auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
                 m_log->L(3, "CTG Get UC:", CubeToStr(uc_cts));
                 if (Generalize(uc_cts, cts_lvl, rec_lvl + 1))
                     m_branching->Update(uc_cts);
@@ -657,9 +661,11 @@ void ForwardChecker::AddSamePrimeConstraints(shared_ptr<SATSolver> slv) {
 
 
 bool ForwardChecker::IsReachable(int lvl, const shared_ptr<cube> assumption) {
-    if (m_settings.multipleSolvers)
+    if (m_settings.multipleSolvers) {
+        m_transSolvers[lvl]->ResetTempDomain();
+        m_transSolvers[lvl]->SetTempDomainCOI(assumption);
         return m_transSolvers[lvl]->SolveFrame(assumption, 0);
-    else
+    } else
         return m_transSolvers[0]->SolveFrame(assumption, lvl);
 }
 
@@ -672,11 +678,41 @@ pair<shared_ptr<cube>, shared_ptr<cube>> ForwardChecker::GetInputAndState(int lv
 }
 
 
-shared_ptr<cube> ForwardChecker::GetUnsatCore(int lvl) {
+shared_ptr<cube> ForwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> state) {
+    shared_ptr<cube> uc;
     if (m_settings.multipleSolvers)
-        return m_transSolvers[lvl]->GetUC(true);
+        uc = m_transSolvers[lvl]->GetUC(true);
     else
-        return m_transSolvers[0]->GetUC(true);
+        uc = m_transSolvers[0]->GetUC(true);
+
+    MakeSubset(uc, state);
+    return uc;
+}
+
+
+// ================================================================================
+// @brief: let c1 be a subset of c2
+// @input: c1 and c2 are both sorted and without repeated elements
+// @output:
+// ================================================================================
+void ForwardChecker::MakeSubset(shared_ptr<cube> c1, shared_ptr<cube> c2) {
+    size_t i = 0, j = 0, k = 0;
+
+    while (i < c1->size() && j < c2->size()) {
+        if (c1->operator[](i) == c2->operator[](j)) {
+            if (k != i) {
+                c1->operator[](k) = std::move(c1->operator[](i));
+            }
+            k++;
+            i++;
+            j++;
+        } else if (cmp(c1->operator[](i), c2->operator[](j))) {
+            i++;
+        } else {
+            j++;
+        }
+    }
+    c1->resize(k);
 }
 
 

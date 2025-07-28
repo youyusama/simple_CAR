@@ -2,10 +2,10 @@
 
 namespace car {
 
-SATSolver::SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind) {
-    m_model = model;
+SATSolver::SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind)
+    : m_model(model), m_slvKind(slv_kind) {
 
-    switch (slv_kind) {
+    switch (m_slvKind) {
     case MCSATSolver::minisat:
         m_slv = make_shared<MinisatSolver>(m_model);
         break;
@@ -45,6 +45,7 @@ void SATSolver::AddTrans() {
 void SATSolver::AddConstraints() {
     for (auto c : m_model->GetConstraints()) {
         AddClause(clause{c});
+        SetDomainCOI(make_shared<cube>(cube{c}));
     }
 }
 
@@ -110,15 +111,15 @@ bool SATSolver::SolveFrame(const shared_ptr<cube> assumption, int lvl) {
 // @input:
 // @output:
 // ================================================================================
-void SATSolver::AddUC(const cube &uc, int lvl) {
+void SATSolver::AddUC(const shared_ptr<cube> uc, int lvl) {
     int flag = GetFrameFlag(lvl);
     clause cls;
-    cls.reserve(uc.size() + 1);
-    cls.push_back(-flag);
-    for (int i = 0; i < uc.size(); ++i) {
-        cls.push_back(-uc[i]);
-    }
+    cls.reserve(uc->size() + 1);
+    cls.emplace_back(-flag);
+    for (auto ci : *uc) cls.emplace_back(-ci);
+
     AddClause(cls);
+    SetDomain(make_shared<cube>(cls));
 }
 
 
@@ -128,7 +129,9 @@ void SATSolver::AddUC(const cube &uc, int lvl) {
 // @output:
 // ================================================================================
 void SATSolver::AddProperty() {
-    AddClause(clause{m_model->GetProperty()});
+    clause cls = clause{m_model->GetProperty()};
+    AddClause(cls);
+    SetDomainCOI(make_shared<cube>(cls));
 }
 
 

@@ -88,10 +88,6 @@ class BackwardChecker : public BaseChecker {
         }
     }
 
-    static bool cmp(int a, int b) {
-        return abs(a) < abs(b);
-    }
-
     bool Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1);
 
     bool Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unordered_set<int> required_lits);

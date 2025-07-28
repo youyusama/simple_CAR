@@ -205,9 +205,9 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frame
             m_transSolvers.back()->AddConstraints();
             m_transSolvers.back()->AddProperty();
         }
-        m_transSolvers[frameLevel]->AddUC(*puc);
+        m_transSolvers[frameLevel]->AddUC(puc);
     } else
-        m_transSolvers[0]->AddUC(*puc, frameLevel);
+        m_transSolvers[0]->AddUC(puc, frameLevel);
 
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;

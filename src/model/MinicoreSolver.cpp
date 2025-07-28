@@ -6,6 +6,7 @@ MinicoreSolver::MinicoreSolver(shared_ptr<Model> m) {
     m_model = m;
     m_maxId = m_model->GetMaxId();
     // verbosity = 1;
+    solveInDomain = true;
 }
 
 MinicoreSolver::~MinicoreSolver() {}
@@ -52,8 +53,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinicoreSolver::GetAssignment(bool prim
     for (int i = 1, end = m_model->GetNumInputs() + 1; i < end; ++i) {
         if (model[i] == minicore::l_True) {
             inputs->emplace_back(i);
-        } else {
-            assert(model[i] == minicore::l_False);
+        } else if (model[i] == minicore::l_False) {
             inputs->emplace_back(-i);
         }
     }
@@ -63,8 +63,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinicoreSolver::GetAssignment(bool prim
         if (!prime) {
             if (model[i] == minicore::l_True) {
                 latches->emplace_back(i);
-            } else {
-                assert(model[i] == minicore::l_False);
+            } else if (model[i] == minicore::l_False) {
                 latches->emplace_back(-i);
             }
         } else {
@@ -161,6 +160,25 @@ int MinicoreSolver::PopAssumption() {
     minicore::Lit p = m_assumptions.back();
     m_assumptions.pop_back();
     return GetLiteralId(p);
+}
+
+
+inline void MinicoreSolver::SetDomain(const shared_ptr<cube> domain) {
+    std::vector<minicore::Var> d;
+    for (auto v : *domain) d.emplace_back(v);
+    setDomain(d);
+}
+
+
+inline void MinicoreSolver::SetTempDomain(const shared_ptr<cube> domain) {
+    std::vector<minicore::Var> d;
+    for (auto v : *domain) d.emplace_back(v);
+    setTempDomain(d);
+}
+
+
+inline void MinicoreSolver::ResetTempDomain() {
+    resetTempDomain();
 }
 
 
