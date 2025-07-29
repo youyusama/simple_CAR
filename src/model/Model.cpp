@@ -32,6 +32,7 @@ void Model::Init() {
     m_maxId = m_aig->maxvar + 2;
     m_trueId = m_maxId - 1;
     m_falseId = m_maxId;
+    m_andGateStartId = m_aig->num_inputs + m_aig->num_latches + 1;
     CollectConstants();
     CollectConstraints();
     CollectBad();
@@ -160,17 +161,28 @@ void Model::CollectCOIInputs() {
 
 
 shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
-    set<int> coi_vars;
+    unordered_set<int> coi_vars;
+    queue<int> todo_vars;
     for (int v : *c) {
+        todo_vars.emplace(abs(v));
         coi_vars.emplace(abs(v));
     }
-    for (int i = m_aig->num_ands - 1; i >= 0; i--) {
-        aiger_and &a = m_aig->ands[i];
-        if (coi_vars.find(a.lhs >> 1) != coi_vars.end()) {
-            coi_vars.emplace(aiger_strip(a.rhs0) >> 1);
-            coi_vars.emplace(aiger_strip(a.rhs1) >> 1);
+    while (!todo_vars.empty()) {
+        int v = todo_vars.front();
+        if (IsAnd(v)) {
+            aiger_and &a = m_aig->ands[v - m_andGateStartId];
+            if (coi_vars.find(a.rhs0 >> 1) == coi_vars.end()) {
+                todo_vars.emplace(a.rhs0 >> 1);
+                coi_vars.emplace(a.rhs0 >> 1);
+            }
+            if (coi_vars.find(a.rhs1 >> 1) == coi_vars.end()) {
+                todo_vars.emplace(a.rhs1 >> 1);
+                coi_vars.emplace(a.rhs1 >> 1);
+            }
         }
+        todo_vars.pop();
     }
+
     shared_ptr<cube> domain = make_shared<cube>(coi_vars.begin(), coi_vars.end());
     domain->emplace_back(m_trueId);
     domain->emplace_back(m_falseId);

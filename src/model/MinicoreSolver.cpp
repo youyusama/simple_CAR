@@ -4,7 +4,8 @@
 namespace car {
 MinicoreSolver::MinicoreSolver(shared_ptr<Model> m) {
     m_model = m;
-    m_maxId = m_model->GetMaxId();
+    // m_maxId = m_model->GetMaxId();
+    m_maxId = m_model->GetFalseId() + 1;
     // verbosity = 1;
     solveInDomain = true;
 }

@@ -44,19 +44,26 @@ class Log {
         if (m_verbosity == 0) return;
         cout << endl
              << "TransSolver    called: " << left << setw(12) << m_mainSolverCalls
-             << "takes: " << fixed << setprecision(3) << m_mainSolverTime << endl;
+             << "takes: " << fixed << setprecision(3) << setw(10) << m_mainSolverTime
+             << "per: " << fixed << setprecision(5) << m_mainSolverTime / m_mainSolverCalls << endl;
         cout << "Propagation    called: " << left << setw(12) << m_propagation
-             << "takes: " << fixed << setprecision(3) << m_propagationTime << endl;
+             << "takes: " << fixed << setprecision(3) << setw(10) << m_propagationTime
+             << "per: " << fixed << setprecision(5) << m_propagationTime / m_propagation << endl;
         cout << "LiftSolver     called: " << left << setw(12) << m_liftSolverCalls
-             << "takes: " << fixed << setprecision(3) << m_liftSolverTime << endl;
+             << "takes: " << fixed << setprecision(3) << setw(10) << m_liftSolverTime
+             << "per: " << fixed << setprecision(5) << m_liftSolverTime / m_liftSolverCalls << endl;
         cout << "InvSolver      called: " << left << setw(12) << m_invSolverCalls
-             << "takes: " << fixed << setprecision(3) << m_invSolverTime << endl;
+             << "takes: " << fixed << setprecision(3) << setw(10) << m_invSolverTime
+             << "per: " << fixed << setprecision(5) << m_invSolverTime / m_invSolverCalls << endl;
         cout << "StartSolver    called: " << left << setw(12) << m_enumerateStartState
-             << "takes: " << fixed << setprecision(3) << m_enumerateStartStateTime << endl;
+             << "takes: " << fixed << setprecision(3) << setw(10) << m_enumerateStartStateTime
+             << "per: " << fixed << setprecision(5) << m_enumerateStartStateTime / m_enumerateStartState << endl;
         cout << "Locating lvl   called: " << left << setw(12) << m_getNewLevel
-             << "takes: " << fixed << setprecision(3) << m_getNewLevelTime << endl;
+             << "takes: " << fixed << setprecision(3) << setw(10) << m_getNewLevelTime
+             << "per: " << fixed << setprecision(5) << m_getNewLevelTime / m_getNewLevel << endl;
         cout << "Updating UC    called: " << left << setw(12) << m_updateUc
-             << "takes: " << fixed << setprecision(3) << m_updateUcTime << endl;
+             << "takes: " << fixed << setprecision(3) << setw(10) << m_updateUcTime
+             << "per: " << fixed << setprecision(5) << m_updateUcTime / m_updateUc << endl;
 
         cout << "Initialization takes: " << fixed << setprecision(3) << m_initTime << endl;
         cout << "Innards        takes: " << fixed << setprecision(3) << m_internalSignalsTime << endl;

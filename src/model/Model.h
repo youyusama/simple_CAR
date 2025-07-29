@@ -15,7 +15,7 @@ extern "C" {
 #include <iostream>
 #include <math.h>
 #include <memory>
-#include <set>
+#include <queue>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -57,7 +57,7 @@ class Model {
     }
 
     inline bool IsLatch(int id) {
-        if (abs(id) > m_aig->num_inputs && abs(id) <= m_aig->num_inputs + m_aig->num_latches)
+        if (abs(id) > m_aig->num_inputs && abs(id) < m_andGateStartId)
             return true;
         else
             return false;
@@ -65,6 +65,13 @@ class Model {
 
     inline bool IsInput(int id) {
         if (abs(id) > 0 && abs(id) <= m_aig->num_inputs)
+            return true;
+        else
+            return false;
+    }
+
+    inline bool IsAnd(int id) {
+        if (abs(id) >= m_andGateStartId && abs(id) < m_trueId)
             return true;
         else
             return false;
@@ -166,8 +173,7 @@ class Model {
     int m_maxId;
     int m_trueId;
     int m_falseId;
-    int m_outputsStart; // the index of cls_ to point the start position of outputs
-    int m_latchesStart; // the index of cls_ to point the start position of latches
+    int m_andGateStartId;
 
     cube m_initialState;
     int m_bad;
