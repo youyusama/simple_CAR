@@ -10,8 +10,8 @@ set(CMAKE_C_FLAGS_DEBUG "-g -ggdb")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -ggdb -fpermissive")
 
 # release
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -fpermissive")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -flto")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -fpermissive -flto")
 
 set(DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -55,6 +55,13 @@ endif()
 add_executable(simpleCAR ${SRCS})
 target_include_directories(simpleCAR PUBLIC ${DIRS})
 target_link_libraries(simpleCAR PUBLIC ${LIBS})
+
+if(UNIX AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_custom_command(TARGET simpleCAR POST_BUILD
+        COMMAND ${CMAKE_STRIP} --strip-all $<TARGET_FILE:simpleCAR>
+        COMMENT "Stripping debug symbols"
+    )
+endif()
 target_link_options(simpleCAR PUBLIC 
-    $<$<CONFIG:Release>:-s -static -flto>
+    $<$<CONFIG:Release>:-static -flto>
 )

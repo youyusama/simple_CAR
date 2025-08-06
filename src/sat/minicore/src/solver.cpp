@@ -339,6 +339,7 @@ void Solver::analyzeFinal(Lit p, std::unordered_set<Lit, LitHash> &out_conflict)
         return;
 
     seen[var(p)] = 1;
+    // std::cout << "final conflict var: " << (!sign(p) ? var(p) : -var(p)) << std::endl;
 
     for (int i = trail.size() - 1; i >= trail_lim[0]; i--) {
         Var x = var(trail[i]);
@@ -346,8 +347,10 @@ void Solver::analyzeFinal(Lit p, std::unordered_set<Lit, LitHash> &out_conflict)
             if (reason(x) == CRef_Undef) {
                 assert(level(x) > 0);
                 out_conflict.insert(~trail[i]);
+                // std::cout << "decision var: " << (!sign(trail[i]) ? var(trail[i]) : -var(trail[i])) << std::endl;
             } else {
                 Clause &c = ca->get_clause(reason(x));
+                // std::cout << "from clause: " << c.tostring() << std::endl;
                 for (size_t j = 1; j < c.size(); j++)
                     if (level(var(c[j])) > 0)
                         seen[var(c[j])] = 1;

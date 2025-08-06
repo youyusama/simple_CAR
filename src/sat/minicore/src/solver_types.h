@@ -238,10 +238,11 @@ class Clause {
 
     std::string tostring() const noexcept {
         std::string res;
-        std::cout << size() << std::endl;
         for (uint32_t i = 0; i < size() && i < 10; i++) {
-            res += std::to_string(toInt(data()[i])) + " ";
+            Lit p = data()[i];
+            res += std::to_string((!sign(p) ? var(p) : -var(p))) + " ";
         }
+        if (learnt()) res += "learnt";
         return res;
     }
 
