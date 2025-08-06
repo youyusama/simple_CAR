@@ -32,6 +32,7 @@ void Model::Init() {
     m_maxId = m_aig->maxvar + 2;
     m_trueId = m_maxId - 1;
     m_falseId = m_maxId;
+    m_andGateStartId = m_aig->num_inputs + m_aig->num_latches + 1;
     CollectConstants();
     CollectConstraints();
     CollectBad();
@@ -127,26 +128,6 @@ void Model::CollectClauses() {
         AddAndGateToClause(a);
     }
 
-    // todo: add this constraint inside forward checker
-    // if l1 and l2 have same prime l', then l1 and l2 shoud have same value, except the initial states
-    if (m_settings.forward) {
-        int init = ++m_maxId;
-        int cons = ++m_maxId;
-        m_clauses.emplace_back(clause{init, cons});
-        for (auto it = m_preValueOfLatchMap.begin(); it != m_preValueOfLatchMap.end(); it++) {
-            if (it->second.size() > 1) {
-                m_maxId++;
-                for (int p : it->second) {
-                    m_clauses.emplace_back(clause{-cons, -p, m_maxId});
-                    m_clauses.emplace_back(clause{-cons, p, -m_maxId});
-                }
-            }
-        }
-        for (int i : m_initialState) {
-            m_clauses.emplace_back(clause{-init, i});
-        }
-    }
-
     // create clauses for true and false
     m_clauses.emplace_back(clause{m_trueId});
     m_clauses.emplace_back(clause{-m_falseId});
@@ -160,11 +141,9 @@ void Model::CollectCOIInputs() {
     }
     coi_lits.insert(abs(m_bad) * 2);
 
-    vector<unsigned> coi_gates;
     for (int i = m_aig->num_ands - 1; i >= 0; i--) {
         aiger_and &a = m_aig->ands[i];
         if (coi_lits.find(a.lhs) != coi_lits.end()) {
-            coi_gates.push_back(a.lhs);
             coi_lits.insert(aiger_strip(a.rhs0));
             coi_lits.insert(aiger_strip(a.rhs1));
         }
@@ -178,6 +157,36 @@ void Model::CollectCOIInputs() {
         } else if (lit > 0)
             break;
     }
+}
+
+
+shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
+    unordered_set<int> coi_vars;
+    queue<int> todo_vars;
+    for (int v : *c) {
+        todo_vars.emplace(abs(v));
+        coi_vars.emplace(abs(v));
+    }
+    while (!todo_vars.empty()) {
+        int v = todo_vars.front();
+        if (IsAnd(v)) {
+            aiger_and &a = m_aig->ands[v - m_andGateStartId];
+            if (coi_vars.find(a.rhs0 >> 1) == coi_vars.end()) {
+                todo_vars.emplace(a.rhs0 >> 1);
+                coi_vars.emplace(a.rhs0 >> 1);
+            }
+            if (coi_vars.find(a.rhs1 >> 1) == coi_vars.end()) {
+                todo_vars.emplace(a.rhs1 >> 1);
+                coi_vars.emplace(a.rhs1 >> 1);
+            }
+        }
+        todo_vars.pop();
+    }
+
+    shared_ptr<cube> domain = make_shared<cube>(coi_vars.begin(), coi_vars.end());
+    domain->emplace_back(m_trueId);
+    domain->emplace_back(m_falseId);
+    return domain;
 }
 
 

@@ -5,6 +5,7 @@
 #include "CadicalSolver.h"
 #endif
 #include "ISolver.h"
+#include "MinicoreSolver.h"
 #include "MinisatSolver.h"
 #include "Model.h"
 #include <memory>
@@ -13,7 +14,7 @@ namespace car {
 
 class SATSolver : public ISolver {
   public:
-    SATSolver(shared_ptr<Model> model, int slv_kind);
+    SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind);
     ~SATSolver() {}
 
     // general SAT interface
@@ -69,6 +70,38 @@ class SATSolver : public ISolver {
         return m_slv->PopAssumption();
     }
 
+    // special interface in minicore
+    void SetDomain(const shared_ptr<cube> domain) {
+        if (m_slvKind != MCSATSolver::minicore) return;
+        shared_ptr<cube> d = make_shared<cube>();
+        for (int v : *domain) d->emplace_back(abs(v));
+        m_slv->SetDomain(d);
+    }
+
+    void SetTempDomain(const shared_ptr<cube> domain) {
+        if (m_slvKind != MCSATSolver::minicore) return;
+        shared_ptr<cube> d = make_shared<cube>();
+        for (int v : *domain) d->emplace_back(abs(v));
+        m_slv->SetTempDomain(d);
+    }
+
+    void ResetTempDomain() {
+        if (m_slvKind != MCSATSolver::minicore) return;
+        m_slv->ResetTempDomain();
+    }
+
+    void SetDomainCOI(const shared_ptr<cube> c) {
+        if (m_slvKind != MCSATSolver::minicore) return;
+        shared_ptr<cube> domain = m_model->GetCOIDomain(c);
+        SetDomain(domain);
+    }
+
+    void SetTempDomainCOI(const shared_ptr<cube> c) {
+        if (m_slvKind != MCSATSolver::minicore) return;
+        shared_ptr<cube> domain = m_model->GetCOIDomain(c);
+        SetTempDomain(domain);
+    }
+
     // SAT interface for IC3/CAR
     void AddTrans();
 
@@ -84,7 +117,7 @@ class SATSolver : public ISolver {
 
     bool SolveFrame(const shared_ptr<cube> assumption, int lvl);
 
-    void AddUC(const cube &uc, int lvl);
+    void AddUC(const shared_ptr<cube> uc, int lvl = 0);
 
     void AddProperty();
 
@@ -94,6 +127,7 @@ class SATSolver : public ISolver {
 
   protected:
     shared_ptr<Model> m_model;
+    MCSATSolver m_slvKind;
     shared_ptr<ISolver> m_slv;
 
     vector<int> m_frameFlags;

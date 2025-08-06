@@ -13,10 +13,11 @@ class BMC : public BaseChecker {
         shared_ptr<Model> model,
         shared_ptr<Log> log);
 
-    bool Run();
-    bool Check(int badId);
+    CheckResult Run();
+    void Witness();
 
   private:
+    bool Check(int badId);
     Settings m_settings;
     shared_ptr<Log> m_log;
     shared_ptr<Model> m_model;
@@ -26,6 +27,7 @@ class BMC : public BaseChecker {
     int m_badId;
     shared_ptr<SATSolver> m_Solver;
 
+    CheckResult m_checkResult;
     void Init(int badId);
     void OutputCounterExample(int bad);
     void GetClausesK(int m_k, shared_ptr<vector<clause>> clauses);

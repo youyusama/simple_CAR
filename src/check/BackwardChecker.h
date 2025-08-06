@@ -18,10 +18,12 @@ class BackwardChecker : public BaseChecker {
     BackwardChecker(Settings settings,
                     shared_ptr<Model> model,
                     shared_ptr<Log> log);
-    bool Run();
-    bool Check(int badId);
+    CheckResult Run();
+    void Witness();
 
   private:
+    bool Check(int badId);
+
     void Init();
 
     bool AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel);
@@ -68,15 +70,15 @@ class BackwardChecker : public BaseChecker {
     } blockerOrder;
 
     void OrderAssumption(shared_ptr<cube> uc) {
-        if (m_settings.seed > 0) {
-            shuffle(uc->begin(), uc->end(), default_random_engine(m_settings.seed));
+        if (m_settings.randomSeed > 0) {
+            shuffle(uc->begin(), uc->end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.internalSignals) {
             stable_sort(uc->begin(), uc->end(), innOrder);
             return;
         }
-        if (m_settings.Branching == 0) return;
+        if (m_settings.branching == 0) return;
         stable_sort(uc->begin(), uc->end(), litOrder);
     }
 
@@ -84,10 +86,6 @@ class BackwardChecker : public BaseChecker {
         for (auto &x : *p) {
             x = m_model->GetPrime(x);
         }
-    }
-
-    static bool cmp(int a, int b) {
-        return abs(a) < abs(b);
     }
 
     bool Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1);
@@ -110,6 +108,13 @@ class BackwardChecker : public BaseChecker {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
+    bool IsReachable(int lvl, const shared_ptr<cube> assumption);
+
+    pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
+
+    shared_ptr<cube> GetUnsatCore(int lvl);
+
+    CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_k;
     shared_ptr<Branching> m_branching;
@@ -119,7 +124,7 @@ class BackwardChecker : public BaseChecker {
     shared_ptr<Log> m_log;
     shared_ptr<Model> m_model;
     shared_ptr<State> m_initialState;
-    shared_ptr<SATSolver> m_mainSolver;
+    vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_invSolver;
     vector<shared_ptr<vector<int>>> m_rotation;
     shared_ptr<State> m_lastState;

@@ -16,10 +16,12 @@ class ForwardChecker : public BaseChecker {
     ForwardChecker(Settings settings,
                    shared_ptr<Model> model,
                    shared_ptr<Log> log);
-    bool Run();
-    bool Check(int badId);
+    CheckResult Run();
+    void Witness();
 
   private:
+    bool Check(int badId);
+
     void Init(int badId);
 
     bool AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel);
@@ -66,15 +68,15 @@ class ForwardChecker : public BaseChecker {
     } blockerOrder;
 
     void OrderAssumption(shared_ptr<cube> c) {
-        if (m_settings.seed > 0) {
-            shuffle(c->begin(), c->end(), default_random_engine(m_settings.seed));
+        if (m_settings.randomSeed > 0) {
+            shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.internalSignals) {
             stable_sort(c->begin(), c->end(), innOrder);
             return;
         }
-        if (m_settings.Branching == 0) return;
+        if (m_settings.branching == 0) return;
         stable_sort(c->begin(), c->end(), litOrder);
     }
 
@@ -82,10 +84,6 @@ class ForwardChecker : public BaseChecker {
         for (auto &x : *p) {
             x = m_model->GetPrime(x);
         }
-    }
-
-    static bool cmp(int a, int b) {
-        return abs(a) < abs(b);
     }
 
     void GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &s, shared_ptr<State> t);
@@ -112,6 +110,17 @@ class ForwardChecker : public BaseChecker {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
+    void AddSamePrimeConstraints(shared_ptr<SATSolver> slv);
+
+    bool IsReachable(int lvl, const shared_ptr<cube> assumption);
+
+    pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
+
+    shared_ptr<cube> GetUnsatCore(int lvl, const shared_ptr<cube> state);
+
+    void MakeSubset(shared_ptr<cube> c1, shared_ptr<cube> c2);
+
+    CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_badId;
     int m_k;
@@ -121,7 +130,7 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<Log> m_log;
     shared_ptr<Model> m_model;
     shared_ptr<State> m_initialState;
-    shared_ptr<SATSolver> m_mainSolver;
+    vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_liftSolver;
     shared_ptr<SATSolver> m_badPredLiftSolver;
     shared_ptr<SATSolver> m_invSolver;

@@ -60,7 +60,7 @@ class OverSequenceSet {
 
     OverSequenceSet(shared_ptr<Model> model) {
         m_model = model;
-        m_blockSolver = make_shared<SATSolver>(m_model, 0);
+        m_blockSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
         m_blockCounter.clear();
         m_invariantLevel = 0;
     }

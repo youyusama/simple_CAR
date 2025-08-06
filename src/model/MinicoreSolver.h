@@ -1,17 +1,17 @@
-#ifndef CADICALSOLVER_H
-#define CADICALSOLVER_H
+#ifndef MINICORESOLVER_H
+#define MINICORESOLVER_H
 
 #include "ISolver.h"
 #include "Model.h"
-#include "cadical/src/cadical.hpp"
+#include "minicore/src/solver.h"
 #include <memory>
 
 namespace car {
 
-class CadicalSolver : public ISolver, public CaDiCaL::Solver {
+class MinicoreSolver : public ISolver, public minicore::Solver {
   public:
-    CadicalSolver(shared_ptr<Model> m);
-    ~CadicalSolver();
+    MinicoreSolver(shared_ptr<Model> m);
+    ~MinicoreSolver();
 
     void AddClause(const cube &cls) override;
     void AddAssumption(const shared_ptr<cube> assumption) override;
@@ -25,10 +25,9 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     void AddTempClause(const cube &cls) override;
     void ReleaseTempClause() override;
     inline bool GetModel(int id) {
-        if (val(id) > 0)
+        if (model[id] == minicore::l_True)
             return true;
         else {
-            assert(val(id) < 0);
             return false;
         }
     }
@@ -36,16 +35,22 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     void PushAssumption(int a);
     int PopAssumption();
 
-    // not available
-    inline void SetDomain(const shared_ptr<cube> domain) {}
-    inline void SetTempDomain(const shared_ptr<cube> domain) {}
-    inline void ResetTempDomain() {}
+    inline void SetDomain(const shared_ptr<cube> domain) override;
+    inline void SetTempDomain(const shared_ptr<cube> domain) override;
+    inline void ResetTempDomain() override;
 
   protected:
+    inline int GetLiteralId(const minicore::Lit &l);
+    inline minicore::Lit GetLit(int id) {
+        minicore::Var var = abs(id);
+        while (var >= nVars()) newVar();
+        return ((id > 0) ? minicore::mkLit(var) : ~minicore::mkLit(var));
+    };
+
     shared_ptr<Model> m_model;
     int m_maxId;
-    shared_ptr<cube> m_assumptions;
-    cube m_tempClause;
+    vector<minicore::Lit> m_assumptions;
+    vector<minicore::Lit> m_tempClause;
 };
 
 } // namespace car

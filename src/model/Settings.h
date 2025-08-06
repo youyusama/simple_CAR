@@ -1,29 +1,38 @@
 #ifndef SETTINGS_H
 #define SETTINGS_H
 
+#include "CLI11.hpp"
 #include <string>
 
 using namespace std;
 
 namespace car {
 
+enum class MCAlgorithm { FCAR,
+                         BCAR,
+                         BMC };
+
+enum class MCSATSolver { minisat,
+                         cadical,
+                         minicore };
+
 struct Settings {
-    bool debug = false;
-    bool forward = false;
-    bool backward = false;
-    bool bmc = false;
-    int bmc_k = -1;
-    bool end = false;
-    int Branching = 0;
-    bool skip_refer = false;
-    bool witness = false;
-    int seed = 0;
     int verbosity = 0;
-    bool internalSignals = false;
-    int solver = 0;
     string aigFilePath;
-    string outputDir;
+    string witnessOutputDir = "";
+
+    MCSATSolver solver = MCSATSolver::minisat;
+    MCAlgorithm alg = MCAlgorithm::FCAR;
+    int bmcK = -1;
+    bool end = false;
+    int branching = 0;
+    int randomSeed = 0;
+    bool referSkipping = false;
+    bool internalSignals = false;
+    bool multipleSolvers = true;
 };
+
+bool ParseSettings(int argc, char **argv, Settings &settings);
 
 } // namespace car
 

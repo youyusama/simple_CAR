@@ -103,7 +103,7 @@ void OverSequenceSet::add_uc_to_frame(const shared_ptr<cube> uc, shared_ptr<fram
 
 
 bool OverSequenceSet::Insert(shared_ptr<cube> uc, int index, bool need_imply) {
-    m_blockSolver->AddUC(*uc, index);
+    m_blockSolver->AddUC(uc, index);
     if (index >= m_sequence.size()) {
         shared_ptr<frame> new_frame(new frame);
         m_sequence.emplace_back(new_frame);
