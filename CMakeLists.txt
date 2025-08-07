@@ -56,12 +56,6 @@ add_executable(simpleCAR ${SRCS})
 target_include_directories(simpleCAR PUBLIC ${DIRS})
 target_link_libraries(simpleCAR PUBLIC ${LIBS})
 
-if(UNIX AND CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_custom_command(TARGET simpleCAR POST_BUILD
-        COMMAND ${CMAKE_STRIP} --strip-all $<TARGET_FILE:simpleCAR>
-        COMMENT "Stripping debug symbols"
-    )
-endif()
 target_link_options(simpleCAR PUBLIC 
-    $<$<CONFIG:Release>:-static -flto>
+    $<$<CONFIG:Release>:-s -static -flto>
 )
