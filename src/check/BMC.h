@@ -36,6 +36,7 @@ class BMC : public BaseChecker {
 
     bool Run();
     bool Check(int badId);
+    void Build(int badId);
 
   private:
     Settings m_settings;

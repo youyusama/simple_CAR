@@ -73,4 +73,7 @@ bld/
 [Uu]nsafe/
 frame_vis/
 
+build/
+deps/
+
 simplecar

@@ -30,17 +30,15 @@ bool BMC::Run() {
         string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
         string cexPath = m_settings.outputDir + aigName + "." + to_string(m_maxK) + ".cnf";
         m_cnfw = make_shared<CNFWriter>(cexPath);
-    } else {
-        m_cnfw = make_shared<CNFWriter>("");
-    }
 
-    bool result = Check(m_model->GetBad());
+        Build(m_model->GetBad());
 
-    if (m_settings.cnf) {
         m_cnfw->WriteFile();
         m_log->L(0, "CNF written.");
         return true;
     }
+
+    bool result = Check(m_model->GetBad());
 
     m_log->PrintStatistics();
     if (result) {
@@ -67,40 +65,70 @@ bool BMC::Check(int badId) {
         // & T^k
         for (int i = 0; i < clauses->size(); ++i) {
             m_Solver->AddClause(clauses->at(i));
-            m_cnfw->AppendClause(clauses->at(i));
             m_log->L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
         }
 
         int k_bad = GetBadK(m_k);
-        if (!m_settings.cnf || m_k == m_maxK) {
-            // assume( bad^k & cons^k )
-            shared_ptr<cube> assumptions(new cube());
-            assumptions->push_back(k_bad);
-            m_cnfw->AppendClause({k_bad});
-            for (auto c : GetConstraintsK(m_k)) {
-                assumptions->push_back(c);
-                m_cnfw->AppendClause({c});
-            }
-            if (m_settings.cnf) return false;
-            m_log->L(3, "Assumption: ", CubeToStr(assumptions));
-            m_log->Tick();
-            bool sat = m_Solver->Solve(assumptions);
-            m_log->StatMainSolver();
-            if (sat) return true;
+
+        // assume( bad^k & cons^k )
+        shared_ptr<cube> assumptions(new cube());
+        assumptions->push_back(k_bad);
+        for (auto c : GetConstraintsK(m_k)) {
+            assumptions->push_back(c);
         }
+        m_log->L(3, "Assumption: ", CubeToStr(assumptions));
+        m_log->Tick();
+        bool sat = m_Solver->Solve(assumptions);
+        m_log->StatMainSolver();
+        if (sat) return true;
 
         // & cons^k
         for (auto c : GetConstraintsK(m_k)) {
             m_Solver->AddClause({c});
-            m_cnfw->AppendClause({c});
             m_log->L(3, "Add Clause: ", c);
         }
         // & !bad^k
         m_Solver->AddClause({-k_bad});
-        m_cnfw->AppendClause({-k_bad});
         m_log->L(3, "Add Clause: ", -k_bad);
         m_k++;
         if (m_maxK != -1 && m_k > m_maxK) return false;
+    }
+}
+
+
+void BMC::Build(int badId) {
+    m_badId = badId;
+
+    // send initial state
+    for (auto l : m_model->GetInitialState()) {
+        m_cnfw->AppendClause({l});
+    }
+
+    while (true) {
+        m_log->L(1, "BMC Bound: ", m_k);
+
+        shared_ptr<vector<clause>> clauses = make_shared<vector<clause>>();
+        GetClausesK(m_k, clauses);
+
+        // & T^k
+        for (int i = 0; i < clauses->size(); ++i) {
+            m_cnfw->AppendClause(clauses->at(i));
+            m_log->L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
+        }
+
+        // & cons^k
+        for (auto c : GetConstraintsK(m_k)) {
+            m_cnfw->AppendClause({c});
+            m_log->L(3, "Add Clause: ", c);
+        }
+
+        int k_bad = GetBadK(m_k);
+        if (m_k == m_maxK) {
+            m_cnfw->AppendClause({k_bad});
+            return;
+        }
+
+        m_k++;
     }
 }
 
@@ -112,7 +140,6 @@ void BMC::Init(int badId) {
     // send initial state
     for (auto l : m_model->GetInitialState()) {
         m_Solver->AddClause({l});
-        m_cnfw->AppendClause({l});
     }
 }
 
