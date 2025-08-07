@@ -6,16 +6,16 @@
 
 `cd simple_CAR/src/sat/cadical/`
 
-`./configure && make`
+`./configure --competition && make`
 
 `cd ../../../..`
 
 ### build simple_CAR
 
-`mkdir release`
+`mkdir build`
 
-`cd release`
+`cd build`
 
 `cmake .. -DCMAKE_BUILD_TYPE=Release -DCADICAL=1`
 
-`make`
+`make -j`

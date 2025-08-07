@@ -63,7 +63,7 @@ bool ForwardChecker::Check(int badId) {
         m_transSolvers[0]->AddUC(neg_init_l);
         m_startSolver->AddUC(neg_init_l, 0);
     }
-    // m_transSolvers[0]->AddProperty();
+    m_transSolvers[0]->AddProperty();
 
     // main stage
     m_k = 0;
@@ -247,7 +247,7 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
             m_transSolvers.back()->AddTrans();
             m_transSolvers.back()->AddConstraints();
             AddSamePrimeConstraints(m_transSolvers.back());
-            // m_transSolvers.back()->AddProperty();
+            m_transSolvers.back()->AddProperty();
         }
         m_transSolvers[frameLevel]->AddUC(uc);
     } else
