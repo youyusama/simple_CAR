@@ -19,3 +19,13 @@
 `cmake .. -DCMAKE_BUILD_TYPE=Release -DCADICAL=1`
 
 `make -j`
+
+### [optional] btor2
+
+`./setup_btor2.sh`
+
+usage:
+
+`python btorasaig.py <simpleCAR> [OPTIONS] -w <output_dir> <btor2_file>`
+
+The `.cexb` file in `output_dir\` is the witness file for btor2sim.
