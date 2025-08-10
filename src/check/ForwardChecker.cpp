@@ -68,7 +68,6 @@ bool ForwardChecker::Check(int badId) {
     // main stage
     m_k = 0;
     stack<Task> workingStack;
-    bool firstTime = true;
     while (true) {
         m_refinement_count = 0;
         m_restart_needed = false;
@@ -90,11 +89,10 @@ bool ForwardChecker::Check(int badId) {
         shared_ptr<State> startState = EnumerateStartState();
         m_log->StatStartSolver();
         // T & c & P & T' & c' & bad' is unsat
-        if (m_k > 0 && startState == nullptr && firstTime) {
+        if (m_k > 0 && startState == nullptr && m_overSequence->IsEmpty(m_k)) {
             m_overSequence->SetInvariantLevel(-1);
             return true;
         }
-        firstTime = false;
 
         while (startState != nullptr) {
             m_log->L(2, "State from StartSolver: ", CubeToStrShort(startState->latches));
@@ -211,7 +209,6 @@ bool ForwardChecker::Check(int badId) {
 
         m_k++;
         m_log->L(2, "\nNew Frame Added");
-        firstTime = true;
     }
 }
 

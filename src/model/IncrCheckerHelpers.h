@@ -88,6 +88,11 @@ class OverSequenceSet {
 
     void GetBlockers(shared_ptr<cube> latches, int framelevel, vector<shared_ptr<cube>> &b);
 
+    bool IsEmpty(int frameLevel) {
+        if (frameLevel < 0 || frameLevel >= m_sequence.size()) return true;
+        return m_sequence[frameLevel]->empty();
+    }
+
     string FramesInfo();
 
     string FramesDetail();
