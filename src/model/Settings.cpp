@@ -48,6 +48,11 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
 
     app.add_flag("--is", settings.internalSignals, "internal signals");
 
+    app.add_flag("--restart", settings.restart, "enable restart mechanism");
+
+    app.add_option("--restart_threshold", settings.restart_threshold, "restart threshold")
+        ->default_val(100);
+
     try {
         app.parse(argc, argv);
         return true;

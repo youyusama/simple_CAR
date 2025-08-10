@@ -68,6 +68,8 @@ bool BackwardChecker::Check(int badId) {
     m_k = 0;
     stack<Task> workingStack;
     while (true) {
+        m_refinement_count = 0;
+        m_restart_needed = false;
         m_minUpdateLevel = m_k + 1;
         if (m_settings.end) // from the deep and the end
         {
@@ -131,11 +133,22 @@ bool BackwardChecker::Check(int badId) {
                     m_branching->Update(uc);
                 m_log->L(2, "Get Generalized UC:", CubeToStr(uc));
                 AddUnsatisfiableCore(uc, task.frameLevel + 1);
+                if (m_restart_needed) break;
                 PropagateUp(uc, task.frameLevel + 1);
                 m_log->L(3, m_overSequence->FramesInfo());
                 task.frameLevel++;
                 continue;
             }
+        }
+
+        if (m_restart_needed) {
+            m_log->L(3, "Restart triggered at frame ", m_k, " after ", m_refinement_count, " refinements.");
+            m_restart_needed = false;
+            m_refinement_count = 0;
+            m_underSequence = UnderSequence();
+            m_underSequence.push(m_initialState);
+            while(!workingStack.empty()) workingStack.pop();
+            continue;
         }
 
         if (m_invSolver == nullptr) {
@@ -194,6 +207,13 @@ void BackwardChecker::Init() {
 }
 
 bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
+    if (m_settings.restart) {
+        m_refinement_count++;
+        if (m_refinement_count >= m_settings.restart_threshold) {
+            m_log->L(3, "Setting restart flag at frame ", m_k, " after ", m_refinement_count, " refinements.");
+            m_restart_needed = true;
+        }
+    }
     m_log->Tick();
 
     shared_ptr<cube> puc(new cube(*uc));
@@ -317,6 +337,7 @@ bool BackwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lv
         for (auto b : *uc_blocker) required_lits.emplace(b);
     OrderAssumption(uc);
     for (int i = uc->size() - 1; i > 0; i--) {
+        if (m_restart_needed) break;
         if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
         shared_ptr<cube> temp_uc(new cube());
         temp_uc->reserve(uc->size());
