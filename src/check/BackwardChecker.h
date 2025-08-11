@@ -128,6 +128,8 @@ class BackwardChecker : public BaseChecker {
     shared_ptr<SATSolver> m_invSolver;
     vector<shared_ptr<vector<int>>> m_rotation;
     shared_ptr<State> m_lastState;
+    int m_refinement_count = 0;
+    bool m_restart_needed = false;
 };
 
 } // namespace car

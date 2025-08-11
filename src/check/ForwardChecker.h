@@ -137,6 +137,8 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<Branching> m_branching;
     shared_ptr<State> m_lastState;
+    int m_refinement_count = 0;
+    bool m_restart_needed = false;
 };
 
 

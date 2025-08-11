@@ -71,7 +71,14 @@ class OverSequenceSet {
 
     bool Insert(shared_ptr<cube> uc, int index, bool need_imply = true);
 
-    shared_ptr<frame> GetFrame(int lvl) { return m_sequence[lvl]; };
+    shared_ptr<frame> GetFrame(int lvl) {
+        while (lvl >= m_sequence.size()) {
+            shared_ptr<frame> new_frame(new frame);
+            m_sequence.emplace_back(new_frame);
+            m_blockCounter.emplace_back(0);
+        }
+        return m_sequence[lvl];
+    }
 
     bool IsBlockedByFrame_lazy(shared_ptr<cube> latches, int frameLevel);
 
@@ -80,6 +87,11 @@ class OverSequenceSet {
     bool IsBlockedByFrame(shared_ptr<cube> latches, int frameLevel);
 
     void GetBlockers(shared_ptr<cube> latches, int framelevel, vector<shared_ptr<cube>> &b);
+
+    bool IsEmpty(int frameLevel) {
+        if (frameLevel < 0 || frameLevel >= m_sequence.size()) return true;
+        return m_sequence[frameLevel]->empty();
+    }
 
     string FramesInfo();
 

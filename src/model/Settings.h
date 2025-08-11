@@ -30,6 +30,8 @@ struct Settings {
     bool referSkipping = false;
     bool internalSignals = false;
     bool multipleSolvers = true;
+    bool restart = false;
+    int restart_threshold = 100;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

@@ -69,6 +69,8 @@ bool ForwardChecker::Check(int badId) {
     m_k = 0;
     stack<Task> workingStack;
     while (true) {
+        m_refinement_count = 0;
+        m_restart_needed = false;
         m_minUpdateLevel = m_k + 1;
         if (m_settings.end) { // from the deep and the end
             for (int i = m_underSequence.size() - 1; i >= 0; i--) {
@@ -87,7 +89,7 @@ bool ForwardChecker::Check(int badId) {
         shared_ptr<State> startState = EnumerateStartState();
         m_log->StatStartSolver();
         // T & c & P & T' & c' & bad' is unsat
-        if (m_k > 0 && startState == nullptr) {
+        if (m_k > 0 && startState == nullptr && m_overSequence->IsEmpty(m_k)) {
             m_overSequence->SetInvariantLevel(-1);
             return true;
         }
@@ -152,15 +154,26 @@ bool ForwardChecker::Check(int badId) {
                         m_branching->Update(uc);
                     m_log->L(2, "Get Generalized UC: ", CubeToStr(uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
+                    if (m_restart_needed) break;
                     PropagateUp(uc, task.frameLevel + 1);
                     m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
                     task.frameLevel++;
                     continue;
                 }
             } // end while (!workingStack.empty())
+            if (m_restart_needed) break;
             m_log->Tick();
             startState = EnumerateStartState();
             m_log->StatStartSolver();
+        }
+
+        if (m_restart_needed) {
+            m_log->L(3, "Restart triggered at frame ", m_k, " after ", m_refinement_count, " refinements.");
+            m_restart_needed = false;
+            m_refinement_count = 0;
+            m_underSequence = UnderSequence();
+            while(!workingStack.empty()) workingStack.pop();
+            continue;
         }
 
         if (m_invSolver == nullptr) {
@@ -239,6 +252,14 @@ void ForwardChecker::Init(int badId) {
 }
 
 bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
+    if (m_settings.restart) {
+        m_refinement_count++;
+        if (m_refinement_count >= m_settings.restart_threshold) {
+            m_log->L(3, "Setting restart flag at frame ", m_k, " after ", m_refinement_count, " refinements.");
+            m_restart_needed = true;
+        }
+    }
+
     m_log->Tick();
 
     if (m_settings.multipleSolvers) {
@@ -477,6 +498,7 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
         for (auto b : *uc_blocker) required_lits.emplace(b);
     OrderAssumption(uc);
     for (int i = uc->size() - 1; i >= 0; i--) {
+        if (m_restart_needed) break;
         if (uc->size() < 2) break;
         if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
         shared_ptr<cube> temp_uc(new cube());

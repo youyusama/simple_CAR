@@ -7,6 +7,7 @@
 #include <iostream>
 #include <list>
 #include <memory_resource>
+#include <memory>
 #include <stdint.h>
 #include <vector>
 
