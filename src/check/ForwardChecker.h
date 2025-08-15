@@ -5,6 +5,7 @@
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
+#include "Restart.h"
 #include "random"
 #include <memory>
 #include <unordered_set>
@@ -137,8 +138,7 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<Branching> m_branching;
     shared_ptr<State> m_lastState;
-    int m_refinement_count = 0;
-    bool m_restart_needed = false;
+    std::shared_ptr<Restart> m_restart;
 };
 
 

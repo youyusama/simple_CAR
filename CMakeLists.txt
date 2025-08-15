@@ -31,6 +31,8 @@ set(SRCS
     src/model/SATSolver.cpp
     src/model/IncrCheckerHelpers.cpp
     src/main.cpp
+    # restart
+    src/model/Restart.h
     # minisat
     src/model/MinisatSolver.cpp
     src/sat/minisat/core/Solver.cc

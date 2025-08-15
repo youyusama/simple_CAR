@@ -51,7 +51,12 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_flag("--restart", settings.restart, "enable restart mechanism");
 
     app.add_option("--restart_threshold", settings.restart_threshold, "restart threshold")
-        ->default_val(100);
+        ->default_val(128);
+
+    app.add_option("--restart_growth_rate", settings.restart_growth_rate, "restart growth rate")
+        ->default_val(1.5);
+
+    app.add_flag("--luby", settings.luby, "enable Luby's restart strategy");
 
     try {
         app.parse(argc, argv);
