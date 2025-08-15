@@ -69,8 +69,6 @@ bool ForwardChecker::Check(int badId) {
     m_k = 0;
     stack<Task> workingStack;
     while (true) {
-        m_refinement_count = 0;
-        m_restart_needed = false;
         m_minUpdateLevel = m_k + 1;
         if (m_settings.end) { // from the deep and the end
             for (int i = m_underSequence.size() - 1; i >= 0; i--) {
@@ -101,6 +99,15 @@ bool ForwardChecker::Check(int badId) {
 
             while (!workingStack.empty()) {
                 Task &task = workingStack.top();
+
+                if (m_settings.restart && m_restart->RestartCheck()) {
+                    m_log->L(1, "Restarting...");
+                    m_underSequence = UnderSequence();
+                    while (workingStack.size() > 1) workingStack.pop();
+                    m_restart->UpdateThreshold();
+                    m_restart->ResetUcCounts();
+                    continue;
+                }
 
                 if (!task.isLocated) {
                     task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
@@ -154,26 +161,15 @@ bool ForwardChecker::Check(int badId) {
                         m_branching->Update(uc);
                     m_log->L(2, "Get Generalized UC: ", CubeToStr(uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
-                    if (m_restart_needed) break;
                     PropagateUp(uc, task.frameLevel + 1);
                     m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
                     task.frameLevel++;
                     continue;
                 }
             } // end while (!workingStack.empty())
-            if (m_restart_needed) break;
             m_log->Tick();
             startState = EnumerateStartState();
             m_log->StatStartSolver();
-        }
-
-        if (m_restart_needed) {
-            m_log->L(3, "Restart triggered at frame ", m_k, " after ", m_refinement_count, " refinements.");
-            m_restart_needed = false;
-            m_refinement_count = 0;
-            m_underSequence = UnderSequence();
-            while(!workingStack.empty()) workingStack.pop();
-            continue;
         }
 
         if (m_invSolver == nullptr) {
@@ -208,6 +204,7 @@ bool ForwardChecker::Check(int badId) {
         m_startSolver->UpdateStartSolverFlag();
 
         m_k++;
+        m_restart->ResetUcCounts();
         m_log->L(2, "\nNew Frame Added");
     }
 }
@@ -249,17 +246,12 @@ void ForwardChecker::Init(int badId) {
     m_badPredLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
     m_badPredLiftSolver->AddTrans();
     m_badPredLiftSolver->AddTransK(1);
+
+    m_restart.reset(new Restart(m_settings));
 }
 
 bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
-    if (m_settings.restart) {
-        m_refinement_count++;
-        if (m_refinement_count >= m_settings.restart_threshold) {
-            m_log->L(3, "Setting restart flag at frame ", m_k, " after ", m_refinement_count, " refinements.");
-            m_restart_needed = true;
-        }
-    }
-
+    m_restart->UcCountsPlus1();
     m_log->Tick();
 
     if (m_settings.multipleSolvers) {
@@ -498,7 +490,6 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
         for (auto b : *uc_blocker) required_lits.emplace(b);
     OrderAssumption(uc);
     for (int i = uc->size() - 1; i >= 0; i--) {
-        if (m_restart_needed) break;
         if (uc->size() < 2) break;
         if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
         shared_ptr<cube> temp_uc(new cube());
