@@ -87,7 +87,7 @@ bool ForwardChecker::Check(int badId) {
         shared_ptr<State> startState = EnumerateStartState();
         m_log->StatStartSolver();
         // T & c & P & T' & c' & bad' is unsat
-        if (m_k > 0 && startState == nullptr) {
+        if (m_k > 0 && startState == nullptr && m_overSequence->IsEmpty(m_k)) {
             m_overSequence->SetInvariantLevel(-1);
             return true;
         }
@@ -99,6 +99,15 @@ bool ForwardChecker::Check(int badId) {
 
             while (!workingStack.empty()) {
                 Task &task = workingStack.top();
+
+                if (m_settings.restart && m_restart->RestartCheck()) {
+                    m_log->L(1, "Restarting...");
+                    m_underSequence = UnderSequence();
+                    while (workingStack.size() > 1) workingStack.pop();
+                    m_restart->UpdateThreshold();
+                    m_restart->ResetUcCounts();
+                    continue;
+                }
 
                 if (!task.isLocated) {
                     task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
@@ -195,6 +204,7 @@ bool ForwardChecker::Check(int badId) {
         m_startSolver->UpdateStartSolverFlag();
 
         m_k++;
+        m_restart->ResetUcCounts();
         m_log->L(2, "\nNew Frame Added");
     }
 }
@@ -236,9 +246,12 @@ void ForwardChecker::Init(int badId) {
     m_badPredLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
     m_badPredLiftSolver->AddTrans();
     m_badPredLiftSolver->AddTransK(1);
+
+    m_restart.reset(new Restart(m_settings));
 }
 
 bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
+    m_restart->UcCountsPlus1();
     m_log->Tick();
 
     if (m_settings.multipleSolvers) {

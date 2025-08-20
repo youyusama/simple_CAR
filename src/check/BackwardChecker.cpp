@@ -87,6 +87,17 @@ bool BackwardChecker::Check(int badId) {
         while (!workingStack.empty()) {
             Task &task = workingStack.top();
 
+            if (m_settings.restart && m_restart->RestartCheck()) {
+                m_log->L(1, "Restarting...");
+                m_underSequence = UnderSequence();
+                while (!workingStack.empty()) workingStack.pop();
+                m_underSequence.push(m_initialState);
+                workingStack.emplace(m_initialState, m_k - 1, false);
+                m_restart->UpdateThreshold();
+                m_restart->ResetUcCounts();
+                continue;
+            }
+
             if (!task.isLocated) {
                 task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
                 m_log->L(3, "State get new level ", task.frameLevel);
@@ -169,6 +180,7 @@ bool BackwardChecker::Check(int badId) {
         m_log->L(3, m_overSequence->FramesDetail());
 
         m_k++;
+        m_restart->ResetUcCounts();
         m_log->L(2, "\nNew Frame Added");
     }
 }
@@ -191,9 +203,11 @@ void BackwardChecker::Init() {
     m_transSolvers[0]->AddTrans();
     m_transSolvers[0]->AddConstraints();
     m_invSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_restart.reset(new Restart(m_settings));
 }
 
 bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
+    m_restart->UcCountsPlus1();
     m_log->Tick();
 
     shared_ptr<cube> puc(new cube(*uc));

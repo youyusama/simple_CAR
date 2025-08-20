@@ -5,6 +5,7 @@
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
+#include "Restart.h"
 #include "random"
 #include <algorithm>
 #include <assert.h>
@@ -128,6 +129,7 @@ class BackwardChecker : public BaseChecker {
     shared_ptr<SATSolver> m_invSolver;
     vector<shared_ptr<vector<int>>> m_rotation;
     shared_ptr<State> m_lastState;
+    std::shared_ptr<Restart> m_restart;
 };
 
 } // namespace car
