@@ -34,6 +34,7 @@ struct Settings {
     int restart_threshold = 64;
     float restart_growth_rate = 1.5;
     bool luby = false;
+    bool solveInProperty = false;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

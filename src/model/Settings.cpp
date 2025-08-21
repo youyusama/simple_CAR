@@ -58,6 +58,9 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
 
     app.add_flag("--luby", settings.luby, "enable Luby's restart strategy");
 
+    app.add_flag("--solve_in_property", settings.solveInProperty, "solve in property")
+        ->default_val(false);
+
     try {
         app.parse(argc, argv);
         return true;
