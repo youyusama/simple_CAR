@@ -4,8 +4,8 @@
 #include "BaseChecker.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
-#include "SATSolver.h"
 #include "Restart.h"
+#include "SATSolver.h"
 #include "random"
 #include <memory>
 #include <unordered_set>
@@ -91,7 +91,9 @@ class ForwardChecker : public BaseChecker {
 
     bool Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1);
 
-    bool Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unordered_set<int> required_lits);
+    bool Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses);
+
+    bool DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses);
 
     bool Propagate(shared_ptr<cube> c, int lvl);
 

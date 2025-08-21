@@ -488,6 +488,7 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
 
     if (m_settings.referSkipping)
         for (auto b : *uc_blocker) required_lits.emplace(b);
+    shared_ptr<vector<cube>> failed_ctses = make_shared<vector<cube>>();
     OrderAssumption(uc);
     for (int i = uc->size() - 1; i >= 0; i--) {
         if (uc->size() < 2) break;
@@ -496,7 +497,7 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
         temp_uc->reserve(uc->size());
         for (auto ll : *uc)
             if (ll != uc->at(i)) temp_uc->emplace_back(ll);
-        if (Down(temp_uc, frame_lvl, rec_lvl, required_lits)) {
+        if (Down(temp_uc, frame_lvl, rec_lvl, failed_ctses)) {
             uc->swap(*temp_uc);
             OrderAssumption(uc);
             i = uc->size();
@@ -513,7 +514,7 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
 }
 
 
-bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unordered_set<int> required_lits) {
+bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses) {
     int ctgs = 0;
     m_log->L(3, "Down:", CubeToStr(uc));
     shared_ptr<cube> assumption(new cube(*uc));
@@ -529,7 +530,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
             uc->swap(*uc_ctg);
             return true;
-        } else if (rec_lvl > 2) {
+        } else if (rec_lvl > m_settings.ctgMaxRecursionDepth) {
             m_log->StatMainSolver();
             return false;
         } else {
@@ -537,6 +538,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
             auto p = GetInputAndState(frame_lvl);
             GeneralizePredecessor(p, p_ucs);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
+            if (DownHasFailed(cts->latches, failed_ctses)) return false;
             int cts_lvl = GetNewLevel(cts);
             shared_ptr<cube> cts_ass(new cube(*cts->latches));
             OrderAssumption(cts_ass);
@@ -544,7 +546,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
             // F_i-1 & T & cts'
             m_log->L(3, "Try ctg:", CubeToStr(cts->latches));
             m_log->Tick();
-            if (ctgs < 3 && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass)) {
+            if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass)) {
                 m_log->StatMainSolver();
                 ctgs++;
                 auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
@@ -555,11 +557,22 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unor
                 AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
                 PropagateUp(uc_cts, cts_lvl + 1);
             } else {
+                failed_ctses->emplace_back(*cts->latches);
                 m_log->StatMainSolver();
                 return false;
             }
         }
     }
+}
+
+
+bool ForwardChecker::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses) {
+    for (auto f : *failed_ctses) {
+        // if f->s , return true
+        if (f.size() > s->size()) continue;
+        if (includes(s->begin(), s->end(), f.begin(), f.end(), cmp)) return true;
+    }
+    return false;
 }
 
 

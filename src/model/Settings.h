@@ -31,10 +31,12 @@ struct Settings {
     bool internalSignals = false;
     bool multipleSolvers = true;
     bool restart = false;
-    int restart_threshold = 64;
-    float restart_growth_rate = 1.5;
-    bool luby = false;
+    int restartThreshold = 64;
+    float restartGrowthRate = 1.5;
+    bool restartLuby = false;
     bool solveInProperty = false;
+    int ctgMaxRecursionDepth = 0;
+    int ctgMaxStates = 0;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

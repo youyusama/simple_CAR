@@ -50,16 +50,22 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
 
     app.add_flag("--restart", settings.restart, "enable restart mechanism");
 
-    app.add_option("--restart_threshold", settings.restart_threshold, "restart threshold")
+    app.add_option("--restart_threshold", settings.restartThreshold, "restart threshold")
         ->default_val(128);
 
-    app.add_option("--restart_growth_rate", settings.restart_growth_rate, "restart growth rate")
+    app.add_option("--restart_growth_rate", settings.restartGrowthRate, "restart growth rate")
         ->default_val(1.5);
 
-    app.add_flag("--luby", settings.luby, "enable Luby's restart strategy");
+    app.add_flag("--luby", settings.restartLuby, "enable Luby's restart strategy");
 
     app.add_flag("--solve_in_property", settings.solveInProperty, "solve in property")
         ->default_val(false);
+
+    app.add_option("--ctg_max_rec_lvl", settings.ctgMaxRecursionDepth, "CTG max recursion depth")
+        ->default_val(2);
+
+    app.add_option("--ctg_max_states", settings.ctgMaxStates, "CTG max states")
+        ->default_val(3);
 
     try {
         app.parse(argc, argv);

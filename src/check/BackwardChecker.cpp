@@ -329,6 +329,7 @@ bool BackwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lv
 
     if (m_settings.referSkipping)
         for (auto b : *uc_blocker) required_lits.emplace(b);
+    shared_ptr<vector<cube>> failed_ctses = make_shared<vector<cube>>();
     OrderAssumption(uc);
     for (int i = uc->size() - 1; i > 0; i--) {
         if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
@@ -336,7 +337,7 @@ bool BackwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lv
         temp_uc->reserve(uc->size());
         for (auto ll : *uc)
             if (ll != uc->at(i)) temp_uc->emplace_back(ll);
-        if (Down(temp_uc, frame_lvl, rec_lvl, required_lits)) {
+        if (Down(temp_uc, frame_lvl, rec_lvl, failed_ctses)) {
             uc->swap(*temp_uc);
             OrderAssumption(uc);
             i = uc->size();
@@ -352,7 +353,7 @@ bool BackwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lv
 }
 
 
-bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, unordered_set<int> required_lits) {
+bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses) {
     int ctgs = 0;
     shared_ptr<cube> assumption(new cube(*uc));
     shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
@@ -363,16 +364,17 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, uno
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
             uc->swap(*uc_ctg);
             return true;
-        } else if (rec_lvl > 2)
+        } else if (rec_lvl > m_settings.ctgMaxRecursionDepth)
             return false;
         else {
             auto p = GetInputAndState(frame_lvl);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
+            if (DownHasFailed(cts->latches, failed_ctses)) return false;
             int cts_lvl = GetNewLevel(cts);
             shared_ptr<cube> cts_ass(new cube(*cts->latches));
             OrderAssumption(cts_ass);
             // F_i-1 & T & cts'
-            if (ctgs < 3 && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass)) {
+            if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass)) {
                 ctgs++;
                 auto uc_cts = GetUnsatCore(cts_lvl);
                 m_log->L(3, "CTG Get UC:", CubeToStr(uc_cts));
@@ -381,10 +383,21 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, uno
                 AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
                 PropagateUp(uc_cts, cts_lvl + 1);
             } else {
+                failed_ctses->emplace_back(*cts->latches);
                 return false;
             }
         }
     }
+}
+
+
+bool BackwardChecker::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses) {
+    for (auto f : *failed_ctses) {
+        // if f->s , return true
+        if (f.size() > s->size()) continue;
+        if (includes(s->begin(), s->end(), f.begin(), f.end(), cmp)) return true;
+    }
+    return false;
 }
 
 
