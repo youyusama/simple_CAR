@@ -71,6 +71,12 @@ class SATSolver : public ISolver {
     }
 
     // special interface in minicore
+    void SetSolveInDomain() {
+        if (m_slvKind != MCSATSolver::minicore) return;
+        m_slv->SetSolveInDomain();
+    }
+
+
     void SetDomain(const shared_ptr<cube> domain) {
         if (m_slvKind != MCSATSolver::minicore) return;
         shared_ptr<cube> d = make_shared<cube>();

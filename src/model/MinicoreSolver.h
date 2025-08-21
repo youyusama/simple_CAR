@@ -35,6 +35,7 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     void PushAssumption(int a);
     int PopAssumption();
 
+    inline void SetSolveInDomain() override;
     inline void SetDomain(const shared_ptr<cube> domain) override;
     inline void SetTempDomain(const shared_ptr<cube> domain) override;
     inline void ResetTempDomain() override;

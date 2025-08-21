@@ -39,6 +39,7 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     int PopAssumption();
 
     // not available
+    inline void SetSolveInDomain() {}
     inline void SetDomain(const shared_ptr<cube> domain) {}
     inline void SetTempDomain(const shared_ptr<cube> domain) {}
     inline void ResetTempDomain() {}

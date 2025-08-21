@@ -24,6 +24,7 @@ class ISolver {
     virtual void PushAssumption(int a) = 0;
     virtual int PopAssumption() = 0;
     // special interface in minicore
+    virtual void SetSolveInDomain() = 0;
     virtual void SetDomain(const shared_ptr<cube> domain) = 0;
     virtual void SetTempDomain(const shared_ptr<cube> domain) = 0;
     virtual void ResetTempDomain() = 0;

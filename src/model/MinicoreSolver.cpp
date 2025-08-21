@@ -5,9 +5,8 @@ namespace car {
 MinicoreSolver::MinicoreSolver(shared_ptr<Model> m) {
     m_model = m;
     // m_maxId = m_model->GetMaxId();
-    m_maxId = m_model->GetFalseId() + 1;
+    m_maxId = m_model->GetFalseId() + 1; // only handle one step reachability check
     // verbosity = 1;
-    solveInDomain = true;
 }
 
 MinicoreSolver::~MinicoreSolver() {}
@@ -161,6 +160,11 @@ int MinicoreSolver::PopAssumption() {
     minicore::Lit p = m_assumptions.back();
     m_assumptions.pop_back();
     return GetLiteralId(p);
+}
+
+
+inline void MinicoreSolver::SetSolveInDomain() {
+    solveInDomain = true;
 }
 
 

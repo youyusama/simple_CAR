@@ -54,13 +54,11 @@ bool BackwardChecker::Check(int badId) {
         return false;
     }
     m_log->L(2, "Result >>> UNSAT <<<");
-    m_log->Tick();
     auto uc = m_transSolvers[0]->GetUC(false);
     if (uc->size() == 0) {
         m_overSequence->SetInvariantLevel(-1);
         return true;
     }
-    m_log->StatMainSolver();
     m_log->L(2, "Get UC:", CubeToStr(uc));
     AddUnsatisfiableCore(uc, 0);
 
@@ -202,7 +200,7 @@ void BackwardChecker::Init() {
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
     m_transSolvers[0]->AddTrans();
     m_transSolvers[0]->AddConstraints();
-    m_invSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
     m_restart.reset(new Restart(m_settings));
 }
 
@@ -217,7 +215,7 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frame
             m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
             m_transSolvers.back()->AddTrans();
             m_transSolvers.back()->AddConstraints();
-            m_transSolvers.back()->AddProperty();
+            if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
         }
         m_transSolvers[frameLevel]->AddUC(puc);
     } else
@@ -235,7 +233,9 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frame
 bool BackwardChecker::ImmediateSatisfiable(int badId) {
     shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
     assumptions->push_back(badId);
+    m_log->Tick();
     bool result = m_transSolvers[0]->Solve(assumptions);
+    m_log->StatMainSolver();
     return result;
 }
 
@@ -256,6 +256,8 @@ int BackwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
 
 
 bool BackwardChecker::IsInvariant(int frameLevel) {
+    m_log->Tick();
+
     shared_ptr<frame> frame_i = m_overSequence->GetFrame(frameLevel);
 
     if (frameLevel < m_minUpdateLevel) {
@@ -267,6 +269,8 @@ bool BackwardChecker::IsInvariant(int frameLevel) {
     bool result = !m_invSolver->Solve();
     m_invSolver->FlipLastConstrain();
     AddConstraintOr(frame_i);
+
+    m_log->StatInvSolver();
     return result;
 }
 
@@ -358,23 +362,29 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, sha
     shared_ptr<cube> assumption(new cube(*uc));
     shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
     while (true) {
+        m_log->Tick();
         // F_i & T & temp_uc'
         if (!IsReachable(frame_lvl, assumption)) {
+            m_log->StatMainSolver();
             auto uc_ctg = GetUnsatCore(frame_lvl);
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
             uc->swap(*uc_ctg);
             return true;
-        } else if (rec_lvl > m_settings.ctgMaxRecursionDepth)
+        } else if (rec_lvl > m_settings.ctgMaxRecursionDepth) {
+            m_log->StatMainSolver();
             return false;
-        else {
+        } else {
+            m_log->StatMainSolver();
             auto p = GetInputAndState(frame_lvl);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
             if (DownHasFailed(cts->latches, failed_ctses)) return false;
             int cts_lvl = GetNewLevel(cts);
             shared_ptr<cube> cts_ass(new cube(*cts->latches));
             OrderAssumption(cts_ass);
+            m_log->Tick();
             // F_i-1 & T & cts'
             if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass)) {
+                m_log->StatMainSolver();
                 ctgs++;
                 auto uc_cts = GetUnsatCore(cts_lvl);
                 m_log->L(3, "CTG Get UC:", CubeToStr(uc_cts));
@@ -383,6 +393,7 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, sha
                 AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
                 PropagateUp(uc_cts, cts_lvl + 1);
             } else {
+                m_log->StatMainSolver();
                 failed_ctses->emplace_back(*cts->latches);
                 return false;
             }
@@ -424,7 +435,7 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
         // Generalization
         unordered_set<int> required_lits;
         for (int i = uc->size() - 1; i >= 0; i--) {
-            if (uc->size() < 2) break;
+            if (uc->size() < 3) break;
             if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
             shared_ptr<cube> temp_uc(new cube());
             temp_uc->reserve(uc->size());

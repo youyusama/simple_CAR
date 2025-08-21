@@ -67,6 +67,9 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("--ctg_max_states", settings.ctgMaxStates, "CTG max states")
         ->default_val(3);
 
+    app.add_flag("--sd", settings.satSolveInDomain, "solve SAT in domain")
+        ->default_val(false);
+
     try {
         app.parse(argc, argv);
         return true;

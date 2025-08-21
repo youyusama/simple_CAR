@@ -225,12 +225,14 @@ void ForwardChecker::Init(int badId) {
 
     // O_i & T & c & s'
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
+    if (m_settings.satSolveInDomain) m_transSolvers[0]->SetSolveInDomain();
     m_transSolvers[0]->AddTrans();
     m_transSolvers[0]->AddConstraints();
     AddSamePrimeConstraints(m_transSolvers[0]);
     // lift
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_liftSolver->AddTrans();
+    if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
     // inv
     m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
     // s & T & c & P & T' & c' & bad'
@@ -257,6 +259,7 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
     if (m_settings.multipleSolvers) {
         if (frameLevel >= m_transSolvers.size()) {
             m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
+            if (m_settings.satSolveInDomain) m_transSolvers.back()->SetSolveInDomain();
             m_transSolvers.back()->AddTrans();
             m_transSolvers.back()->AddConstraints();
             AddSamePrimeConstraints(m_transSolvers.back());
@@ -281,8 +284,10 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
 bool ForwardChecker::ImmediateSatisfiable(int badId) {
     shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
     assumptions->push_back(badId);
+    m_log->Tick();
     m_transSolvers[0]->SetTempDomainCOI(assumptions);
     bool result = m_transSolvers[0]->Solve(assumptions);
+    m_log->StatMainSolver();
     return result;
 }
 
@@ -557,8 +562,8 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shar
                 AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
                 PropagateUp(uc_cts, cts_lvl + 1);
             } else {
-                failed_ctses->emplace_back(*cts->latches);
                 m_log->StatMainSolver();
+                failed_ctses->emplace_back(*cts->latches);
                 return false;
             }
         }
@@ -597,7 +602,7 @@ bool ForwardChecker::CheckInit(shared_ptr<State> s) {
         // Generalization
         unordered_set<int> required_lits;
         for (int i = uc->size() - 1; i >= 0; i--) {
-            if (uc->size() < 2) break;
+            if (uc->size() < 3) break;
             if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
             shared_ptr<cube> temp_uc(new cube());
             temp_uc->reserve(uc->size());
