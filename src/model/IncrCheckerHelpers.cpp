@@ -82,7 +82,7 @@ static bool _cmp(int a, int b) {
 // @output:
 // ================================================================================
 bool OverSequenceSet::is_imply(shared_ptr<cube> a, shared_ptr<cube> b) {
-    if (a->size() >= b->size())
+    if (a->size() > b->size())
         return false;
     if (includes(b->begin(), b->end(), a->begin(), a->end(), _cmp))
         return true;
