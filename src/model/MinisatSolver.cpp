@@ -4,7 +4,7 @@
 namespace car {
 MinisatSolver::MinisatSolver(shared_ptr<Model> m) {
     m_model = m;
-    m_maxId = m_model->GetMaxId();
+    m_maxId = m_model->GetFalseId() + 1; // reserve variable numbers for one step reachability check
     m_tempVar = 0;
 }
 

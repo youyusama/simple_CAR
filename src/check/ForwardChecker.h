@@ -75,7 +75,6 @@ class ForwardChecker : public BaseChecker {
         }
         if (m_settings.internalSignals) {
             stable_sort(c->begin(), c->end(), innOrder);
-            return;
         }
         if (m_settings.branching == 0) return;
         stable_sort(c->begin(), c->end(), litOrder);

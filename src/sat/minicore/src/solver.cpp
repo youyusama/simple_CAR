@@ -94,6 +94,7 @@ bool Solver::addTempClause(const std::vector<Lit> &cls) {
     if (!ok) return false;
     assert(!temp_cls_activated);
     temp_cls_activated = true;
+    temporary_domain[temp_cls_act_var] = true;
 
     std::vector<Lit> temp_cls;
     temp_cls.emplace_back(mkLit(temp_cls_act_var, true));
@@ -585,7 +586,7 @@ lbool Solver::search(int nof_conflicts) {
             while (decisionLevel() < assumptions.size()) {
                 // Perform user provided assumption:
                 Lit p = assumptions[decisionLevel()];
-                if (value(p) == l_True) {
+                if (value(p) == l_True || !inDomain(var(p))) {
                     // Dummy decision level:
                     newDecisionLevel();
                 } else if (value(p) == l_False) {
@@ -688,11 +689,13 @@ lbool Solver::solve_() {
             std::cout << "unknow";
         std::cout << std::endl;
 
-        std::cout << "unsat core: ";
-        for (auto i : conflict) {
-            std::cout << i.x << " ";
+        if (status == l_False) {
+            std::cout << "unsat core: ";
+            for (auto i : conflict) {
+                std::cout << (i.x % 2 == 0 ? i.x >> 1 : -(i.x >> 1)) << " ";
+            }
+            std::cout << std::endl;
         }
-        std::cout << std::endl;
 
         for (int i = 0; i < nVars(); i++) {
             if (inDomain(i)) {
@@ -725,6 +728,7 @@ lbool Solver::solve_() {
     if (temp_cls_activated) {
         removeTempLearnt();
         temp_cls_activated = false;
+        temporary_domain[temp_cls_act_var] = false;
     }
     // order_list.print();
     return status;

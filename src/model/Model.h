@@ -49,8 +49,7 @@ class Model {
     }
 
     inline bool IsConstant(const int id) {
-        unsigned lit = id > 0 ? id * 2 : -id * 2 + 1;
-        if (IsTrue(lit) || IsFalse(lit))
+        if (IsTrue(GetAigerLit(id)) || IsFalse(GetAigerLit(id)))
             return true;
         else
             return false;
@@ -77,8 +76,16 @@ class Model {
             return false;
     }
 
+    inline bool IsInnardAnd(int id) {
+        if (m_innardsAndGates->find(abs(id)) != m_innardsAndGates->end())
+            return true;
+        else
+            return false;
+    }
+
     inline bool IsInnard(int id) {
-        if (m_innards->find(abs(id)) != m_innards->end()) {
+        if (m_settings.internalSignals &&
+            m_innards->find(abs(id)) != m_innards->end()) {
             return true;
         } else {
             return false;
@@ -91,6 +98,13 @@ class Model {
         else if (lit == 1)
             return m_trueId;
         return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
+    }
+
+    inline unsigned GetAigerLit(const int car_id) {
+        if (car_id > 0)
+            return car_id << 1;
+        else
+            return (-car_id << 1) + 1;
     }
 
     inline aiger *GetAig() { return m_aig; }
@@ -115,7 +129,7 @@ class Model {
 
     inline int GetPrime(const int id) {
         unordered_map<int, int>::iterator it = m_primeMaps[0].find(abs(id));
-        assert(it != m_primeMaps[0].end());
+        if (it == m_primeMaps[0].end()) return 0;
         return id > 0 ? it->second : -(it->second);
     }
 
@@ -123,13 +137,11 @@ class Model {
 
     vector<clause> &GetClauses() { return m_clauses; }
 
-    // shared_ptr<Minisat::SimpSolver> GetSimpSolver();
-
     void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
 
     vector<int> GetConstraints() { return m_constraints; };
 
-    shared_ptr<set<int>> GetInnards() { return m_innards; };
+    shared_ptr<vector<int>> GetInnards() { return m_innardsVec; };
 
     int GetInnardslvl(int id) {
         unordered_map<int, int>::iterator it = m_innards_lvl.find(abs(id));
@@ -184,11 +196,10 @@ class Model {
     vector<unordered_map<int, int>> m_primeMaps;
     unordered_map<int, vector<int>> m_preValueOfLatchMap;
 
-    shared_ptr<set<int>> m_innards;
+    shared_ptr<unordered_set<int>> m_innards;
+    shared_ptr<vector<int>> m_innardsVec;
+    shared_ptr<unordered_map<int, vector<int>>> m_innardsAndGates;
     unordered_map<int, int> m_innards_lvl;
-
-    // void CreateSimpSolver();
-    // shared_ptr<Minisat::SimpSolver> m_simpSolver;
 
     shared_ptr<vector<int>> m_COIInputs;
 };

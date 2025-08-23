@@ -458,8 +458,7 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         bool res = m_liftSolver->Solve(assumption);
         assert(!res);
         shared_ptr<cube> temp_p = m_liftSolver->GetUC(false);
-        if (temp_p->size() == partial_latch->size() &&
-            equal(temp_p->begin(), temp_p->end(), partial_latch->begin()))
+        if (*temp_p == *partial_latch)
             break;
         else {
             partial_latch = temp_p;

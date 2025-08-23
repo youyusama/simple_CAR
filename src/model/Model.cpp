@@ -38,13 +38,15 @@ void Model::Init() {
     CollectBad();
     CollectInitialState();
     CollectNextValueMapping();
-    m_innards = make_shared<set<int>>();
-    if (m_settings.internalSignals) {
-        CollectInnards();
-    }
     CollectClauses();
     CollectCOIInputs();
-    // CreateSimpSolver();
+    m_innards = make_shared<unordered_set<int>>();
+    m_innardsVec = make_shared<vector<int>>();
+    m_innardsAndGates = make_shared<unordered_map<int, vector<int>>>();
+    if (m_settings.internalSignals) {
+        CollectInnards();
+        CollectInnardsClauses();
+    }
 }
 
 
@@ -57,6 +59,8 @@ void Model::CollectConstants() {
             m_trues.insert(aa.lhs + 1);
         }
     }
+    m_trues.insert(GetAigerLit(m_trueId));
+    m_trues.insert(GetAigerLit(m_falseId) + 1);
 }
 
 
@@ -179,6 +183,16 @@ shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
                 todo_vars.emplace(a.rhs1 >> 1);
                 coi_vars.emplace(a.rhs1 >> 1);
             }
+        } else if (m_settings.internalSignals && IsInnardAnd(v)) {
+            vector<int> &a = m_innardsAndGates->operator[](abs(v));
+            if (coi_vars.find(abs(a[0])) == coi_vars.end()) {
+                todo_vars.emplace(abs(a[0]));
+                coi_vars.emplace(abs(a[0]));
+            }
+            if (coi_vars.find(abs(a[1])) == coi_vars.end()) {
+                todo_vars.emplace(abs(a[1]));
+                coi_vars.emplace(abs(a[1]));
+            }
         }
         todo_vars.pop();
     }
@@ -186,6 +200,7 @@ shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
     shared_ptr<cube> domain = make_shared<cube>(coi_vars.begin(), coi_vars.end());
     domain->emplace_back(m_trueId);
     domain->emplace_back(m_falseId);
+    sort(domain->begin(), domain->end());
     return domain;
 }
 
@@ -213,65 +228,6 @@ inline void Model::InsertIntoPreValueMapping(const int key, const int value) {
         it->second.emplace_back(value);
     }
 }
-
-
-// Minisat::Lit getLit(shared_ptr<Minisat::SimpSolver> sslv, int id) {
-//     int var = abs(id) - 1;
-//     while (var >= sslv->nVars()) sslv->newVar();
-//     return ((id > 0) ? Minisat::mkLit(var) : ~Minisat::mkLit(var));
-// };
-
-
-// void addClause(shared_ptr<Minisat::SimpSolver> sslv, const clause &cls) {
-//     Minisat::vec<Minisat::Lit> literals;
-//     for (int i = 0; i < cls.size(); ++i) {
-//         literals.push(getLit(sslv, cls[i]));
-//     }
-//     bool result = sslv->addClause(literals);
-//     assert(result != false);
-// }
-
-
-// void Model::CreateSimpSolver() {
-//     m_simpSolver = make_shared<Minisat::SimpSolver>();
-//     for (int i = 0; i < m_aig->num_inputs + m_aig->num_latches; i++) {
-//         Minisat::Var nv = m_simpSolver->newVar();
-//         m_simpSolver->setFrozen(nv, true);
-//     }
-//     for (int i = m_aig->num_inputs + 1; i < m_aig->num_inputs + m_aig->num_latches + 1; i++) {
-//         Minisat::Var p = abs(GetPrime(i)) - 1;
-//         while (p >= m_simpSolver->nVars()) {
-//             m_simpSolver->newVar();
-//         }
-//         m_simpSolver->setFrozen(p, true);
-//     }
-//     for (int i = 0; i < m_constraints.size(); i++) {
-//         Minisat::Var cons_var = abs(m_constraints[i]) - 1;
-//         while (cons_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
-//         m_simpSolver->setFrozen(cons_var, true);
-//     }
-//     Minisat::Var bad_var = abs(m_bad) - 1;
-//     while (bad_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
-//     m_simpSolver->setFrozen(bad_var, true);
-
-//     if (m_settings.internalSignals) {
-//         for (int i : *m_innards) {
-//             Minisat::Var inn_var = abs(GetPrime(i)) - 1;
-//             while (inn_var >= m_simpSolver->nVars()) m_simpSolver->newVar();
-//             m_simpSolver->setFrozen(inn_var, true);
-//         }
-//     }
-
-//     for (int i = 0; i < m_clauses.size(); i++) {
-//         addClause(m_simpSolver, m_clauses[i]);
-//     }
-//     m_simpSolver->eliminate(true);
-// }
-
-
-// shared_ptr<Minisat::SimpSolver> Model::GetSimpSolver() {
-//     return m_simpSolver;
-// }
 
 
 void Model::GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map) {
@@ -331,6 +287,8 @@ void Model::CollectInnards() {
             InnardsLogiclvlDFS(aa.lhs);
         }
     }
+    m_innardsVec->assign(m_innards->begin(), m_innards->end());
+    sort(m_innardsVec->begin(), m_innardsVec->end());
 }
 
 
@@ -372,6 +330,9 @@ void Model::CollectInnardsClauses() {
         } else if (aiger_is_and(const_cast<aiger *>(m_aig), aiger_strip(aa.rhs1))) {
             assert(GetPrime(GetCarId(aa.rhs1)) != 0);
             pr1 = GetPrime(GetCarId(aa.rhs1));
+        }
+        if (m_settings.satSolveInDomain) {
+            m_innardsAndGates->operator[](pl) = {pr0, pr1};
         }
         m_clauses.emplace_back(vector<int>{pl, -pr0, -pr1});
         m_clauses.emplace_back(vector<int>{-pl, pr0});

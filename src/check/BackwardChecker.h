@@ -77,7 +77,6 @@ class BackwardChecker : public BaseChecker {
         }
         if (m_settings.internalSignals) {
             stable_sort(uc->begin(), uc->end(), innOrder);
-            return;
         }
         if (m_settings.branching == 0) return;
         stable_sort(uc->begin(), uc->end(), litOrder);

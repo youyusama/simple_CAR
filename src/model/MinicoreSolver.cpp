@@ -4,8 +4,7 @@
 namespace car {
 MinicoreSolver::MinicoreSolver(shared_ptr<Model> m) {
     m_model = m;
-    // m_maxId = m_model->GetMaxId();
-    m_maxId = m_model->GetFalseId() + 1; // only handle one step reachability check
+    m_maxId = m_model->GetFalseId() + 1; // reserve variable numbers for one step reachability check
     // verbosity = 1;
 }
 
@@ -71,7 +70,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinicoreSolver::GetAssignment(bool prim
             minicore::lbool val = model[abs(p)];
             if ((val == minicore::l_True && p > 0) || (val == minicore::l_False && p < 0)) {
                 latches->emplace_back(i);
-            } else {
+            } else if ((val == minicore::l_True && p < 0) || (val == minicore::l_False && p > 0)) {
                 latches->emplace_back(-i);
             }
         }
@@ -80,7 +79,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinicoreSolver::GetAssignment(bool prim
         if (!prime) {
             if (model[i] == minicore::l_True) {
                 latches->emplace_back(i);
-            } else {
+            } else if (model[i] == minicore::l_False) {
                 latches->emplace_back(-i);
             }
         } else {
@@ -88,7 +87,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinicoreSolver::GetAssignment(bool prim
             minicore::lbool val = model[abs(p)];
             if ((val == minicore::l_True && p > 0) || (val == minicore::l_False && p < 0)) {
                 latches->emplace_back(i);
-            } else {
+            } else if ((val == minicore::l_True && p < 0) || (val == minicore::l_False && p > 0)) {
                 latches->emplace_back(-i);
             }
         }
