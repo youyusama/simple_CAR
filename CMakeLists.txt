@@ -54,6 +54,16 @@ if(CADICAL)
     set(LIBS ${LIBS} ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/cadical/build/libcadical.a)
 endif()
 
+# kissat
+if(KISSAT)
+    add_definitions(-DKISSAT)
+    set(SRCS
+        ${SRCS}
+        src/model/KissatSolver.cpp
+    )
+    set(LIBS ${LIBS} ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/kissat/build/libkissat.a)
+endif()
+
 add_executable(simpleCAR ${SRCS})
 target_include_directories(simpleCAR PUBLIC ${DIRS})
 target_link_libraries(simpleCAR PUBLIC ${LIBS})

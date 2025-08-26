@@ -14,7 +14,8 @@ enum class MCAlgorithm { FCAR,
 
 enum class MCSATSolver { minisat,
                          cadical,
-                         minicore };
+                         minicore,
+                         kissat };
 
 struct Settings {
     int verbosity = 0;
@@ -38,6 +39,7 @@ struct Settings {
     int ctgMaxRecursionDepth = 0;
     int ctgMaxStates = 0;
     bool satSolveInDomain = false;
+    int bmc_step = 1;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

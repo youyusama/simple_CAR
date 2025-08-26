@@ -4,6 +4,9 @@
 #ifdef CADICAL
 #include "CadicalSolver.h"
 #endif
+#ifdef KISSAT
+#include "KissatSolver.h"
+#endif
 #include "ISolver.h"
 #include "MinicoreSolver.h"
 #include "MinisatSolver.h"

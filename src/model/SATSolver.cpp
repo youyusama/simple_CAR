@@ -14,6 +14,11 @@ SATSolver::SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind)
         m_slv = make_shared<CadicalSolver>(m_model);
         break;
 #endif
+#ifdef KISSAT
+    case MCSATSolver::kissat:
+        m_slv = make_shared<KissatSolver>(m_model);
+        break;
+#endif
     case MCSATSolver::minicore:
         m_slv = make_shared<MinicoreSolver>(m_model);
         break;
