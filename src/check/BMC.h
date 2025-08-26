@@ -18,14 +18,19 @@ class BMC : public BaseChecker {
 
   private:
     bool Check(int badId);
+    bool Check_nonincremental(int badId);
     Settings m_settings;
     shared_ptr<Log> m_log;
     shared_ptr<Model> m_model;
     int m_k;
     int m_maxK;
+    int m_step;
     shared_ptr<State> m_initialState;
     int m_badId;
     shared_ptr<SATSolver> m_Solver;
+
+    // for kissat to store clauses from previous unrolling
+    shared_ptr<vector<clause>> m_clauses;
 
     CheckResult m_checkResult;
     void Init(int badId);

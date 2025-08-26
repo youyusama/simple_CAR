@@ -10,13 +10,21 @@
 
 `cd ../../../..`
 
+### build kissat
+
+`cd simple_CAR/src/sat/kissat/`
+
+`./configure --competition && make`
+
+`cd ../../../..`
+
 ### build simple_CAR
 
 `mkdir build`
 
 `cd build`
 
-`cmake .. -DCMAKE_BUILD_TYPE=Release -DCADICAL=1`
+`cmake .. -DCMAKE_BUILD_TYPE=Release -DCADICAL=1 -DKISSAT=1`
 
 `make -j`
 

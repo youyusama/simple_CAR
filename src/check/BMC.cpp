@@ -13,14 +13,21 @@ BMC::BMC(Settings settings,
     m_k = 0;
     m_maxK = m_settings.bmcK;
     m_checkResult = CheckResult::Unknown;
+    m_step = m_settings.bmc_step;
+    m_clauses = make_shared<vector<clause>>();
 }
 
 
 CheckResult BMC::Run() {
     signal(SIGINT, signalHandler);
-
-    if (Check(m_model->GetBad()))
-        m_checkResult = CheckResult::Unsafe;
+    if (m_settings.solver == MCSATSolver::kissat) {
+        if (Check_nonincremental(m_model->GetBad())) {
+            m_checkResult = CheckResult::Unsafe;
+        }
+    } else {
+        if (Check(m_model->GetBad()))
+            m_checkResult = CheckResult::Unsafe;
+    }
 
     m_log->PrintStatistics();
 
@@ -72,6 +79,70 @@ bool BMC::Check(int badId) {
         m_log->L(3, "Add Clause: ", -k_bad);
         m_k++;
         if (m_maxK != -1 && m_k > m_maxK) return false;
+    }
+}
+
+bool BMC::Check_nonincremental(int badId) {
+    // before clause^k ConstraintsK(k) bad^k
+
+    // before clause^k clause^(k+1) clause^(k+2) ConstraintsK(k) ConstraintsK(k+1) ConstraintsK(k+2) (bad^(k)|bad^(k+1)|bad^(k+2))
+    clause badClause;
+    badClause.reserve(m_step);
+    // Pre-allocate m_step memory
+    while (true) {
+        Init(badId);
+        // add clauses before K unrollings to the Kissat solver
+        for (int i = 0; i < m_clauses->size(); ++i) {
+            m_Solver->AddClause(m_clauses->at(i));
+            m_log->L(
+                3, "Add Clause: ", CubeToStr(make_shared<cube>(m_clauses->at(i))));
+        }
+        badClause.clear();
+        for (int s = 0; s < m_step; s++) {
+            m_log->L(1, "BMC Bound: ", m_k);
+
+            shared_ptr<vector<clause>> clauses = make_shared<vector<clause>>();
+            GetClausesK(m_k, clauses);
+
+            // & T^k
+            for (int i = 0; i < clauses->size(); ++i) {
+                m_Solver->AddClause(clauses->at(i));
+                m_clauses->emplace_back(clauses->at(i)); // store for further use
+                m_log->L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
+            }
+
+            int k_bad = GetBadK(m_k);
+
+            badClause.push_back({k_bad});
+            // m_Solver->AddClause({k_bad});
+            m_log->L(3, "Add Clause: ", k_bad);
+            for (auto c : GetConstraintsK(m_k)) {
+                m_Solver->AddClause({c});
+                m_clauses->push_back({c}); // store for further use
+                m_log->L(3, "Add Clause: ", c);
+            }
+
+            clause cl({-k_bad}); // store bad^k for
+            m_clauses->emplace_back(cl);
+
+            m_k++;
+            if (m_maxK != -1 && m_k > m_maxK) {
+                m_Solver->AddClause(badClause);
+                m_log->Tick();
+                bool sat = m_Solver->Solve();
+                m_log->StatMainSolver();
+                if (sat)
+                    return true;
+                else
+                    return false;
+            }
+        }
+        m_Solver->AddClause(badClause);
+        m_log->Tick();
+        bool sat = m_Solver->Solve();
+        m_log->StatMainSolver();
+        if (sat)
+            return true;
     }
 }
 
