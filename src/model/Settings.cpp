@@ -21,6 +21,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"fcar", MCAlgorithm::FCAR},
                 {"bcar", MCAlgorithm::BCAR},
                 {"bmc", MCAlgorithm::BMC},
+                {"ic3", MCAlgorithm::IC3}
             }))
         ->default_val("fcar");
 

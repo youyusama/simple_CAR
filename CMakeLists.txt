@@ -28,6 +28,7 @@ set(SRCS
     src/check/BackwardChecker.cpp
     src/check/ForwardChecker.cpp
     src/check/BMC.cpp
+    src/check/BasicIC3.cpp
     src/model/SATSolver.cpp
     src/model/IncrCheckerHelpers.cpp
     src/main.cpp

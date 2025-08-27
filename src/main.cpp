@@ -1,6 +1,7 @@
 #include "BMC.h"
 #include "BackwardChecker.h"
 #include "ForwardChecker.h"
+#include "BasicIC3.h"
 #include "Log.h"
 #include "Model.h"
 #include "Settings.h"
@@ -27,6 +28,9 @@ int main(int argc, char **argv) {
         break;
     case MCAlgorithm::BMC:
         checker = make_shared<BMC>(settings, aigerModel, log);
+        break;
+    case MCAlgorithm::IC3:
+        checker = make_shared<BasicIC3>(settings, aigerModel, log);
         break;
     default:
         return EXIT_FAILURE;
