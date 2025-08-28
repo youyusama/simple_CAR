@@ -84,10 +84,17 @@ void Model::CollectBad() {
 
 void Model::CollectInitialState() {
     for (int i = 0; i < m_aig->num_latches; ++i) {
-        if (m_aig->latches[i].reset == 0)
-            m_initialState.push_back(-(m_aig->latches[i].lit >> 1));
-        else if (m_aig->latches[i].reset == 1)
-            m_initialState.push_back(m_aig->latches[i].lit >> 1);
+        unsigned &lit = m_aig->latches[i].lit;
+        unsigned &reset = m_aig->latches[i].reset;
+
+        if (reset == 0)
+            m_initialState.push_back(-(lit >> 1));
+        else if (reset == 1)
+            m_initialState.push_back(lit >> 1);
+        else if (reset != lit && aiger_is_and(m_aig, reset)) {
+            m_initialClauses.emplace_back(clause{GetCarId(lit), -GetCarId(reset)});
+            m_initialClauses.emplace_back(clause{-GetCarId(lit), GetCarId(reset)});
+        }
     }
 }
 

@@ -137,6 +137,8 @@ class Model {
 
     vector<clause> &GetSimpClauses() { return m_simpClauses; }
 
+    vector<clause> &GetInitialClauses() { return m_initialClauses; }
+
     void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
 
     vector<int> GetConstraints() { return m_constraints; };
@@ -194,6 +196,7 @@ class Model {
     vector<int> m_constraints;
     vector<clause> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
     vector<clause> m_simpClauses;
+    vector<clause> m_initialClauses;
     unordered_set<int> m_trues; // variables that are always true
 
     vector<unordered_map<int, int>> m_primeMaps;

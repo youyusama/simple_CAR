@@ -108,6 +108,20 @@ void SATSolver::AddBadk(int k) {
 
 
 // ================================================================================
+// @brief: add initial constraints on gate intialized latches
+// @input:
+// @output:
+// ================================================================================
+void SATSolver::AddInitialClauses() {
+    vector<clause> &clauses = m_model->GetInitialClauses();
+    for (auto &c : clauses) {
+        AddClause(c);
+        SetDomainCOI(make_shared<cube>(cube{c}));
+    }
+}
+
+
+// ================================================================================
 // @brief: assume state and give frame level, check satisfiability, & F_i & ass
 // @input:
 // @output:

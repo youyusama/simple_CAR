@@ -125,6 +125,8 @@ class SATSolver : public ISolver {
 
     void AddBadk(int k);
 
+    void AddInitialClauses();
+
     bool SolveFrame(const shared_ptr<cube> assumption, int lvl);
 
     void AddUC(const shared_ptr<cube> uc, int lvl = 0);
