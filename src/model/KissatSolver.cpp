@@ -9,6 +9,7 @@ KissatSolver::KissatSolver(shared_ptr<Model> m) {
     m_maxId = m_model->GetMaxId();
     // m_tempVar = 0;
     m_solver = kissat_init();
+    kissat_reserve(m_solver, m_maxId);
     assert(!m_solver);
 }
 
@@ -28,6 +29,10 @@ bool KissatSolver::Solve() {
 void KissatSolver::AddClause(const cube &cls) {
     for (int l : cls) {
         kissat_add(m_solver, l);
+    }
+    if (abs(cls[0]) > m_maxId) {
+        m_maxId += m_maxId;
+        kissat_reserve(m_solver, m_maxId);
     }
     kissat_add(m_solver, 0); // end of a clause
 }
