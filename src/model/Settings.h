@@ -10,7 +10,8 @@ namespace car {
 
 enum class MCAlgorithm { FCAR,
                          BCAR,
-                         BMC };
+                         BMC,
+                         IC3 };
 
 enum class MCSATSolver { minisat,
                          cadical,
