@@ -70,7 +70,10 @@ class BasicIC3 : public BaseChecker {
         // branching
     }
 
+    void Extend();
     bool Propagate();
+
+    shared_ptr<State> EnumerateStartState();
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
     void OutputWitness(int bad);
@@ -87,7 +90,9 @@ class BasicIC3 : public BaseChecker {
     shared_ptr<Model> m_model;
     vector<IC3Frame> m_frames;
     shared_ptr<SATSolver> m_liftSolver;
+    shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badPredLiftSolver;
+    IC3Frame infFrame;
     set<int> m_initialStateSet;
     shared_ptr<State> m_cexStart;
     bool m_trivial;
