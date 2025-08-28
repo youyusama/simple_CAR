@@ -120,13 +120,14 @@ bool ForwardChecker::Check(int badId) {
                 task.isLocated = false;
 
                 if (task.frameLevel == -1) {
-                    if (m_settings.internalSignals)
-                        if (!CheckInit(task.state)) continue;
-                    m_initialState->preState = task.state->preState;
-                    m_initialState->inputs = task.state->inputs;
-                    m_initialState->latches = task.state->latches;
-                    m_lastState = m_initialState;
-                    return false;
+                    if (CheckInit(task.state)) {
+                        m_initialState->preState = task.state->preState;
+                        m_initialState->inputs = task.state->inputs;
+                        m_initialState->latches = task.state->latches;
+                        m_lastState = m_initialState;
+                        return false;
+                    } else
+                        continue;
                 }
                 m_log->L(2, "SAT Check on Frame: ", task.frameLevel);
                 m_log->L(2, "From State: ", CubeToStrShort(task.state->latches));
@@ -228,6 +229,7 @@ void ForwardChecker::Init(int badId) {
     if (m_settings.satSolveInDomain) m_transSolvers[0]->SetSolveInDomain();
     m_transSolvers[0]->AddTrans();
     m_transSolvers[0]->AddConstraints();
+    m_transSolvers[0]->AddInitialClauses();
     AddSamePrimeConstraints(m_transSolvers[0]);
     // lift
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);

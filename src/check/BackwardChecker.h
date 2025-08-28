@@ -116,6 +116,8 @@ class BackwardChecker : public BaseChecker {
 
     shared_ptr<cube> GetUnsatCore(int lvl);
 
+    shared_ptr<State> EnumerateStartState();
+
     CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_k;
@@ -125,8 +127,8 @@ class BackwardChecker : public BaseChecker {
     Settings m_settings;
     shared_ptr<Log> m_log;
     shared_ptr<Model> m_model;
-    shared_ptr<State> m_initialState;
     vector<shared_ptr<SATSolver>> m_transSolvers;
+    shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_invSolver;
     vector<shared_ptr<vector<int>>> m_rotation;
     shared_ptr<State> m_lastState;

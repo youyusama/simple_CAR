@@ -208,7 +208,6 @@ shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
     shared_ptr<cube> domain = make_shared<cube>(coi_vars.begin(), coi_vars.end());
     domain->emplace_back(m_trueId);
     domain->emplace_back(m_falseId);
-    sort(domain->begin(), domain->end());
     return domain;
 }
 

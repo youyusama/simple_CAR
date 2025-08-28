@@ -155,6 +155,7 @@ void BMC::Init(int badId) {
     for (auto l : m_model->GetInitialState()) {
         m_Solver->AddClause({l});
     }
+    m_Solver->AddInitialClauses();
 }
 
 

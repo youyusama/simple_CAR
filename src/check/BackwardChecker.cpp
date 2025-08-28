@@ -46,7 +46,7 @@ bool BackwardChecker::Check(int badId) {
     m_log->L(2, "Initial States Check");
     if (ImmediateSatisfiable(badId)) {
         m_log->L(2, "Result >>> SAT <<<");
-        auto p = m_transSolvers[0]->GetAssignment(false);
+        auto p = m_startSolver->GetAssignment(false);
         m_log->L(3, "Get Assignment:", CubeToStr(p.second));
 
         shared_ptr<State> newState(new State(nullptr, p.first, p.second, 1));
@@ -54,13 +54,12 @@ bool BackwardChecker::Check(int badId) {
         return false;
     }
     m_log->L(2, "Result >>> UNSAT <<<");
-    auto uc = m_transSolvers[0]->GetUC(false);
-    if (uc->size() == 0) {
+    shared_ptr<cube> bad_assumption(new cube({badId}));
+    if (!m_transSolvers[0]->Solve(bad_assumption)) {
         m_overSequence->SetInvariantLevel(-1);
         return true;
     }
-    m_log->L(2, "Get UC:", CubeToStr(uc));
-    AddUnsatisfiableCore(uc, 0);
+    m_startSolver->UpdateStartSolverFlag();
 
     // main stage
     m_k = 0;
@@ -82,69 +81,80 @@ bool BackwardChecker::Check(int badId) {
             }
         }
 
-        while (!workingStack.empty()) {
-            Task &task = workingStack.top();
+        m_log->Tick();
+        shared_ptr<State> startState = EnumerateStartState();
+        m_log->StatStartSolver();
 
-            if (m_settings.restart && m_restart->RestartCheck()) {
-                m_log->L(1, "Restarting...");
-                m_underSequence = UnderSequence();
-                while (!workingStack.empty()) workingStack.pop();
-                m_underSequence.push(m_initialState);
-                workingStack.emplace(m_initialState, m_k - 1, false);
-                m_restart->UpdateThreshold();
-                m_restart->ResetUcCounts();
-                continue;
-            }
+        while (startState != nullptr) {
+            m_log->L(2, "State from StartSolver: ", CubeToStrShort(startState->latches));
+            m_log->L(3, "State Detail: ", CubeToStr(startState->latches));
+            workingStack.push(Task(startState, m_k - 1, true));
 
-            if (!task.isLocated) {
-                task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
-                m_log->L(3, "State get new level ", task.frameLevel);
-                if (task.frameLevel >= m_k) {
-                    workingStack.pop();
+            while (!workingStack.empty()) {
+                Task &task = workingStack.top();
+
+                if (m_settings.restart && m_restart->RestartCheck()) {
+                    m_log->L(1, "Restarting...");
+                    m_underSequence = UnderSequence();
+                    while (!workingStack.empty()) workingStack.pop();
+                    m_restart->UpdateThreshold();
+                    m_restart->ResetUcCounts();
+                    continue;
+                }
+
+                if (!task.isLocated) {
+                    task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
+                    m_log->L(3, "State get new level ", task.frameLevel);
+                    if (task.frameLevel >= m_k) {
+                        workingStack.pop();
+                        continue;
+                    }
+                }
+                task.isLocated = false;
+
+                if (task.frameLevel == -1) {
+                    if (CheckBad(task.state))
+                        return false;
+                    else
+                        continue;
+                }
+
+                shared_ptr<cube> assumption(new cube(*task.state->latches));
+                OrderAssumption(assumption);
+                m_log->L(2, "\nSAT Check on frame: ", task.frameLevel);
+                m_log->L(3, "From state: ", CubeToStr(task.state->latches));
+                m_log->Tick();
+                bool result = IsReachable(task.frameLevel, assumption);
+                m_log->StatMainSolver();
+                if (result) {
+                    // Solver return SAT, get a new State, then continue
+                    m_log->L(2, "Result >>> SAT <<<");
+                    auto p = GetInputAndState(task.frameLevel);
+                    shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
+                    m_log->L(3, "Get state: ", CubeToStr(newState->latches));
+                    m_underSequence.push(newState);
+                    int newFrameLevel = GetNewLevel(newState);
+                    m_log->L(3, "State get new level ", newFrameLevel);
+                    workingStack.emplace(newState, newFrameLevel, true);
+                    continue;
+                } else {
+                    // Solver return UNSAT, get uc, then continue
+                    m_log->L(2, "Result >>> UNSAT <<<");
+                    auto uc = GetUnsatCore(task.frameLevel);
+                    m_log->L(3, "Get UC:", CubeToStr(uc));
+                    if (Generalize(uc, task.frameLevel))
+                        m_branching->Update(uc);
+                    m_log->L(2, "Get Generalized UC:", CubeToStr(uc));
+                    AddUnsatisfiableCore(uc, task.frameLevel + 1);
+                    PropagateUp(uc, task.frameLevel + 1);
+                    m_log->L(3, m_overSequence->FramesInfo());
+                    task.frameLevel++;
                     continue;
                 }
             }
-            task.isLocated = false;
-
-            if (task.frameLevel == -1) {
-                if (CheckBad(task.state))
-                    return false;
-                else
-                    continue;
-            }
-
-            shared_ptr<cube> assumption(new cube(*task.state->latches));
-            OrderAssumption(assumption);
-            m_log->L(2, "\nSAT CHECK on frame: ", task.frameLevel);
-            m_log->L(3, "From state: ", CubeToStr(task.state->latches));
             m_log->Tick();
-            bool result = IsReachable(task.frameLevel, assumption);
-            m_log->StatMainSolver();
-            if (result) {
-                // Solver return SAT, get a new State, then continue
-                m_log->L(2, "Result >>> SAT <<<");
-                auto p = GetInputAndState(task.frameLevel);
-                shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
-                m_log->L(3, "Get state: ", CubeToStr(newState->latches));
-                m_underSequence.push(newState);
-                int newFrameLevel = GetNewLevel(newState);
-                m_log->L(3, "State get new level ", newFrameLevel);
-                workingStack.emplace(newState, newFrameLevel, true);
-                continue;
-            } else {
-                // Solver return UNSAT, get uc, then continue
-                m_log->L(2, "Result >>> UNSAT <<<");
-                auto uc = GetUnsatCore(task.frameLevel);
-                m_log->L(3, "Get UC:", CubeToStr(uc));
-                if (Generalize(uc, task.frameLevel))
-                    m_branching->Update(uc);
-                m_log->L(2, "Get Generalized UC:", CubeToStr(uc));
-                AddUnsatisfiableCore(uc, task.frameLevel + 1);
-                PropagateUp(uc, task.frameLevel + 1);
-                m_log->L(3, m_overSequence->FramesInfo());
-                task.frameLevel++;
-                continue;
-            }
+            startState = EnumerateStartState();
+            m_log->StatStartSolver();
         }
 
         if (m_invSolver == nullptr) {
@@ -176,6 +186,7 @@ bool BackwardChecker::Check(int badId) {
 
         m_log->L(1, m_overSequence->FramesInfo());
         m_log->L(3, m_overSequence->FramesDetail());
+        m_startSolver->UpdateStartSolverFlag();
 
         m_k++;
         m_restart->ResetUcCounts();
@@ -185,22 +196,26 @@ bool BackwardChecker::Check(int badId) {
 
 
 void BackwardChecker::Init() {
-    shared_ptr<cube> inputs(new cube(State::numInputs, 0));
-    shared_ptr<cube> latches(new cube(m_model->GetInitialState()));
-    m_initialState.reset(new State(nullptr, inputs, latches, 0));
-
     m_overSequence = make_shared<OverSequenceSet>(m_model);
     m_underSequence = UnderSequence();
-    m_underSequence.push(m_initialState);
     m_branching = make_shared<Branching>(m_settings.branching);
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
     innOrder.m = m_model;
 
+    // s & T & c & O_i'
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
     m_transSolvers[0]->AddTrans();
     m_transSolvers[0]->AddConstraints();
-    m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
+    // I & T & c
+    m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_startSolver->AddTrans();
+    m_startSolver->AddConstraints();
+    for (auto l : m_model->GetInitialState()) {
+        m_startSolver->AddClause({l});
+    }
+    m_startSolver->AddInitialClauses();
+    m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
     m_restart.reset(new Restart(m_settings));
 }
 
@@ -221,6 +236,9 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frame
     } else
         m_transSolvers[0]->AddUC(puc, frameLevel);
 
+    if (frameLevel >= m_k) {
+        m_startSolver->AddUC(puc, frameLevel);
+    }
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
     }
@@ -231,12 +249,21 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frame
 }
 
 bool BackwardChecker::ImmediateSatisfiable(int badId) {
-    shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
+    shared_ptr<cube> assumptions = make_shared<cube>();
     assumptions->push_back(badId);
     m_log->Tick();
-    bool result = m_transSolvers[0]->Solve(assumptions);
+    bool result = m_startSolver->Solve(assumptions);
     m_log->StatMainSolver();
+    m_startSolver->ClearAssumption();
     return result;
+}
+
+
+shared_ptr<State> BackwardChecker::EnumerateStartState() {
+    if (!m_startSolver->Solve()) return nullptr;
+    auto p = m_startSolver->GetAssignment(true);
+    shared_ptr<State> startState(new State(nullptr, p.first, p.second, 0));
+    return startState;
 }
 
 
@@ -650,21 +677,22 @@ void BackwardChecker::OutputCounterExample(int bad) {
 
     // get determined initial state
     if (trace.size() > 1) {
-        shared_ptr<cube> assumption(new cube(*trace.top()->latches));
-        trace.pop();
+        shared_ptr<cube> assumption(new cube());
         shared_ptr<cube> succ(new cube(*trace.top()->latches));
         shared_ptr<cube> input(new cube(*trace.top()->inputs));
         GetPrimed(succ);
         assumption->insert(assumption->end(), succ->begin(), succ->end());
         assumption->insert(assumption->end(), input->begin(), input->end());
-        bool sat = m_transSolvers[0]->Solve(assumption);
+        m_startSolver->UpdateStartSolverFlag();
+        bool sat = m_startSolver->Solve(assumption);
         assert(sat);
-        auto p = m_transSolvers[0]->GetAssignment(false);
+        auto p = m_startSolver->GetAssignment(false);
         shared_ptr<State> initState(new State(nullptr, p.first, p.second, 0));
         cexFile << initState->GetLatchesString() << endl;
     } else {
         cexFile << trace.top()->GetLatchesString() << endl;
     }
+
     while (!trace.empty()) {
         cexFile << trace.top()->GetInputsString() << endl;
         trace.pop();
