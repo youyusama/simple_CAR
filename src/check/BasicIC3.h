@@ -87,6 +87,7 @@ class BasicIC3 : public BaseChecker {
     shared_ptr<Model> m_model;
     vector<IC3Frame> m_frames;
     shared_ptr<SATSolver> m_liftSolver;
+    shared_ptr<SATSolver> m_badPredLiftSolver;
     set<int> m_initialStateSet;
     shared_ptr<State> m_cexStart;
     bool m_trivial;

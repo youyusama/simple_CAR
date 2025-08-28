@@ -18,6 +18,10 @@ BasicIC3::BasicIC3(Settings settings,
     // Initialize the dedicated solver for predecessor generalization (lifting).
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_liftSolver->AddTrans();
+
+    m_badPredLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_badPredLiftSolver->AddTrans();
+    m_badPredLiftSolver->AddTransK(1);
     // Store the initial state literals in a set for efficient lookups.
     const auto &initState = m_model->GetInitialState();
     m_initialStateSet.insert(initState.begin(), initState.end());
@@ -214,16 +218,54 @@ bool BasicIC3::Strengthen() {
             // CTI found. This iteration is not trivial.
             m_trivial = false;
 
+            cube primeInputs;
             cube badInputs;
             shared_ptr<vector<int>> coiInputs = m_model->GetCOIInputs();
             for (int i : *coiInputs) {
                 int i_p = m_model->GetPrimeK(i, 1);
-                if (solver->GetModel(i_p))
+                if (solver->GetModel(i_p)) {
+                    primeInputs.push_back(i_p);
                     badInputs.push_back(i);
-                else
+                } else {
+                    primeInputs.push_back(-i_p);
                     badInputs.push_back(-i);
+                }
             }
+
+
             pair<shared_ptr<cube>, shared_ptr<cube>> assignment = solver->GetAssignment(false);
+
+            shared_ptr<cube> partialLatch = make_shared<cube>(*assignment.second);
+
+            clause cls;
+            cls.push_back(-m_model->GetPrimeK(m_model->GetBad(), 1));
+            for (auto cons : m_model->GetConstraints()) {
+                cls.push_back(-m_model->GetPrimeK(cons, 1));
+            }
+            for (auto cons : m_model->GetConstraints()) {
+                cls.push_back(-cons);
+            }
+            m_badPredLiftSolver->AddTempClause(cls);
+
+            while (true) {
+                shared_ptr<cube> assump(new cube());
+                copy(partialLatch->begin(), partialLatch->end(), back_inserter(*assump));
+                OrderAssumption(assump);
+                copy(assignment.first->begin(), assignment.first->end(), back_inserter(*assump));
+                copy(primeInputs.begin(), primeInputs.end(), back_inserter(*assump));
+
+                bool res = m_badPredLiftSolver->Solve(assump);
+                assert(!res);
+                shared_ptr<cube> tempUc = m_badPredLiftSolver->GetUC(false);
+                if (tempUc->size() == partialLatch->size()) {
+                    break;
+                } else {
+                    partialLatch = tempUc;
+                }
+            }
+            m_badPredLiftSolver->ReleaseTempClause();
+            assignment.second = partialLatch;
+
             shared_ptr<State> badState(new State(nullptr, make_shared<cube>(badInputs), nullptr, 0));
             shared_ptr<State> ctiState = make_shared<State>(
                 badState, // nextState is null for the last state in the trace
@@ -417,7 +459,7 @@ void BasicIC3::GeneralizePredecessor(shared_ptr<State> predecessorState, shared_
     for (auto cons : m_model->GetConstraints()) {
         succNegationClause.push_back(-cons);
     }
-    
+
     m_liftSolver->AddTempClause(succNegationClause);
     // 2. Iteratively minimize the latch part of the predecessor.
     auto partialLatch = make_shared<cube>(*predecessorState->latches);
@@ -457,22 +499,8 @@ void BasicIC3::GeneralizePredecessor(shared_ptr<State> predecessorState, shared_
 
 bool BasicIC3::InitiationCheck(const shared_ptr<cube> &c) {
     m_log->L(3, "Initiation check for cube: ", CubeToStr(c));
-    if (m_model->GetConstraints().empty()) {
-        // Simple case: No internal signals. Check for direct conflict with initial state literals.
-        // This is true if c contains a literal l such that -l is in I.
-        for (const auto &lit : *c) {
-            if (m_initialStateSet.count(-lit)) {
-                return true; // Disjoint (UNSAT), check passes.
-            }
-        }
-        return false; // Intersects with I (potentially SAT), check fails.
-    } else {
-        // Complex case: Cube may contain internal signals.
-        // We must use a SAT solver to check if I & c is satisfiable.
-        // F_0's solver contains the clauses for I.
-        auto solver = m_frames[0].solver;
-        return !solver->Solve(c); // Return true if UNSAT (disjoint).
-    }
+    auto solver = m_frames[0].solver;
+    return !solver->Solve(c); // Return true if UNSAT (disjoint).
 }
 
 shared_ptr<cube> BasicIC3::GetAndValidateUC(const shared_ptr<SATSolver> solver, const shared_ptr<cube> fallbackCube) {
@@ -589,7 +617,7 @@ bool BasicIC3::Propagate() {
         // were propagated to F_{i+1}, making F_i an inductive invariant.
         if (frame.borderCubes.empty()) {
             m_log->L(1, "SAFE: Frame F_", i, " is empty.");
-            m_invariantLevel = i+1;
+            m_invariantLevel = i + 1;
             m_log->L(1, "Border cubes in Frame F_", m_invariantLevel, " are an inductive invariant.");
             return true; // Proof found
         }
@@ -741,7 +769,7 @@ void BasicIC3::OutputWitness(int bad) {
     //             F_{i+1} = c_1 & c_2 & ... & c_j
     //                       c_j = !( l_1 & l_2 & .. & l_k )
 
-    
+
     set<shared_ptr<cube>, cubePtrComp> &indInv = m_frames[m_invariantLevel].borderCubes;
     assert(!indInv.empty());
 
