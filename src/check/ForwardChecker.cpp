@@ -778,7 +778,7 @@ void ForwardChecker::OutputWitness(int bad) {
     auto endIndex = m_settings.aigFilePath.find_last_of(".");
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
-    string outPath = m_settings.witnessOutputDir + aigName + ".w.aag";
+    string outPath = m_settings.witnessOutputDir + aigName + ".w.aig";
     aiger *model_aig = m_model->GetAig();
 
     unsigned lvl_i;
