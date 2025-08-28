@@ -5,10 +5,8 @@ extern "C" {
 #include "aiger.h"
 }
 
-// #include "minisat/core/Solver.h"
-// #include "minisat/simp/SimpSolver.h"
-
 #include "Settings.h"
+#include "cadical/src/cadical.hpp"
 #include <algorithm>
 #include <assert.h>
 #include <fstream>
@@ -137,6 +135,8 @@ class Model {
 
     vector<clause> &GetClauses() { return m_clauses; }
 
+    vector<clause> &GetSimpClauses() { return m_simpClauses; }
+
     void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
 
     vector<int> GetConstraints() { return m_constraints; };
@@ -180,6 +180,8 @@ class Model {
 
     void CollectCOIInputs();
 
+    void SimplifyClauses();
+
     Settings m_settings;
     aiger *m_aig;
     int m_maxId;
@@ -190,7 +192,8 @@ class Model {
     cube m_initialState;
     int m_bad;
     vector<int> m_constraints;
-    vector<clause> m_clauses;   // CNF, e.g. (a|b|c) * (-a|c)
+    vector<clause> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
+    vector<clause> m_simpClauses;
     unordered_set<int> m_trues; // variables that are always true
 
     vector<unordered_map<int, int>> m_primeMaps;

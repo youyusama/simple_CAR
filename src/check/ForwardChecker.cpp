@@ -231,12 +231,12 @@ void ForwardChecker::Init(int badId) {
     AddSamePrimeConstraints(m_transSolvers[0]);
     // lift
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-    m_liftSolver->AddTrans();
     if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
+    m_liftSolver->AddTrans();
     // inv
-    m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
+    m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
     // s & T & c & P & T' & c' & bad'
-    m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
+    m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
     m_startSolver->AddTrans();
     m_startSolver->AddTransK(1);
     m_startSolver->AddBadk(1);
@@ -245,7 +245,7 @@ void ForwardChecker::Init(int badId) {
     m_startSolver->AddConstraintsK(1);
     AddSamePrimeConstraints(m_startSolver);
     // bad predecessor lift
-    m_badPredLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
+    m_badPredLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
     m_badPredLiftSolver->AddTrans();
     m_badPredLiftSolver->AddTransK(1);
 

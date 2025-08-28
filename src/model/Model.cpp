@@ -47,6 +47,7 @@ void Model::Init() {
         CollectInnards();
         CollectInnardsClauses();
     }
+    SimplifyClauses();
 }
 
 
@@ -338,6 +339,45 @@ void Model::CollectInnardsClauses() {
         m_clauses.emplace_back(vector<int>{-pl, pr0});
         m_clauses.emplace_back(vector<int>{-pl, pr1});
     }
+}
+
+
+void Model::SimplifyClauses() {
+    std::shared_ptr<CaDiCaL::Solver> solver = std::make_shared<CaDiCaL::Solver>();
+    for (auto &c : m_clauses) {
+        solver->clause(c);
+    }
+    // freeze variables
+    for (int i = 1; i < m_andGateStartId; i++) solver->freeze(i);
+    // freeze primed variables
+    for (int i = m_aig->num_inputs + 1; i < m_andGateStartId; i++) solver->freeze(GetPrime(i));
+    // freeze constraints
+    for (int i : m_constraints) solver->freeze(i);
+    solver->freeze(m_trueId);
+    solver->freeze(m_falseId);
+    solver->freeze(m_bad);
+
+    class carClauseIterator : public CaDiCaL::ClauseIterator {
+      public:
+        ~carClauseIterator() {}
+        bool clause(const std::vector<int> &cls) {
+            simp_clauses.emplace_back(cls);
+            return true;
+        }
+        vector<std::vector<int>> &getClauses() {
+            return simp_clauses;
+        }
+
+      private:
+        vector<std::vector<int>> simp_clauses;
+    };
+
+    carClauseIterator it;
+    solver->simplify();
+    solver->traverse_clauses(it);
+    // cout << "clauses: " << m_clauses.size() << endl;
+    // cout << "simplified clauses: " << it.getClauses().size() << endl;
+    m_simpClauses = it.getClauses();
 }
 
 

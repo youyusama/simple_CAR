@@ -26,6 +26,8 @@ SATSolver::SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind)
         assert(false);
         break;
     }
+
+    m_solveInDomain = false;
 }
 
 
@@ -35,9 +37,16 @@ SATSolver::SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind)
 // @output:
 // ================================================================================
 void SATSolver::AddTrans() {
-    vector<clause> &clauses = m_model->GetClauses();
-    for (int i = 0; i < clauses.size(); ++i) {
-        AddClause(clauses[i]);
+    if (m_solveInDomain) {
+        vector<clause> &clauses = m_model->GetClauses();
+        for (int i = 0; i < clauses.size(); ++i) {
+            AddClause(clauses[i]);
+        }
+    } else {
+        vector<clause> &clauses = m_model->GetSimpClauses();
+        for (int i = 0; i < clauses.size(); ++i) {
+            AddClause(clauses[i]);
+        }
     }
 }
 

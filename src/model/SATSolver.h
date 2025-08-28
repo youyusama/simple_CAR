@@ -75,6 +75,7 @@ class SATSolver : public ISolver {
 
     // special interface in minicore
     void SetSolveInDomain() {
+        m_solveInDomain = true;
         if (m_slvKind != MCSATSolver::minicore) return;
         m_slv->SetSolveInDomain();
     }
@@ -138,6 +139,7 @@ class SATSolver : public ISolver {
     shared_ptr<Model> m_model;
     MCSATSolver m_slvKind;
     shared_ptr<ISolver> m_slv;
+    bool m_solveInDomain;
 
     vector<int> m_frameFlags;
     inline int GetFrameFlag(int lvl) {
