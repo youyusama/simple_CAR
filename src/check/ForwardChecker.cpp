@@ -13,6 +13,8 @@ ForwardChecker::ForwardChecker(Settings settings,
     m_lastState = nullptr;
     GLOBAL_LOG = m_log;
     m_checkResult = CheckResult::Unknown;
+
+    m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
 }
 
 CheckResult ForwardChecker::Run() {
@@ -135,6 +137,7 @@ bool ForwardChecker::Check(int badId) {
                 shared_ptr<cube> assumption(new cube(*task.state->latches));
                 OrderAssumption(assumption);
                 GetPrimed(assumption);
+                if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
                 m_log->Tick();
                 bool result = IsReachable(task.frameLevel, assumption);
                 m_log->StatMainSolver();
@@ -151,6 +154,7 @@ bool ForwardChecker::Check(int badId) {
                     m_log->L(3, "State Detail: ", CubeToStr(newState->latches));
                     int newFrameLevel = GetNewLevel(newState);
                     workingStack.emplace(newState, newFrameLevel, true);
+                    if (m_settings.satSolveInDomain) PopDomain();
                     continue;
                 } else {
                     // Solver return UNSAT, get uc, then continue
@@ -165,6 +169,7 @@ bool ForwardChecker::Check(int badId) {
                     PropagateUp(uc, task.frameLevel + 1);
                     m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
                     task.frameLevel++;
+                    if (m_settings.satSolveInDomain) PopDomain();
                     continue;
                 }
             } // end while (!workingStack.empty())
@@ -223,6 +228,7 @@ void ForwardChecker::Init(int badId) {
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
     innOrder.m = m_model;
+    m_domainStack = make_shared<vector<shared_ptr<cube>>>();
 
     // O_i & T & c & s'
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
@@ -235,6 +241,8 @@ void ForwardChecker::Init(int badId) {
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
     m_liftSolver->AddTrans();
+    if (m_settings.satSolveInDomain)
+        m_liftSolver->SetDomainCOI(make_shared<cube>(m_model->GetConstraints()));
     // inv
     m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
     // s & T & c & P & T' & c' & bad'
@@ -287,7 +295,7 @@ bool ForwardChecker::ImmediateSatisfiable(int badId) {
     shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
     assumptions->push_back(badId);
     m_log->Tick();
-    m_transSolvers[0]->SetTempDomainCOI(assumptions);
+    if (m_settings.satSolveInDomain) m_transSolvers[0]->SetTempDomainCOI(assumptions);
     bool result = m_transSolvers[0]->Solve(assumptions);
     m_log->StatMainSolver();
     return result;
@@ -448,8 +456,10 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
     }
     for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
     m_liftSolver->AddTempClause(cls);
-    m_liftSolver->ResetTempDomain();
-    m_liftSolver->SetTempDomainCOI(make_shared<cube>(cls));
+    if (m_settings.satSolveInDomain) {
+        m_liftSolver->ResetTempDomain();
+        m_liftSolver->SetTempDomain(TopDomain());
+    }
 
     while (true) {
         shared_ptr<cube> assumption(new cube());
@@ -496,6 +506,11 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
         for (auto b : *uc_blocker) required_lits.emplace(b);
     shared_ptr<vector<cube>> failed_ctses = make_shared<vector<cube>>();
     OrderAssumption(uc);
+    if (m_settings.satSolveInDomain) {
+        shared_ptr<cube> puc(new cube(*uc));
+        GetPrimed(puc);
+        GetAndPushDomain(puc);
+    }
     for (int i = uc->size() - 1; i >= 0; i--) {
         if (uc->size() < 2) break;
         if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
@@ -511,6 +526,7 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
             required_lits.emplace(uc->at(i));
         }
     }
+    if (m_settings.satSolveInDomain) PopDomain();
     sort(uc->begin(), uc->end(), cmp);
     if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
         return false;
@@ -549,6 +565,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shar
             shared_ptr<cube> cts_ass(new cube(*cts->latches));
             OrderAssumption(cts_ass);
             GetPrimed(cts_ass);
+            if (m_settings.satSolveInDomain) GetAndPushDomain(cts_ass);
             // F_i-1 & T & cts'
             m_log->L(3, "Try ctg:", CubeToStr(cts->latches));
             m_log->Tick();
@@ -562,9 +579,11 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shar
                 m_log->L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
                 AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
                 PropagateUp(uc_cts, cts_lvl + 1);
+                if (m_settings.satSolveInDomain) PopDomain();
             } else {
                 m_log->StatMainSolver();
                 failed_ctses->emplace_back(*cts->latches);
+                if (m_settings.satSolveInDomain) PopDomain();
                 return false;
             }
         }
@@ -588,12 +607,14 @@ bool ForwardChecker::CheckInit(shared_ptr<State> s) {
     m_log->L(3, "State Detail: ", CubeToStr(s->latches));
     shared_ptr<cube> assumption(new cube(*s->latches));
     OrderAssumption(assumption);
+    if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
     m_log->Tick();
     bool result = IsReachable(0, assumption);
     m_log->StatMainSolver();
     if (result) {
         // Solver return SAT
         m_log->L(2, "Result >>> SAT <<<");
+        if (m_settings.satSolveInDomain) PopDomain();
         return true;
     } else {
         // Solver return UNSAT, get uc, then continue
@@ -629,6 +650,7 @@ bool ForwardChecker::CheckInit(shared_ptr<State> s) {
         AddUnsatisfiableCore(uc, 0);
         PropagateUp(uc, 0);
         m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
+        if (m_settings.satSolveInDomain) PopDomain();
         return false;
     }
 }
@@ -640,12 +662,14 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
     bool result;
     shared_ptr<cube> assumption(new cube(*c));
     GetPrimed(assumption);
+    if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
     if (!IsReachable(lvl, assumption)) {
         AddUnsatisfiableCore(c, lvl + 1);
         result = true;
     } else {
         result = false;
     }
+    if (m_settings.satSolveInDomain) PopDomain();
 
     m_log->StatPropagation();
     return result;
@@ -694,8 +718,10 @@ void ForwardChecker::AddSamePrimeConstraints(shared_ptr<SATSolver> slv) {
 
 bool ForwardChecker::IsReachable(int lvl, const shared_ptr<cube> assumption) {
     if (m_settings.multipleSolvers) {
-        m_transSolvers[lvl]->ResetTempDomain();
-        m_transSolvers[lvl]->SetTempDomainCOI(assumption);
+        if (m_settings.satSolveInDomain) {
+            m_transSolvers[lvl]->ResetTempDomain();
+            m_transSolvers[lvl]->SetTempDomain(TopDomain());
+        }
         return m_transSolvers[lvl]->SolveFrame(assumption, 0);
     } else
         return m_transSolvers[0]->SolveFrame(assumption, lvl);
@@ -719,6 +745,24 @@ shared_ptr<cube> ForwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> st
 
     MakeSubset(uc, state);
     return uc;
+}
+
+
+shared_ptr<cube> ForwardChecker::TopDomain() {
+    return m_domainStack->back();
+}
+
+
+shared_ptr<cube> ForwardChecker::GetAndPushDomain(shared_ptr<cube> c) {
+    shared_ptr<cube> domain = make_shared<cube>();
+    domain = m_model->GetCOIDomain(c);
+    m_domainStack->emplace_back(domain);
+    return domain;
+}
+
+
+void ForwardChecker::PopDomain() {
+    m_domainStack->pop_back();
 }
 
 

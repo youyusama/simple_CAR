@@ -122,6 +122,12 @@ class ForwardChecker : public BaseChecker {
 
     void MakeSubset(shared_ptr<cube> c1, shared_ptr<cube> c2);
 
+    shared_ptr<cube> TopDomain();
+
+    shared_ptr<cube> GetAndPushDomain(shared_ptr<cube> c);
+
+    void PopDomain();
+
     CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_badId;
@@ -139,7 +145,8 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<Branching> m_branching;
     shared_ptr<State> m_lastState;
-    std::shared_ptr<Restart> m_restart;
+    shared_ptr<Restart> m_restart;
+    shared_ptr<vector<shared_ptr<cube>>> m_domainStack;
 };
 
 
