@@ -48,11 +48,12 @@ class BasicIC3 : public BaseChecker {
     bool BaseCases();
     void AddNewFrame();
     void AddNewFrames();
-    void AddBlockingCube(shared_ptr<cube> blockingCube, int frameLevel);
+    void AddBlockingCube(shared_ptr<cube> blockingCube, int frameLevel, bool toAll);
 
     bool Strengthen();
     bool HandleObligations(set<Obligation> &obligations);
-    void Generalize(shared_ptr<cube> c, int frameLvl, int recLvl);
+    size_t Generalize(shared_ptr<cube> c, int frameLvl);
+    void MIC(shared_ptr<cube> c, int frameLvl, int recLvl);
     void GeneralizePredecessor(shared_ptr<State> predecessorState, shared_ptr<State> successorState = nullptr);
 
     bool InitiationCheck(const shared_ptr<cube> &c);
@@ -73,6 +74,7 @@ class BasicIC3 : public BaseChecker {
     void Extend();
     bool Propagate();
     bool Down(shared_ptr<cube> c, int frameLvl, int recLvl, const set<int> &triedLits);
+    // bool Down(shared_ptr<cube> c, int frameLvl, int recLvl, int keepTo);
 
     shared_ptr<State> EnumerateStartState();
 
@@ -80,6 +82,8 @@ class BasicIC3 : public BaseChecker {
     void OutputWitness(int bad);
     void OutputCounterExample();
     void AddSamePrimeConstraints(shared_ptr<SATSolver> slv);
+
+    void InitiationAugmentation(shared_ptr<cube> failureCube, shared_ptr<cube> fallbackCube);
 
     CheckResult m_checkResult;
 
@@ -93,12 +97,14 @@ class BasicIC3 : public BaseChecker {
     shared_ptr<SATSolver> m_liftSolver;
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badPredLiftSolver;
-    IC3Frame infFrame;
+    // IC3Frame infFrame;
     set<int> m_initialStateSet;
     shared_ptr<State> m_cexStart;
     bool m_trivial;
     int m_earliest;
-
+    // int infSolverCount;
+    // int infLemmaCount;
+    int lemmaCount;
     int m_invariantLevel;
 };
 
