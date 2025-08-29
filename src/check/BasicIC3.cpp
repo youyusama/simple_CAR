@@ -397,15 +397,14 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
 }
 
 
-bool BasicIC3::Down(shared_ptr<cube> cb, int frameLvl, int recLvl, const set<int> &triedLits) {
-    m_log->L(3, "Down:", CubeToStr(cb), " at frame level ", frameLvl, " and recursion level ", recLvl);
+bool BasicIC3::Down(shared_ptr<cube> downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
+    m_log->L(3, "Down:", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
-    shared_ptr<cube> downCube = make_shared<cube>(*cb);
     auto solverLvl = m_frames[frameLvl].solver;
     bool downRes = false;
-    if (recLvl > m_settings.ctgMaxRecursionDepth || frameLvl < 1) {
-        m_log->L(3, "recLvl > max or frameLvl < 1, quick check");
+    if (recLvl > m_settings.ctgMaxRecursionDepth) {
+        m_log->L(3, "recLvl > max, quick check");
         if (!InitiationCheck(downCube)) {
             return false;
         }
@@ -422,13 +421,11 @@ bool BasicIC3::Down(shared_ptr<cube> cb, int frameLvl, int recLvl, const set<int
             shared_ptr<cube> downCore = GetAndValidateUC(solverLvl, downCube);
             if (downCore->size() < downCube->size()) {
                 m_log->L(3, "Found smaller core during down: ", CubeToStr(downCore));
-                cb->swap(*downCore);
+                downCube->swap(*downCore);
             }
         }
-
         return downRes;
     } else {
-        bool ret = false;
         while (true) {
             m_log->L(3, "Down attempt:", CubeToStr(downCube));
             if (!InitiationCheck(downCube)) {
@@ -443,80 +440,73 @@ bool BasicIC3::Down(shared_ptr<cube> cb, int frameLvl, int recLvl, const set<int
             solverLvl->AddTempClause(downCls);
             auto downCubePrime = GetPrimeCube(downCube);
             downRes = !solverLvl->Solve(downCubePrime);
+            solverLvl->ReleaseTempClause();
             if (downRes) {
                 shared_ptr<cube> downCore = GetAndValidateUC(solverLvl, downCube);
-                solverLvl->ReleaseTempClause();
                 if (downCore->size() < downCube->size()) {
                     m_log->L(3, "Found smaller core during down: ", CubeToStr(downCore));
-                    cb->swap(*downCore);
+                    downCube->swap(*downCore);
                 }
-                ret = true;
-            } else {
-                m_log->L(3, "Not inductive, extracting ctg");
-                shared_ptr<State> downState = make_shared<State>(
-                    nullptr,
-                    nullptr,
-                    downCube,
-                    0);
-                pair<shared_ptr<cube>, shared_ptr<cube>> ctgAssignment = solverLvl->GetAssignment(false);
-                auto ctgState = make_shared<State>(
-                    downState,
-                    ctgAssignment.first,
-                    ctgAssignment.second,
-                    0);
-                solverLvl->ReleaseTempClause();
-                GeneralizePredecessor(ctgState, downState);
-                const shared_ptr<cube> &ctgCube = ctgState->latches;
-                m_log->L(3, "CTG cube: ", CubeToStr(ctgCube));
-                if (!InitiationCheck(ctgCube)) {
-                    // initiation check failed, not inductive, no need to join
-                    ret = true;
-                } else {
-                    bool ctgRes = false;
-                    if (ctgs < m_settings.ctgMaxStates) {
-                        ctgs++;
-                        auto solverLvlMinus1 = m_frames[frameLvl - 1].solver;
-                        clause ctgCls;
-                        ctgCls.reserve(ctgCube->size());
-                        for (const auto &lit : *ctgCube) {
-                            ctgCls.push_back(-lit);
-                        }
-                        solverLvlMinus1->AddTempClause(ctgCls);
-                        auto ctgCubePrime = GetPrimeCube(ctgCube);
-                        ctgRes = !solverLvlMinus1->Solve(ctgCubePrime);
-
-                        if (ctgRes) {
-                            m_log->L(3, "CTG is inductive at level ", frameLvl - 1);
-                            shared_ptr<cube> ctgCore = GetAndValidateUC(solverLvlMinus1, ctgCube);
-                            solverLvlMinus1->ReleaseTempClause();
-                            Generalize(ctgCore, frameLvl - 1, recLvl + 1);
-                            int pushLevel = PushLemmaForward(ctgCore, frameLvl);
-                            m_log->L(2, "Learned ctg clause and pushed to frame ", pushLevel);
-                            AddBlockingCube(ctgCore, pushLevel);
-                        } else {
-                            solverLvlMinus1->ReleaseTempClause();
-                        }
-                    }
-                    if (!ctgRes) {
-                        m_log->L(3, "CTG is not inductive at level ", frameLvl - 1);
-                        sort(ctgCube->begin(), ctgCube->end());
-                        shared_ptr<cube> tempCube = make_shared<cube>();
-                        for (int i = downCube->size() - 1; i >= 0; i--) {
-                            if (binary_search(ctgCube->begin(), ctgCube->end(), downCube->at(i))) {
-                                tempCube->push_back(downCube->at(i));
-                            } else if (triedLits.count(downCube->at(i))) {
-                                ret = true;
-                                break;
-                            }
-                        }
-                        m_log->L(3, "Joint cube: ", CubeToStr(tempCube));
-                        downCube->swap(*tempCube);
-                    }
-                }
+                return true;
             }
 
-            if (ret) {
-                return downRes;
+            m_log->L(3, "Not inductive, extracting ctg");
+            shared_ptr<State> downState = make_shared<State>(
+                nullptr,
+                nullptr,
+                downCube,
+                0);
+            pair<shared_ptr<cube>, shared_ptr<cube>> ctgAssignment = solverLvl->GetAssignment(false);
+            auto ctgState = make_shared<State>(
+                downState,
+                ctgAssignment.first,
+                ctgAssignment.second,
+                0);
+            GeneralizePredecessor(ctgState, downState);
+            const shared_ptr<cube> &ctgCube = ctgState->latches;
+            m_log->L(3, "CTG cube: ", CubeToStr(ctgCube));
+            if (!InitiationCheck(ctgCube)) {
+                // initiation check failed, not inductive, no need to join
+                return false;
+            }
+
+            bool ctgRes = false;
+            if (ctgs < m_settings.ctgMaxStates && frameLvl > 1) {
+                ctgs++;
+                auto solverLvlMinus1 = m_frames[frameLvl - 1].solver;
+                clause ctgCls;
+                ctgCls.reserve(ctgCube->size());
+                for (const auto &lit : *ctgCube) {
+                    ctgCls.push_back(-lit);
+                }
+                solverLvlMinus1->AddTempClause(ctgCls);
+                auto ctgCubePrime = GetPrimeCube(ctgCube);
+                ctgRes = !solverLvlMinus1->Solve(ctgCubePrime);
+                solverLvlMinus1->ReleaseTempClause();
+                if (ctgRes) {
+                    m_log->L(3, "CTG is inductive at level ", frameLvl - 1);
+                    shared_ptr<cube> ctgCore = GetAndValidateUC(solverLvlMinus1, ctgCube);
+
+                    int pushLevel = PushLemmaForward(ctgCore, frameLvl);
+                    Generalize(ctgCore, pushLevel - 1, recLvl + 1);
+                    // pushLevel = PushLemmaForward(ctgCore, pushLevel - 1);
+                    m_log->L(2, "Learned ctg clause and pushed to frame ", pushLevel);
+                    AddBlockingCube(ctgCore, pushLevel);
+                }
+            }
+            if (!ctgRes) {
+                m_log->L(3, "CTG is not inductive at level ", frameLvl - 1);
+                sort(ctgCube->begin(), ctgCube->end());
+                shared_ptr<cube> tempCube = make_shared<cube>();
+                for (int i = downCube->size() - 1; i >= 0; i--) {
+                    if (binary_search(ctgCube->begin(), ctgCube->end(), downCube->at(i))) {
+                        tempCube->push_back(downCube->at(i));
+                    } else if (triedLits.count(downCube->at(i))) {
+                        return false;
+                    }
+                }
+                m_log->L(3, "Joint cube: ", CubeToStr(tempCube));
+                downCube->swap(*tempCube);
             }
         }
     }
@@ -583,7 +573,7 @@ void BasicIC3::GeneralizePredecessor(shared_ptr<State> predecessorState, shared_
     for (auto cons : m_model->GetConstraints()) {
         succNegationClause.push_back(-cons);
     }
-    
+
     m_liftSolver->AddTempClause(succNegationClause);
     // 2. Iteratively minimize the latch part of the predecessor.
     auto partialLatch = make_shared<cube>(*predecessorState->latches);
@@ -764,14 +754,14 @@ bool BasicIC3::Propagate() {
         for (const auto &lit : *tempCube) {
             tempClause.push_back(-lit);
         }
-        infSolver->AddTempClause(tempClause);
+
 
         // order assumption for innards
         OrderAssumption(tempCube);
 
         m_log->L(3, "Checking inductivity for ordered cube: ", CubeToStr(tempCube));
         auto tempCubePrime = GetPrimeCube(tempCube);
-
+        infSolver->AddTempClause(tempClause);
         bool res = !infSolver->Solve(tempCubePrime);
         infSolver->ReleaseTempClause(); // Always release the temporary clause
         if (res) {
