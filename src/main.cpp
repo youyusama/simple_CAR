@@ -1,7 +1,7 @@
 #include "BMC.h"
 #include "BackwardChecker.h"
-#include "ForwardChecker.h"
 #include "BasicIC3.h"
+#include "ForwardChecker.h"
 #include "Log.h"
 #include "Model.h"
 #include "Settings.h"
@@ -36,6 +36,10 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     CheckResult res = checker->Run();
+
+    if (settings.witnessOutputDir.size() > 0)
+        checker->Witness();
+
     switch (res) {
     case CheckResult::Safe:
         std::cout << "Safe" << std::endl;
@@ -49,7 +53,5 @@ int main(int argc, char **argv) {
     default:
         break;
     }
-    if (settings.witnessOutputDir.size() > 0)
-        checker->Witness();
     return 0;
 }
