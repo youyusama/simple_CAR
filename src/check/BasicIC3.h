@@ -52,7 +52,7 @@ class BasicIC3 : public BaseChecker {
 
     bool Strengthen();
     bool HandleObligations(set<Obligation> &obligations);
-    void Generalize(shared_ptr<cube> c, int level);
+    void Generalize(shared_ptr<cube> c, int frameLvl, int recLvl);
     void GeneralizePredecessor(shared_ptr<State> predecessorState, shared_ptr<State> successorState = nullptr);
 
     bool InitiationCheck(const shared_ptr<cube> &c);
@@ -72,6 +72,7 @@ class BasicIC3 : public BaseChecker {
 
     void Extend();
     bool Propagate();
+    bool Down(shared_ptr<cube> c, int frameLvl, int recLvl, const set<int> &triedLits);
 
     shared_ptr<State> EnumerateStartState();
 

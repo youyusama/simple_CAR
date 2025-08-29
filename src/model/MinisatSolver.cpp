@@ -13,6 +13,7 @@ MinisatSolver::~MinisatSolver() {}
 bool MinisatSolver::Solve() {
     if (m_tempVar != 0) m_assumptions.push(GetLit(m_tempVar));
     lbool result = solveLimited(m_assumptions);
+    m_assumptions.clear();
     if (result == l_True) {
         return true;
     } else {
@@ -23,7 +24,6 @@ bool MinisatSolver::Solve() {
 
 
 bool MinisatSolver::Solve(const shared_ptr<cube> assumption) {
-    m_assumptions.clear();
     for (auto it : *assumption) {
         m_assumptions.push(GetLit(it));
     }
