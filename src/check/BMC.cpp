@@ -160,7 +160,7 @@ void BMC::Init(int badId) {
 
 
 void BMC::GetClausesK(int m_k, shared_ptr<vector<clause>> clauses) {
-    auto &originalClauses = m_model->GetClauses();
+    auto &originalClauses = m_model->GetSimpClauses();
     for (int i = 0; i < originalClauses.size(); ++i) {
         clause &ori = originalClauses[i];
         clause cls_k;
