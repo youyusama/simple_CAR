@@ -62,13 +62,23 @@ class BasicIC3 : public BaseChecker {
     string FramesInfo() const;
     int PushLemmaForward(shared_ptr<cube> c, int startLevel);
 
+    struct LitOrder {
+        shared_ptr<Branching> branching;
+
+        LitOrder() {}
+
+        bool operator()(const int &l1, const int &l2) const {
+            return (branching->PriorityOf(l1) > branching->PriorityOf(l2));
+        }
+    } litOrder;
+
     void OrderAssumption(shared_ptr<cube> c) {
         if (m_settings.randomSeed > 0) {
             shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        // branching
+        stable_sort(c->begin(), c->end(), litOrder);
     }
 
     void Extend();
@@ -84,6 +94,7 @@ class BasicIC3 : public BaseChecker {
     void AddSamePrimeConstraints(shared_ptr<SATSolver> slv);
 
     void InitiationAugmentation(shared_ptr<cube> failureCube, shared_ptr<cube> fallbackCube);
+    void MakeSubset(shared_ptr<cube> c1, shared_ptr<cube> c2);
 
     CheckResult m_checkResult;
 
@@ -106,6 +117,7 @@ class BasicIC3 : public BaseChecker {
     // int infLemmaCount;
     int lemmaCount;
     int m_invariantLevel;
+    shared_ptr<Branching> m_branching;
 };
 
 } // namespace car

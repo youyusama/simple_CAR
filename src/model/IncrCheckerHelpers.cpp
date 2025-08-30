@@ -38,6 +38,7 @@ void Branching::Update(const shared_ptr<cube> uc) {
         switch (branching_type) {
         case 1:
         case 2: {
+            assert(abs(l) < counts.size());
             counts[abs(l)]++;
             break;
         }
