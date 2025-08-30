@@ -125,6 +125,15 @@ shared_ptr<cube> MinicoreSolver::GetUC(bool prime) {
     return uc;
 }
 
+unordered_set<int> MinicoreSolver::GetConflict() {
+    unordered_set<int> conflictSet;
+    for (minicore::Lit l : conflict) {
+        int val = -GetLiteralId(l);
+        conflictSet.insert(val);
+    }
+    return conflictSet;
+}
+
 
 inline int MinicoreSolver::GetLiteralId(const minicore::Lit &l) {
     return sign(l) ? -var(l) : var(l);

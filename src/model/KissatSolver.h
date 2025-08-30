@@ -25,6 +25,7 @@ class KissatSolver : public ISolver {
     bool Solve(const shared_ptr<cube> assumption) { return false; }
     pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) { return pair<shared_ptr<cube>, shared_ptr<cube>>(NULL, NULL); }
     shared_ptr<cube> GetUC(bool prime) { return NULL; }
+    unordered_set<int> GetConflict() { return unordered_set<int>(); }
     int GetNewVar() { return 0; }
     void AddTempClause(const cube &cls) {}
     void ReleaseTempClause() {}

@@ -5,9 +5,22 @@ project(simpleCAR VERSION 0.1)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(ENABLE_SANITIZERS "Enable Address/UB Sanitizers and extra debug flags" OFF)
+
+
 # debug
 set(CMAKE_C_FLAGS_DEBUG "-g -ggdb")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -ggdb -fpermissive")
+
+if(ENABLE_SANITIZERS)
+    message(STATUS "Sanitizers enabled for Debug builds")
+    set(SANITIZER_FLAGS "-O0 -fno-omit-frame-pointer -fsanitize=address,undefined -fno-strict-aliasing")
+
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${SANITIZER_FLAGS}")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${SANITIZER_FLAGS}")
+else()
+    message(STATUS "Sanitizers disabled for Debug builds")
+endif()
 
 # release
 set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -flto")
