@@ -119,7 +119,8 @@ class State {
           int inDepth) : preState(inPreState),
                          inputs(inInputs),
                          latches(inLatches),
-                         depth(inDepth) {}
+                         depth(inDepth),
+                         dtScore(0) {}
     static int numInputs;
     static int numLatches;
 
@@ -130,6 +131,15 @@ class State {
     shared_ptr<State> preState = nullptr;
     shared_ptr<cube> inputs;
     shared_ptr<cube> latches;
+    double dtScore;
+
+    void HasUC() {
+        dtScore += 0.7;
+    }
+
+    void HasSucc() {
+        dtScore += 0.3;
+    }
 };
 
 
@@ -149,9 +159,7 @@ class UnderSequence {
     UnderSequence() {}
     ~UnderSequence() {
         for (int i = 0; i < m_sequence.size(); ++i) {
-            for (int j = 0; j < m_sequence[i].size(); ++j) {
-                m_sequence[i][j] = nullptr;
-            }
+            m_sequence.clear();
         }
     }
 
@@ -159,10 +167,26 @@ class UnderSequence {
         while (m_sequence.size() <= state->depth) {
             m_sequence.emplace_back(vector<shared_ptr<State>>());
         }
-        m_sequence[state->depth].push_back(state);
+        m_sequence[state->depth].emplace_back(state);
     }
 
     int size() { return m_sequence.size(); }
+
+    static bool state_ptr_cmp(shared_ptr<State> s1, shared_ptr<State> s2) {
+        return s1->dtScore > s2->dtScore;
+    }
+
+    shared_ptr<vector<shared_ptr<State>>> GetSeqDT() {
+        shared_ptr<vector<shared_ptr<State>>> res(new vector<shared_ptr<State>>());
+        for (int i = 0; i < m_sequence.size(); ++i) {
+            for (int j = 0; j < m_sequence[i].size(); ++j) {
+                res->emplace_back(m_sequence[i][j]);
+            }
+        }
+        sort(res->begin(), res->end(), state_ptr_cmp);
+        res->resize(res->size() / 5);
+        return res;
+    }
 
     vector<shared_ptr<State>> &operator[](int i) { return m_sequence[i]; }
 

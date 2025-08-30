@@ -72,15 +72,14 @@ bool ForwardChecker::Check(int badId) {
     stack<Task> workingStack;
     while (true) {
         m_minUpdateLevel = m_k + 1;
-        if (m_settings.end) { // from the deep and the end
-            for (int i = m_underSequence.size() - 1; i >= 0; i--) {
-                for (int j = m_underSequence[i].size() - 1; j >= 0; j--) {
-                    workingStack.emplace(m_underSequence[i][j], m_k - 1, false);
-                }
+        if (m_settings.dt) { // Dynamic Traversal
+            shared_ptr<vector<shared_ptr<State>>> dtseq = m_underSequence.GetSeqDT();
+            for (auto state : *dtseq) {
+                workingStack.emplace(state, m_k - 1, false);
             }
         } else { // from the shallow and the start
-            for (int i = 0; i < m_underSequence.size(); i++) {
-                for (int j = 0; j < m_underSequence[i].size(); j++) {
+            for (int i = m_underSequence.size() - 1; i >= 0; i--) {
+                for (int j = m_underSequence[i].size() - 1; j >= 0; j--) {
                     workingStack.emplace(m_underSequence[i][j], m_k - 1, false);
                 }
             }
@@ -150,6 +149,7 @@ bool ForwardChecker::Check(int badId) {
                     GeneralizePredecessor(p, task.state);
                     shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
                     m_underSequence.push(newState);
+                    if (m_settings.dt) task.state->HasSucc();
                     m_log->L(3, "Get State: ", CubeToStrShort(newState->latches));
                     m_log->L(3, "State Detail: ", CubeToStr(newState->latches));
                     int newFrameLevel = GetNewLevel(newState);
@@ -166,6 +166,7 @@ bool ForwardChecker::Check(int badId) {
                         m_branching->Update(uc);
                     m_log->L(2, "Get Generalized UC: ", CubeToStr(uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
+                    if (m_settings.dt) task.state->HasUC();
                     PropagateUp(uc, task.frameLevel + 1);
                     m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
                     task.frameLevel++;

@@ -26,7 +26,7 @@ struct Settings {
     MCSATSolver solver = MCSATSolver::minisat;
     MCAlgorithm alg = MCAlgorithm::FCAR;
     int bmcK = -1;
-    bool end = false;
+    bool dt = true;
     int branching = 0;
     int randomSeed = 0;
     bool referSkipping = false;
