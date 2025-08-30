@@ -22,13 +22,15 @@ BasicIC3::BasicIC3(Settings settings,
     m_badPredLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_badPredLiftSolver->AddTrans();
     m_badPredLiftSolver->AddTransK(1);
-
-    // infFrame.k = -1;
-    // infFrame.solver = make_shared<SATSolver>(m_model, m_settings.solver);
-    // infFrame.solver->AddTrans();
-    // infFrame.solver->AddConstraints();
-    // infFrame.solver->AddProperty();
-    // AddSamePrimeConstraints(infFrame.solver);
+    clause cls;
+    cls.push_back(-m_model->GetPrimeK(m_model->GetBad(), 1));
+    for (auto cons : m_model->GetConstraints()) {
+        cls.push_back(-m_model->GetPrimeK(cons, 1));
+    }
+    for (auto cons : m_model->GetConstraints()) {
+        cls.push_back(-cons);
+    }
+    m_badPredLiftSolver->AddClause(cls);
 
     // Store the initial state literals in a set for efficient lookups.
     const auto &initState = m_model->GetInitialState();
@@ -39,16 +41,14 @@ BasicIC3::BasicIC3(Settings settings,
     m_checkResult = CheckResult::Unknown;
     m_k = 0;
     m_invariantLevel = 0;
-    // infSolverCount = 0;
-    // infLemmaCount = 0;
     lemmaCount = 0;
 
     m_branching = make_shared<Branching>(m_settings.branching);
     litOrder.branching = m_branching;
+    blockerOrder.branching = m_branching;
 }
 
 BasicIC3::~BasicIC3() {
-    // Destructor logic, if needed
 }
 
 CheckResult BasicIC3::Run() {
@@ -85,15 +85,6 @@ void BasicIC3::Extend() {
         }
         m_startSolver->AddClause(lemma);
     }
-    // blockingCubes = infFrame.borderCubes;
-    // for (const auto &blockingCube : blockingCubes) {
-    //     clause lemma;
-    //     lemma.reserve(blockingCube->size());
-    //     for (const auto &lit : *blockingCube) {
-    //         lemma.push_back(-lit);
-    //     }
-    //     m_startSolver->AddClause(lemma);
-    // }
 }
 
 bool BasicIC3::Check(int badId) {
@@ -115,9 +106,7 @@ bool BasicIC3::Check(int badId) {
     for (const auto &lit : m_initialStateSet) {
         frame0.solver->AddClause({lit});
         auto blockingCube = make_shared<cube>(cube{-lit});
-        // AddBlockingCube(blockingCube, 0, false);
     }
-
 
     // The main IC3 loop.
     for (m_k = 1;; ++m_k) {
@@ -211,21 +200,11 @@ void BasicIC3::AddNewFrame() {
     newFrame.solver->AddConstraints();
     newFrame.solver->AddProperty();
     AddSamePrimeConstraints(newFrame.solver);
-    // auto blockingCubes = infFrame.borderCubes;
-    // for (const auto &blockingCube : blockingCubes) {
-    //     clause lemma;
-    //     lemma.reserve(blockingCube->size());
-    //     for (const auto &lit : *blockingCube) {
-    //         lemma.push_back(-lit);
-    //     }
-    //     newFrame.solver->AddClause(lemma);
-    // }
     m_frames.push_back(newFrame);
 }
 
-void BasicIC3::AddBlockingCube(shared_ptr<cube> blockingCube, int frameLevel, bool toAll) {
+void BasicIC3::AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLevel, bool toAll) {
     assert(frameLevel >= 1);
-    // If the cube was already present, do nothing.
     auto insertionResult = m_frames[frameLevel].borderCubes.insert(blockingCube);
     if (!insertionResult.second) {
         return;
@@ -248,31 +227,31 @@ void BasicIC3::AddBlockingCube(shared_ptr<cube> blockingCube, int frameLevel, bo
             m_frames[i].solver->AddClause(lemma);
         }
     }
-    if (frameLevel >= m_k && frameLevel > 0) {
+    if (frameLevel >= m_k) {
         m_startSolver->AddClause(lemma);
     }
-    // if (toAll && frameLevel > m_k) {
-    //     auto infSolver = infFrame.solver;
-    //     OrderAssumption(blockingCube);
-    //     m_log->L(3, "Checking inductivity for ordered cube: ", CubeToStr(blockingCube));
-    //     auto blockingCubePrime = GetPrimeCube(blockingCube);
-    //     infSolver->AddTempClause(lemma);
-    //     bool res = !infSolver->Solve(blockingCubePrime);
-    //     infSolverCount++;
-    //     infSolver->ReleaseTempClause(); // Always release the temporary clause
-    //     if (res) {
-    //         auto blockingCubeCore = GetAndValidateUC(infSolver, blockingCube);
-    //         clause infLemma;
-    //         infLemma.reserve(blockingCube->size());
-    //         for (const auto &lit : *blockingCubeCore) {
-    //             infLemma.push_back(-lit);
-    //         }
-    //         infFrame.solver->AddClause(infLemma);
-    //         infLemmaCount++;
-    //     }
-    // }
 }
 
+shared_ptr<cube> BasicIC3::GetCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube, bool prime) {
+    unordered_set<int> conflictSet = solver->GetConflict();
+    shared_ptr<cube> core = make_shared<cube>();
+    if (!prime) {
+        for (const auto &lit : *fallbackCube) {
+            if (conflictSet.count(lit)) {
+                core->push_back(lit);
+            }
+        }
+        return core;
+    } else {
+        for (const auto &lit : *fallbackCube) {
+            int lit_p = m_model->GetPrimeK(lit, 1);
+            if (conflictSet.count(lit_p)) {
+                core->push_back(lit);
+            }
+        }
+        return core;
+    }
+}
 
 shared_ptr<State> BasicIC3::EnumerateStartState() {
     m_log->L(2, "Searching for a start state at level ", m_k);
@@ -293,38 +272,26 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
             }
         }
 
-
         pair<shared_ptr<cube>, shared_ptr<cube>> assignment = m_startSolver->GetAssignment(false);
-
         shared_ptr<cube> partialLatch = make_shared<cube>(*assignment.second);
 
-        clause cls;
-        cls.push_back(-m_model->GetPrimeK(m_model->GetBad(), 1));
-        for (auto cons : m_model->GetConstraints()) {
-            cls.push_back(-m_model->GetPrimeK(cons, 1));
-        }
-        for (auto cons : m_model->GetConstraints()) {
-            cls.push_back(-cons);
-        }
-        m_badPredLiftSolver->AddTempClause(cls);
-
         while (true) {
-            shared_ptr<cube> assump(new cube());
-            copy(partialLatch->begin(), partialLatch->end(), back_inserter(*assump));
-            OrderAssumption(assump);
-            copy(assignment.first->begin(), assignment.first->end(), back_inserter(*assump));
-            copy(primeInputs.begin(), primeInputs.end(), back_inserter(*assump));
+            shared_ptr<cube> assumps = make_shared<cube>();
+            assumps->insert(assumps->end(), partialLatch->begin(), partialLatch->end());
+            OrderAssumption(assumps);
+            assumps->insert(assumps->end(), assignment.first->begin(), assignment.first->end());
+            assumps->insert(assumps->end(), primeInputs.begin(), primeInputs.end());
 
-            bool res = m_badPredLiftSolver->Solve(assump);
+            bool res = m_badPredLiftSolver->Solve(assumps);
             assert(!res);
-            shared_ptr<cube> tempUc = m_badPredLiftSolver->GetUC(false);
-            if (tempUc->size() == partialLatch->size()) {
+            shared_ptr<cube> tempCore = GetCore(m_badPredLiftSolver, partialLatch, false);
+            if (tempCore->size() == partialLatch->size()) {
                 break;
             } else {
-                partialLatch = tempUc;
+                partialLatch = tempCore;
             }
         }
-        m_badPredLiftSolver->ReleaseTempClause();
+
         assignment.second = partialLatch;
 
         shared_ptr<State> badState(new State(nullptr, make_shared<cube>(badInputs), nullptr, 0));
@@ -355,7 +322,7 @@ bool BasicIC3::Strengthen() {
                 return false;
             }
         } else {
-            m_log->L(1, "No more CTIs at level ", m_k, ". Frame is strengthened.");
+            m_log->L(2, "No more CTIs at level ", m_k, ". Frame is strengthened.");
             return true;
         }
     }
@@ -367,17 +334,13 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
 
         // Query: F_{ob.level} & T & cti'
         m_log->L(2, "Handling obligation for state at level ", ob.level, " with depth ", ob.depth);
-        auto solver = m_frames[ob.level].solver;
-        shared_ptr<cube> ctiCube(new cube(*ob.state->latches));
-        OrderAssumption(ctiCube);
-        auto ctiPrime = GetPrimeCube(ctiCube);
 
-        if (!solver->Solve(ctiPrime)) {
+        const shared_ptr<SATSolver> &frameSolver = m_frames[ob.level].solver;
+        const shared_ptr<cube> &ctiCube = ob.state->latches;
+
+        if (UnreachabilityCheck(ctiCube, frameSolver)) {
             obligations.erase(obligations.begin());
-
-            // Get the UNSAT core, but validate it against the initial states.
-            // The safe fallback is the original CTI state that was just blocked.
-            auto newBlockingCube = GetAndValidateUC(solver, ob.state->latches);
+            auto newBlockingCube = GetAndValidateCore(frameSolver, ctiCube);
 
             size_t pushLevel = Generalize(newBlockingCube, ob.level);
 
@@ -385,21 +348,13 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
                 m_log->L(2, "Creating new obligation for same state at higher level ", pushLevel);
                 obligations.insert(Obligation(ob.state, pushLevel, ob.depth));
             }
-
         } else {
-            pair<shared_ptr<cube>, shared_ptr<cube>> assignment = solver->GetAssignment(false);
-
-            // Create the predecessor state object first with the concrete assignment.
-            auto predecessorState = make_shared<State>(
-                ob.state,
-                assignment.first,
-                assignment.second,
-                ob.depth + 1);
-
+            pair<shared_ptr<cube>, shared_ptr<cube>> assignment = frameSolver->GetAssignment(false);
+            auto predecessorState = make_shared<State>(ob.state, assignment.first, assignment.second, ob.depth + 1);
             if (ob.level == 0) {
                 m_log->L(1, "UNSAFE: Found a path from the initial state.");
                 m_cexStart = predecessorState;
-                return false; // Signal that CEX is found.
+                return false;
             }
 
             GeneralizePredecessor(predecessorState, ob.state);
@@ -411,148 +366,143 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
     return true;
 }
 
+bool BasicIC3::InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv) {
+    clause cls;
+    cls.reserve(cb->size());
+    for (const auto &lit : *cb) {
+        cls.push_back(-lit);
+    }
+    slv->AddTempClause(cls);
+    auto assumption = make_shared<cube>(*cb);
+    OrderAssumption(assumption);
+    GetPrimed(assumption);
+    bool result = slv->Solve(assumption);
+    slv->ReleaseTempClause();
+    return !result;
+}
 
-bool BasicIC3::Down(shared_ptr<cube> downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
-    m_log->L(3, "Down:", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
+bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
+    m_log->L(3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
-    auto solverLvl = m_frames[frameLvl].solver;
+    const auto solverLvl = m_frames[frameLvl].solver;
     bool downRes = false;
     if (recLvl > m_settings.ctgMaxRecursionDepth) {
-        m_log->L(3, "recLvl > max, quick check");
+        m_log->L(3, "Max recursion depth reached, quick check");
         if (!InitiationCheck(downCube)) {
             return false;
         }
-        clause downCls;
-        downCls.reserve(downCube->size());
-        for (const auto &lit : *downCube) {
-            downCls.push_back(-lit);
+        if (InductionCheck(downCube, solverLvl)) {
+            shared_ptr<cube> downCore = GetAndValidateCore(solverLvl, downCube);
+            downCube->swap(*downCore);
+            return true;
         }
-        solverLvl->AddTempClause(downCls);
-        OrderAssumption(downCube);
-        auto downCubePrime = GetPrimeCube(downCube);
-        downRes = !solverLvl->Solve(downCubePrime);
-        solverLvl->ReleaseTempClause();
-        if (downRes) {
-            shared_ptr<cube> downCore = GetAndValidateUC(solverLvl, downCube);
-            if (downCore->size() < downCube->size()) {
-                m_log->L(3, "Found smaller core during down: ", CubeToStr(downCore));
-                downCube->swap(*downCore);
-            }
+        return false;
+    }
+
+    while (true) {
+        m_log->L(3, "Down attempt: ", CubeToStr(downCube));
+        if (!InitiationCheck(downCube)) {
+            return false;
         }
-        return downRes;
-    } else {
-        while (true) {
-            m_log->L(3, "Down attempt:", CubeToStr(downCube));
-            if (!InitiationCheck(downCube)) {
-                return false;
-            }
+        if (InductionCheck(downCube, solverLvl)) {
+            shared_ptr<cube> downCore = GetAndValidateCore(solverLvl, downCube);
+            downCube->swap(*downCore);
+            return true;
+        }
 
-            clause downCls;
-            downCls.reserve(downCube->size());
-            for (const auto &lit : *downCube) {
-                downCls.push_back(-lit);
-            }
-            solverLvl->AddTempClause(downCls);
-            OrderAssumption(downCube);
-            auto downCubePrime = GetPrimeCube(downCube);
-            downRes = !solverLvl->Solve(downCubePrime);
-            solverLvl->ReleaseTempClause();
-            if (downRes) {
-                shared_ptr<cube> downCore = GetAndValidateUC(solverLvl, downCube);
-                if (downCore->size() < downCube->size()) {
-                    m_log->L(3, "Found smaller core during down: ", CubeToStr(downCore));
-                    downCube->swap(*downCore);
-                }
-                return true;
-            }
+        shared_ptr<State> downState = make_shared<State>(nullptr, nullptr, downCube, 0);
+        pair<shared_ptr<cube>, shared_ptr<cube>> ctgAssignment = solverLvl->GetAssignment(false);
+        auto ctgState = make_shared<State>(downState, ctgAssignment.first, ctgAssignment.second, 0);
+        GeneralizePredecessor(ctgState, downState);
 
-            m_log->L(3, "Not inductive, extracting ctg");
-            shared_ptr<State> downState = make_shared<State>(
-                nullptr,
-                nullptr,
-                downCube,
-                0);
-            pair<shared_ptr<cube>, shared_ptr<cube>> ctgAssignment = solverLvl->GetAssignment(false);
-            auto ctgState = make_shared<State>(
-                downState,
-                ctgAssignment.first,
-                ctgAssignment.second,
-                0);
-            GeneralizePredecessor(ctgState, downState);
-            const shared_ptr<cube> &ctgCube = ctgState->latches;
-            m_log->L(3, "CTG cube: ", CubeToStr(ctgCube));
-            if (!InitiationCheck(ctgCube)) {
-                // initiation check failed, not inductive, no need to join
-                return false;
+        const shared_ptr<cube> &ctgCube = ctgState->latches;
+        m_log->L(3, "CTG cube: ", CubeToStr(ctgCube));
+
+        if (!InitiationCheck(ctgCube)) {
+            return false;
+        }
+
+        const auto solverLvlMinus1 = m_frames[frameLvl - 1].solver;
+        if (ctgs < m_settings.ctgMaxStates && frameLvl > 1 && InductionCheck(ctgCube, solverLvlMinus1)) {
+            ctgs++;
+            m_log->L(3, "CTG is inductive at level ", frameLvl - 1);
+            shared_ptr<cube> ctgCore = GetAndValidateCore(solverLvlMinus1, ctgCube);
+
+            int pushLevel = PushLemmaForward(ctgCore, frameLvl);
+            if (MIC(ctgCore, pushLevel - 1, recLvl + 1)) {
+                m_branching->Update(ctgCore);
             }
-
-            bool ctgRes = false;
-            if (ctgs < m_settings.ctgMaxStates && frameLvl > 1) {
-                ctgs++;
-                auto solverLvlMinus1 = m_frames[frameLvl - 1].solver;
-                clause ctgCls;
-                ctgCls.reserve(ctgCube->size());
-                for (const auto &lit : *ctgCube) {
-                    ctgCls.push_back(-lit);
-                }
-                solverLvlMinus1->AddTempClause(ctgCls);
-                OrderAssumption(ctgCube);
-                auto ctgCubePrime = GetPrimeCube(ctgCube);
-                ctgRes = !solverLvlMinus1->Solve(ctgCubePrime);
-                solverLvlMinus1->ReleaseTempClause();
-                if (ctgRes) {
-                    m_log->L(3, "CTG is inductive at level ", frameLvl - 1);
-                    shared_ptr<cube> ctgCore = GetAndValidateUC(solverLvlMinus1, ctgCube);
-
-                    int pushLevel = PushLemmaForward(ctgCore, frameLvl);
-                    MIC(ctgCore, pushLevel - 1, recLvl + 1);
-                    m_log->L(2, "Learned ctg clause and pushed to frame ", pushLevel);
-                    AddBlockingCube(ctgCore, pushLevel, true);
+            m_log->L(2, "Learned ctg clause and pushed to frame ", pushLevel);
+            AddBlockingCube(ctgCore, pushLevel, true);
+        } else {
+            ctgs = 0;
+            shared_ptr<cube> joinCube = make_shared<cube>();
+            for (int i = downCube->size() - 1; i >= 0; i--) {
+                if (binary_search(ctgCube->begin(), ctgCube->end(), downCube->at(i))) {
+                    joinCube->push_back(downCube->at(i));
+                } else if (triedLits.count(downCube->at(i))) {
+                    return false;
                 }
             }
-            if (!ctgRes) {
-                ctgs = 0;
-                sort(ctgCube->begin(), ctgCube->end(), cmp);
-                shared_ptr<cube> tempCube = make_shared<cube>();
-                for (int i = downCube->size() - 1; i >= 0; i--) {
-                    if (binary_search(ctgCube->begin(), ctgCube->end(), downCube->at(i))) {
-                        tempCube->push_back(downCube->at(i));
-                    } else if (triedLits.count(downCube->at(i))) {
-                        return false;
-                    }
-                }
-                m_log->L(3, "Joint cube: ", CubeToStr(tempCube));
-                downCube->swap(*tempCube);
-            }
+            m_log->L(3, "Joint cube: ", CubeToStr(joinCube));
+            downCube->swap(*joinCube);
         }
     }
 }
 
-size_t BasicIC3::Generalize(shared_ptr<cube> cb, int frameLvl) {
+void BasicIC3::GetBlockers(const shared_ptr<cube> &blockingCube, int framelevel, vector<shared_ptr<cube>> &blockers) {
+    int size = -1;
+    for (auto it : m_frames[framelevel].borderCubes) {
+        shared_ptr<cube> cb = make_shared<cube>(*it);
+        if (size != -1 && size < cb->size()) break;
+        if (includes(blockingCube->begin(), blockingCube->end(), cb->begin(), cb->end(), cmp)) {
+            size = cb->size();
+            blockers.push_back(cb);
+        }
+    }
+}
+
+size_t BasicIC3::Generalize(const shared_ptr<cube> &cb, int frameLvl) {
     m_log->L(3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
-    MIC(cb, frameLvl, 1);
+    if (MIC(cb, frameLvl, 1)) {
+        m_branching->Update(cb);
+    }
     int pushLevel = PushLemmaForward(cb, frameLvl + 1);
     m_log->L(2, "Learned clause and pushed to frame ", pushLevel);
-    sort(cb->begin(), cb->end(), cmp);
     AddBlockingCube(cb, pushLevel, true);
-    m_branching->Update(cb);
     return pushLevel;
 }
 
-void BasicIC3::MIC(shared_ptr<cube> cb, int frameLvl, int recLvl) {
-    m_log->L(3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
-    shared_ptr<cube> generalizedCube = make_shared<cube>(*cb);
+bool BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
+    m_log->L(3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
+
+    vector<shared_ptr<cube>> blockers;
+    shared_ptr<cube> blocker = make_shared<cube>();
     set<int> triedLits;
+
+    if (m_settings.referSkipping && frameLvl > 0) {
+        GetBlockers(cb, frameLvl, blockers);
+        if (blockers.size() > 0) {
+            if (m_settings.branching > 0) {
+                sort(blockers.begin(), blockers.end(), blockerOrder);
+            }
+            *blocker = *blockers[0];
+        }
+        for (const auto &lit : *blocker) {
+            triedLits.insert(lit);
+        }
+    }
+
+
     const int maxMicAttempts = 3;
     size_t attempts = maxMicAttempts;
 
-    OrderAssumption(generalizedCube);
-
+    OrderAssumption(cb);
     // Iterate backwards to handle the shrinking cube size gracefully.
-    for (int i = generalizedCube->size() - 1; i >= 0; --i) {
-        if (generalizedCube->size() < 2) break;
-        int litToDrop = generalizedCube->at(i);
+    for (int i = cb->size() - 1; i >= 0; --i) {
+        if (cb->size() < 2) break;
+        int litToDrop = cb->at(i);
 
         // If we have already tried and failed to drop this literal, skip.
         if (triedLits.count(litToDrop)) {
@@ -561,305 +511,105 @@ void BasicIC3::MIC(shared_ptr<cube> cb, int frameLvl, int recLvl) {
 
         // Create a temporary cube with one literal removed.
         shared_ptr<cube> dropCube = make_shared<cube>();
-        dropCube->reserve(generalizedCube->size() - 1);
-        for (int j = 0; j < generalizedCube->size(); ++j) {
+        dropCube->reserve(cb->size() - 1);
+        for (int j = 0; j < cb->size(); ++j) {
             if (i == j) continue;
-            dropCube->push_back(generalizedCube->at(j));
+            dropCube->push_back(cb->at(j));
         }
 
         if (Down(dropCube, frameLvl, recLvl, triedLits)) {
-            generalizedCube = dropCube;
-            OrderAssumption(generalizedCube);
-            i = generalizedCube->size(); // Restart from the end
-            attempts = maxMicAttempts;   // Reset attempts after a successful drop
+            // dropCube is sorted
+            cb->swap(*dropCube);
+            OrderAssumption(cb);
+            i = cb->size();
+            attempts = maxMicAttempts;
         } else {
             if (--attempts == 0) {
                 m_log->L(3, "Max MIC attempts reached, stopping generalization.");
                 break;
             }
-            // SAT: The smaller cube is not inductive. We cannot drop the literal.
             triedLits.insert(litToDrop);
         }
     }
-    cb->swap(*generalizedCube);
+    sort(cb->begin(), cb->end(), cmp);
+    if (cb->size() > blocker->size() && frameLvl != 0) {
+        return false;
+    } else {
+        return true;
+    }
 }
 
 
-// size_t BasicIC3::Generalize(shared_ptr<cube> cb, int frameLvl) {
-//     m_log->L(3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
-//     MIC(cb, frameLvl, 1);
-//     int pushLevel = PushLemmaForward(cb, frameLvl + 1);
-//     m_log->L(2, "Learned clause and pushed to frame ", pushLevel);
-//     AddBlockingCube(cb, pushLevel, true);
-//     return pushLevel;
-// }
+void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState) {
+    m_log->L(3, "Generalizing predecessor. Initial latch size: ", predecessorState->latches->size(), ", input size: ", predecessorState->inputs->size(), ", Successor state latch size: ", successorState->latches->size());
 
-// void BasicIC3::MIC(shared_ptr<cube> cb, int frameLvl, int recLvl) {
-//     m_log->L(3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
-//     shared_ptr<cube> generalizedCube = make_shared<cube>(*cb);
-//     const int maxMicAttempts = 3;
-//     size_t attempts = maxMicAttempts;
-
-//     // Iterate backwards to handle the shrinking cube size gracefully.
-//     for (int i = 0; i < generalizedCube->size();) {
-//         // Create a temporary cube with one literal removed.
-//         shared_ptr<cube> dropCube = make_shared<cube>();
-//         dropCube->reserve(generalizedCube->size() - 1);
-//         for (int j = 0; j < generalizedCube->size(); ++j) {
-//             if (i == j) continue;
-//             dropCube->push_back(generalizedCube->at(j));
-//         }
-
-//         if (Down(dropCube, frameLvl, recLvl, i)) {
-//             generalizedCube->swap(*dropCube);
-//             attempts = maxMicAttempts; // Reset attempts after a successful drop
-//         } else {
-//             if (--attempts == 0) {
-//                 m_log->L(3, "Max MIC attempts reached, stopping generalization.");
-//                 break;
-//             }
-//             ++i;
-//         }
-//     }
-//     cb->swap(*generalizedCube);
-// }
-
-
-// bool BasicIC3::Down(shared_ptr<cube> downCube, int frameLvl, int recLvl, int keepTo) {
-//     m_log->L(3, "Down:", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
-//     int ctgs = 0;
-//     int joins = 0;
-
-//     while (true) {
-//         if (!InitiationCheck(downCube)) {
-//             return false;
-//         }
-//         if (recLvl > m_settings.ctgMaxRecursionDepth) {
-//             m_log->L(3, "recLvl > max, quick check");
-//             auto solverLvl = m_frames[frameLvl].solver;
-
-//             clause downCls;
-//             downCls.reserve(downCube->size());
-//             for (const auto &lit : *downCube) {
-//                 downCls.push_back(-lit);
-//             }
-//             solverLvl->AddTempClause(downCls);
-//             auto downCubePrime = GetPrimeCube(downCube);
-//             bool downRes = !solverLvl->Solve(downCubePrime);
-//             solverLvl->ReleaseTempClause();
-//             if (downRes) {
-//                 shared_ptr<cube> downCore = GetAndValidateUC(solverLvl, downCube);
-//                 if (downCore->size() < downCube->size()) {
-//                     m_log->L(3, "Found smaller core during down: ", CubeToStr(downCore));
-//                     downCube->swap(*downCore);
-//                 }
-//             }
-//             return downRes;
-//         }
-//         auto solverLvl = m_frames[frameLvl].solver;
-//         clause downCls;
-//         downCls.reserve(downCube->size());
-//         for (const auto &lit : *downCube) {
-//             downCls.push_back(-lit);
-//         }
-//         solverLvl->AddTempClause(downCls);
-//         auto downCubePrime = GetPrimeCube(downCube);
-//         bool downRes = !solverLvl->Solve(downCubePrime);
-//         solverLvl->ReleaseTempClause();
-//         if (downRes) {
-//             shared_ptr<cube> downCore = GetAndValidateUC(solverLvl, downCube);
-//             if (downCore->size() < downCube->size()) {
-//                 m_log->L(3, "Found smaller core during down: ", CubeToStr(downCore));
-//                 downCube->swap(*downCore);
-//             }
-//             return true;
-//         }
-
-//         shared_ptr<State> downState = make_shared<State>(
-//             nullptr,
-//             nullptr,
-//             downCube,
-//             0);
-//         pair<shared_ptr<cube>, shared_ptr<cube>> ctgAssignment = solverLvl->GetAssignment(false);
-//         auto ctgState = make_shared<State>(
-//             downState,
-//             ctgAssignment.first,
-//             ctgAssignment.second,
-//             0);
-//         GeneralizePredecessor(ctgState, downState);
-//         const shared_ptr<cube> &ctgCube = ctgState->latches;
-
-//         bool ret = false;
-//         if (ctgs < m_settings.ctgMaxStates && frameLvl > 1 && InitiationCheck(ctgCube)) {
-//             auto solverLvlMinus1 = m_frames[frameLvl - 1].solver;
-//             clause ctgCls;
-//             ctgCls.reserve(ctgCube->size());
-//             for (const auto &lit : *ctgCube) {
-//                 ctgCls.push_back(-lit);
-//             }
-//             solverLvlMinus1->AddTempClause(ctgCls);
-//             auto ctgCubePrime = GetPrimeCube(ctgCube);
-//             bool ctgRes = !solverLvlMinus1->Solve(ctgCubePrime);
-//             solverLvlMinus1->ReleaseTempClause();
-//             if (ctgRes) {
-//                 ctgs++;
-//                 m_log->L(3, "CTG is inductive at level ", frameLvl - 1);
-//                 shared_ptr<cube> ctgCore = GetAndValidateUC(solverLvlMinus1, ctgCube);
-//                 int pushLevel = PushLemmaForward(ctgCore, frameLvl);
-//                 MIC(ctgCore, pushLevel - 1, recLvl + 1);
-//                 m_log->L(2, "Learned ctg clause and pushed to frame ", pushLevel);
-//                 AddBlockingCube(ctgCore, pushLevel, true);
-//             } else {
-//                 ctgs = 0;
-//                 ++joins;
-//                 shared_ptr<cube> tempCube = make_shared<cube>();
-//                 for (int i = 0; i < downCube->size(); i++) {
-//                     if (binary_search(ctgCube->begin(), ctgCube->end(), downCube->at(i))) {
-//                         tempCube->push_back(downCube->at(i));
-//                     } else if (i < keepTo) {
-//                         ret = true;
-//                         break;
-//                     }
-//                 }
-//                 m_log->L(3, "Joint cube: ", CubeToStr(tempCube));
-//                 downCube->swap(*tempCube);
-//             }
-//         } else {
-//             ctgs = 0;
-//             ++joins;
-//             shared_ptr<cube> tempCube = make_shared<cube>();
-//             for (int i = 0; i < downCube->size(); i++) {
-//                 if (binary_search(ctgCube->begin(), ctgCube->end(), downCube->at(i))) {
-//                     tempCube->push_back(downCube->at(i));
-//                 } else if (i < keepTo) {
-//                     ret = true;
-//                     break;
-//                 }
-//             }
-//             m_log->L(3, "Joint cube: ", CubeToStr(tempCube));
-//             downCube->swap(*tempCube);
-//         }
-//         if (ret) return false;
-//     }
-// }
-
-
-void BasicIC3::GeneralizePredecessor(shared_ptr<State> predecessorState, shared_ptr<State> successorState) {
-    m_log->L(3, "Generalizing predecessor. Initial latch size: ", predecessorState->latches->size(), ", input size: ", predecessorState->inputs->size());
-    m_log->L(3, "Successor state latch size: ", successorState->latches->size());
-    // 1. Create the temporary clause !s' based on the successor.
     clause succNegationClause;
-
-    // Successor is a state cube.
     succNegationClause.reserve(successorState->latches->size());
     for (const auto &lit : *(successorState->latches)) {
         succNegationClause.push_back(-m_model->GetPrimeK(lit, 1));
     }
-
     for (auto cons : m_model->GetConstraints()) {
         succNegationClause.push_back(-cons);
     }
-
     m_liftSolver->AddTempClause(succNegationClause);
-    // 2. Iteratively minimize the latch part of the predecessor.
-    auto partialLatch = make_shared<cube>(*predecessorState->latches);
+
+    const auto &partialLatch = predecessorState->latches;
 
     while (true) {
-        // 2a. Build assumption: current partial latch cube + fixed inputs.
-        auto assumption = make_shared<cube>();
-        assumption->insert(assumption->end(), partialLatch->begin(), partialLatch->end());
+        auto assumption = make_shared<cube>(*partialLatch);
         OrderAssumption(assumption);
-        assumption->insert(assumption->end(), predecessorState->inputs->begin(), predecessorState->inputs->end());
-        // assert (m_liftSolver->Solve(assumption));
+        assumption->insert(assumption->begin(), predecessorState->inputs->begin(), predecessorState->inputs->end());
         // There exist some successors whose predecessors are the entire set. (All latches are determined solely by the inputs.)
-        
 
-        // 2b. Solve. This query must be UNSAT.
         bool result = m_liftSolver->Solve(assumption);
-        assert(!result && "Lifting query resulted in SAT, which should be impossible.");
+        assert(!result);
 
-        // 2c. Get core. GetUC(false) returns a sorted cube of latches/innards.
-        auto core = m_liftSolver->GetUC(false);
+        auto core = GetCore(m_liftSolver, partialLatch, false);
         m_log->L(3, "Core size: ", core->size(), ", Partial latch size: ", partialLatch->size());
 
-        // 2d. Check for fixed point. If the core is not strictly smaller, we are done.
         if (core->size() >= partialLatch->size()) {
             break;
         } else {
-            // 2e. Update partial latch with the new, smaller core.
             partialLatch->swap(*core);
         }
     }
-    // 3. Release the temporary clause from the solver.
     m_liftSolver->ReleaseTempClause();
-
-    // 4. Update the predecessor state's latch cube in-place.
-    predecessorState->latches->swap(*partialLatch);
     m_log->L(3, "Generalized predecessor. Final latch size: ", predecessorState->latches->size());
 }
 
-// --- Helper Implementations ---
-
-bool BasicIC3::InitiationCheck(const shared_ptr<cube> &c) {
-    m_log->L(3, "Initiation check for cube: ", CubeToStr(c));
-    for (const auto &lit : *c) {
+bool BasicIC3::InitiationCheck(const shared_ptr<cube> &cb) {
+    for (const auto &lit : *cb) {
         if (m_initialStateSet.count(-lit)) {
             return true; // Disjoint (UNSAT), check passes.
         }
     }
-    // assert(m_frames[0].solver->Solve(c));
     m_log->L(3, "Initiation check failed.");
-    return false; // Intersects with I (potentially SAT), check fails.
-    // auto solver = m_frames[0].solver;
-    // return !solver->Solve(c); // Return true if UNSAT (disjoint).
+    return false;
 }
 
 
 // try to add negated literals from initial states
-void BasicIC3::InitiationAugmentation(shared_ptr<cube> failureCube, shared_ptr<cube> fallbackCube) {
+void BasicIC3::InitiationAugmentation(const shared_ptr<cube> &failureCube, const shared_ptr<cube> &fallbackCube) {
     for (const auto &lit : *fallbackCube) {
         if (m_initialStateSet.count(-lit)) {
             failureCube->push_back(lit);
             break;
         }
     }
-    // sort(failureCube->begin(), failureCube->end(), cmp);
+    sort(failureCube->begin(), failureCube->end(), cmp);
 }
 
-// todo, use conflict and original cube to extract core that strictly smaller.
-// todo, if initiation check failed, try to add neg inputs(from original cubes) to make it disjoint
-// fallbackCube is assumed to be disjoint with initial states
-shared_ptr<cube> BasicIC3::GetAndValidateUC(const shared_ptr<SATSolver> solver, const shared_ptr<cube> fallbackCube) {
-    shared_ptr<cube> core = solver->GetUC(true);
+// fallbackCube is sorted
+shared_ptr<cube> BasicIC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube) {
+    shared_ptr<cube> core = GetCore(solver, fallbackCube, true);
     m_log->L(3, "Got UNSAT core: ", CubeToStr(core));
     if (!InitiationCheck(core)) {
-        m_log->L(3, "GetAndValidateUC: core intersects with initial states. Reverting to fallback cube.");
-        InitiationAugmentation(core, fallbackCube);
-        // *core = *fallbackCube;
+        m_log->L(3, "GetAndValidateCore: core intersects with initial states. Reverting to fallback cube.");
+        // InitiationAugmentation(core, fallbackCube);
+        *core = *fallbackCube;
     }
-    // MakeSubset(core, fallbackCube);
     return core;
 }
-
-// void BasicIC3::MakeSubset(shared_ptr<cube> c1, shared_ptr<cube> c2) {
-//     size_t i = 0, j = 0, k = 0;
-
-//     while (i < c1->size() && j < c2->size()) {
-//         if (c1->operator[](i) == c2->operator[](j)) {
-//             if (k != i) {
-//                 c1->operator[](k) = std::move(c1->operator[](i));
-//             }
-//             k++;
-//             i++;
-//             j++;
-//         } else if (cmp(c1->operator[](i), c2->operator[](j))) {
-//             i++;
-//         } else {
-//             j++;
-//         }
-//     }
-//     c1->resize(k);
-// }
 
 string BasicIC3::FramesInfo() const {
     stringstream ss;
@@ -870,42 +620,33 @@ string BasicIC3::FramesInfo() const {
     return ss.str();
 }
 
-shared_ptr<cube> BasicIC3::GetPrimeCube(const shared_ptr<cube> &c) {
-    auto primeCube = make_shared<cube>();
-    primeCube->reserve(c->size());
-    for (const auto &lit : *c) {
-        primeCube->push_back(m_model->GetPrimeK(lit, 1));
-    }
-    return primeCube;
+bool BasicIC3::UnreachabilityCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv) {
+    auto assumption = make_shared<cube>(*cb);
+    OrderAssumption(assumption);
+    GetPrimed(assumption);
+    return !slv->Solve(assumption);
 }
 
-int BasicIC3::PushLemmaForward(shared_ptr<cube> c, int startLevel) {
+int BasicIC3::PushLemmaForward(const shared_ptr<cube> &cb, int startLevel) {
     int pushLevel = startLevel;
-    sort(c->begin(), c->end(), cmp);
     while (pushLevel <= m_k) {
-        auto nextFrameSolver = m_frames[pushLevel].solver;
-        auto cubePrime = GetPrimeCube(c);
-        // If F_{pushLevel} & T & c' is SAT, we can't push further.
-        if (nextFrameSolver->Solve(cubePrime)) {
+        if (!UnreachabilityCheck(cb, m_frames[pushLevel].solver)) {
             break;
         }
-        m_branching->Update(c);
+        m_branching->Update(cb);
         pushLevel++;
     }
     return pushLevel;
 }
 
-// --- Placeholder Implementations for Subsequent Phases ---
-
 bool BasicIC3::Propagate() {
-    m_log->L(1, "Phase 3: Propagating clauses.");
+    m_log->L(1, "Propagating clauses.");
 
     m_log->L(2, "Cleaning up redundant clauses.");
     set<shared_ptr<cube>, cubePtrComp> allCubes;
     for (int i = m_k + 1; i >= m_earliest; --i) {
         IC3Frame &frame = m_frames[i];
         if (frame.borderCubes.empty()) continue;
-
         size_t originalSize = frame.borderCubes.size();
 
         set<shared_ptr<cube>, cubePtrComp> remainingCubes;
@@ -923,37 +664,21 @@ bool BasicIC3::Propagate() {
     }
 
     m_log->L(2, "Propagating clauses forward.");
-    // Optimization: if the last strengthening was trivial, only propagate from F_k.
     for (int i = m_trivial ? m_k : 1; i <= m_k; ++i) {
-        IC3Frame &frame = m_frames[i];
+        IC3Frame &framei = m_frames[i];
         int cubesKept = 0;
         int cubesPropagated = 0;
 
-        // Use the safe manual iteration pattern from IC3.cpp
-        for (auto it = frame.borderCubes.begin(); it != frame.borderCubes.end();) {
-            const auto &c = *it;
-            shared_ptr<cube> assumption(new cube(*c));
-            OrderAssumption(assumption);
-            // A clause !c is inductive relative to F_i if F_i & T & c' is UNSAT.
-            auto solver = frame.solver;
-            auto prime_c = GetPrimeCube(assumption);
-            if (!solver->Solve(prime_c)) {
-                // UNSAT -> Inductive.
+        for (auto it = framei.borderCubes.begin(); it != framei.borderCubes.end();) {
+            const auto &cb = *it;
+            if (UnreachabilityCheck(cb, framei.solver)) {
                 cubesPropagated++;
-                // Get the UNSAT core, which might be a smaller, more general cube.
-                // The fallback is the original cube 'c'.
-                auto smaller_c = GetAndValidateUC(solver, c);
-
-                // Push the (potentially smaller) blocking cube to the next frame.
-                AddBlockingCube(smaller_c, i + 1, smaller_c->size() < c->size());
-                sort(smaller_c->begin(), smaller_c->end(), cmp);
-                m_branching->Update(smaller_c);
-
-                // And remove the original cube 'c' from the current frame's border.
+                auto core = GetAndValidateCore(framei.solver, cb);
+                AddBlockingCube(core, i + 1, core->size() < cb->size());
+                m_branching->Update(core);
                 // Safely erase and advance the iterator
-                it = frame.borderCubes.erase(it);
+                it = framei.borderCubes.erase(it);
             } else {
-                // SAT -> Not inductive, keep the cube in this frame.
                 cubesKept++;
                 ++it;
             }
@@ -961,57 +686,16 @@ bool BasicIC3::Propagate() {
 
         m_log->L(2, "Frame ", i, " propagation: ", cubesPropagated, " propagated, ", cubesKept, " kept.");
 
-        // After attempting to push all clauses, check for proof.
-        // A proof is found if F_i becomes empty, meaning all its clauses
-        // were propagated to F_{i+1}, making F_i an inductive invariant.
-        if (frame.borderCubes.empty()) {
+
+        if (framei.borderCubes.empty()) {
             m_log->L(1, "SAFE: Frame F_", i, " is empty.");
             m_invariantLevel = i + 1;
             m_log->L(1, "m_invariantLevel: ", m_invariantLevel);
             m_log->L(1, FramesInfo());
-            // m_log->L(1, "infSolverCount: ", infSolverCount);
-            // m_log->L(1, "infLemmaCount: ", infLemmaCount);
             m_log->L(1, "lemmaCount: ", lemmaCount);
             return true; // Proof found
         }
     }
-
-    // IC3Frame &frameKPlus1 = m_frames[m_k + 1];
-    // for (auto it = frameKPlus1.borderCubes.begin(); it != frameKPlus1.borderCubes.end();) {
-    //     auto tempCube = *it;
-    //     auto infSolver = infFrame.solver;
-
-    //     // Add !tempCube as a temporary clause
-    //     clause tempClause;
-    //     tempClause.reserve(tempCube->size());
-    //     for (const auto &lit : *tempCube) {
-    //         tempClause.push_back(-lit);
-    //     }
-
-
-    //     // order assumption for innards
-    //     OrderAssumption(tempCube);
-
-    //     m_log->L(3, "Checking inductivity for ordered cube: ", CubeToStr(tempCube));
-    //     auto tempCubePrime = GetPrimeCube(tempCube);
-    //     infSolver->AddTempClause(tempClause);
-    //     bool res = !infSolver->Solve(tempCubePrime);
-    //     infcount ++;
-    //     infSolver->ReleaseTempClause(); // Always release the temporary clause
-    //     if (res) {
-    //         auto tempCore = GetAndValidateUC(infSolver, tempCube);
-    //         AddBlockingCube(tempCore, -1, false);
-    //         it = frameKPlus1.borderCubes.erase(it);
-    //     } else {
-    //         ++it;
-    //     }
-    // }
-
-    // 3. Simplify solvers to clean up internal states.
-    // for (int i = 1; i <= m_k + 1; ++i) {
-    //     m_frames[i].solver->Simplify();
-    // }
-    // m_liftSolver->Simplify();
 
     // No proof was found in this iteration.
     return false;
@@ -1156,7 +840,7 @@ void BasicIC3::OutputWitness(int bad) {
 
     set<shared_ptr<cube>, cubePtrComp> indInv;
 
-    for (int i = m_invariantLevel; i <= m_k+1; i++) {
+    for (int i = m_invariantLevel; i <= m_k + 1; i++) {
         indInv.insert(m_frames[i].borderCubes.begin(), m_frames[i].borderCubes.end());
     }
     // if (indInv.empty()) {

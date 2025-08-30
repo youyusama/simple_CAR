@@ -137,6 +137,15 @@ shared_ptr<cube> CadicalSolver::GetUC(bool prime) {
     return uc;
 }
 
+unordered_set<int> CadicalSolver::GetConflict() {
+    unordered_set<int> conflictSet;
+    for (auto v : *m_assumptions) {
+        if (failed(v)) {
+            conflictSet.insert(v);
+        }
+    }
+    return conflictSet;
+}
 
 void CadicalSolver::AddTempClause(const cube &cls) {
     m_tempClause = cls;

@@ -103,6 +103,14 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinisatSolver::GetAssignment(bool prime
     return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
 }
 
+unordered_set<int> MinisatSolver::GetConflict() {
+    unordered_set<int> conflictSet;
+    for (int i = 0; i < conflict.size(); ++i) {
+        int val = -GetLiteralId(conflict[i]);
+        conflictSet.insert(val);
+    }
+    return conflictSet;
+}
 
 shared_ptr<cube> MinisatSolver::GetUC(bool prime) {
     shared_ptr<cube> uc(new cube());
