@@ -21,6 +21,7 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     bool Solve(const shared_ptr<cube> assumption) override;
     pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override;
     shared_ptr<cube> GetUC(bool prime) override;
+    unordered_set<int> GetConflict() override;
     inline int GetNewVar() {
         return ++m_maxId;
     }

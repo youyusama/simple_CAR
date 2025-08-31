@@ -48,34 +48,78 @@ class BasicIC3 : public BaseChecker {
     bool BaseCases();
     void AddNewFrame();
     void AddNewFrames();
-    void AddBlockingCube(shared_ptr<cube> blockingCube, int frameLevel);
+    void AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLevel, bool toAll);
 
     bool Strengthen();
     bool HandleObligations(set<Obligation> &obligations);
-    void Generalize(shared_ptr<cube> c, int level);
-    void GeneralizePredecessor(shared_ptr<State> predecessorState, shared_ptr<State> successorState = nullptr);
+    size_t Generalize(const shared_ptr<cube> &cb, int frameLvl);
+    bool MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl);
+    bool Down(const shared_ptr<cube> &c, int frameLvl, int recLvl, const set<int> &triedLits);
+    void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 
-    bool InitiationCheck(const shared_ptr<cube> &c);
-    shared_ptr<cube> GetAndValidateUC(const shared_ptr<SATSolver> solver, const shared_ptr<cube> fallbackCube);
-    shared_ptr<cube> GetPrimeCube(const shared_ptr<cube> &c);
+
+    inline void GetPrimed(shared_ptr<cube> p) {
+        for (auto &x : *p) {
+            x = m_model->GetPrimeK(x, 1);
+        }
+    }
     string FramesInfo() const;
-    int PushLemmaForward(shared_ptr<cube> c, int startLevel);
+    int PushLemmaForward(const shared_ptr<cube> &cb, int startLevel);
 
-    void OrderAssumption(shared_ptr<cube> c) {
+    struct LitOrder {
+        shared_ptr<Branching> branching;
+
+        LitOrder() {}
+
+        bool operator()(const int &l1, const int &l2) const {
+            return (branching->PriorityOf(l1) > branching->PriorityOf(l2));
+        }
+    } litOrder;
+
+    struct BlockerOrder {
+        shared_ptr<Branching> branching;
+
+        BlockerOrder() {}
+
+        bool operator()(const shared_ptr<cube> &a, const shared_ptr<cube> &b) const {
+            float score_a = 0, score_b = 0;
+            for (int i = 0; i < a->size(); i++) {
+                score_a += branching->PriorityOf(a->at(i));
+                score_b += branching->PriorityOf(b->at(i));
+            }
+            return score_a > score_b;
+        }
+    } blockerOrder;
+
+    void OrderAssumption(const shared_ptr<cube> &c) {
         if (m_settings.randomSeed > 0) {
             shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        // branching
+        sort(c->begin(), c->end(), litOrder);
     }
 
+    void Extend();
     bool Propagate();
+
+
+    shared_ptr<State> EnumerateStartState();
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
     void OutputWitness(int bad);
     void OutputCounterExample();
     void AddSamePrimeConstraints(shared_ptr<SATSolver> slv);
+
+
+    std::shared_ptr<cube> GetCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube, bool prime);
+    bool UnreachabilityCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv);
+    bool InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv);
+    shared_ptr<cube> GetAndValidateCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube);
+    void InitiationAugmentation(const shared_ptr<cube> &failureCube, const shared_ptr<cube> &fallbackCube);
+    bool InitiationCheck(const shared_ptr<cube> &cb);
+
+    void GetBlockers(const shared_ptr<cube> &c, int framelevel, vector<shared_ptr<cube>> &blockers);
 
     CheckResult m_checkResult;
 
@@ -87,13 +131,15 @@ class BasicIC3 : public BaseChecker {
     shared_ptr<Model> m_model;
     vector<IC3Frame> m_frames;
     shared_ptr<SATSolver> m_liftSolver;
+    shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badPredLiftSolver;
     set<int> m_initialStateSet;
     shared_ptr<State> m_cexStart;
     bool m_trivial;
     int m_earliest;
-
+    int lemmaCount;
     int m_invariantLevel;
+    shared_ptr<Branching> m_branching;
 };
 
 } // namespace car

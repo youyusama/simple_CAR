@@ -45,6 +45,10 @@ class SATSolver : public ISolver {
         return m_slv->GetUC(prime);
     }
 
+    unordered_set<int> GetConflict() {
+        return m_slv->GetConflict();
+    }
+
     int GetNewVar() {
         return m_slv->GetNewVar();
     }
