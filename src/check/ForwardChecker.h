@@ -73,11 +73,11 @@ class ForwardChecker : public BaseChecker {
             shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
             return;
         }
+        if (m_settings.branching == 0) return;
+        stable_sort(c->begin(), c->end(), litOrder);
         if (m_settings.internalSignals) {
             stable_sort(c->begin(), c->end(), innOrder);
         }
-        if (m_settings.branching == 0) return;
-        stable_sort(c->begin(), c->end(), litOrder);
     }
 
     inline void GetPrimed(shared_ptr<cube> p) {

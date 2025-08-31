@@ -75,11 +75,11 @@ class BackwardChecker : public BaseChecker {
             shuffle(uc->begin(), uc->end(), default_random_engine(m_settings.randomSeed));
             return;
         }
+        if (m_settings.branching == 0) return;
+        stable_sort(uc->begin(), uc->end(), litOrder);
         if (m_settings.internalSignals) {
             stable_sort(uc->begin(), uc->end(), innOrder);
         }
-        if (m_settings.branching == 0) return;
-        stable_sort(uc->begin(), uc->end(), litOrder);
     }
 
     inline void GetPrimed(shared_ptr<cube> p) {
