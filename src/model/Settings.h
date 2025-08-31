@@ -27,9 +27,9 @@ struct Settings {
     MCAlgorithm alg = MCAlgorithm::FCAR;
     int bmcK = -1;
     bool dt = true;
-    int branching = 0;
+    int branching = 1;
     int randomSeed = 0;
-    bool referSkipping = false;
+    bool referSkipping = true;
     bool internalSignals = false;
     bool multipleSolvers = true;
     bool restart = false;
@@ -37,8 +37,8 @@ struct Settings {
     float restartGrowthRate = 1.5;
     bool restartLuby = false;
     bool solveInProperty = false;
-    int ctgMaxRecursionDepth = 0;
-    int ctgMaxStates = 0;
+    int ctgMaxRecursionDepth = 2;
+    int ctgMaxStates = 3;
     bool satSolveInDomain = false;
     int bmc_step = 1;
 };

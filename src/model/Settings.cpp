@@ -21,8 +21,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"fcar", MCAlgorithm::FCAR},
                 {"bcar", MCAlgorithm::BCAR},
                 {"bmc", MCAlgorithm::BMC},
-                {"ic3", MCAlgorithm::IC3}
-            }))
+                {"ic3", MCAlgorithm::IC3}}))
         ->default_val("fcar");
 
     app.add_option("-s", settings.solver, "Main SAT Solver")
@@ -49,11 +48,14 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->default_val(0)
         ->excludes("--br");
 
-    app.add_flag("--rs", settings.referSkipping, "refer-skipping # i-good lemma");
+    app.add_flag("--rs", settings.referSkipping, "refer-skipping # i-good lemma")
+        ->default_val(true);
 
-    app.add_flag("--is", settings.internalSignals, "internal signals");
+    app.add_flag("--is", settings.internalSignals, "internal signals")
+        ->default_val(false);
 
-    app.add_flag("--restart", settings.restart, "enable restart mechanism");
+    app.add_flag("--restart", settings.restart, "enable restart mechanism")
+        ->default_val(false);
 
     app.add_option("--restart_threshold", settings.restartThreshold, "restart threshold")
         ->default_val(128);
@@ -61,7 +63,8 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("--restart_growth_rate", settings.restartGrowthRate, "restart growth rate")
         ->default_val(1.5);
 
-    app.add_flag("--luby", settings.restartLuby, "enable Luby's restart strategy");
+    app.add_flag("--luby", settings.restartLuby, "enable Luby's restart strategy")
+        ->default_val(false);
 
     app.add_flag("--solve_in_property", settings.solveInProperty, "solve in property")
         ->default_val(false);
