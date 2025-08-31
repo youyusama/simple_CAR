@@ -70,7 +70,7 @@ void SATSolver::AddConstraints() {
 // @output:
 // ================================================================================
 void SATSolver::AddTransK(int k) {
-    vector<clause> &clauses = m_model->GetClauses();
+    vector<clause> &clauses = m_model->GetSimpClauses();
     for (int i = 0; i < clauses.size(); ++i) {
         clause &ori = clauses[i];
         clause cls_k;
