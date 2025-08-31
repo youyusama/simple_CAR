@@ -29,7 +29,7 @@ struct Settings {
     bool dt = true;
     int branching = 1;
     int randomSeed = 0;
-    bool referSkipping = true;
+    bool referSkipping = false;
     bool internalSignals = false;
     bool multipleSolvers = true;
     bool restart = false;

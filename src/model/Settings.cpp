@@ -49,7 +49,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->excludes("--br");
 
     app.add_flag("--rs", settings.referSkipping, "refer-skipping # i-good lemma")
-        ->default_val(true);
+        ->default_val(false);
 
     app.add_flag("--is", settings.internalSignals, "internal signals")
         ->default_val(false);
