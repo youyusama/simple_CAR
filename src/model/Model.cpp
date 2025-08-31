@@ -359,6 +359,12 @@ void Model::SimplifyClauses() {
     for (int i = m_aig->num_inputs + 1; i < m_andGateStartId; i++) solver->freeze(GetPrime(i));
     // freeze constraints
     for (int i : m_constraints) solver->freeze(i);
+    if (m_settings.internalSignals) {
+        for (int i : *m_innardsVec) {
+            solver->freeze(i);
+            solver->freeze(GetPrime(i));
+        }
+    }
     solver->freeze(m_trueId);
     solver->freeze(m_falseId);
     solver->freeze(m_bad);
