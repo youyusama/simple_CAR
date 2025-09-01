@@ -179,6 +179,7 @@ bool BackwardChecker::Check(int badId) {
                 m_log->L(1, "Proof at frame ", i + 1);
                 m_log->L(1, m_overSequence->FramesInfo());
                 m_overSequence->SetInvariantLevel(i);
+                OverSequenceRefine(i);
                 return true;
             }
         }
@@ -264,6 +265,53 @@ shared_ptr<State> BackwardChecker::EnumerateStartState() {
     auto p = m_startSolver->GetAssignment(true);
     shared_ptr<State> startState(new State(nullptr, p.first, p.second, 0));
     return startState;
+}
+
+
+void BackwardChecker::OverSequenceRefine(int lvl) {
+    // sometimes we have I & T & c & (O_0 | O_1 | ... | O_i+1)' is UNSAT,
+    // but to output a correct witness,
+    // we need I & c & (O_0 | O_1 | ... | O_i) is UNSAT.
+    //         I & c & !P   is UNSAT.
+    // get model s of I & c & (O_0 | O_1 | ... | O_i),
+    // assert( s & T & c & (O_0 | O_1 | ... | O_i+1)' is UNSAT)
+    // add uc to O_0 ... O_i
+
+    // solver: I & c & (O_0 | O_1 | ... | O_i)
+    shared_ptr<SATSolver> refine_solver = make_shared<SATSolver>(m_model, m_settings.solver);
+    refine_solver->AddConstraints();
+    for (auto l : m_model->GetInitialState()) refine_solver->AddClause({l});
+    refine_solver->AddInitialClauses();
+    clause inv;
+    for (int i = 0; i <= lvl; i++) {
+        shared_ptr<frame> frame_i = m_overSequence->GetFrame(i);
+        int f = refine_solver->GetNewVar();
+        for (shared_ptr<cube> uc : *frame_i) {
+            clause cls;
+            for (int i = 0; i < uc->size(); i++) {
+                cls.emplace_back(-uc->at(i));
+            }
+            cls.emplace_back(-f);
+            refine_solver->AddClause(cls);
+        }
+        inv.emplace_back(f);
+    }
+    refine_solver->AddClause(inv);
+
+    // if I & c & (O_0 | O_1 | ... | O_i) is SAT, get model s
+    while (refine_solver->Solve()) {
+        m_log->L(1, "Refine OverSequence");
+        auto s = refine_solver->GetAssignment(false);
+
+        bool sat = IsReachable(lvl + 1, s.second);
+        assert(!sat);
+        auto uc = GetUnsatCore(lvl + 1);
+        for (int i = 0; i <= lvl; i++)
+            AddUnsatisfiableCore(uc, i);
+        clause cls;
+        for (auto ci : *uc) cls.emplace_back(-ci);
+        refine_solver->AddClause(cls);
+    }
 }
 
 

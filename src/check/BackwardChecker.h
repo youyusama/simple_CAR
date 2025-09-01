@@ -118,6 +118,8 @@ class BackwardChecker : public BaseChecker {
 
     shared_ptr<State> EnumerateStartState();
 
+    void OverSequenceRefine(int lvl);
+
     CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_k;
