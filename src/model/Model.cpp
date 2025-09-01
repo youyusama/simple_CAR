@@ -42,7 +42,6 @@ void Model::Init() {
     CollectCOIInputs();
     m_innards = make_shared<unordered_set<int>>();
     m_innardsVec = make_shared<vector<int>>();
-    m_innardsAndGates = make_shared<unordered_map<int, vector<int>>>();
     if (m_settings.internalSignals) {
         CollectInnards();
         CollectInnardsClauses();
@@ -108,36 +107,30 @@ void Model::CollectNextValueMapping() {
 
         int next_id = GetCarId(m_aig->latches[i].next);
         prime_map.insert(pair<int, int>(id, next_id));
-        InsertIntoPreValueMapping(abs(next_id), (next_id > 0) ? id : -id);
+        m_preValueOfLatchMap[abs(next_id)].emplace_back((next_id > 0) ? id : -id);
     }
 }
 
+
 void Model::CollectClauses() {
     // get coi gates for transition relations, constraints, and property
-    set<unsigned> coi_lits;
+    unordered_set<unsigned> coi_lits;
+    for (int i = 0; i < m_aig->num_latches; i++)
+        coi_lits.emplace(aiger_strip(m_aig->latches[i].next));
+    for (int i = 0; i < m_aig->num_constraints; i++)
+        coi_lits.emplace(aiger_strip(m_aig->constraints[i].lit));
+    coi_lits.emplace(abs(m_bad) * 2);
 
-    for (int i = 0; i < m_aig->num_latches; i++) {
-        coi_lits.insert(aiger_strip(m_aig->latches[i].next));
-    }
-    for (int i = 0; i < m_aig->num_constraints; i++) {
-        coi_lits.insert(aiger_strip(m_aig->constraints[i].lit));
-    }
-    coi_lits.insert(abs(m_bad) * 2);
-
-    vector<unsigned> coi_gates;
+    // tranverse and gates reversely
     for (int i = m_aig->num_ands - 1; i >= 0; i--) {
         aiger_and &a = m_aig->ands[i];
         if (coi_lits.find(a.lhs) != coi_lits.end()) {
-            coi_gates.push_back(a.lhs);
-            coi_lits.insert(aiger_strip(a.rhs0));
-            coi_lits.insert(aiger_strip(a.rhs1));
+            if (TryConvertXOR(a.lhs, coi_lits))
+                continue;
+            if (TryConvertITE(a.lhs, coi_lits))
+                continue;
+            ConvertAND(a.lhs, coi_lits);
         }
-    }
-
-    for (unsigned and_gate : coi_gates) {
-        aiger_and *a = aiger_is_and(m_aig, and_gate);
-        assert(a != nullptr);
-        AddAndGateToClause(a);
     }
 
     // create clauses for true and false
@@ -146,28 +139,127 @@ void Model::CollectClauses() {
 }
 
 
-void Model::CollectCOIInputs() {
-    set<unsigned> coi_lits;
-    for (int i = 0; i < m_aig->num_constraints; i++) {
-        coi_lits.insert(aiger_strip(m_aig->constraints[i].lit));
+bool Model::TryConvertXOR(const unsigned a, unordered_set<unsigned> &coi_lits) {
+    aiger_and *aa = aiger_is_and(const_cast<aiger *>(m_aig), a);
+    assert(aa != nullptr);
+
+    unsigned a0 = aa->rhs0;
+    unsigned a1 = aa->rhs1;
+    if (!aiger_sign(a0) || !aiger_sign(a1)) return false;
+
+    aiger_and *aa0 = aiger_is_and(const_cast<aiger *>(m_aig), a0);
+    aiger_and *aa1 = aiger_is_and(const_cast<aiger *>(m_aig), a1);
+    if (aa0 == nullptr || aa1 == nullptr) return false;
+
+    unsigned a00 = aa0->rhs0;
+    unsigned a01 = aa0->rhs1;
+    unsigned a10 = aa1->rhs0;
+    unsigned a11 = aa1->rhs1;
+
+    if (a00 == aiger_not(a10) && a01 == aiger_not(a11)) {
+        if (a00 == a01) return false;
+        // is XOR
+        m_clauses.emplace_back(clause{-GetCarId(a00), -GetCarId(a01), -GetCarId(a)});
+        m_clauses.emplace_back(clause{GetCarId(a00), GetCarId(a01), -GetCarId(a)});
+        m_clauses.emplace_back(clause{-GetCarId(a00), GetCarId(a01), GetCarId(a)});
+        m_clauses.emplace_back(clause{GetCarId(a00), -GetCarId(a01), GetCarId(a)});
+
+        coi_lits.emplace(aiger_strip(a00));
+        coi_lits.emplace(aiger_strip(a01));
+
+        m_dependencyMap[GetCarId(a)].emplace_back(abs(GetCarId(a00)));
+        m_dependencyMap[GetCarId(a)].emplace_back(abs(GetCarId(a01)));
+
+        return true;
     }
-    coi_lits.insert(abs(m_bad) * 2);
+    return false;
+}
+
+
+bool Model::TryConvertITE(const unsigned a, unordered_set<unsigned> &coi_lits) {
+    aiger_and *aa = aiger_is_and(const_cast<aiger *>(m_aig), a);
+    assert(aa != nullptr);
+
+    unsigned a0 = aa->rhs0;
+    unsigned a1 = aa->rhs1;
+    if (!aiger_sign(a0) || !aiger_sign(a1)) return false;
+
+    aiger_and *aa0 = aiger_is_and(const_cast<aiger *>(m_aig), a0);
+    aiger_and *aa1 = aiger_is_and(const_cast<aiger *>(m_aig), a1);
+    if (aa0 == nullptr || aa1 == nullptr) return false;
+
+    unsigned a00 = aa0->rhs0;
+    unsigned a01 = aa0->rhs1;
+    unsigned a10 = aa1->rhs0;
+    unsigned a11 = aa1->rhs1;
+
+    std::vector<unsigned> ite;
+    if (a00 == aiger_not(a10)) {
+        ite = {a00, aiger_not(a01), aiger_not(a11)};
+    } else if (a00 == aiger_not(a11)) {
+        ite = {a00, aiger_not(a01), aiger_not(a10)};
+    } else if (a01 == aiger_not(a10)) {
+        ite = {a01, aiger_not(a00), aiger_not(a11)};
+    } else if (a01 == aiger_not(a11)) {
+        ite = {a01, aiger_not(a00), aiger_not(a10)};
+    } else {
+        return false;
+    }
+
+    // is ITE
+    m_clauses.emplace_back(clause{-GetCarId(ite[0]), -GetCarId(ite[1]), GetCarId(a)});
+    m_clauses.emplace_back(clause{GetCarId(ite[0]), -GetCarId(ite[2]), GetCarId(a)});
+    m_clauses.emplace_back(clause{-GetCarId(ite[0]), GetCarId(ite[1]), -GetCarId(a)});
+    m_clauses.emplace_back(clause{GetCarId(ite[0]), GetCarId(ite[2]), -GetCarId(a)});
+
+    coi_lits.emplace(aiger_strip(ite[0]));
+    coi_lits.emplace(aiger_strip(ite[1]));
+    coi_lits.emplace(aiger_strip(ite[2]));
+
+    m_dependencyMap[GetCarId(a)].emplace_back(abs(GetCarId(ite[0])));
+    m_dependencyMap[GetCarId(a)].emplace_back(abs(GetCarId(ite[1])));
+    m_dependencyMap[GetCarId(a)].emplace_back(abs(GetCarId(ite[2])));
+
+    return true;
+}
+
+
+void Model::ConvertAND(unsigned a, unordered_set<unsigned> &coi_lits) {
+    aiger_and *aa = aiger_is_and(const_cast<aiger *>(m_aig), a);
+    assert(aa != nullptr);
+
+    m_clauses.emplace_back(clause{GetCarId(aa->lhs), -GetCarId(aa->rhs0), -GetCarId(aa->rhs1)});
+    m_clauses.emplace_back(clause{-GetCarId(aa->lhs), GetCarId(aa->rhs0)});
+    m_clauses.emplace_back(clause{-GetCarId(aa->lhs), GetCarId(aa->rhs1)});
+
+    coi_lits.emplace(aiger_strip(aa->rhs0));
+    coi_lits.emplace(aiger_strip(aa->rhs1));
+
+    m_dependencyMap[GetCarId(aa->lhs)].emplace_back(abs(GetCarId(aa->rhs0)));
+    m_dependencyMap[GetCarId(aa->lhs)].emplace_back(abs(GetCarId(aa->rhs1)));
+}
+
+
+void Model::CollectCOIInputs() {
+    unordered_set<unsigned> coi_lits;
+    for (int i = 0; i < m_aig->num_constraints; i++) {
+        coi_lits.emplace(aiger_strip(m_aig->constraints[i].lit));
+    }
+    coi_lits.emplace(abs(m_bad) * 2);
 
     for (int i = m_aig->num_ands - 1; i >= 0; i--) {
         aiger_and &a = m_aig->ands[i];
         if (coi_lits.find(a.lhs) != coi_lits.end()) {
-            coi_lits.insert(aiger_strip(a.rhs0));
-            coi_lits.insert(aiger_strip(a.rhs1));
+            coi_lits.emplace(aiger_strip(a.rhs0));
+            coi_lits.emplace(aiger_strip(a.rhs1));
         }
     }
 
     m_COIInputs = make_shared<vector<int>>();
-    for (unsigned lit : coi_lits) {
-        unsigned inputs_max = m_aig->num_inputs * 2;
-        if (lit > 0 && lit <= inputs_max) {
-            m_COIInputs->push_back(GetCarId(lit));
-        } else if (lit > 0)
-            break;
+    unsigned inputs_end = m_aig->num_inputs * 2 + 1;
+    for (unsigned lit = 2; lit < inputs_end; lit += 2) {
+        if (coi_lits.find(lit) != coi_lits.end())
+            m_COIInputs->emplace_back(GetCarId(lit));
     }
 }
 
@@ -181,25 +273,12 @@ shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
     }
     while (!todo_vars.empty()) {
         int v = todo_vars.front();
-        if (IsAnd(v)) {
-            aiger_and &a = m_aig->ands[v - m_andGateStartId];
-            if (coi_vars.find(a.rhs0 >> 1) == coi_vars.end()) {
-                todo_vars.emplace(a.rhs0 >> 1);
-                coi_vars.emplace(a.rhs0 >> 1);
-            }
-            if (coi_vars.find(a.rhs1 >> 1) == coi_vars.end()) {
-                todo_vars.emplace(a.rhs1 >> 1);
-                coi_vars.emplace(a.rhs1 >> 1);
-            }
-        } else if (m_settings.internalSignals && IsInnardAnd(v)) {
-            vector<int> &a = m_innardsAndGates->operator[](abs(v));
-            if (coi_vars.find(abs(a[0])) == coi_vars.end()) {
-                todo_vars.emplace(abs(a[0]));
-                coi_vars.emplace(abs(a[0]));
-            }
-            if (coi_vars.find(abs(a[1])) == coi_vars.end()) {
-                todo_vars.emplace(abs(a[1]));
-                coi_vars.emplace(abs(a[1]));
+        if (m_dependencyMap.find(v) != m_dependencyMap.end()) {
+            for (int d : m_dependencyMap[v]) {
+                if (coi_vars.find(d) == coi_vars.end()) {
+                    todo_vars.emplace(d);
+                    coi_vars.emplace(d);
+                }
             }
         }
         todo_vars.pop();
@@ -209,31 +288,6 @@ shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
     domain->emplace_back(m_trueId);
     domain->emplace_back(m_falseId);
     return domain;
-}
-
-
-void Model::AddAndGateToClause(const aiger_and *aa) {
-    if (IsTrue(aa->rhs0)) {
-        m_clauses.emplace_back(clause{GetCarId(aa->lhs), -GetCarId(aa->rhs1)});
-        m_clauses.emplace_back(clause{-GetCarId(aa->lhs), GetCarId(aa->rhs1)});
-    } else if (IsTrue(aa->rhs1)) {
-        m_clauses.emplace_back(clause{GetCarId(aa->lhs), -GetCarId(aa->rhs0)});
-        m_clauses.emplace_back(clause{-GetCarId(aa->lhs), GetCarId(aa->rhs0)});
-    } else {
-        m_clauses.emplace_back(clause{GetCarId(aa->lhs), -GetCarId(aa->rhs0), -GetCarId(aa->rhs1)});
-        m_clauses.emplace_back(clause{-GetCarId(aa->lhs), GetCarId(aa->rhs0)});
-        m_clauses.emplace_back(clause{-GetCarId(aa->lhs), GetCarId(aa->rhs1)});
-    }
-}
-
-
-inline void Model::InsertIntoPreValueMapping(const int key, const int value) {
-    auto it = m_preValueOfLatchMap.find(key);
-    if (it == m_preValueOfLatchMap.end()) {
-        m_preValueOfLatchMap.insert(pair<int, vector<int>>(key, vector<int>{value}));
-    } else {
-        it->second.emplace_back(value);
-    }
 }
 
 
@@ -311,7 +365,7 @@ void Model::CollectInnardsClauses() {
         if (GetPrime(GetCarId(aa.lhs)) == 0) {
             m_maxId++;
             m_primeMaps[0].insert(pair<int, int>(GetCarId(aa.lhs), m_maxId));
-            InsertIntoPreValueMapping(m_maxId, GetCarId(aa.lhs));
+            m_preValueOfLatchMap[m_maxId].emplace_back(GetCarId(aa.lhs));
         }
         pl = GetPrime(GetCarId(aa.lhs));
         // primed right 0
@@ -338,9 +392,7 @@ void Model::CollectInnardsClauses() {
             assert(GetPrime(GetCarId(aa.rhs1)) != 0);
             pr1 = GetPrime(GetCarId(aa.rhs1));
         }
-        if (m_settings.satSolveInDomain) {
-            m_innardsAndGates->operator[](pl) = {pr0, pr1};
-        }
+
         m_clauses.emplace_back(vector<int>{pl, -pr0, -pr1});
         m_clauses.emplace_back(vector<int>{-pl, pr0});
         m_clauses.emplace_back(vector<int>{-pl, pr1});

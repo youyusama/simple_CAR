@@ -74,13 +74,6 @@ class Model {
             return false;
     }
 
-    inline bool IsInnardAnd(int id) {
-        if (m_innardsAndGates->find(abs(id)) != m_innardsAndGates->end())
-            return true;
-        else
-            return false;
-    }
-
     inline bool IsInnard(int id) {
         if (m_settings.internalSignals &&
             m_innards->find(abs(id)) != m_innards->end()) {
@@ -170,9 +163,11 @@ class Model {
 
     void CollectClauses();
 
-    void AddAndGateToClause(const aiger_and *aa);
+    bool TryConvertXOR(const unsigned a, unordered_set<unsigned> &coi_lits);
 
-    inline void InsertIntoPreValueMapping(const int key, const int value);
+    bool TryConvertITE(const unsigned a, unordered_set<unsigned> &coi_lits);
+
+    void ConvertAND(const unsigned a, unordered_set<unsigned> &coi_lits);
 
     int InnardsLogiclvlDFS(unsigned aig_id);
 
@@ -202,9 +197,10 @@ class Model {
     vector<unordered_map<int, int>> m_primeMaps;
     unordered_map<int, vector<int>> m_preValueOfLatchMap;
 
+    unordered_map<int, vector<int>> m_dependencyMap;
+
     shared_ptr<unordered_set<int>> m_innards;
     shared_ptr<vector<int>> m_innardsVec;
-    shared_ptr<unordered_map<int, vector<int>>> m_innardsAndGates;
     unordered_map<int, int> m_innards_lvl;
 
     shared_ptr<vector<int>> m_COIInputs;

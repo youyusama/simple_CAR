@@ -76,7 +76,8 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->default_val(3);
 
     app.add_flag("--sd", settings.satSolveInDomain, "solve SAT in domain")
-        ->default_val(false);
+        ->default_val(false)
+        ->excludes("--is");
 
     try {
         app.parse(argc, argv);
