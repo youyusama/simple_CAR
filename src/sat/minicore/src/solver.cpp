@@ -50,8 +50,8 @@ Var Solver::newVar() {
         polarity.resize(alloced_var, true);
         order_list.resize(alloced_var);
         trail.reserve(alloced_var);
-        permanent_domain.resize(alloced_var, false);
-        temporary_domain.resize(alloced_var, false);
+        permanent_domain.resize(alloced_var, 0);
+        temporary_domain.resize(alloced_var, 0);
     }
     dec_vars++;
     order_list.init_var(v);
@@ -94,7 +94,7 @@ bool Solver::addTempClause(const std::vector<Lit> &cls) {
     if (!ok) return false;
     assert(!temp_cls_activated);
     temp_cls_activated = true;
-    temporary_domain[temp_cls_act_var] = true;
+    temporary_domain[temp_cls_act_var] = 1;
 
     std::vector<Lit> temp_cls;
     temp_cls.emplace_back(mkLit(temp_cls_act_var, true));
@@ -728,7 +728,7 @@ lbool Solver::solve_() {
     if (temp_cls_activated) {
         removeTempLearnt();
         temp_cls_activated = false;
-        temporary_domain[temp_cls_act_var] = false;
+        temporary_domain[temp_cls_act_var] = 0;
     }
     // order_list.print();
     return status;

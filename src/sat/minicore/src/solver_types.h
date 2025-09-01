@@ -6,8 +6,8 @@
 #include <functional>
 #include <iostream>
 #include <list>
-#include <memory_resource>
 #include <memory>
+#include <memory_resource>
 #include <stdint.h>
 #include <vector>
 
@@ -562,95 +562,133 @@ struct ShrinkStackElem {
 };
 
 
-class DecisionList {
+class DecisionBuckets {
   public:
-    DecisionList() : var_inc_(0) {}
+    DecisionBuckets() : max_bucket_index_(0), var_inc_(0) {
+        buckets_.resize(32);
+    }
+    ~DecisionBuckets() {}
 
-    void insert(Var v) {
-        present_flags_[v] = true;
-        if (act_[v] > act_[*next_search_]) {
-            next_search_ = iter_map_[v];
-        }
+    void resize(Var s) {
+        var_bucket_.resize(s, -1);
+        var_bucket_pos_.resize(s, -1);
+        var_activity_.resize(s, 0);
     }
 
     void init_var(Var v) {
-        if (var_inc_ > 1e9) {
-            rescale();
-        }
-        act_[v] = ++var_inc_;
-        push_back(v);
-        next_search_ = --list_.end();
+        if (var_inc_ > 1e9) rescale();
 
-        present_flags_[v] = true;
+        var_activity_[v] = ++var_inc_;
+        int bucket_index = getBucketIndex(v);
+        buckets_[bucket_index].push_back(v);
+        var_bucket_[v] = bucket_index;
+        var_bucket_pos_[v] = buckets_[bucket_index].size() - 1;
+
+        max_bucket_index_ = bucket_index;
     }
 
-    void update(Var v) {
-        if (var_inc_ > 1e9) {
-            rescale();
-        }
-        act_[v] = ++var_inc_;
+    void insert(Var v) {
+        int bucket_index = getBucketIndex(v);
 
-        list_.erase(iter_map_[v]);
-        push_back(v);
-        if (present_flags_[v]) next_search_ = --list_.end();
+        if (var_bucket_[v] == -1) {
+            buckets_[bucket_index].push_back(v);
+            var_bucket_[v] = bucket_index;
+            var_bucket_pos_[v] = buckets_[bucket_index].size() - 1;
+        }
+
+        if (bucket_index > max_bucket_index_) {
+            max_bucket_index_ = bucket_index;
+        }
     }
 
-    bool empty() {
-        while (next_search_ != list_.begin() && !present_flags_[*next_search_]) {
-            next_search_--;
+    bool empty() const {
+        for (int i = max_bucket_index_; i >= 0; --i) {
+            if (!buckets_[i].empty()) {
+                return false;
+            }
         }
-        return next_search_ == list_.begin() && !present_flags_[*next_search_];
+        return true;
     }
 
     Var get_deci_var() {
-        if (!present_flags_[*next_search_])
-            assert(false);
+        while (max_bucket_index_ >= 0 && buckets_[max_bucket_index_].empty()) {
+            max_bucket_index_--;
+        }
 
-        Var v = *next_search_;
-        present_flags_[v] = false;
-        if (next_search_ != list_.begin()) next_search_--;
+        Var v = buckets_[max_bucket_index_].back();
+        buckets_[max_bucket_index_].pop_back();
+
+        var_bucket_[v] = -1;
+
         return v;
     }
 
-    void resize(Var s) {
-        iter_map_.resize(s);
-        act_.resize(s, 0);
-        present_flags_.resize(s, false);
-    }
+    void update(Var v) {
+        if (var_inc_ > 1e9) rescale();
 
-    void print() {
-        for (auto i : list_) {
-            std::cout << "var(" << i << ", " << act_[i] << ", " << present_flags_[i] << ") ";
+        var_activity_[v] = ++var_inc_;
+
+        if (var_bucket_[v] != -1) {
+            remove(v);
+
+            int bucket_index = getBucketIndex(v);
+            buckets_[bucket_index].push_back(v);
+            var_bucket_[v] = bucket_index;
+            var_bucket_pos_[v] = buckets_[bucket_index].size() - 1;
+
+            if (bucket_index > max_bucket_index_) {
+                max_bucket_index_ = bucket_index;
+            }
         }
-        std::cout << std::endl;
-        std::cout << "next_search: " << *next_search_ << std::endl;
     }
 
   private:
-    std::list<Var> list_;
-    std::list<Var>::iterator next_search_;
-    std::vector<std::list<Var>::iterator> iter_map_;
-    std::vector<uint32_t> act_;
-    std::vector<bool> present_flags_;
-    uint32_t var_inc_;
-
-    inline void push_back(Var v) {
-        list_.emplace_back(v);
-        iter_map_[v] = --list_.end();
+    int getBucketIndex(Var v) const {
+        uint32_t act = var_activity_[v];
+        if (act == 0) return 0;
+        int bucket_index = 0;
+        while ((1ull << (bucket_index + 1)) <= act && bucket_index < buckets_.size()) {
+            bucket_index++;
+        }
+        return bucket_index;
     }
 
-    inline void push_front(Var v) {
-        list_.emplace_front(v);
-        iter_map_[v] = list_.begin();
+    void remove(Var v) {
+        int bucket_index = var_bucket_[v];
+        int bucket_pos = var_bucket_pos_[v];
+
+        auto &bucket = buckets_[bucket_index];
+        std::swap(bucket[bucket_pos], bucket.back());
+        var_bucket_pos_[bucket[bucket_pos]] = bucket_pos;
+        bucket.pop_back();
+        var_bucket_[v] = -1;
     }
 
     void rescale() {
         var_inc_ = 0;
-        for (Var v : list_) {
-            act_[v] = ++var_inc_;
+
+        std::vector<Var> var_to_insert;
+        for (auto &bucket : buckets_) {
+            for (auto v : bucket) {
+                var_activity_[v] = ++var_inc_;
+                var_bucket_[v] = -1;
+                var_to_insert.push_back(v);
+            }
+            bucket.clear();
+        }
+        for (auto v : var_to_insert) {
+            insert(v);
         }
     }
+
+    std::vector<std::vector<Var>> buckets_;
+    std::vector<int> var_bucket_;
+    std::vector<int> var_bucket_pos_;
+    std::vector<uint32_t> var_activity_;
+    int max_bucket_index_;
+    uint32_t var_inc_;
 };
+
 } // namespace minicore
 
 #endif

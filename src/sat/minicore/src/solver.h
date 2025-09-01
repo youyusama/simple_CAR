@@ -12,7 +12,7 @@
 
 namespace minicore {
 
-inline std::string vec2str(const std::vector<Lit> lits) {
+inline std::string vec2str(const std::vector<Lit> &lits) {
     std::string res;
     for (Lit l : lits) {
         res += std::to_string(toInt(l)) + " ";
@@ -104,10 +104,10 @@ class Solver {
     OccLists watches;             // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
 
     bool solveInDomain;                 // Deciside in domain.
-    std::vector<bool> permanent_domain; // A variable is a decision variable in all queries.
-    std::vector<bool> temporary_domain; // A variable is a decision variable in the next query.
+    std::vector<char> permanent_domain; // A variable is a decision variable in all queries.
+    std::vector<char> temporary_domain; // A variable is a decision variable in the next query.
 
-    DecisionList order_list; // A priority queue of variables ordered with respect to the variable activity.
+    DecisionBuckets order_list; // A priority queue of variables ordered with respect to the variable activity.
 
     // VarOrderLt var_order_lt; // Compare function for var on activity order
     reduceDB_lt reduce_db_lt;
@@ -272,15 +272,15 @@ inline bool Solver::okay() const { return ok; }
 inline bool Solver::inDomain(Var x) const { return !solveInDomain || permanent_domain[x] || temporary_domain[x]; }
 
 inline void Solver::setDomain(const std::vector<Var> dvars) {
-    for (Var x : dvars) permanent_domain[x] = true;
+    for (Var x : dvars) permanent_domain[x] = 1;
 }
 
 inline void Solver::setTempDomain(const std::vector<Var> dvars) {
-    for (Var x : dvars) temporary_domain[x] = true;
+    for (Var x : dvars) temporary_domain[x] = 1;
 }
 
 inline void Solver::resetTempDomain() {
-    std::fill(temporary_domain.begin(), temporary_domain.end(), false);
+    std::fill(temporary_domain.begin(), temporary_domain.end(), 0);
 }
 
 } // namespace minicore
