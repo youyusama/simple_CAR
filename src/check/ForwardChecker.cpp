@@ -615,6 +615,8 @@ bool ForwardChecker::CheckInit(shared_ptr<State> s) {
     if (result) {
         // Solver return SAT
         m_log->L(2, "Result >>> SAT <<<");
+        auto p = m_transSolvers[0]->GetAssignment(false);
+        s->latches = p.second;
         if (m_settings.satSolveInDomain) PopDomain();
         return true;
     } else {
