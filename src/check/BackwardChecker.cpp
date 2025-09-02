@@ -590,13 +590,13 @@ bool BackwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
 
     bool result;
     if (!IsReachable(lvl, c)) {
+        m_log->StatPropagation();
         AddUnsatisfiableCore(c, lvl + 1);
         result = true;
     } else {
+        m_log->StatPropagation();
         result = false;
     }
-
-    m_log->StatPropagation();
     return result;
 }
 

@@ -660,21 +660,20 @@ bool ForwardChecker::CheckInit(shared_ptr<State> s) {
 
 
 bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
-    m_log->Tick();
-
     bool result;
     shared_ptr<cube> assumption(new cube(*c));
     GetPrimed(assumption);
     if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
+    m_log->Tick();
     if (!IsReachable(lvl, assumption)) {
+        m_log->StatPropagation();
         AddUnsatisfiableCore(c, lvl + 1);
         result = true;
     } else {
+        m_log->StatPropagation();
         result = false;
     }
     if (m_settings.satSolveInDomain) PopDomain();
-
-    m_log->StatPropagation();
     return result;
 }
 
