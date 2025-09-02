@@ -82,58 +82,47 @@ static bool _cmp(int a, int b) {
 // @input:
 // @output:
 // ================================================================================
-bool OverSequenceSet::is_imply(shared_ptr<cube> a, shared_ptr<cube> b) {
-    if (a->size() > b->size())
+bool OverSequenceSet::Imply(const cube &a, const cube &b) {
+    if (a.size() > b.size())
         return false;
-    if (includes(b->begin(), b->end(), a->begin(), a->end(), _cmp))
-        return true;
-    else
-        return false;
+    return (includes(b.begin(), b.end(), a.begin(), a.end(), _cmp));
 }
 
 
-void OverSequenceSet::add_uc_to_frame(const shared_ptr<cube> uc, shared_ptr<frame> f) {
-    frame tmp;
-    for (auto f_uc : *f) {
-        if (!is_imply(uc, f_uc))
-            tmp.emplace(f_uc);
+void OverSequenceSet::AddLemmaToFrame(const cube &lemma, frame &f) {
+    for (auto it = f.begin(); it != f.end();) {
+        if (Imply(lemma, *it)) {
+            it = f.erase(it);
+        } else {
+            ++it;
+        }
     }
-    tmp.emplace(uc);
-    f->swap(tmp);
+    f.emplace(lemma);
 }
 
 
-bool OverSequenceSet::Insert(shared_ptr<cube> uc, int index, bool need_imply) {
+bool OverSequenceSet::Insert(const cube &uc, int index) {
     m_blockSolver->AddUC(uc, index);
-    if (index >= m_sequence.size()) {
-        shared_ptr<frame> new_frame(new frame);
-        m_sequence.emplace_back(new_frame);
-        m_blockCounter.emplace_back(0);
-    }
-    auto res = m_UCSet.insert(uc);
-    if (!need_imply)
-        m_sequence[index]->emplace(*res.first);
-    else
-        add_uc_to_frame(*res.first, m_sequence[index]);
+    auto f = GetFrame(index);
+    AddLemmaToFrame(uc, *f);
     return true;
 }
 
 
-bool OverSequenceSet::IsBlockedByFrame(shared_ptr<cube> latches, int frameLevel) {
-    if (frameLevel >= m_sequence.size()) return false;
+shared_ptr<frame> OverSequenceSet::GetFrame(int lvl) {
+    while (lvl >= m_sequence.size()) {
+        m_sequence.emplace_back(make_shared<frame>());
+        m_blockCounter.emplace_back(0);
+    }
+    return m_sequence[lvl];
+}
+
+
+bool OverSequenceSet::IsBlockedByFrame(const cube &latches, int frameLevel) {
+    auto f = GetFrame(frameLevel);
     // by for checking
-    int latch_index, num_inputs;
-    num_inputs = m_model->GetNumInputs();
-    for (auto uc : *m_sequence[frameLevel]) { // for each uc
-        bool blocked = true;
-        for (int j = 0; j < uc->size(); j++) { // for each literal
-            latch_index = abs(uc->at(j)) - num_inputs - 1;
-            if (latches->at(latch_index) != uc->at(j)) {
-                blocked = false;
-                break;
-            }
-        }
-        if (blocked) {
+    for (const auto &uc : *f) {
+        if (Imply(uc, latches)) {
             return true;
         }
     }
@@ -141,61 +130,43 @@ bool OverSequenceSet::IsBlockedByFrame(shared_ptr<cube> latches, int frameLevel)
 }
 
 
-bool OverSequenceSet::IsBlockedByFrame_sat(shared_ptr<cube> latches, int frameLevel) {
+bool OverSequenceSet::IsBlockedByFrameLazy(const cube &latches, int frameLevel) {
     if (frameLevel >= m_sequence.size()) return false;
-    bool result = m_blockSolver->SolveFrame(latches, frameLevel);
-    if (!result) {
-        return true;
-    } else {
-        return false;
-    }
-}
 
-
-bool OverSequenceSet::IsBlockedByFrame_lazy(shared_ptr<cube> latches, int frameLevel) {
-    if (frameLevel >= m_sequence.size()) return false;
     int &counter = m_blockCounter[frameLevel];
     if (counter == -1) { // by sat
-        bool result = m_blockSolver->SolveFrame(latches, frameLevel);
-        if (!result) {
-            return true;
-        } else {
-            return false;
-        }
+        bool sat = m_blockSolver->SolveFrame(make_shared<cube>(latches), frameLevel);
+        return !sat;
     }
+
     if (m_sequence[frameLevel]->size() > 3000) {
         counter++;
     }
     // whether it's need to change the way of checking
-    clock_t start_time, sat_time, for_time;
     if (counter > 1000) {
-        start_time = clock();
-        m_blockSolver->SolveFrame(latches, frameLevel);
-        sat_time = clock();
-    }
-    // by imply checking
-    for (auto uc : *m_sequence[frameLevel]) { // for each uc
-        if (includes(latches->begin(), latches->end(), uc->begin(), uc->end(), _cmp)) return true;
-    }
-    if (counter > 1000) {
-        for_time = clock();
-        if (sat_time - start_time > for_time - sat_time)
+        auto start_time = std::chrono::high_resolution_clock::now();
+        m_blockSolver->SolveFrame(make_shared<cube>(latches), frameLevel);
+        auto sat_end = std::chrono::high_resolution_clock::now();
+        bool res = IsBlockedByFrame(latches, frameLevel);
+        auto for_end = std::chrono::high_resolution_clock::now();
+        auto sat_time = std::chrono::duration_cast<std::chrono::microseconds>(sat_end - start_time).count();
+        auto for_time = std::chrono::duration_cast<std::chrono::microseconds>(for_end - sat_end).count();
+        if (sat_time > for_time)
             counter = 0;
         else
             counter = -1;
+        return res;
     }
-    return false;
+
+    return IsBlockedByFrame(latches, frameLevel);
 }
 
 
-void OverSequenceSet::GetBlockers(shared_ptr<cube> c, int framelevel, vector<shared_ptr<cube>> &b) {
-    if (framelevel >= m_sequence.size()) return;
-    int size = -1;
+void OverSequenceSet::GetBlockers(const cube &latches, int framelevel, vector<cube> &b) {
+    auto f = GetFrame(framelevel);
     // by imply checking
-    for (auto uc : *m_sequence[framelevel]) { // for each uc
-        if (size != -1 && size < uc->size()) break;
-        if (includes(c->begin(), c->end(), uc->begin(), uc->end(), _cmp)) {
-            size = uc->size();
+    for (const auto &uc : *f) {
+        if (Imply(uc, latches)) {
             b.emplace_back(uc);
         }
     }
@@ -218,7 +189,7 @@ string OverSequenceSet::FramesDetail() {
         res += "Frame " + to_string(i) + "\n";
         if (i != 0) {
             for (auto uc : *m_sequence[i]) {
-                for (auto j : *uc) {
+                for (auto j : uc) {
                     res += to_string(j) + " ";
                 }
                 res += "\n";

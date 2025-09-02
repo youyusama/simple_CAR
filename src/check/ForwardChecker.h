@@ -58,11 +58,11 @@ class ForwardChecker : public BaseChecker {
 
         BlockerOrder() {}
 
-        bool operator()(const shared_ptr<cube> a, const shared_ptr<cube> b) const {
+        bool operator()(const cube &a, const cube &b) const {
             float score_a = 0, score_b = 0;
-            for (int i = 0; i < a->size(); i++) {
-                score_a += branching->PriorityOf(a->at(i));
-                score_b += branching->PriorityOf(b->at(i));
+            for (int i = 0; i < a.size(); i++) {
+                score_a += branching->PriorityOf(a[i]);
+                score_b += branching->PriorityOf(b[i]);
             }
             return score_a > score_b;
         }

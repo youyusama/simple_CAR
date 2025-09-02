@@ -60,10 +60,9 @@ bool ForwardChecker::Check(int badId) {
     // initialize frame 0
     m_startSolver->UpdateStartSolverFlag();
     for (int l : *m_initialState->latches) {
-        shared_ptr<cube> neg_init_l(new cube{-l});
-        m_overSequence->Insert(neg_init_l, 0, false);
-        m_transSolvers[0]->AddUC(neg_init_l);
-        m_startSolver->AddUC(neg_init_l, 0);
+        m_overSequence->Insert({-l}, 0);
+        m_transSolvers[0]->AddUC({-l});
+        m_startSolver->AddUC({-l}, 0);
     }
     if (m_settings.solveInProperty) m_transSolvers[0]->AddProperty();
 
@@ -189,10 +188,10 @@ bool ForwardChecker::Check(int badId) {
                 shared_ptr<frame> fi = m_overSequence->GetFrame(i);
                 shared_ptr<frame> fi_plus_1 = m_overSequence->GetFrame(i + 1);
                 frame::iterator iter;
-                for (shared_ptr<cube> uc : *fi) {
-                    iter = fi_plus_1->find(uc);
-                    if (iter != fi_plus_1->end()) continue; // propagated
-                    if (Propagate(uc, i)) m_branching->Update(uc);
+                for (const cube &uc : *fi) {
+                    if (fi_plus_1->find(uc) != fi_plus_1->end()) continue; // propagated
+                    if (Propagate(make_shared<cube>(uc), i))
+                        m_branching->Update(make_shared<cube>(uc));
                 }
             }
 
@@ -286,7 +285,7 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
     }
-    m_overSequence->Insert(uc, frameLevel);
+    m_overSequence->Insert(*uc, frameLevel);
 
     m_log->StatUpdateUc();
     return true;
@@ -371,7 +370,7 @@ int ForwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
     m_log->Tick();
 
     for (int i = start; i <= m_k; i++) {
-        if (!m_overSequence->IsBlockedByFrame_lazy(state->latches, i)) {
+        if (!m_overSequence->IsBlockedByFrameLazy(*state->latches, i)) {
             m_log->StatGetNewLevel();
             return i - 1;
         }
@@ -409,11 +408,11 @@ bool ForwardChecker::IsInvariant(int frameLevel) {
 // ================================================================================
 void ForwardChecker::AddConstraintOr(const shared_ptr<frame> f) {
     cube cls;
-    for (shared_ptr<cube> frame_cube : *f) {
+    for (const cube &frame_cube : *f) {
         int flag = m_invSolver->GetNewVar();
         cls.push_back(flag);
-        for (int i = 0; i < frame_cube->size(); i++) {
-            m_invSolver->AddClause(cube{-flag, frame_cube->at(i)});
+        for (int i = 0; i < frame_cube.size(); i++) {
+            m_invSolver->AddClause(cube{-flag, frame_cube[i]});
         }
     }
     m_invSolver->AddClause(cls);
@@ -427,10 +426,10 @@ void ForwardChecker::AddConstraintOr(const shared_ptr<frame> f) {
 // ================================================================================
 void ForwardChecker::AddConstraintAnd(const shared_ptr<frame> f) {
     int flag = m_invSolver->GetNewVar();
-    for (shared_ptr<cube> frame_cube : *f) {
+    for (const cube &frame_cube : *f) {
         cube cls;
-        for (int i = 0; i < frame_cube->size(); i++) {
-            cls.push_back(-frame_cube->at(i));
+        for (int i = 0; i < frame_cube.size(); i++) {
+            cls.push_back(-frame_cube[i]);
         }
         cls.push_back(-flag);
         m_invSolver->AddClause(cls);
@@ -492,19 +491,17 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
 bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
     unordered_set<int> required_lits;
 
-    vector<shared_ptr<cube>> uc_blockers;
-    m_overSequence->GetBlockers(uc, frame_lvl, uc_blockers);
-    shared_ptr<cube> uc_blocker;
+    vector<cube> uc_blockers;
+    m_overSequence->GetBlockers(*uc, frame_lvl, uc_blockers);
+    cube uc_blocker;
     if (uc_blockers.size() > 0) {
         if (m_settings.branching > 0)
             stable_sort(uc_blockers.begin(), uc_blockers.end(), blockerOrder);
         uc_blocker = uc_blockers[0];
-    } else {
-        uc_blocker = make_shared<cube>();
     }
 
     if (m_settings.referSkipping)
-        for (auto b : *uc_blocker) required_lits.emplace(b);
+        for (auto b : uc_blocker) required_lits.emplace(b);
     shared_ptr<vector<cube>> failed_ctses = make_shared<vector<cube>>();
     OrderAssumption(uc);
     if (m_settings.satSolveInDomain) {
@@ -529,7 +526,7 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
     }
     if (m_settings.satSolveInDomain) PopDomain();
     sort(uc->begin(), uc->end(), cmp);
-    if (uc->size() > uc_blocker->size() && frame_lvl != 0) {
+    if (uc->size() > uc_blocker.size() && frame_lvl != 0) {
         return false;
     } else {
         return true;
@@ -899,9 +896,9 @@ void ForwardChecker::OutputWitness(int bad) {
     for (unsigned i = 0; i <= lvl_i; i++) {
         shared_ptr<frame> frame_i = m_overSequence->GetFrame(i);
         vector<unsigned> frame_i_lits;
-        for (shared_ptr<cube> frame_cube : *frame_i) {
+        for (const cube &frame_cube : *frame_i) {
             vector<unsigned> cube_j;
-            for (int l : *frame_cube) cube_j.push_back(l > 0 ? (2 * l) : (2 * -l + 1));
+            for (int l : frame_cube) cube_j.push_back(l > 0 ? (2 * l) : (2 * -l + 1));
             unsigned c_j = addCubeToANDGates(witness_aig, cube_j) ^ 1;
             frame_i_lits.push_back(c_j);
         }

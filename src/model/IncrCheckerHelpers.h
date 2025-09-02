@@ -5,6 +5,7 @@
 #include "SATSolver.h"
 #include "Settings.h"
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <set>
 #include <string>
@@ -52,41 +53,39 @@ struct cubePtrComp {
     }
 };
 
-typedef set<shared_ptr<cube>, cubePtrComp> frame;
+struct CubeHash {
+    size_t operator()(const vector<int> &cube) const noexcept {
+        size_t seed = cube.size();
+        for (int i : cube) {
+            seed ^= i + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
+};
+
+using frame = unordered_set<cube, CubeHash>;
 
 class OverSequenceSet {
   public:
-    typedef vector<int> cube;
-
-    OverSequenceSet(shared_ptr<Model> model) {
-        m_model = model;
-        m_blockSolver = make_shared<SATSolver>(m_model, MCSATSolver::minisat);
-        m_blockCounter.clear();
+    OverSequenceSet(shared_ptr<Model> model) : m_model(model) {
+        m_blockSolver = make_shared<SATSolver>(model, MCSATSolver::minisat);
         m_invariantLevel = 0;
+        m_blockCounter.emplace_back(0);
     }
 
     void SetInvariantLevel(int lvl) { m_invariantLevel = lvl; }
 
     int GetInvariantLevel() { return m_invariantLevel; }
 
-    bool Insert(shared_ptr<cube> uc, int index, bool need_imply = true);
+    bool Insert(const cube &uc, int index);
 
-    shared_ptr<frame> GetFrame(int lvl) {
-        while (lvl >= m_sequence.size()) {
-            shared_ptr<frame> new_frame(new frame);
-            m_sequence.emplace_back(new_frame);
-            m_blockCounter.emplace_back(0);
-        }
-        return m_sequence[lvl];
-    }
+    shared_ptr<frame> GetFrame(int lvl);
 
-    bool IsBlockedByFrame_lazy(shared_ptr<cube> latches, int frameLevel);
+    bool IsBlockedByFrame(const cube &latches, int frameLevel);
 
-    bool IsBlockedByFrame_sat(shared_ptr<cube> latches, int frameLevel);
+    bool IsBlockedByFrameLazy(const cube &latches, int frameLevel);
 
-    bool IsBlockedByFrame(shared_ptr<cube> latches, int frameLevel);
-
-    void GetBlockers(shared_ptr<cube> latches, int framelevel, vector<shared_ptr<cube>> &b);
+    void GetBlockers(const cube &latches, int framelevel, vector<cube> &b);
 
     bool IsEmpty(int frameLevel) {
         if (frameLevel < 0 || frameLevel >= m_sequence.size()) return true;
@@ -98,12 +97,11 @@ class OverSequenceSet {
     string FramesDetail();
 
   private:
-    bool is_imply(shared_ptr<cube> a, shared_ptr<cube> b);
+    bool Imply(const cube &a, const cube &b);
 
-    void add_uc_to_frame(const shared_ptr<cube> uc, shared_ptr<frame> f);
+    void AddLemmaToFrame(const cube &lemma, frame &f);
 
     shared_ptr<Model> m_model;
-    set<shared_ptr<cube>, cubePtrComp> m_UCSet;
     vector<shared_ptr<frame>> m_sequence;
     shared_ptr<SATSolver> m_blockSolver;
     vector<int> m_blockCounter;

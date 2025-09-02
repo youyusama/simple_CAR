@@ -151,6 +151,18 @@ void SATSolver::AddUC(const shared_ptr<cube> uc, int lvl) {
 }
 
 
+void SATSolver::AddUC(const cube &uc, int lvl) {
+    int flag = GetFrameFlag(lvl);
+    clause cls;
+    cls.reserve(uc.size() + 1);
+    cls.emplace_back(-flag);
+    for (auto ci : uc) cls.emplace_back(-ci);
+
+    AddClause(cls);
+    SetDomain(make_shared<cube>(cls));
+}
+
+
 // ================================================================================
 // @brief: let property hold, & p
 // @input:

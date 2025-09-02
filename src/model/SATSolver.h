@@ -135,6 +135,8 @@ class SATSolver : public ISolver {
 
     void AddUC(const shared_ptr<cube> uc, int lvl = 0);
 
+    void AddUC(const cube &uc, int lvl = 0);
+
     void AddProperty();
 
     void FlipLastConstrain();
