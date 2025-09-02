@@ -392,6 +392,10 @@ class ClauseAllocator {
     // Private Implementation
     // ================================
 
+    static inline size_t round_up(size_t x, size_t a) {
+        return (x + a - 1) & ~(a - 1);
+    }
+
     // Large clause allocation
     CRef allocate_large(const std::vector<Lit> &ps, bool learnt, bool use_extra) {
         stats_.clause_allocs++;
@@ -400,7 +404,9 @@ class ClauseAllocator {
         const size_t base_size = sizeof(Clause);
         const size_t lits_size = sizeof(Lit) * ps.size();
         const size_t extra_size = use_extra ? sizeof(uint32_t) : 0;
-        const size_t total_size = base_size + lits_size + extra_size;
+
+        const size_t tail_padded = round_up(lits_size + extra_size, alignof(void *));
+        const size_t total_size = base_size + tail_padded;
 
         // Align memory for Clause
         // constexpr size_t alignment = alignof(Clause);
@@ -408,7 +414,7 @@ class ClauseAllocator {
         // assert(total_size == aligned_size);
 
         // Allocate memory through PMR
-        void *mem = active_resource_->allocate(total_size, alignof(Clause));
+        void *mem = active_resource_->allocate(total_size, alignof(void *));
 
         // Construct clause in place
         Clause *clause = new (mem) Clause(ps, use_extra, learnt);
@@ -422,7 +428,9 @@ class ClauseAllocator {
         const size_t base_size = sizeof(Clause);
         const size_t lits_size = sizeof(Lit) * from.size();
         const size_t extra_size = use_extra ? sizeof(uint32_t) : 0;
-        const size_t total_size = base_size + lits_size + extra_size;
+
+        const size_t tail_padded = round_up(lits_size + extra_size, alignof(void *));
+        const size_t total_size = base_size + tail_padded;
 
         // Align memory for Clause
         // constexpr size_t alignment = alignof(Clause);
@@ -430,7 +438,7 @@ class ClauseAllocator {
         // assert(total_size == aligned_size);
 
         // Allocate memory through PMR
-        void *mem = active_resource_->allocate(total_size, alignof(Clause));
+        void *mem = active_resource_->allocate(total_size, alignof(void *));
 
         // Construct clause in place
         Clause *clause = new (mem) Clause(from, use_extra);

@@ -769,6 +769,15 @@ void Solver::relocAll(std::shared_ptr<ClauseAllocator> new_ca) {
         }
     learnts.resize(j);
 
+    // All temporary:
+    //
+    for (i = j = 0; i < temp_clauses.size(); i++)
+        if (!isRemoved(temp_clauses[i])) {
+            ca->reloc(temp_clauses[i], new_ca);
+            temp_clauses[j++] = temp_clauses[i];
+        }
+    temp_clauses.resize(j);
+
     // All original:
     //
     for (i = j = 0; i < clauses.size(); i++)
