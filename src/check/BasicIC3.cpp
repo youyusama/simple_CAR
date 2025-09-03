@@ -234,6 +234,7 @@ void BasicIC3::AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLe
     for (int i = toAll ? 1 : frameLevel; i <= frameLevel; ++i) {
         if (m_frames[i].solver) {
             m_frames[i].solver->AddClause(lemma);
+            m_frames[i].solver->SetDomainCOI(blockingCube);
         }
     }
     if (frameLevel >= m_k) {
@@ -387,6 +388,7 @@ bool BasicIC3::InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSo
     GetPrimed(assumption);
     if (m_settings.satSolveInDomain) {
         slv->ResetTempDomain();
+        slv->SetTempDomainCOI(make_shared<cube>(*cb));
         slv->SetTempDomainCOI(assumption);
     }
     bool result = slv->Solve(assumption);
