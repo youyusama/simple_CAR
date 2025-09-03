@@ -114,6 +114,9 @@ bool BasicIC3::Check(int badId) {
     for (const auto &lit : m_initialStateSet) {
         frame0.solver->AddClause({lit});
         auto blockingCube = make_shared<cube>(cube{-lit});
+        if (m_settings.satSolveInDomain) {
+            frame0.solver->SetDomainCOI(blockingCube);
+        }
     }
 
     // The main IC3 loop.
@@ -234,7 +237,9 @@ void BasicIC3::AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLe
     for (int i = toAll ? 1 : frameLevel; i <= frameLevel; ++i) {
         if (m_frames[i].solver) {
             m_frames[i].solver->AddClause(lemma);
-            m_frames[i].solver->SetDomainCOI(blockingCube);
+            if (m_settings.satSolveInDomain) {
+                m_frames[i].solver->SetDomainCOI(blockingCube);
+            }
         }
     }
     if (frameLevel >= m_k) {
@@ -391,9 +396,9 @@ bool BasicIC3::InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSo
         slv->SetTempDomainCOI(make_shared<cube>(*cb));
         slv->SetTempDomainCOI(assumption);
     }
-    bool result = slv->Solve(assumption);
+    bool result = !slv->Solve(assumption);
     slv->ReleaseTempClause();
-    return !result;
+    return result;
 }
 
 bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
