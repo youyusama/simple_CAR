@@ -726,9 +726,20 @@ lbool Solver::solve_() {
 
     cancelUntil(0);
     if (temp_cls_activated) {
-        removeTempLearnt();
         temp_cls_activated = false;
         temporary_domain[temp_cls_act_var] = 0;
+        // remove temperary learnt clause
+        removeTempLearnt();
+        // remove temperary learnt unit clause
+        auto it_act = std::find(trail.begin(), trail.end(), mkLit(temp_cls_act_var, true));
+        for (auto it = it_act; it != trail.end(); it++) {
+            Var x = var(*it);
+            assigns[x] = l_Undef;
+            polarity[x] = sign(*it);
+            insertVarOrder(x);
+        }
+        trail.erase(it_act, trail.end());
+        qhead = trail.size();
     }
     // order_list.print();
     return status;
