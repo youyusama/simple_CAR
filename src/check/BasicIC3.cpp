@@ -17,8 +17,13 @@ BasicIC3::BasicIC3(Settings settings,
 
     // Initialize the dedicated solver for predecessor generalization (lifting).
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
     m_liftSolver->AddTrans();
+    // set permanent domain
+    if (m_settings.satSolveInDomain)
+        m_liftSolver->SetDomainCOI(make_shared<cube>(m_model->GetConstraints()));
 
+    // no need to set domain for bad
     m_badPredLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_badPredLiftSolver->AddTrans();
     m_badPredLiftSolver->AddTransK(1);
@@ -46,6 +51,9 @@ BasicIC3::BasicIC3(Settings settings,
     m_branching = make_shared<Branching>(m_settings.branching);
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
+
+    m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
+    
 }
 
 BasicIC3::~BasicIC3() {
@@ -106,6 +114,9 @@ bool BasicIC3::Check(int badId) {
     for (const auto &lit : m_initialStateSet) {
         frame0.solver->AddClause({lit});
         auto blockingCube = make_shared<cube>(cube{-lit});
+        if (m_settings.satSolveInDomain) {
+            frame0.solver->SetDomainCOI(blockingCube);
+        }
     }
 
     // The main IC3 loop.
@@ -196,6 +207,7 @@ void BasicIC3::AddNewFrame() {
     IC3Frame newFrame;
     newFrame.k = m_frames.size();
     newFrame.solver = make_shared<SATSolver>(m_model, m_settings.solver);
+    if (m_settings.satSolveInDomain) newFrame.solver->SetSolveInDomain();
     newFrame.solver->AddTrans();
     newFrame.solver->AddConstraints();
     newFrame.solver->AddProperty();
@@ -225,6 +237,9 @@ void BasicIC3::AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLe
     for (int i = toAll ? 1 : frameLevel; i <= frameLevel; ++i) {
         if (m_frames[i].solver) {
             m_frames[i].solver->AddClause(lemma);
+            if (m_settings.satSolveInDomain) {
+                m_frames[i].solver->SetDomainCOI(blockingCube);
+            }
         }
     }
     if (frameLevel >= m_k) {
@@ -376,9 +391,14 @@ bool BasicIC3::InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSo
     auto assumption = make_shared<cube>(*cb);
     OrderAssumption(assumption);
     GetPrimed(assumption);
-    bool result = slv->Solve(assumption);
+    if (m_settings.satSolveInDomain) {
+        slv->ResetTempDomain();
+        slv->SetTempDomainCOI(make_shared<cube>(*cb));
+        slv->SetTempDomainCOI(assumption);
+    }
+    bool result = !slv->Solve(assumption);
     slv->ReleaseTempClause();
-    return !result;
+    return result;
 }
 
 bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
@@ -552,6 +572,14 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
         succNegationClause.push_back(-cons);
     }
     m_liftSolver->AddTempClause(succNegationClause);
+    if (m_settings.satSolveInDomain) {
+        m_liftSolver->ResetTempDomain();
+        shared_ptr<cube> primeLatches = make_shared<cube>();
+        for (const auto &lit : *(successorState->latches)) {
+            primeLatches->push_back(m_model->GetPrimeK(lit, 1));
+        }
+        m_liftSolver->SetTempDomainCOI(primeLatches);
+    }
 
     const auto &partialLatch = predecessorState->latches;
 
@@ -624,7 +652,12 @@ bool BasicIC3::UnreachabilityCheck(const shared_ptr<cube> &cb, const shared_ptr<
     auto assumption = make_shared<cube>(*cb);
     OrderAssumption(assumption);
     GetPrimed(assumption);
-    return !slv->Solve(assumption);
+    if (m_settings.satSolveInDomain) {
+        slv->ResetTempDomain();
+        slv->SetTempDomainCOI(assumption);
+    }
+    bool result = !slv->Solve(assumption);
+    return result;
 }
 
 int BasicIC3::PushLemmaForward(const shared_ptr<cube> &cb, int startLevel) {
