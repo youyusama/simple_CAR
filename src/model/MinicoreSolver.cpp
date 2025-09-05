@@ -172,7 +172,7 @@ int MinicoreSolver::PopAssumption() {
 
 
 inline void MinicoreSolver::SetSolveInDomain() {
-    solveInDomain = true;
+    solve_in_domain = true;
 }
 
 

@@ -28,7 +28,7 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   solveInDomain(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false) {
+                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
 }
@@ -403,7 +403,7 @@ CRef Solver::propagate() {
             Lit first = c[0];
             Watcher w = Watcher(cr, first);
             if (first != blocker &&
-                (value(first) == l_True || !inDomain(var(blocker)))) {
+                (value(first) == l_True || !inDomain(var(first)))) {
                 *j++ = w;
                 continue;
             }
@@ -664,10 +664,16 @@ lbool Solver::solve_() {
         std::cout << "===============================================================================\n";
     }
 
+    if (solve_in_domain)
+        solve_in_domain_runtime_flag = true;
     for (int i = 0; i < nVars(); i++) {
         if (inDomain(i)) {
             insertVarOrder(i);
         }
+    }
+
+    if (temp_cls_activated || solve_in_domain) {
+        traillim_snapshot = trail.size();
     }
 
     // Search:
@@ -730,17 +736,21 @@ lbool Solver::solve_() {
         temporary_domain[temp_cls_act_var] = 0;
         // remove temperary learnt clause
         removeTempLearnt();
-        // remove temperary learnt unit clause
-        auto it_act = std::find(trail.begin(), trail.end(), mkLit(temp_cls_act_var, true));
-        for (auto it = it_act; it != trail.end(); it++) {
-            Var x = var(*it);
+    }
+    // remove temperary learnt unit clause
+    if (temp_cls_activated || solve_in_domain) {
+        while (trail.size() > traillim_snapshot) {
+            Var x = var(trail.back());
             assigns[x] = l_Undef;
-            polarity[x] = sign(*it);
+            polarity[x] = sign(trail.back());
             insertVarOrder(x);
+            trail.pop_back();
         }
-        trail.erase(it_act, trail.end());
         qhead = trail.size();
     }
+    if (solve_in_domain)
+        solve_in_domain_runtime_flag = false;
+
     // order_list.print();
     return status;
 }

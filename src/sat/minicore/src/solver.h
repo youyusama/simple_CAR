@@ -103,7 +103,8 @@ class Solver {
     std::vector<VarData> vardata; // Stores reason and level for each variable.
     OccLists watches;             // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
 
-    bool solveInDomain;                 // Deciside in domain.
+    bool solve_in_domain;               // Deciside in domain.
+    bool solve_in_domain_runtime_flag;  // Decide in domain in runtime.
     std::vector<char> permanent_domain; // A variable is a decision variable in all queries.
     std::vector<char> temporary_domain; // A variable is a decision variable in the next query.
 
@@ -123,6 +124,7 @@ class Solver {
     Var alloced_var;          // Variable with structure created.
     Var temp_cls_act_var;     // Variable to activate temp clause.
     bool temp_cls_activated;  // A temp clause is added.
+    int traillim_snapshot;    // Snapshot of trail_lim before temp clause/solve in domain is activated.
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
@@ -269,7 +271,7 @@ inline lbool Solver::solve_main() {
 }
 inline bool Solver::okay() const { return ok; }
 
-inline bool Solver::inDomain(Var x) const { return !solveInDomain || permanent_domain[x] || temporary_domain[x]; }
+inline bool Solver::inDomain(Var x) const { return !solve_in_domain_runtime_flag || permanent_domain[x] || temporary_domain[x]; }
 
 inline void Solver::setDomain(const std::vector<Var> dvars) {
     for (Var x : dvars) permanent_domain[x] = 1;

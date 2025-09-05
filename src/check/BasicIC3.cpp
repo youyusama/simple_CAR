@@ -53,7 +53,6 @@ BasicIC3::BasicIC3(Settings settings,
     blockerOrder.branching = m_branching;
 
     m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
-    
 }
 
 BasicIC3::~BasicIC3() {
