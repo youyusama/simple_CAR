@@ -571,15 +571,11 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
         succNegationClause.push_back(-cons);
     }
     m_liftSolver->AddTempClause(succNegationClause);
-    if (m_settings.satSolveInDomain) {
-        m_liftSolver->ResetTempDomain();
-        shared_ptr<cube> primeLatches = make_shared<cube>();
-        for (const auto &lit : *(successorState->latches)) {
-            primeLatches->push_back(m_model->GetPrimeK(lit, 1));
-        }
-        m_liftSolver->SetTempDomainCOI(primeLatches);
-    }
 
+    shared_ptr<cube> primeLatches = make_shared<cube>();
+    for (const auto &lit : *(successorState->latches)) {
+        primeLatches->push_back(m_model->GetPrimeK(lit, 1));
+    }
     const auto &partialLatch = predecessorState->latches;
 
     while (true) {
@@ -587,6 +583,11 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
         OrderAssumption(assumption);
         assumption->insert(assumption->begin(), predecessorState->inputs->begin(), predecessorState->inputs->end());
         // There exist some successors whose predecessors are the entire set. (All latches are determined solely by the inputs.)
+        if (m_settings.satSolveInDomain) {
+            m_liftSolver->ResetTempDomain();
+            m_liftSolver->SetTempDomainCOI(primeLatches);
+            m_liftSolver->SetTempDomainCOI(assumption);
+        }
 
         bool result = m_liftSolver->Solve(assumption);
         assert(!result);
