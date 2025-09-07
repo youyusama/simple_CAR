@@ -117,6 +117,7 @@ bool BasicIC3::Check(int badId) {
             frame0.solver->SetDomainCOI(blockingCube);
         }
     }
+    frame0.solver->AddInitialClauses();
 
     // The main IC3 loop.
     for (m_k = 1;; ++m_k) {
