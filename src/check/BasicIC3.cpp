@@ -23,20 +23,6 @@ BasicIC3::BasicIC3(Settings settings,
     if (m_settings.satSolveInDomain)
         m_liftSolver->SetDomainCOI(make_shared<cube>(m_model->GetConstraints()));
 
-    // no need to set domain for bad
-    m_badPredLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-    m_badPredLiftSolver->AddTrans();
-    m_badPredLiftSolver->AddTransK(1);
-    clause cls;
-    cls.push_back(-m_model->GetPrimeK(m_model->GetBad(), 1));
-    for (auto cons : m_model->GetConstraints()) {
-        cls.push_back(-m_model->GetPrimeK(cons, 1));
-    }
-    for (auto cons : m_model->GetConstraints()) {
-        cls.push_back(-cons);
-    }
-    m_badPredLiftSolver->AddClause(cls);
-
     // Store the initial state literals in a set for efficient lookups.
     const auto &initState = m_model->GetInitialState();
     m_initialStateSet.insert(initState.begin(), initState.end());
@@ -72,25 +58,8 @@ CheckResult BasicIC3::Run() {
 }
 
 void BasicIC3::Extend() {
-    AddNewFrames(); // Ensures frames up to F_{k+1} exist.
-
-    m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-    m_startSolver->AddTrans();
-    m_startSolver->AddTransK(1);
-    m_startSolver->AddBadk(1);
-    m_startSolver->AddProperty();
-    m_startSolver->AddConstraints();
-    m_startSolver->AddConstraintsK(1);
-    AddSamePrimeConstraints(m_startSolver);
-
-    auto blockingCubes = m_frames[m_k].borderCubes;
-    for (const auto &blockingCube : blockingCubes) {
-        clause lemma;
-        lemma.reserve(blockingCube->size());
-        for (const auto &lit : *blockingCube) {
-            lemma.push_back(-lit);
-        }
-        m_startSolver->AddClause(lemma);
+    while (m_frames.size() <= m_k + 1) {
+        AddNewFrame();
     }
 }
 
@@ -99,10 +68,10 @@ bool BasicIC3::Check(int badId) {
         m_log->L(1, "SAFE: Constant bad.");
         return true;
     }
-    if (!BaseCases()) {
-        m_log->L(1, "UNSAFE: CEX found in base cases.");
-        return false; // CEX found in 0 or 1 steps
-    }
+    // if (!BaseCases()) {
+    //     m_log->L(1, "UNSAFE: CEX found in base cases.");
+    //     return false; // CEX found in 0 or 1 steps
+    // }
 
     m_log->L(1, "Base cases passed. Starting main IC3 loop.");
 
@@ -112,15 +81,30 @@ bool BasicIC3::Check(int badId) {
     // F_0 is defined as exactly the initial states.
     for (const auto &lit : m_initialStateSet) {
         frame0.solver->AddClause({lit});
-        auto blockingCube = make_shared<cube>(cube{-lit});
         if (m_settings.satSolveInDomain) {
+            auto blockingCube = make_shared<cube>(cube{-lit});
             frame0.solver->SetDomainCOI(blockingCube);
         }
     }
     frame0.solver->AddInitialClauses();
 
+    shared_ptr<cube> badCube = make_shared<cube>();
+    badCube->push_back(m_model->GetBad());
+    if (m_settings.satSolveInDomain) {
+        frame0.solver->ResetTempDomain();
+        frame0.solver->SetTempDomainCOI(badCube);
+    }
+    if (frame0.solver->Solve(badCube)) {
+        pair<shared_ptr<cube>, shared_ptr<cube>> assignment = frame0.solver->GetAssignment(false);
+        auto badState = make_shared<State>(nullptr, assignment.first, assignment.second, 0);
+        m_log->L(1, "UNSAFE: Found a path from the initial state.");
+        m_cexStart = badState;
+        return false;
+    }
+
+
     // The main IC3 loop.
-    for (m_k = 1;; ++m_k) {
+    for (m_k = 0;; ++m_k) {
         m_log->L(1, "==================== k=", m_k, " ====================");
         Extend();
         m_log->L(1, FramesInfo());
@@ -139,68 +123,61 @@ bool BasicIC3::Check(int badId) {
     return true; // Should be unreachable
 }
 
-bool BasicIC3::BaseCases() {
-    // 0-step check: I & T & ~P
-    // Check if any initial state is a bad state.
-    auto baseSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-    baseSolver->AddTrans(); // Also load transition relation for combinational logic
-    baseSolver->AddConstraints();
-    baseSolver->AddBad();
-    auto assumption = make_shared<cube>();
-    assumption->insert(assumption->end(), m_initialStateSet.begin(), m_initialStateSet.end());
+// bool BasicIC3::BaseCases() {
+//     // 0-step check: I & T & ~P
+//     // Check if any initial state is a bad state.
+//     auto baseSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+//     baseSolver->AddTrans(); // Also load transition relation for combinational logic
+//     baseSolver->AddConstraints();
+//     baseSolver->AddBad();
+//     auto assumption = make_shared<cube>();
+//     assumption->insert(assumption->end(), m_initialStateSet.begin(), m_initialStateSet.end());
 
-    if (baseSolver->Solve(assumption)) {
-        m_log->L(1, "UNSAFE: Property fails in initial states.");
-        pair<shared_ptr<cube>, shared_ptr<cube>> assignment = baseSolver->GetAssignment(false);
-        m_cexStart = make_shared<State>(
-            nullptr,
-            assignment.first,
-            assignment.second,
-            0);
-        return false;
-    }
+//     if (baseSolver->Solve(assumption)) {
+//         m_log->L(1, "UNSAFE: Property fails in initial states.");
+//         pair<shared_ptr<cube>, shared_ptr<cube>> assignment = baseSolver->GetAssignment(false);
+//         m_cexStart = make_shared<State>(
+//             nullptr,
+//             assignment.first,
+//             assignment.second,
+//             0);
+//         return false;
+//     }
 
-    // 1-step check: I & T & ~P'
-    // Check if a bad state is reachable in one step.
-    auto step1Solver = make_shared<SATSolver>(m_model, m_settings.solver);
-    step1Solver->AddTrans();
-    step1Solver->AddTransK(1);
-    step1Solver->AddBadk(1);
-    step1Solver->AddProperty();
-    step1Solver->AddConstraints();
-    step1Solver->AddConstraintsK(1);
-    AddSamePrimeConstraints(step1Solver);
+//     // 1-step check: I & T & ~P'
+//     // Check if a bad state is reachable in one step.
+//     auto step1Solver = make_shared<SATSolver>(m_model, m_settings.solver);
+//     step1Solver->AddTrans();
+//     step1Solver->AddTransK(1);
+//     step1Solver->AddBadk(1);
+//     step1Solver->AddProperty();
+//     step1Solver->AddConstraints();
+//     step1Solver->AddConstraintsK(1);
+//     AddSamePrimeConstraints(step1Solver);
 
-    if (step1Solver->Solve(assumption)) {
-        m_log->L(1, "UNSAFE: Property fails at step 1.");
-        cube primeInputs;
-        shared_ptr<vector<int>> coiInputs = m_model->GetCOIInputs();
-        for (int i : *coiInputs) {
-            int i_p = m_model->GetPrimeK(i, 1);
-            if (step1Solver->GetModel(i_p))
-                primeInputs.push_back(i);
-            else
-                primeInputs.push_back(-i);
-        }
-        pair<shared_ptr<cube>, shared_ptr<cube>> assignment = step1Solver->GetAssignment(false);
-        shared_ptr<State> badState(new State(nullptr, make_shared<cube>(primeInputs), nullptr, 0));
-        m_cexStart = make_shared<State>(
-            badState,
-            assignment.first,
-            assignment.second,
-            1 // depth
-        );
-        return false;
-    }
-    return true;
-}
-
-void BasicIC3::AddNewFrames() {
-    // We need frames up to index k+1. The size should be at least k+2.
-    while (m_frames.size() <= m_k + 1) {
-        AddNewFrame();
-    }
-}
+//     if (step1Solver->Solve(assumption)) {
+//         m_log->L(1, "UNSAFE: Property fails at step 1.");
+//         cube primeInputs;
+//         shared_ptr<vector<int>> coiInputs = m_model->GetCOIInputs();
+//         for (int i : *coiInputs) {
+//             int i_p = m_model->GetPrimeK(i, 1);
+//             if (step1Solver->GetModel(i_p))
+//                 primeInputs.push_back(i);
+//             else
+//                 primeInputs.push_back(-i);
+//         }
+//         pair<shared_ptr<cube>, shared_ptr<cube>> assignment = step1Solver->GetAssignment(false);
+//         shared_ptr<State> badState(new State(nullptr, make_shared<cube>(primeInputs), nullptr, 0));
+//         m_cexStart = make_shared<State>(
+//             badState,
+//             assignment.first,
+//             assignment.second,
+//             1 // depth
+//         );
+//         return false;
+//     }
+//     return true;
+// }
 
 void BasicIC3::AddNewFrame() {
     m_log->L(2, "Adding new frame F_", m_frames.size());
@@ -210,7 +187,7 @@ void BasicIC3::AddNewFrame() {
     if (m_settings.satSolveInDomain) newFrame.solver->SetSolveInDomain();
     newFrame.solver->AddTrans();
     newFrame.solver->AddConstraints();
-    newFrame.solver->AddProperty();
+    // newFrame.solver->AddProperty();
     AddSamePrimeConstraints(newFrame.solver);
     m_frames.push_back(newFrame);
 }
@@ -242,9 +219,6 @@ void BasicIC3::AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLe
             }
         }
     }
-    if (frameLevel >= m_k) {
-        m_startSolver->AddClause(lemma);
-    }
 }
 
 shared_ptr<cube> BasicIC3::GetCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube, bool prime) {
@@ -268,58 +242,116 @@ shared_ptr<cube> BasicIC3::GetCore(const shared_ptr<SATSolver> &solver, const sh
     }
 }
 
-shared_ptr<State> BasicIC3::EnumerateStartState() {
-    m_log->L(2, "Searching for a start state at level ", m_k);
-    if (m_startSolver->Solve()) {
-        m_trivial = false;
+// shared_ptr<State> BasicIC3::EnumerateStartState() {
+//     m_log->L(2, "Searching for a start state at level ", m_k);
+//     if (m_startSolver->Solve()) {
+//         m_trivial = false;
 
-        cube primeInputs;
-        cube badInputs;
-        shared_ptr<vector<int>> coiInputs = m_model->GetCOIInputs();
-        for (int i : *coiInputs) {
-            int i_p = m_model->GetPrimeK(i, 1);
-            if (m_startSolver->GetModel(i_p)) {
-                primeInputs.push_back(i_p);
-                badInputs.push_back(i);
-            } else {
-                primeInputs.push_back(-i_p);
-                badInputs.push_back(-i);
-            }
+//         cube primeInputs;
+//         cube badInputs;
+//         shared_ptr<vector<int>> coiInputs = m_model->GetCOIInputs();
+//         for (int i : *coiInputs) {
+//             int i_p = m_model->GetPrimeK(i, 1);
+//             if (m_startSolver->GetModel(i_p)) {
+//                 primeInputs.push_back(i_p);
+//                 badInputs.push_back(i);
+//             } else {
+//                 primeInputs.push_back(-i_p);
+//                 badInputs.push_back(-i);
+//             }
+//         }
+
+//         pair<shared_ptr<cube>, shared_ptr<cube>> assignment = m_startSolver->GetAssignment(false);
+//         shared_ptr<cube> partialLatch = make_shared<cube>(*assignment.second);
+
+//         while (true) {
+//             shared_ptr<cube> assumps = make_shared<cube>();
+//             assumps->insert(assumps->end(), partialLatch->begin(), partialLatch->end());
+//             OrderAssumption(assumps);
+//             assumps->insert(assumps->end(), assignment.first->begin(), assignment.first->end());
+//             assumps->insert(assumps->end(), primeInputs.begin(), primeInputs.end());
+
+//             bool res = m_badPredLiftSolver->Solve(assumps);
+//             assert(!res);
+//             shared_ptr<cube> tempCore = GetCore(m_badPredLiftSolver, partialLatch, false);
+//             if (tempCore->size() == partialLatch->size()) {
+//                 break;
+//             } else {
+//                 partialLatch = tempCore;
+//             }
+//         }
+
+//         assignment.second = partialLatch;
+
+//         shared_ptr<State> badState(new State(nullptr, make_shared<cube>(badInputs), nullptr, 0));
+//         shared_ptr<State> ctiState = make_shared<State>(
+//             badState,
+//             assignment.first,
+//             assignment.second,
+//             1);
+//         m_log->L(2, "Found start state at level ", m_k, ": ", CubeToStr(ctiState->latches), ", input: ", CubeToStr(ctiState->inputs));
+//         return ctiState;
+//     } else {
+//         m_log->L(2, "No start state found at level ", m_k);
+//         return nullptr;
+//     }
+// }
+
+bool BasicIC3::EnumerateStartState() {
+    m_log->L(3, "Searching for a start state at level ", m_k+1);
+    shared_ptr<SATSolver> framekSolver = m_frames[m_k+1].solver;
+    shared_ptr<cube> badCube = make_shared<cube>();
+    badCube->push_back(m_model->GetBad());
+    if (m_settings.satSolveInDomain) {
+        framekSolver->ResetTempDomain();
+        framekSolver->SetTempDomainCOI(badCube);
+    }
+    if (!framekSolver->Solve(badCube)) {
+        return false;
+    } else {
+        pair<shared_ptr<cube>, shared_ptr<cube>> assignment = framekSolver->GetAssignment(false);
+        auto badState = make_shared<State>(nullptr, assignment.first, assignment.second, 0);
+
+
+        m_log->L(3, "Generalizing bad. Initial latch size: ", badState->latches->size(), ", input size: ", badState->inputs->size());
+        const auto &partialLatch = badState->latches;
+        clause succNegationClause;
+        succNegationClause.reserve(partialLatch->size());
+        for (const auto &lit : *partialLatch) {
+            succNegationClause.push_back(-m_model->GetBad());
         }
-
-        pair<shared_ptr<cube>, shared_ptr<cube>> assignment = m_startSolver->GetAssignment(false);
-        shared_ptr<cube> partialLatch = make_shared<cube>(*assignment.second);
+        for (auto cons : m_model->GetConstraints()) {
+            succNegationClause.push_back(-cons);
+        }
+        m_liftSolver->AddTempClause(succNegationClause);
+        if (m_settings.satSolveInDomain) {
+            m_liftSolver->ResetTempDomain();
+            m_liftSolver->SetTempDomainCOI(badCube);
+        }
 
         while (true) {
-            shared_ptr<cube> assumps = make_shared<cube>();
-            assumps->insert(assumps->end(), partialLatch->begin(), partialLatch->end());
-            OrderAssumption(assumps);
-            assumps->insert(assumps->end(), assignment.first->begin(), assignment.first->end());
-            assumps->insert(assumps->end(), primeInputs.begin(), primeInputs.end());
+            auto assumption = make_shared<cube>(*partialLatch);
+            OrderAssumption(assumption);
+            assumption->insert(assumption->begin(), assignment.first->begin(), assignment.first->end());
 
-            bool res = m_badPredLiftSolver->Solve(assumps);
-            assert(!res);
-            shared_ptr<cube> tempCore = GetCore(m_badPredLiftSolver, partialLatch, false);
-            if (tempCore->size() == partialLatch->size()) {
+            bool result = m_liftSolver->Solve(assumption);
+            assert(!result);
+
+            auto core = GetCore(m_liftSolver, partialLatch, false);
+            m_log->L(3, "Core size: ", core->size(), ", Partial latch size: ", partialLatch->size());
+
+            if (core->size() >= partialLatch->size()) {
                 break;
             } else {
-                partialLatch = tempCore;
+                partialLatch->swap(*core);
             }
         }
-
-        assignment.second = partialLatch;
-
-        shared_ptr<State> badState(new State(nullptr, make_shared<cube>(badInputs), nullptr, 0));
-        shared_ptr<State> ctiState = make_shared<State>(
-            badState,
-            assignment.first,
-            assignment.second,
-            1);
-        m_log->L(2, "Found start state at level ", m_k, ": ", CubeToStr(ctiState->latches), ", input: ", CubeToStr(ctiState->inputs));
-        return ctiState;
-    } else {
-        m_log->L(2, "No start state found at level ", m_k);
-        return nullptr;
+        m_liftSolver->ReleaseTempClause();
+        m_log->L(3, "Generalized bad. Final latch size: ", badState->latches->size());
+        m_log->L(3, "Bad state at level ", m_k, ": ", CubeToStr(badState->latches));
+        m_log->L(2, "Found bad State. New obligation at level ", m_k);
+        obligations.insert(Obligation(badState, m_k, 0));
+        return true;
     }
 }
 
@@ -328,22 +360,20 @@ bool BasicIC3::Strengthen() {
     m_earliest = m_k + 1;
 
     while (true) {
-        shared_ptr<State> startState = EnumerateStartState();
-        if (startState != nullptr) {
-            set<Obligation> obligations;
-            obligations.emplace(startState, m_k - 1, 1);
-
-            if (!HandleObligations(obligations)) {
-                return false;
-            }
-        } else {
+        if (!HandleObligations()) {
+            return false;
+        }
+        if (!EnumerateStartState()) {
             m_log->L(2, "No more CTIs at level ", m_k, ". Frame is strengthened.");
             return true;
+        }
+        if (m_cexStart != nullptr) {
+            return false;
         }
     }
 }
 
-bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
+bool BasicIC3::HandleObligations() {
     while (!obligations.empty()) {
         Obligation ob = *obligations.begin();
 
@@ -617,16 +647,16 @@ bool BasicIC3::InitiationCheck(const shared_ptr<cube> &cb) {
 }
 
 
-// try to add negated literals from initial states
-void BasicIC3::InitiationAugmentation(const shared_ptr<cube> &failureCube, const shared_ptr<cube> &fallbackCube) {
-    for (const auto &lit : *fallbackCube) {
-        if (m_initialStateSet.count(-lit)) {
-            failureCube->push_back(lit);
-            break;
-        }
-    }
-    sort(failureCube->begin(), failureCube->end(), cmp);
-}
+// // try to add negated literals from initial states
+// void BasicIC3::InitiationAugmentation(const shared_ptr<cube> &failureCube, const shared_ptr<cube> &fallbackCube) {
+//     for (const auto &lit : *fallbackCube) {
+//         if (m_initialStateSet.count(-lit)) {
+//             failureCube->push_back(lit);
+//             break;
+//         }
+//     }
+//     sort(failureCube->begin(), failureCube->end(), cmp);
+// }
 
 // fallbackCube is sorted
 shared_ptr<cube> BasicIC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube) {
@@ -674,6 +704,7 @@ int BasicIC3::PushLemmaForward(const shared_ptr<cube> &cb, int startLevel) {
 }
 
 bool BasicIC3::Propagate() {
+    if (m_k == 0) return false;
     m_log->L(1, "Propagating clauses.");
 
     m_log->L(2, "Cleaning up redundant clauses.");

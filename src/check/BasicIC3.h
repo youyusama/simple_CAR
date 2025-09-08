@@ -47,11 +47,10 @@ class BasicIC3 : public BaseChecker {
 
     bool BaseCases();
     void AddNewFrame();
-    void AddNewFrames();
     void AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLevel, bool toAll);
 
     bool Strengthen();
-    bool HandleObligations(set<Obligation> &obligations);
+    bool HandleObligations();
     size_t Generalize(const shared_ptr<cube> &cb, int frameLvl);
     bool MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl);
     bool Down(const shared_ptr<cube> &c, int frameLvl, int recLvl, const set<int> &triedLits);
@@ -104,7 +103,7 @@ class BasicIC3 : public BaseChecker {
     bool Propagate();
 
 
-    shared_ptr<State> EnumerateStartState();
+    bool EnumerateStartState();
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
     void OutputWitness(int bad);
@@ -116,7 +115,7 @@ class BasicIC3 : public BaseChecker {
     bool UnreachabilityCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv);
     bool InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv);
     shared_ptr<cube> GetAndValidateCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube);
-    void InitiationAugmentation(const shared_ptr<cube> &failureCube, const shared_ptr<cube> &fallbackCube);
+    // void InitiationAugmentation(const shared_ptr<cube> &failureCube, const shared_ptr<cube> &fallbackCube);
     bool InitiationCheck(const shared_ptr<cube> &cb);
 
     void GetBlockers(const shared_ptr<cube> &c, int framelevel, vector<shared_ptr<cube>> &blockers);
@@ -131,8 +130,6 @@ class BasicIC3 : public BaseChecker {
     shared_ptr<Model> m_model;
     vector<IC3Frame> m_frames;
     shared_ptr<SATSolver> m_liftSolver;
-    shared_ptr<SATSolver> m_startSolver;
-    shared_ptr<SATSolver> m_badPredLiftSolver;
     set<int> m_initialStateSet;
     shared_ptr<State> m_cexStart;
     bool m_trivial;
@@ -140,6 +137,7 @@ class BasicIC3 : public BaseChecker {
     int lemmaCount;
     int m_invariantLevel;
     shared_ptr<Branching> m_branching;
+    set<Obligation> obligations;
 };
 
 } // namespace car
