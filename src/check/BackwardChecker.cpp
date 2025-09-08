@@ -69,15 +69,18 @@ bool BackwardChecker::Check(int badId) {
         if (m_settings.dt) { // Dynamic Traversal
             shared_ptr<vector<shared_ptr<State>>> dtseq = m_underSequence.GetSeqDT();
             for (auto state : *dtseq) {
-                workingStack.emplace(state, m_k - 1, false);
+                workingStack.emplace(state, m_k - 1);
             }
         } else { // from the shallow and the start
             for (int i = m_underSequence.size() - 1; i >= 0; i--) {
                 for (int j = m_underSequence[i].size() - 1; j >= 0; j--) {
-                    workingStack.emplace(m_underSequence[i][j], m_k - 1, false);
+                    workingStack.emplace(m_underSequence[i][j], m_k - 1);
                 }
             }
         }
+
+        m_log->L(2, "Start Frame: ", m_k);
+        m_log->L(2, "Working Stack Size: ", workingStack.size());
 
         m_log->Tick();
         shared_ptr<State> startState = EnumerateStartState();
@@ -86,7 +89,7 @@ bool BackwardChecker::Check(int badId) {
         while (startState != nullptr) {
             m_log->L(2, "State from StartSolver: ", CubeToStrShort(startState->latches));
             m_log->L(3, "State Detail: ", CubeToStr(startState->latches));
-            workingStack.push(Task(startState, m_k - 1, true));
+            workingStack.emplace(startState, m_k - 1);
 
             while (!workingStack.empty()) {
                 Task &task = workingStack.top();
@@ -100,15 +103,17 @@ bool BackwardChecker::Check(int badId) {
                     continue;
                 }
 
-                if (!task.isLocated) {
-                    task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
-                    m_log->L(3, "State get new level ", task.frameLevel);
-                    if (task.frameLevel >= m_k) {
-                        workingStack.pop();
-                        continue;
-                    }
+                m_log->Tick();
+                while (task.frameLevel < m_k &&
+                       m_overSequence->IsBlockedByFrameLazy(*task.state->latches, task.frameLevel + 1)) {
+                    task.frameLevel++;
                 }
-                task.isLocated = false;
+                m_log->StatGetNewLevel();
+
+                if (task.frameLevel >= m_k) {
+                    workingStack.pop();
+                    continue;
+                }
 
                 if (task.frameLevel == -1) {
                     if (CheckBad(task.state))
@@ -132,9 +137,7 @@ bool BackwardChecker::Check(int badId) {
                     m_log->L(3, "Get state: ", CubeToStr(newState->latches));
                     m_underSequence.push(newState);
                     if (m_settings.dt) task.state->HasSucc();
-                    int newFrameLevel = GetNewLevel(newState);
-                    m_log->L(3, "State get new level ", newFrameLevel);
-                    workingStack.emplace(newState, newFrameLevel, true);
+                    workingStack.emplace(newState, task.frameLevel - 1);
                     continue;
                 } else {
                     // Solver return UNSAT, get uc, then continue
@@ -146,9 +149,8 @@ bool BackwardChecker::Check(int badId) {
                     m_log->L(2, "Get Generalized UC:", CubeToStr(uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     if (m_settings.dt) task.state->HasUC();
-                    PropagateUp(uc, task.frameLevel + 1);
+                    task.frameLevel = PropagateUp(uc, task.frameLevel + 1);
                     m_log->L(3, m_overSequence->FramesInfo());
-                    task.frameLevel++;
                     continue;
                 }
             }
@@ -220,9 +222,11 @@ void BackwardChecker::Init() {
     m_restart.reset(new Restart(m_settings));
 }
 
-bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
+bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck) {
     m_restart->UcCountsPlus1();
     m_log->Tick();
+
+    if (!m_overSequence->Insert(*uc, frameLevel, implyCheck)) return false;
 
     shared_ptr<cube> puc(new cube(*uc));
     GetPrimed(puc);
@@ -243,7 +247,6 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frame
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
     }
-    m_overSequence->Insert(*uc, frameLevel);
 
     m_log->StatUpdateUc();
     return true;
@@ -312,21 +315,6 @@ void BackwardChecker::OverSequenceRefine(int lvl) {
         for (auto ci : *uc) cls.emplace_back(-ci);
         refine_solver->AddClause(cls);
     }
-}
-
-
-int BackwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
-    m_log->Tick();
-
-    for (int i = start; i <= m_k; ++i) {
-        if (!m_overSequence->IsBlockedByFrameLazy(*state->latches, i)) {
-            m_log->StatGetNewLevel();
-            return i - 1;
-        }
-    }
-
-    m_log->StatGetNewLevel();
-    return m_k;
 }
 
 
@@ -451,7 +439,7 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, sha
             auto p = GetInputAndState(frame_lvl);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
             if (DownHasFailed(cts->latches, failed_ctses)) return false;
-            int cts_lvl = GetNewLevel(cts);
+            int cts_lvl = frame_lvl - 1;
             shared_ptr<cube> cts_ass(new cube(*cts->latches));
             OrderAssumption(cts_ass);
             m_log->Tick();
@@ -589,7 +577,8 @@ bool BackwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
     bool result;
     if (!IsReachable(lvl, c)) {
         m_log->StatPropagation();
-        AddUnsatisfiableCore(c, lvl + 1);
+        auto uc = GetUnsatCore(lvl);
+        AddUnsatisfiableCore(uc, lvl + 1, true);
         result = true;
     } else {
         m_log->StatPropagation();
@@ -607,7 +596,7 @@ int BackwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
             break;
         lvl++;
     }
-    return lvl + 1;
+    return lvl;
 }
 
 

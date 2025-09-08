@@ -74,15 +74,18 @@ bool ForwardChecker::Check(int badId) {
         if (m_settings.dt) { // Dynamic Traversal
             shared_ptr<vector<shared_ptr<State>>> dtseq = m_underSequence.GetSeqDT();
             for (auto state : *dtseq) {
-                workingStack.emplace(state, m_k - 1, false);
+                workingStack.emplace(state, m_k - 1);
             }
         } else { // from the shallow and the start
             for (int i = m_underSequence.size() - 1; i >= 0; i--) {
                 for (int j = m_underSequence[i].size() - 1; j >= 0; j--) {
-                    workingStack.emplace(m_underSequence[i][j], m_k - 1, false);
+                    workingStack.emplace(m_underSequence[i][j], m_k - 1);
                 }
             }
         }
+        m_log->L(2, "Start Frame: ", m_k);
+        m_log->L(2, "Working Stack Size: ", workingStack.size());
+
         m_log->Tick();
         shared_ptr<State> startState = EnumerateStartState();
         m_log->StatStartSolver();
@@ -95,7 +98,7 @@ bool ForwardChecker::Check(int badId) {
         while (startState != nullptr) {
             m_log->L(2, "State from StartSolver: ", CubeToStrShort(startState->latches));
             m_log->L(3, "State Detail: ", CubeToStr(startState->latches));
-            workingStack.push(Task(startState, m_k - 1, true));
+            workingStack.emplace(startState, m_k - 1);
 
             while (!workingStack.empty()) {
                 Task &task = workingStack.top();
@@ -109,15 +112,17 @@ bool ForwardChecker::Check(int badId) {
                     continue;
                 }
 
-                if (!task.isLocated) {
-                    task.frameLevel = GetNewLevel(task.state, task.frameLevel + 1);
-                    m_log->L(3, "State get new Level ", task.frameLevel);
-                    if (task.frameLevel >= m_k) {
-                        workingStack.pop();
-                        continue;
-                    }
+                m_log->Tick();
+                while (task.frameLevel < m_k &&
+                       m_overSequence->IsBlockedByFrameLazy(*task.state->latches, task.frameLevel + 1)) {
+                    task.frameLevel++;
                 }
-                task.isLocated = false;
+                m_log->StatGetNewLevel();
+
+                if (task.frameLevel >= m_k) {
+                    workingStack.pop();
+                    continue;
+                }
 
                 if (task.frameLevel == -1) {
                     if (CheckInit(task.state)) {
@@ -146,15 +151,14 @@ bool ForwardChecker::Check(int badId) {
                     m_log->L(3, "Input Detail: ", CubeToStr(p.first));
                     m_log->L(3, "State Detail: ", CubeToStr(p.second));
                     GeneralizePredecessor(p, task.state);
-                    shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
+                    shared_ptr<State> newState =
+                        make_shared<State>(task.state, p.first, p.second, task.state->depth + 1);
                     m_underSequence.push(newState);
                     if (m_settings.dt) task.state->HasSucc();
                     m_log->L(3, "Get State: ", CubeToStrShort(newState->latches));
                     m_log->L(3, "State Detail: ", CubeToStr(newState->latches));
-                    int newFrameLevel = GetNewLevel(newState);
-                    workingStack.emplace(newState, newFrameLevel, true);
+                    workingStack.emplace(newState, task.frameLevel - 1);
                     if (m_settings.satSolveInDomain) PopDomain();
-                    continue;
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     m_log->L(2, "Result >>> UNSAT <<<");
@@ -166,11 +170,9 @@ bool ForwardChecker::Check(int badId) {
                     m_log->L(2, "Get Generalized UC: ", CubeToStr(uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     if (m_settings.dt) task.state->HasUC();
-                    PropagateUp(uc, task.frameLevel + 1);
+                    task.frameLevel = PropagateUp(uc, task.frameLevel + 1);
                     m_log->L(3, "Frames: ", m_overSequence->FramesInfo());
-                    task.frameLevel++;
                     if (m_settings.satSolveInDomain) PopDomain();
-                    continue;
                 }
             } // end while (!workingStack.empty())
             m_log->Tick();
@@ -262,9 +264,11 @@ void ForwardChecker::Init(int badId) {
     m_restart.reset(new Restart(m_settings));
 }
 
-bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel) {
+bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck) {
     m_restart->UcCountsPlus1();
     m_log->Tick();
+
+    if (!m_overSequence->Insert(*uc, frameLevel, implyCheck)) return false;
 
     if (m_settings.multipleSolvers) {
         if (frameLevel >= m_transSolvers.size()) {
@@ -285,7 +289,6 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameL
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
     }
-    m_overSequence->Insert(*uc, frameLevel);
 
     m_log->StatUpdateUc();
     return true;
@@ -363,21 +366,6 @@ shared_ptr<State> ForwardChecker::EnumerateStartState() {
     } else {
         return nullptr;
     }
-}
-
-
-int ForwardChecker::GetNewLevel(shared_ptr<State> state, int start) {
-    m_log->Tick();
-
-    for (int i = start; i <= m_k; i++) {
-        if (!m_overSequence->IsBlockedByFrameLazy(*state->latches, i)) {
-            m_log->StatGetNewLevel();
-            return i - 1;
-        }
-    }
-
-    m_log->StatGetNewLevel();
-    return m_k;
 }
 
 
@@ -559,7 +547,8 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shar
             GeneralizePredecessor(p, p_ucs);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
             if (DownHasFailed(cts->latches, failed_ctses)) return false;
-            int cts_lvl = GetNewLevel(cts);
+            // int cts_lvl = GetNewLevel(cts);
+            int cts_lvl = frame_lvl - 1;
             shared_ptr<cube> cts_ass(new cube(*cts->latches));
             OrderAssumption(cts_ass);
             GetPrimed(cts_ass);
@@ -664,7 +653,8 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
     m_log->Tick();
     if (!IsReachable(lvl, assumption)) {
         m_log->StatPropagation();
-        AddUnsatisfiableCore(c, lvl + 1);
+        auto uc = GetUnsatCore(lvl, c);
+        AddUnsatisfiableCore(uc, lvl + 1, true);
         result = true;
     } else {
         m_log->StatPropagation();
@@ -683,7 +673,7 @@ int ForwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
             break;
         lvl++;
     }
-    return lvl + 1;
+    return lvl;
 }
 
 

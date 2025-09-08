@@ -89,22 +89,23 @@ bool OverSequenceSet::Imply(const cube &a, const cube &b) {
 }
 
 
-void OverSequenceSet::AddLemmaToFrame(const cube &lemma, frame &f) {
-    for (auto it = f.begin(); it != f.end();) {
-        if (Imply(lemma, *it)) {
-            it = f.erase(it);
-        } else {
-            ++it;
+bool OverSequenceSet::Insert(const cube &uc, int index, bool implyCheck) {
+    auto f = GetFrame(index);
+    if (f->find(uc) != f->end()) return false;
+
+    m_blockSolver->AddUC(uc, index);
+
+    if (implyCheck) {
+        for (auto it = f->begin(); it != f->end();) {
+            if (Imply(uc, *it)) {
+                it = f->erase(it);
+            } else {
+                ++it;
+            }
         }
     }
-    f.emplace(lemma);
-}
+    f->emplace(uc);
 
-
-bool OverSequenceSet::Insert(const cube &uc, int index) {
-    m_blockSolver->AddUC(uc, index);
-    auto f = GetFrame(index);
-    AddLemmaToFrame(uc, *f);
     return true;
 }
 

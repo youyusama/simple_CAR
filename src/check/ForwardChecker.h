@@ -25,13 +25,11 @@ class ForwardChecker : public BaseChecker {
 
     void Init(int badId);
 
-    bool AddUnsatisfiableCore(shared_ptr<vector<int>> uc, int frameLevel);
+    bool AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck = false);
 
     bool ImmediateSatisfiable(int badId);
 
     bool IsInvariant(int frameLevel);
-
-    int GetNewLevel(shared_ptr<State> state, int start = 0);
 
     struct LitOrder {
         shared_ptr<Branching> branching;

@@ -77,7 +77,7 @@ class OverSequenceSet {
 
     int GetInvariantLevel() { return m_invariantLevel; }
 
-    bool Insert(const cube &uc, int index);
+    bool Insert(const cube &uc, int index, bool implyCheck = false);
 
     shared_ptr<frame> GetFrame(int lvl);
 
@@ -98,8 +98,6 @@ class OverSequenceSet {
 
   private:
     bool Imply(const cube &a, const cube &b);
-
-    void AddLemmaToFrame(const cube &lemma, frame &f);
 
     shared_ptr<Model> m_model;
     vector<shared_ptr<frame>> m_sequence;
@@ -143,10 +141,8 @@ class State {
 
 struct Task {
   public:
-    Task(shared_ptr<State> inState, int inFrameLevel, bool inIsLocated) : state(inState),
-                                                                          frameLevel(inFrameLevel),
-                                                                          isLocated(inIsLocated) {};
-    bool isLocated;
+    Task(shared_ptr<State> inState, int inFrameLevel) : state(inState),
+                                                        frameLevel(inFrameLevel) {};
     int frameLevel;
     shared_ptr<State> state;
 };
