@@ -129,6 +129,7 @@ class BackwardChecker : public BaseChecker {
     shared_ptr<Model> m_model;
     vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_startSolver;
+    shared_ptr<SATSolver> m_badSolver;
     shared_ptr<SATSolver> m_invSolver;
     vector<shared_ptr<vector<int>>> m_rotation;
     shared_ptr<State> m_lastState;

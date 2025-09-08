@@ -159,9 +159,8 @@ bool BackwardChecker::Check(int badId) {
             m_log->StatStartSolver();
         }
 
-        if (m_invSolver == nullptr) {
-            m_invSolver.reset(new SATSolver(m_model, m_settings.solver));
-        }
+        // inv
+        m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
         IsInvariant(0);
         for (int i = 0; i < m_k; ++i) {
             // propagation
@@ -185,7 +184,6 @@ bool BackwardChecker::Check(int badId) {
                 return true;
             }
         }
-        m_invSolver = nullptr;
 
         m_log->L(1, m_overSequence->FramesInfo());
         m_log->L(3, m_overSequence->FramesDetail());
@@ -218,7 +216,12 @@ void BackwardChecker::Init() {
         m_startSolver->AddClause({l});
     }
     m_startSolver->AddInitialClauses();
-    m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+    // bad & T & c
+    m_badSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_badSolver->AddTrans();
+    m_badSolver->AddConstraints();
+    m_badSolver->AddBad();
+
     m_restart.reset(new Restart(m_settings));
 }
 
@@ -230,16 +233,13 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, 
 
     shared_ptr<cube> puc(new cube(*uc));
     GetPrimed(puc);
-    if (m_settings.multipleSolvers) {
-        if (frameLevel >= m_transSolvers.size()) {
-            m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
-            m_transSolvers.back()->AddTrans();
-            m_transSolvers.back()->AddConstraints();
-            if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
-        }
-        m_transSolvers[frameLevel]->AddUC(puc);
-    } else
-        m_transSolvers[0]->AddUC(puc, frameLevel);
+    if (frameLevel >= m_transSolvers.size()) {
+        m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
+        m_transSolvers.back()->AddTrans();
+        m_transSolvers.back()->AddConstraints();
+        if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
+    }
+    m_transSolvers[frameLevel]->AddUC(puc);
 
     if (frameLevel >= m_k) {
         m_startSolver->AddUC(puc, frameLevel);
@@ -478,13 +478,12 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
     m_log->L(3, "From state: ", CubeToStr(s->latches));
     shared_ptr<cube> assumption(new cube(*s->latches));
     OrderAssumption(assumption);
-    assumption->push_back(m_model->GetBad());
     m_log->Tick();
-    bool result = m_transSolvers[0]->Solve(assumption);
+    bool result = m_badSolver->Solve(assumption);
     m_log->StatMainSolver();
     if (result) {
         m_log->L(2, "Result >>> SAT <<<");
-        auto p = m_transSolvers[0]->GetAssignment(false);
+        auto p = m_badSolver->GetAssignment(false);
         m_log->L(3, "Get Assignment:", CubeToStr(p.second));
         shared_ptr<State> newState(new State(s, p.first, p.second, s->depth + 1));
         m_lastState = newState;
@@ -492,7 +491,7 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
         return true;
     } else {
         m_log->L(2, "Result >>> UNSAT <<<");
-        auto uc = m_transSolvers[0]->GetUC(false);
+        auto uc = m_badSolver->GetUC(false);
         // Generalization
         unordered_set<int> required_lits;
         for (int i = uc->size() - 1; i >= 0; i--) {
@@ -507,10 +506,10 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
             OrderAssumption(assumption);
             assumption->push_back(m_model->GetBad());
             m_log->Tick();
-            bool result = m_transSolvers[0]->Solve(assumption);
+            bool result = m_badSolver->Solve(assumption);
             m_log->StatMainSolver();
             if (!result) {
-                auto new_uc = m_transSolvers[0]->GetUC(false);
+                auto new_uc = m_badSolver->GetUC(false);
                 uc->swap(*new_uc);
                 OrderAssumption(uc);
                 i = uc->size();
@@ -529,26 +528,17 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
 
 
 bool BackwardChecker::IsReachable(int lvl, const shared_ptr<cube> assumption) {
-    if (m_settings.multipleSolvers)
-        return m_transSolvers[lvl]->SolveFrame(assumption, 0);
-    else
-        return m_transSolvers[0]->SolveFrame(assumption, lvl);
+    return m_transSolvers[lvl]->Solve(assumption);
 }
 
 
 pair<shared_ptr<cube>, shared_ptr<cube>> BackwardChecker::GetInputAndState(int lvl) {
-    if (m_settings.multipleSolvers)
-        return m_transSolvers[lvl]->GetAssignment(true);
-    else
-        return m_transSolvers[0]->GetAssignment(true);
+    return m_transSolvers[lvl]->GetAssignment(true);
 }
 
 
 shared_ptr<cube> BackwardChecker::GetUnsatCore(int lvl) {
-    if (m_settings.multipleSolvers)
-        return m_transSolvers[lvl]->GetUC(false);
-    else
-        return m_transSolvers[0]->GetUC(false);
+    return m_transSolvers[lvl]->GetUC(false);
 }
 
 

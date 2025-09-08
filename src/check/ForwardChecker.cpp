@@ -60,9 +60,10 @@ bool ForwardChecker::Check(int badId) {
     // initialize frame 0
     m_startSolver->UpdateStartSolverFlag();
     for (int l : *m_initialState->latches) {
-        m_overSequence->Insert({-l}, 0);
-        m_transSolvers[0]->AddUC({-l});
-        m_startSolver->AddUC({-l}, 0);
+        auto uc = {-l};
+        m_overSequence->Insert(uc, 0);
+        m_transSolvers[0]->AddUC(make_shared<cube>(uc));
+        m_startSolver->AddUC(uc, 0);
     }
     if (m_settings.solveInProperty) m_transSolvers[0]->AddProperty();
 
@@ -180,9 +181,8 @@ bool ForwardChecker::Check(int badId) {
             m_log->StatStartSolver();
         }
 
-        if (m_invSolver == nullptr) {
-            m_invSolver.reset(new SATSolver(m_model, MCSATSolver::minisat));
-        }
+        // inv
+        m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
         IsInvariant(0);
         for (int i = 0; i < m_k; ++i) {
             // propagation
@@ -205,7 +205,6 @@ bool ForwardChecker::Check(int badId) {
                 return true;
             }
         }
-        m_invSolver = nullptr;
 
         m_log->L(1, m_overSequence->FramesInfo());
         m_log->L(3, m_overSequence->FramesDetail());
@@ -245,8 +244,6 @@ void ForwardChecker::Init(int badId) {
     m_liftSolver->AddTrans();
     if (m_settings.satSolveInDomain)
         m_liftSolver->SetDomainCOI(make_shared<cube>(m_model->GetConstraints()));
-    // inv
-    m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
     // s & T & c & P & T' & c' & bad'
     m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
     m_startSolver->AddTrans();
@@ -270,18 +267,15 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, b
 
     if (!m_overSequence->Insert(*uc, frameLevel, implyCheck)) return false;
 
-    if (m_settings.multipleSolvers) {
-        if (frameLevel >= m_transSolvers.size()) {
-            m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
-            if (m_settings.satSolveInDomain) m_transSolvers.back()->SetSolveInDomain();
-            m_transSolvers.back()->AddTrans();
-            m_transSolvers.back()->AddConstraints();
-            AddSamePrimeConstraints(m_transSolvers.back());
-            if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
-        }
-        m_transSolvers[frameLevel]->AddUC(uc);
-    } else
-        m_transSolvers[0]->AddUC(uc, frameLevel);
+    if (frameLevel >= m_transSolvers.size()) {
+        m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
+        if (m_settings.satSolveInDomain) m_transSolvers.back()->SetSolveInDomain();
+        m_transSolvers.back()->AddTrans();
+        m_transSolvers.back()->AddConstraints();
+        AddSamePrimeConstraints(m_transSolvers.back());
+        if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
+    }
+    m_transSolvers[frameLevel]->AddUC(uc);
 
     if (frameLevel >= m_k) {
         m_startSolver->AddUC(uc, frameLevel);
@@ -706,31 +700,21 @@ void ForwardChecker::AddSamePrimeConstraints(shared_ptr<SATSolver> slv) {
 
 
 bool ForwardChecker::IsReachable(int lvl, const shared_ptr<cube> assumption) {
-    if (m_settings.multipleSolvers) {
-        if (m_settings.satSolveInDomain) {
-            m_transSolvers[lvl]->ResetTempDomain();
-            m_transSolvers[lvl]->SetTempDomain(TopDomain());
-        }
-        return m_transSolvers[lvl]->SolveFrame(assumption, 0);
-    } else
-        return m_transSolvers[0]->SolveFrame(assumption, lvl);
+    if (m_settings.satSolveInDomain) {
+        m_transSolvers[lvl]->ResetTempDomain();
+        m_transSolvers[lvl]->SetTempDomain(TopDomain());
+    }
+    return m_transSolvers[lvl]->Solve(assumption);
 }
 
 
 pair<shared_ptr<cube>, shared_ptr<cube>> ForwardChecker::GetInputAndState(int lvl) {
-    if (m_settings.multipleSolvers)
-        return m_transSolvers[lvl]->GetAssignment(false);
-    else
-        return m_transSolvers[0]->GetAssignment(false);
+    return m_transSolvers[lvl]->GetAssignment(false);
 }
 
 
 shared_ptr<cube> ForwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> state) {
-    shared_ptr<cube> uc;
-    if (m_settings.multipleSolvers)
-        uc = m_transSolvers[lvl]->GetUC(true);
-    else
-        uc = m_transSolvers[0]->GetUC(true);
+    shared_ptr<cube> uc = m_transSolvers[lvl]->GetUC(true);
 
     MakeSubset(uc, state);
     return uc;

@@ -31,7 +31,6 @@ struct Settings {
     int randomSeed = 0;
     bool referSkipping = false;
     bool internalSignals = false;
-    bool multipleSolvers = true;
     bool restart = false;
     int restartThreshold = 128;
     float restartGrowthRate = 1.5;
