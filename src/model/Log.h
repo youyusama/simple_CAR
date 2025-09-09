@@ -1,8 +1,6 @@
 #ifndef LOG_H
 #define LOG_H
 
-#include "IncrCheckerHelpers.h"
-#include "Model.h"
 #include "Settings.h"
 #include "signal.h"
 #include <assert.h>
@@ -14,11 +12,11 @@
 
 namespace car {
 
-string CubeToStr(const shared_ptr<cube> c);
+string CubeToStr(const shared_ptr<vector<int>> c);
 
-void compress_vector(shared_ptr<cube> res, const shared_ptr<cube> v);
+void compress_vector(shared_ptr<vector<int>> res, const shared_ptr<vector<int>> v);
 
-string CubeToStrShort(const shared_ptr<cube> c);
+string CubeToStrShort(const shared_ptr<vector<int>> c);
 
 void signalHandler(int signum);
 

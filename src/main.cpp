@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     if (!ParseSettings(argc, argv, settings)) return EXIT_FAILURE;
 
     shared_ptr<Log> log(new Log(settings.verbosity));
-    shared_ptr<Model> aigerModel(new Model(settings));
+    shared_ptr<Model> aigerModel(new Model(settings, log));
     log->StatInit();
     shared_ptr<BaseChecker> checker;
     switch (settings.alg) {

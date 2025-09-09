@@ -3,8 +3,8 @@
 
 namespace car {
 
-Model::Model(Settings settings) {
-    m_settings = settings;
+Model::Model(Settings settings, shared_ptr<Log> log) : m_settings(settings),
+                                                       m_log(log) {
     string aigFilePath = settings.aigFilePath;
 
     m_aig = aiger_init();
@@ -47,6 +47,9 @@ void Model::Init() {
         CollectInnardsClauses();
     }
     SimplifyClauses();
+    m_log->L(1, "Model initialized: ",
+             m_aig->num_inputs, " inputs, ", m_aig->num_latches, " latches, ", m_aig->num_constraints, " constraints, ");
+    m_log->L(1, "                   ", m_clauses.size(), " clauses , ", m_simpClauses.size(), " simplified clauses.");
 }
 
 

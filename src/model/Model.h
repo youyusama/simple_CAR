@@ -5,6 +5,7 @@ extern "C" {
 #include "aiger.h"
 }
 
+#include "Log.h"
 #include "Settings.h"
 #include "cadical/src/cadical.hpp"
 #include <algorithm>
@@ -36,7 +37,7 @@ inline bool cmp(int a, int b) {
 
 class Model {
   public:
-    Model(Settings settings);
+    Model(Settings settings, shared_ptr<Log> log);
 
     inline bool IsTrue(const unsigned lit) {
         return (lit == 1) || (m_trues.find(lit) != m_trues.end());
@@ -180,6 +181,7 @@ class Model {
     void SimplifyClauses();
 
     Settings m_settings;
+    shared_ptr<Log> m_log;
     aiger *m_aig;
     int m_maxId;
     int m_trueId;

@@ -2,6 +2,7 @@
 #define BMC_H
 
 #include "BaseChecker.h"
+#include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
 
