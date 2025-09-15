@@ -22,7 +22,10 @@ struct Obligation {
         if (level != other.level) {
             return level < other.level;
         }
-        return depth < other.depth;
+        if (depth != other.depth) {
+            return depth > other.depth;
+        }
+        return cubePtrComp()(state->latches, other.state->latches);
     }
 };
 
@@ -137,7 +140,8 @@ class BasicIC3 : public BaseChecker {
     int lemmaCount;
     int m_invariantLevel;
     shared_ptr<Branching> m_branching;
-    set<Obligation> obligations;
+    set<Obligation> m_obligations;
+    set<Obligation> m_oldObligations;
 };
 
 } // namespace car

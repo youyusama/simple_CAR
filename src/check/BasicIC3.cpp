@@ -350,7 +350,7 @@ bool BasicIC3::EnumerateStartState() {
         m_log->L(3, "Generalized bad. Final latch size: ", badState->latches->size());
         m_log->L(3, "Bad state at level ", m_k, ": ", CubeToStr(badState->latches));
         m_log->L(2, "Found bad State. New obligation at level ", m_k);
-        obligations.insert(Obligation(badState, m_k, 0));
+        m_obligations.insert(Obligation(badState, m_k, 0));
         return true;
     }
 }
@@ -358,6 +358,14 @@ bool BasicIC3::EnumerateStartState() {
 bool BasicIC3::Strengthen() {
     m_trivial = true;
     m_earliest = m_k + 1;
+
+    assert(m_obligations.empty());
+    m_obligations.swap(m_oldObligations);
+    assert(m_oldObligations.empty());
+    for (auto ob : m_obligations) {
+        assert(ob.level == m_k);
+    }
+    cout << "m_obligations.size(): " << m_obligations.size() << endl;
 
     while (true) {
         if (!HandleObligations()) {
@@ -374,8 +382,8 @@ bool BasicIC3::Strengthen() {
 }
 
 bool BasicIC3::HandleObligations() {
-    while (!obligations.empty()) {
-        Obligation ob = *obligations.begin();
+    while (!m_obligations.empty()) {
+        Obligation ob = *m_obligations.begin();
 
         // Query: F_{ob.level} & T & cti'
         m_log->L(2, "Handling obligation for state at level ", ob.level, " with depth ", ob.depth);
@@ -384,14 +392,16 @@ bool BasicIC3::HandleObligations() {
         const shared_ptr<cube> &ctiCube = ob.state->latches;
 
         if (UnreachabilityCheck(ctiCube, frameSolver)) {
-            obligations.erase(obligations.begin());
+            m_obligations.erase(m_obligations.begin());
             auto newBlockingCube = GetAndValidateCore(frameSolver, ctiCube);
 
             size_t pushLevel = Generalize(newBlockingCube, ob.level);
 
             if (pushLevel <= m_k) {
                 m_log->L(2, "Creating new obligation for same state at higher level ", pushLevel);
-                obligations.insert(Obligation(ob.state, pushLevel, ob.depth));
+                m_obligations.insert(Obligation(ob.state, pushLevel, ob.depth));
+            } else {
+                m_oldObligations.insert(Obligation(ob.state, m_k + 1, ob.depth));
             }
         } else {
             pair<shared_ptr<cube>, shared_ptr<cube>> assignment = frameSolver->GetAssignment(false);
@@ -405,7 +415,7 @@ bool BasicIC3::HandleObligations() {
             GeneralizePredecessor(predecessorState, ob.state);
 
             m_log->L(2, "Found predecessor for CTI. New obligation at level ", ob.level - 1);
-            obligations.insert(Obligation(predecessorState, ob.level - 1, ob.depth + 1));
+            m_obligations.insert(Obligation(predecessorState, ob.level - 1, ob.depth + 1));
         }
     }
     return true;
@@ -694,7 +704,7 @@ bool BasicIC3::UnreachabilityCheck(const shared_ptr<cube> &cb, const shared_ptr<
 int BasicIC3::PushLemmaForward(const shared_ptr<cube> &cb, int startLevel) {
     int pushLevel = startLevel;
     while (pushLevel <= m_k) {
-        if (!UnreachabilityCheck(cb, m_frames[pushLevel].solver)) {
+        if (!InductionCheck(cb, m_frames[pushLevel].solver)) {
             break;
         }
         m_branching->Update(cb);
@@ -759,6 +769,13 @@ bool BasicIC3::Propagate() {
             m_log->L(1, FramesInfo());
             m_log->L(1, "lemmaCount: ", lemmaCount);
             return true; // Proof found
+        }
+    }
+
+    for (int i = 1; i <= m_k+1; ++i) {
+        m_log->L(3, "F", i, " size: ", m_frames[i].borderCubes.size());
+        for (const auto &cb : m_frames[i].borderCubes) {
+            m_log->L(3, "  ", CubeToStr(cb));
         }
     }
 
