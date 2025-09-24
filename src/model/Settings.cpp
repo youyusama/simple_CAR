@@ -79,6 +79,12 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->default_val(false)
         ->excludes("--is");
 
+    app.add_flag("--bad_pred", settings.bad_pred, "enumerate bad predecessors")
+        ->default_val(false);
+
+    app.add_option("--max_obligation_act", settings.maxObligationAct, "maximum activity for obligations")
+        ->default_val(20.0);
+
     try {
         app.parse(argc, argv);
         return true;
