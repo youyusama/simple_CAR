@@ -111,7 +111,7 @@ class BasicIC3 : public BaseChecker {
 
     bool BaseCases();
     void AddNewFrame();
-    bool AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLevel, bool toAll);
+    void AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLevel, bool lazyCheck);
 
     bool Strengthen();
     bool HandleObligations();
@@ -174,6 +174,8 @@ class BasicIC3 : public BaseChecker {
     int MaxLevel() const {
         return m_frames.size() - 1;
     }
+    bool BaseCheck();
+    void NewStartSolver();
 
     CheckResult m_checkResult;
 
@@ -193,6 +195,8 @@ class BasicIC3 : public BaseChecker {
     shared_ptr<Branching> m_branching;
     set<shared_ptr<Obligation>, obligationPtrComp> m_obligations;
 
+    shared_ptr<SATSolver> m_startSolver;
+    shared_ptr<SATSolver> m_badPredLiftSolver;
     LitSet m_tmpLitSet; // used in LazyCheck
 };
 
