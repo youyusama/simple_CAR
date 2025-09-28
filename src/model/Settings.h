@@ -42,6 +42,8 @@ struct Settings {
     int bmc_step = 1;
     bool bad_pred = false;
     double maxObligationAct = 20.0;
+    double micRandRate = 0.0;
+    bool liftRand = false;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

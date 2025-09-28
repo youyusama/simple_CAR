@@ -14,6 +14,7 @@ BasicIC3::BasicIC3(Settings settings,
     State::numInputs = model->GetNumInputs();
     State::numLatches = model->GetNumLatches();
     m_cexStart = nullptr;
+    m_rng = make_shared<RNG>(m_settings.randomSeed);
 
     badCube = make_shared<cube>();
     badCube->push_back(m_model->GetBad());
@@ -147,6 +148,8 @@ void BasicIC3::NewStartSolver() {
     m_startSolver->AddConstraints();
     m_startSolver->AddConstraintsK(1);
     AddSamePrimeConstraints(m_startSolver);
+
+    assert(MaxLevel() >= 2);
 
     auto blockingCubes = m_frames[MaxLevel() - 1].borderCubes;
     blockingCubes.insert(blockingCubes.end(),
@@ -394,7 +397,7 @@ bool BasicIC3::EnumerateStartState() {
 }
 
 bool BasicIC3::Strengthen() {
-    m_earliest = MaxLevel();
+    m_earliest = m_settings.bad_pred ? MaxLevel() - 1 : MaxLevel();
 
     while (true) {
         if (!HandleObligations()) {
@@ -587,7 +590,8 @@ bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, 
             shared_ptr<cube> ctgCore = GetAndValidateCore(ctgCubeSolver, ctgCube);
 
             int pushLevel = PushLemmaForward(ctgCore, frameLvl - 1);
-            MIC(ctgCore, pushLevel, recLvl + 1);
+            if (MIC(ctgCore, pushLevel, recLvl + 1))
+                m_branching->Update(ctgCore);
             m_log->L(2, "Learned ctg clause and pushed to frame ", pushLevel);
             AddBlockingCube(ctgCore, pushLevel, false);
         } else {
@@ -619,7 +623,8 @@ shared_ptr<cube> BasicIC3::GetBlocker(const shared_ptr<cube> &blockingCube, int 
 size_t BasicIC3::Generalize(const shared_ptr<cube> &cb, int frameLvl) {
     m_log->L(3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
     if (cb->size() >= 2) {
-        MIC(cb, frameLvl, 1);
+        if (MIC(cb, frameLvl, 1))
+            m_branching->Update(cb);
     }
     int pushLevel = PushLemmaForward(cb, frameLvl);
     m_log->L(2, "Learned clause and pushed to frame ", pushLevel);
@@ -627,7 +632,7 @@ size_t BasicIC3::Generalize(const shared_ptr<cube> &cb, int frameLvl) {
     return pushLevel;
 }
 
-void BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
+bool BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
     m_log->L(3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
     shared_ptr<cube> blocker;
@@ -643,11 +648,11 @@ void BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
         }
     }
 
-
     const int maxMicAttempts = 3;
     size_t attempts = maxMicAttempts;
 
-    OrderAssumption(cb);
+    OrderAssumptionWithRand(cb);
+
     // Iterate backwards to handle the shrinking cube size gracefully.
     for (int i = cb->size() - 1; i >= 0; --i) {
         if (cb->size() < 2) break;
@@ -667,9 +672,8 @@ void BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
         }
 
         if (Down(dropCube, frameLvl, recLvl, triedLits)) {
-            // dropCube is sorted
             cb->swap(*dropCube);
-            OrderAssumption(cb);
+            OrderAssumptionWithRand(cb);
             i = cb->size();
             attempts = maxMicAttempts;
         } else {
@@ -681,6 +685,11 @@ void BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
         }
     }
     sort(cb->begin(), cb->end(), cmp);
+    if (blocker && cb->size() > blocker->size()) {
+        return false;
+    } else {
+        return true;
+    }
 }
 
 
@@ -699,20 +708,23 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
 
     const auto &partialLatch = predecessorState->latches;
 
-    // int strategy = 1;
+    int strategy = 1;
     while (true) {
         auto assumption = make_shared<cube>(*partialLatch);
-        OrderAssumption(assumption);
-        // if (strategy == 1) OrderAssumption(assumption);
-        // else if (strategy == 2) {
-        //     OrderAssumption(assumption);
-        //     reverse(assumption->begin(), assumption->end());
-        // } else {
-        //     random_device rd;
-        //     mt19937 g(rd());
-        //     shuffle(assumption->begin(), assumption->end(), g);
-        // }
-        // strategy ++;
+        if (!m_settings.liftRand)
+            OrderAssumption(assumption);
+        else {
+            if (strategy == 1) {
+                OrderAssumption(assumption);
+            } else if (strategy == 2) {
+                OrderAssumption(assumption);
+                reverse(assumption->begin(), assumption->end());
+            } else {
+                shuffle(assumption->begin(), assumption->end(), m_rng->engine());
+            }
+            strategy++;
+        }
+
         assumption->insert(assumption->begin(), predecessorState->inputs->begin(), predecessorState->inputs->end());
         // There exist some successors whose predecessors are the entire set. (All latches are determined solely by the inputs.)
         if (m_settings.satSolveInDomain) {
@@ -810,7 +822,7 @@ int BasicIC3::PushLemmaForward(const shared_ptr<cube> &cb, int startLevel) {
 bool BasicIC3::Propagate() {
     m_log->L(1, "Propagating clauses.");
 
-    for (int i = m_earliest; i < MaxLevel(); ++i) {
+    for (int i = m_earliest; i < (m_settings.bad_pred ? MaxLevel() - 1 : MaxLevel()); ++i) {
         m_log->L(2, "Propagating from F_", i, " to F_", i + 1);
         // Sort the border cubes by size (smallest first) to improve the chances of pushing more clauses.
         sort(m_frames[i].borderCubes.begin(), m_frames[i].borderCubes.end(), [](const shared_ptr<cube> &a, const shared_ptr<cube> &b) {

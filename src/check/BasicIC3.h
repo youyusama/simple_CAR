@@ -96,6 +96,22 @@ class LitSet {
     std::vector<uint8_t> has_;
 };
 
+class RNG {
+public:
+    explicit RNG(uint32_t seed)
+        : eng_(seed), dist_(0.0, 1.0) {}
+
+    double uniform01() {
+        return dist_(eng_);
+    }
+
+    std::mt19937& engine() { return eng_; }
+
+private:
+    std::mt19937 eng_;
+    std::uniform_real_distribution<double> dist_;
+};
+
 class BasicIC3 : public BaseChecker {
   public:
     BasicIC3(Settings settings,
@@ -116,7 +132,7 @@ class BasicIC3 : public BaseChecker {
     bool Strengthen();
     bool HandleObligations();
     size_t Generalize(const shared_ptr<cube> &cb, int frameLvl);
-    void MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl);
+    bool MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl);
     bool Down(const shared_ptr<cube> &c, int frameLvl, int recLvl, const set<int> &triedLits);
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<cube> &succ);
 
@@ -140,13 +156,19 @@ class BasicIC3 : public BaseChecker {
     } litOrder;
 
     void OrderAssumption(const shared_ptr<cube> &c) {
-        if (m_settings.randomSeed > 0) {
-            shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
-            return;
-        }
         if (m_settings.branching == 0) return;
         sort(c->begin(), c->end(), litOrder);
     }
+
+    // m_settings.micRandRate is between 0 and 1, 0 means no randomization, 1 means full randomization
+    // get a random number between 0 and 1 based on m_settings.randomSeed
+    void OrderAssumptionWithRand(const shared_ptr<cube> &c) {
+        if (m_settings.micRandRate > 1e-6 && m_rng->uniform01() < m_settings.micRandRate) {
+            shuffle(c->begin(), c->end(), m_rng->engine());
+        } else {
+            OrderAssumption(c);
+        }
+    }   
 
     bool Propagate();
 
@@ -176,6 +198,8 @@ class BasicIC3 : public BaseChecker {
     }
     bool BaseCheck();
     void NewStartSolver();
+
+    shared_ptr<RNG> m_rng;
 
     CheckResult m_checkResult;
 

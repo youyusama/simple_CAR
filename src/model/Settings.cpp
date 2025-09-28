@@ -85,6 +85,13 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("--max_obligation_act", settings.maxObligationAct, "maximum activity for obligations")
         ->default_val(20.0);
 
+    app.add_option("--mic_rand_rate", settings.micRandRate, "random removal rate for MIC")
+        ->default_val(0.0)
+        ->check(CLI::Range(0.0, 1.0));
+    
+    app.add_flag("--lift_rand", settings.liftRand, "randomly lift literals in MIC")
+        ->default_val(false);
+
     try {
         app.parse(argc, argv);
         return true;
