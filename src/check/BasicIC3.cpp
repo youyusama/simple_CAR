@@ -590,8 +590,7 @@ bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, 
             shared_ptr<cube> ctgCore = GetAndValidateCore(ctgCubeSolver, ctgCube);
 
             int pushLevel = PushLemmaForward(ctgCore, frameLvl - 1);
-            if (MIC(ctgCore, pushLevel, recLvl + 1))
-                m_branching->Update(ctgCore);
+            MIC(ctgCore, pushLevel, recLvl + 1);
             m_log->L(2, "Learned ctg clause and pushed to frame ", pushLevel);
             AddBlockingCube(ctgCore, pushLevel, false);
         } else {
@@ -623,8 +622,7 @@ shared_ptr<cube> BasicIC3::GetBlocker(const shared_ptr<cube> &blockingCube, int 
 size_t BasicIC3::Generalize(const shared_ptr<cube> &cb, int frameLvl) {
     m_log->L(3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
     if (cb->size() >= 2) {
-        if (MIC(cb, frameLvl, 1))
-            m_branching->Update(cb);
+        MIC(cb, frameLvl, 1);
     }
     int pushLevel = PushLemmaForward(cb, frameLvl);
     m_log->L(2, "Learned clause and pushed to frame ", pushLevel);
@@ -632,7 +630,7 @@ size_t BasicIC3::Generalize(const shared_ptr<cube> &cb, int frameLvl) {
     return pushLevel;
 }
 
-bool BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
+void BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
     m_log->L(3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
     shared_ptr<cube> blocker;
@@ -685,11 +683,6 @@ bool BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
         }
     }
     sort(cb->begin(), cb->end(), cmp);
-    if (blocker && cb->size() > blocker->size()) {
-        return false;
-    } else {
-        return true;
-    }
 }
 
 

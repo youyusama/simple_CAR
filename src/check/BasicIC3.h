@@ -132,7 +132,7 @@ class BasicIC3 : public BaseChecker {
     bool Strengthen();
     bool HandleObligations();
     size_t Generalize(const shared_ptr<cube> &cb, int frameLvl);
-    bool MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl);
+    void MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl);
     bool Down(const shared_ptr<cube> &c, int frameLvl, int recLvl, const set<int> &triedLits);
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<cube> &succ);
 
