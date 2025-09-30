@@ -30,6 +30,12 @@ class ISolver {
     virtual void SetDomain(const shared_ptr<cube> domain) = 0;
     virtual void SetTempDomain(const shared_ptr<cube> domain) = 0;
     virtual void ResetTempDomain() = 0;
+    
+    // cadical only
+    virtual std::shared_ptr<ISolver> Clone() const { return nullptr; }
+    virtual int  GetOption(const char* name) { (void)name; return 0; }
+    virtual bool SetOption(const char* name, int val) { (void)name; (void)val; return false; }
+    virtual int  Simplify(int rounds = 3) { (void)rounds; return 0; }
 
   private:
 };

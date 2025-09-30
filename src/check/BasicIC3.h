@@ -198,6 +198,10 @@ class BasicIC3 : public BaseChecker {
     }
     bool BaseCheck();
     void NewStartSolver();
+    shared_ptr<SATSolver> NewT();
+    shared_ptr<SATSolver> NewTT();
+    void SetPreprocessingOptions(const shared_ptr<SATSolver> &slv);
+    void SetSolvingOptions(const shared_ptr<SATSolver> &slv);
 
     shared_ptr<RNG> m_rng;
 
@@ -222,6 +226,10 @@ class BasicIC3 : public BaseChecker {
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badPredLiftSolver;
     LitSet m_tmpLitSet; // used in LazyCheck
+
+    // cadical only
+    shared_ptr<SATSolver> m_T;
+    shared_ptr<SATSolver> m_TT;
 };
 
 } // namespace car

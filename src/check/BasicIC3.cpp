@@ -19,18 +19,45 @@ BasicIC3::BasicIC3(Settings settings,
     badCube = make_shared<cube>();
     badCube->push_back(m_model->GetBad());
 
+    if (m_settings.solver == MCSATSolver::cadical) {
+        // initialize m_T and m_TT
+        m_log->Tick();
+        m_T = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+        m_T->AddTrans();
+        m_log->StatSolverCreate();
+        if (m_settings.cadicalOptionsPre)
+            SetPreprocessingOptions(m_T);
+        m_log->Tick();
+        if (m_settings.cadicalSimplify)
+            m_T->Simplify();
+        m_log->StatCadicalSimplify();
+        if (m_settings.cadicalOptionsSol)
+            SetSolvingOptions(m_T);
+        if (m_settings.bad_pred) {
+            m_log->Tick();
+            m_TT = make_shared<SATSolver>(m_T);
+            m_TT->AddTransK(1);
+            m_log->StatSolverCreate();
+            if (m_settings.cadicalOptionsPre)
+                SetPreprocessingOptions(m_TT);
+            m_log->Tick();
+            if (m_settings.cadicalSimplify)
+                m_TT->Simplify();
+            m_log->StatCadicalSimplify();
+            if (m_settings.cadicalOptionsSol)
+                SetSolvingOptions(m_TT);
+        }
+    }
+
     // Initialize the dedicated solver for predecessor generalization (lifting).
-    m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_liftSolver = NewT();
     if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
-    m_liftSolver->AddTrans();
     // set permanent domain
     if (m_settings.satSolveInDomain)
         m_liftSolver->SetDomainCOI(make_shared<cube>(m_model->GetConstraints()));
 
     if (m_settings.bad_pred) {
-        m_badPredLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-        m_badPredLiftSolver->AddTrans();
-        m_badPredLiftSolver->AddTransK(1);
+        m_badPredLiftSolver = NewTT();
         clause cls;
         cls.push_back(-m_model->GetPrimeK(m_model->GetBad(), 1));
         for (auto cons : m_model->GetConstraints()) {
@@ -59,6 +86,60 @@ BasicIC3::BasicIC3(Settings settings,
 }
 
 BasicIC3::~BasicIC3() {
+}
+
+void BasicIC3::SetPreprocessingOptions(const shared_ptr<SATSolver> &slv) {
+    if (m_settings.solver == MCSATSolver::cadical) {
+        slv->SetOption("block", 1);
+        slv->SetOption("cover", 1);
+        slv->SetOption("condition", 1);
+    }
+}
+
+void BasicIC3::SetSolvingOptions(const shared_ptr<SATSolver> &slv) {
+    if (m_settings.solver == MCSATSolver::cadical && m_settings.cadicalOptionsPre) {
+        slv->SetOption("block", 0);
+        slv->SetOption("cover", 0);
+        slv->SetOption("condition", 0);
+    }
+    if (m_settings.solver == MCSATSolver::cadical) {
+        slv->SetOption("ilb", 1);
+        slv->SetOption("ilbassumptions", 1);
+
+        slv->SetOption("prob", 0);
+        slv->SetOption("compact", 0);
+
+        slv->SetOption("flush", 1);
+        slv->SetOption("walk", 0);
+        slv->SetOption("score", 0);
+    }
+}
+
+shared_ptr<SATSolver> BasicIC3::NewT() {
+    m_log->Tick();
+    shared_ptr<SATSolver> slv;
+    if (m_settings.solver == MCSATSolver::cadical) {
+        slv = make_shared<SATSolver>(m_T);
+    } else {
+        slv = make_shared<SATSolver>(m_model, m_settings.solver);
+        slv->AddTrans();
+    }
+    m_log->StatSolverCreate();
+    return slv;
+}
+
+shared_ptr<SATSolver> BasicIC3::NewTT() {
+    m_log->Tick();
+    shared_ptr<SATSolver> slv;
+    if (m_settings.solver == MCSATSolver::cadical) {
+        slv = make_shared<SATSolver>(m_TT);
+    } else {
+        slv = make_shared<SATSolver>(m_model, m_settings.solver);
+        slv->AddTrans();
+        slv->AddTransK(1);
+    }
+    m_log->StatSolverCreate();
+    return slv;
 }
 
 CheckResult BasicIC3::Run() {
@@ -103,9 +184,7 @@ bool BasicIC3::BaseCheck() {
     if (m_settings.bad_pred) {
         auto assumption = make_shared<cube>();
         assumption->insert(assumption->end(), m_initialStateSet.begin(), m_initialStateSet.end());
-        auto step1Solver = make_shared<SATSolver>(m_model, m_settings.solver);
-        step1Solver->AddTrans();
-        step1Solver->AddTransK(1);
+        auto step1Solver = NewTT();
         step1Solver->AddBadk(1);
         step1Solver->AddProperty();
         step1Solver->AddConstraints();
@@ -140,9 +219,7 @@ bool BasicIC3::BaseCheck() {
 
 // Create start solver, should be equivalent to F_{MaxLevel()-1}
 void BasicIC3::NewStartSolver() {
-    m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-    m_startSolver->AddTrans();
-    m_startSolver->AddTransK(1);
+    m_startSolver = NewTT();
     m_startSolver->AddBadk(1);
     m_startSolver->AddProperty();
     m_startSolver->AddConstraints();
@@ -213,9 +290,8 @@ void BasicIC3::AddNewFrame() {
     m_log->L(2, "Adding new frame F_", m_frames.size());
     IC3Frame newFrame;
     newFrame.k = m_frames.size();
-    newFrame.solver = make_shared<SATSolver>(m_model, m_settings.solver);
+    newFrame.solver = NewT();
     if (m_settings.satSolveInDomain) newFrame.solver->SetSolveInDomain();
-    newFrame.solver->AddTrans();
     newFrame.solver->AddConstraints();
     if (m_settings.bad_pred && newFrame.k >= 1)
         newFrame.solver->AddProperty();
@@ -233,6 +309,8 @@ void BasicIC3::AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLe
     if (lazyCheck && LazyCheck(blockingCube, frameLevel) != -1) {
         return;
     }
+
+    m_log->Tick();
     clause lemma;
     lemma.reserve(blockingCube->size());
     for (const auto &lit : *blockingCube) {
@@ -264,6 +342,7 @@ void BasicIC3::AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLe
                     }
                     m_frames[frameLevel].borderCubes.push_back(blockingCube);
                     m_earliest = min(m_earliest, i + 1);
+                    m_log->StatAddBlockingCube();
                     return;
                 }
 
@@ -298,6 +377,7 @@ void BasicIC3::AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLe
     }
     m_frames[frameLevel].borderCubes.push_back(blockingCube);
     m_earliest = min(m_earliest, beginLevel);
+    m_log->StatAddBlockingCube();
 }
 
 shared_ptr<cube> BasicIC3::GetCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube, bool prime) {
@@ -331,9 +411,12 @@ bool BasicIC3::EnumerateStartState() {
             startSolver->ResetTempDomain();
             startSolver->SetTempDomainCOI(badCube);
         }
+        m_log->Tick();
         if (!startSolver->Solve(badCube)) {
+            m_log->StatStartSolver();
             return false;
         } else {
+            m_log->StatStartSolver();
             pair<shared_ptr<cube>, shared_ptr<cube>> assignment = startSolver->GetAssignment(false);
             auto badState = make_shared<State>(nullptr, assignment.first, assignment.second, 0);
 
@@ -341,10 +424,13 @@ bool BasicIC3::EnumerateStartState() {
             GeneralizePredecessor(badState, badCube);
             m_log->L(2, "Found bad State. New obligation at level ", MaxLevel());
             PushObligation(make_shared<Obligation>(badState, MaxLevel(), 0), MaxLevel());
+
             return true;
         }
     } else {
+        m_log->Tick();
         if (m_startSolver->Solve()) {
+            m_log->StatStartSolver();
             cube primeInputs;
             cube badInputs;
             shared_ptr<vector<int>> coiInputs = m_model->GetCOIInputs();
@@ -391,6 +477,7 @@ bool BasicIC3::EnumerateStartState() {
             PushObligation(make_shared<Obligation>(ctiState, MaxLevel() - 1, 1), MaxLevel() - 1);
             return true;
         } else {
+            m_log->StatStartSolver();
             return false;
         }
     }
@@ -399,19 +486,27 @@ bool BasicIC3::EnumerateStartState() {
 bool BasicIC3::Strengthen() {
     m_earliest = m_settings.bad_pred ? MaxLevel() - 1 : MaxLevel();
 
+    bool result = true;
     while (true) {
         if (!HandleObligations()) {
-            return false;
+            result = false;
+            break;
         }
-        if (m_invariantLevel) return true;
+        if (m_invariantLevel) {
+            result = true;
+            break;
+        }
         if (!EnumerateStartState()) {
             m_log->L(2, "No more CTIs at level ", m_settings.bad_pred ? MaxLevel() - 1 : MaxLevel(), ". Strengthening done.");
-            return true;
+            result = true;
+            break;
         }
         if (m_cexStart != nullptr) {
-            return false;
+            result = false;
+            break;
         }
     }
+    return result;
 }
 
 shared_ptr<Obligation> BasicIC3::PopObligation() {
@@ -448,6 +543,7 @@ bool BasicIC3::SubsumeSet(const shared_ptr<cube> &a, const LitSet &b) {
 }
 
 int BasicIC3::LazyCheck(const shared_ptr<cube> &cb, int startLvl) {
+    m_log->Tick();
     m_log->L(3, "LazyCheck: ", CubeToStr(cb), " starting from frame level ", startLvl);
     int result = -1;
     m_tmpLitSet.clear();
@@ -460,10 +556,12 @@ int BasicIC3::LazyCheck(const shared_ptr<cube> &cb, int startLvl) {
                 m_log->L(3, "LazyCheck: subsumed by blocking cube ", CubeToStr(blockingCube), " at frame level ", i);
                 m_tmpLitSet.clear();
                 result = i;
+                m_log->StatLazyCheck();
                 return result;
             }
         }
     }
+    m_log->StatLazyCheck();
     return result;
 }
 
@@ -532,7 +630,9 @@ bool BasicIC3::InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSo
         slv->SetTempDomainCOI(make_shared<cube>(*cb));
         slv->SetTempDomainCOI(assumption);
     }
+    m_log->Tick();
     bool result = !slv->Solve(assumption);
+    m_log->StatFrameSolver();
     slv->ReleaseTempClause();
     return result;
 }
@@ -610,12 +710,15 @@ bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, 
 }
 
 shared_ptr<cube> BasicIC3::GetBlocker(const shared_ptr<cube> &blockingCube, int framelevel) {
+    m_log->Tick();
     for (auto it : m_frames[framelevel].borderCubes) {
         shared_ptr<cube> cb = make_shared<cube>(*it);
         if (includes(blockingCube->begin(), blockingCube->end(), cb->begin(), cb->end(), cmp)) {
+            m_log->StatGetBlocker();
             return cb;
         }
     }
+    m_log->StatGetBlocker();
     return nullptr;
 }
 
@@ -726,7 +829,9 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
             m_liftSolver->SetTempDomainCOI(partialLatch);
         }
 
+        m_log->Tick();
         bool result = m_liftSolver->Solve(assumption);
+        m_log->StatLiftSolver();
         assert(!result);
 
         auto core = GetCore(m_liftSolver, partialLatch, false);
@@ -793,7 +898,9 @@ bool BasicIC3::UnreachabilityCheck(const shared_ptr<cube> &cb, const shared_ptr<
         slv->ResetTempDomain();
         slv->SetTempDomainCOI(assumption);
     }
+    m_log->Tick();
     bool result = !slv->Solve(assumption);
+    m_log->StatFrameSolver();
     return result;
 }
 
@@ -850,7 +957,6 @@ bool BasicIC3::Propagate() {
             }
         }
     }
-
     return false;
 }
 

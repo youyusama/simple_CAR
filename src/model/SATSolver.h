@@ -20,6 +20,36 @@ class SATSolver : public ISolver {
     SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind);
     ~SATSolver() {}
 
+    SATSolver(const SATSolver &src)
+        : m_model(src.m_model),
+          m_slvKind(src.m_slvKind),
+          m_solveInDomain(src.m_solveInDomain),
+          m_frameFlags(src.m_frameFlags)
+    {
+        auto cloned = src.m_slv->Clone();
+        if (!cloned) {
+            throw std::invalid_argument("Cloning only supported for CaDiCaL solver");
+        }
+        m_slv = cloned;
+    }
+
+    explicit SATSolver(const std::shared_ptr<SATSolver> &other)
+        : SATSolver(*other) {}
+
+    int GetOption(const char* name) override {
+        return m_slv->GetOption(name);
+    }
+    bool SetOption(const char* name, int val) override {
+        cout << "name: " << name << ", val: " << val << endl;
+        bool success = m_slv->SetOption(name, val);
+        cout << "success: " << success << endl;
+        return success;
+    }
+    int Simplify(int rounds = 3) override {
+        cout << "simplify rounds: " << rounds << endl;
+        return m_slv->Simplify(rounds);
+    }
+
     // general SAT interface
     void AddClause(const cube &cls) {
         m_slv->AddClause(cls);

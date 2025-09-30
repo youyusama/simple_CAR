@@ -13,6 +13,32 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     CadicalSolver(shared_ptr<Model> m);
     ~CadicalSolver();
 
+    CadicalSolver(const CadicalSolver& src)
+        : ISolver(src), CaDiCaL::Solver(),
+          m_model(src.m_model),
+          m_maxId(src.m_maxId),
+          m_assumptions(std::make_shared<cube>()),
+          m_tempClause(cube())
+    {
+        src.CaDiCaL::Solver::copy(static_cast<CaDiCaL::Solver&>(*this));
+    }
+
+    std::shared_ptr<ISolver> Clone() const override {
+        return std::make_shared<CadicalSolver>(*this);
+    }
+
+    int GetOption(const char* name) override {
+        return get(name);
+    }
+
+    bool SetOption(const char* name, int val) override {
+        return set(name, val);
+    }
+
+    int Simplify(int rounds = 3) override {
+        return simplify(rounds);
+    }
+
     void AddClause(const cube &cls) override;
     void AddAssumption(const shared_ptr<cube> assumption) override;
     bool Solve() override;

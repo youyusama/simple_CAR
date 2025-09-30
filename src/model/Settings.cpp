@@ -92,6 +92,15 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_flag("--lift_rand", settings.liftRand, "randomly lift literals in MIC")
         ->default_val(false);
 
+    app.add_flag("--cadical_options_pre", settings.cadicalOptionsPre, "enable CaDiCaL preprocessing options")
+        ->default_val(false);
+
+    app.add_flag("--cadical_options_sol", settings.cadicalOptionsSol, "enable CaDiCaL solving options")
+        ->default_val(false);
+    
+    app.add_flag("--cadical_simplify", settings.cadicalSimplify, "enable CaDiCaL simplify")
+        ->default_val(false);
+
     try {
         app.parse(argc, argv);
         return true;
