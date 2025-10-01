@@ -44,9 +44,10 @@ struct Settings {
     double maxObligationAct = 20.0;
     double micRandRate = 0.0;
     bool liftRand = false;
-    bool cadicalOptionsPre = false;
+    bool cadicalOptionsPre = true;
     bool cadicalOptionsSol = false;
-    bool cadicalSimplify = false;
+    bool cadicalSimplify = true;
+    int micMaxAttempts = 0;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

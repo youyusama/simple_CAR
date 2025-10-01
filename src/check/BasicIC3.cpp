@@ -15,6 +15,7 @@ BasicIC3::BasicIC3(Settings settings,
     State::numLatches = model->GetNumLatches();
     m_cexStart = nullptr;
     m_rng = make_shared<RNG>(m_settings.randomSeed);
+    micMaxAttempts = m_settings.micMaxAttempts ? m_settings.micMaxAttempts : INT32_MAX;
 
     badCube = make_shared<cube>();
     badCube->push_back(m_model->GetBad());
@@ -25,27 +26,24 @@ BasicIC3::BasicIC3(Settings settings,
         m_T = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
         m_T->AddTrans();
         m_log->StatSolverCreate();
-        if (m_settings.cadicalOptionsPre)
-            SetPreprocessingOptions(m_T);
+        SetPreprocessingOptions(m_T);
         m_log->Tick();
         if (m_settings.cadicalSimplify)
             m_T->Simplify();
         m_log->StatCadicalSimplify();
-        if (m_settings.cadicalOptionsSol)
-            SetSolvingOptions(m_T);
+        SetSolvingOptions(m_T);
         if (m_settings.bad_pred) {
             m_log->Tick();
-            m_TT = make_shared<SATSolver>(m_T);
+            m_TT = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+            m_TT->AddTrans();
             m_TT->AddTransK(1);
             m_log->StatSolverCreate();
-            if (m_settings.cadicalOptionsPre)
-                SetPreprocessingOptions(m_TT);
+            SetPreprocessingOptions(m_TT);
             m_log->Tick();
             if (m_settings.cadicalSimplify)
                 m_TT->Simplify();
             m_log->StatCadicalSimplify();
-            if (m_settings.cadicalOptionsSol)
-                SetSolvingOptions(m_TT);
+            SetSolvingOptions(m_TT);
         }
     }
 
@@ -89,7 +87,7 @@ BasicIC3::~BasicIC3() {
 }
 
 void BasicIC3::SetPreprocessingOptions(const shared_ptr<SATSolver> &slv) {
-    if (m_settings.solver == MCSATSolver::cadical) {
+    if (m_settings.solver == MCSATSolver::cadical && m_settings.cadicalOptionsPre) {
         slv->SetOption("block", 1);
         slv->SetOption("cover", 1);
         slv->SetOption("condition", 1);
@@ -102,7 +100,7 @@ void BasicIC3::SetSolvingOptions(const shared_ptr<SATSolver> &slv) {
         slv->SetOption("cover", 0);
         slv->SetOption("condition", 0);
     }
-    if (m_settings.solver == MCSATSolver::cadical) {
+    if (m_settings.solver == MCSATSolver::cadical && m_settings.cadicalOptionsSol) {
         slv->SetOption("ilb", 1);
         slv->SetOption("ilbassumptions", 1);
 
@@ -446,26 +444,29 @@ bool BasicIC3::EnumerateStartState() {
             }
 
             pair<shared_ptr<cube>, shared_ptr<cube>> assignment = m_startSolver->GetAssignment(false);
-            shared_ptr<cube> partialLatch = make_shared<cube>(*assignment.second);
+            const shared_ptr<cube> &partialLatch = assignment.second;
 
+            int strategy = 1;
             while (true) {
-                shared_ptr<cube> assumps = make_shared<cube>();
-                assumps->insert(assumps->end(), partialLatch->begin(), partialLatch->end());
-                OrderAssumption(assumps);
+                shared_ptr<cube> assumps = make_shared<cube>(*partialLatch);
+                if (!m_settings.liftRand)
+                    OrderAssumption(assumps);
+                else {
+                    OrderAssumptionWithStrategy(assumps, strategy);
+                    strategy++;
+                }
                 assumps->insert(assumps->end(), assignment.first->begin(), assignment.first->end());
                 assumps->insert(assumps->end(), primeInputs.begin(), primeInputs.end());
 
                 bool res = m_badPredLiftSolver->Solve(assumps);
                 assert(!res);
                 shared_ptr<cube> tempCore = GetCore(m_badPredLiftSolver, partialLatch, false);
-                if (tempCore->size() == partialLatch->size()) {
+                if (tempCore->size() >= partialLatch->size()) {
                     break;
                 } else {
-                    partialLatch = tempCore;
+                    partialLatch->swap(*tempCore);
                 }
             }
-
-            assignment.second = partialLatch;
 
             shared_ptr<State> badState(new State(nullptr, make_shared<cube>(badInputs), nullptr, 0));
             shared_ptr<State> ctiState = make_shared<State>(
@@ -637,7 +638,7 @@ bool BasicIC3::InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSo
     return result;
 }
 
-bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
+bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, const unordered_set<int> &triedLits) {
     m_log->L(3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
@@ -737,22 +738,26 @@ void BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
     m_log->L(3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
     shared_ptr<cube> blocker;
-    set<int> triedLits;
+    unordered_set<int> triedLits;
+    unordered_set<int> blockerSet;
 
     // refer skipping needs to find blockers at frameLvl - 1, so frameLvl must be at least 2 (F_0 does not have border cubes)
     if (m_settings.referSkipping && frameLvl >= 2) {
         blocker = GetBlocker(cb, frameLvl - 1);
         if (blocker) {
             for (const auto &lit : *blocker) {
-                triedLits.insert(lit);
+                blockerSet.insert(lit);
             }
         }
     }
 
-    const int maxMicAttempts = 3;
-    size_t attempts = maxMicAttempts;
+    size_t attempts = micMaxAttempts;
 
-    OrderAssumptionWithRand(cb);
+    if (m_settings.referSkipping && blocker) {
+        OrderAssumptionMIC(cb, blockerSet);
+    } else {
+        OrderAssumptionMIC(cb);
+    }
 
     // Iterate backwards to handle the shrinking cube size gracefully.
     for (int i = cb->size() - 1; i >= 0; --i) {
@@ -774,9 +779,13 @@ void BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
 
         if (Down(dropCube, frameLvl, recLvl, triedLits)) {
             cb->swap(*dropCube);
-            OrderAssumptionWithRand(cb);
+            if (m_settings.referSkipping && blocker) {
+                OrderAssumptionMIC(cb, blockerSet);
+            } else {
+                OrderAssumptionMIC(cb);
+            }
             i = cb->size();
-            attempts = maxMicAttempts;
+            attempts = micMaxAttempts;
         } else {
             if (--attempts == 0) {
                 m_log->L(3, "Max MIC attempts reached, stopping generalization.");
@@ -810,14 +819,7 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
         if (!m_settings.liftRand)
             OrderAssumption(assumption);
         else {
-            if (strategy == 1) {
-                OrderAssumption(assumption);
-            } else if (strategy == 2) {
-                OrderAssumption(assumption);
-                reverse(assumption->begin(), assumption->end());
-            } else {
-                shuffle(assumption->begin(), assumption->end(), m_rng->engine());
-            }
+            OrderAssumptionWithStrategy(assumption, strategy);
             strategy++;
         }
 
@@ -1093,10 +1095,10 @@ void BasicIC3::OutputWitness(int bad) {
     //             F_{i+1} = c_1 & c_2 & ... & c_j
     //                       c_j = !( l_1 & l_2 & .. & l_k )
 
-    set<shared_ptr<cube>, cubePtrComp> indInv;
+    vector<shared_ptr<cube>> indInv;
 
     for (int i = m_invariantLevel; i <= MaxLevel(); i++) {
-        indInv.insert(m_frames[i].borderCubes.begin(), m_frames[i].borderCubes.end());
+        indInv.insert(indInv.end(), m_frames[i].borderCubes.begin(), m_frames[i].borderCubes.end());
     }
     // if (indInv.empty()) {
     //     indInv.insert(infFrame.borderCubes.begin(), infFrame.borderCubes.end());

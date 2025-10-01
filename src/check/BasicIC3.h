@@ -97,7 +97,7 @@ class LitSet {
 };
 
 class RNG {
-public:
+  public:
     explicit RNG(uint32_t seed)
         : eng_(seed), dist_(0.0, 1.0) {}
 
@@ -105,9 +105,9 @@ public:
         return dist_(eng_);
     }
 
-    std::mt19937& engine() { return eng_; }
+    std::mt19937 &engine() { return eng_; }
 
-private:
+  private:
     std::mt19937 eng_;
     std::uniform_real_distribution<double> dist_;
 };
@@ -133,7 +133,7 @@ class BasicIC3 : public BaseChecker {
     bool HandleObligations();
     size_t Generalize(const shared_ptr<cube> &cb, int frameLvl);
     void MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl);
-    bool Down(const shared_ptr<cube> &c, int frameLvl, int recLvl, const set<int> &triedLits);
+    bool Down(const shared_ptr<cube> &c, int frameLvl, int recLvl, const unordered_set<int> &triedLits);
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<cube> &succ);
 
 
@@ -160,15 +160,42 @@ class BasicIC3 : public BaseChecker {
         sort(c->begin(), c->end(), litOrder);
     }
 
-    // m_settings.micRandRate is between 0 and 1, 0 means no randomization, 1 means full randomization
-    // get a random number between 0 and 1 based on m_settings.randomSeed
-    void OrderAssumptionWithRand(const shared_ptr<cube> &c) {
+    void OrderAssumptionMIC(const shared_ptr<cube> &c) {
         if (m_settings.micRandRate > 1e-6 && m_rng->uniform01() < m_settings.micRandRate) {
             shuffle(c->begin(), c->end(), m_rng->engine());
         } else {
             OrderAssumption(c);
         }
-    }   
+    }
+
+    // m_settings.micRandRate is between 0 and 1, 0 means no randomization, 1 means full randomization
+    // get a random number between 0 and 1 based on m_settings.randomSeed
+    void OrderAssumptionMIC(const shared_ptr<cube> &c, unordered_set<int> &blockerSet) {
+        if (m_settings.micRandRate > 1e-6 && m_rng->uniform01() < m_settings.micRandRate) {
+            shuffle(c->begin(), c->end(), m_rng->engine());
+        } else {
+            OrderAssumptionWithBlocker(c, blockerSet);
+        }
+    }
+
+    void OrderAssumptionWithStrategy(const shared_ptr<cube> &c, int strategy) {
+        if (strategy == 1) {
+            OrderAssumption(c);
+        } else if (strategy == 2) {
+            OrderAssumption(c);
+            reverse(c->begin(), c->end());
+        } else {
+            shuffle(c->begin(), c->end(), m_rng->engine());
+        }
+    }
+
+    // First, order by OrderAssumption, then put literals in blocker at the front
+    void OrderAssumptionWithBlocker(const shared_ptr<cube> &c, const unordered_set<int> &blockerSet) {
+        OrderAssumption(c);
+        auto it = stable_partition(c->begin(), c->end(), [&blockerSet](int lit) {
+            return blockerSet.count(lit) > 0;
+        });
+    }
 
     bool Propagate();
 
@@ -203,6 +230,7 @@ class BasicIC3 : public BaseChecker {
     void SetPreprocessingOptions(const shared_ptr<SATSolver> &slv);
     void SetSolvingOptions(const shared_ptr<SATSolver> &slv);
 
+    int micMaxAttempts;
     shared_ptr<RNG> m_rng;
 
     CheckResult m_checkResult;

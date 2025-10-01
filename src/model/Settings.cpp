@@ -93,13 +93,19 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->default_val(false);
 
     app.add_flag("--cadical_options_pre", settings.cadicalOptionsPre, "enable CaDiCaL preprocessing options")
-        ->default_val(false);
+        ->default_val(true);
 
     app.add_flag("--cadical_options_sol", settings.cadicalOptionsSol, "enable CaDiCaL solving options")
         ->default_val(false);
     
     app.add_flag("--cadical_simplify", settings.cadicalSimplify, "enable CaDiCaL simplify")
-        ->default_val(false);
+        ->default_val(true);
+    
+    // at least 0
+    // zero mean no limit
+    app.add_option("--mic_max_attempts", settings.micMaxAttempts, "maximum attempts for MIC")
+        ->default_val(3)
+        ->check(CLI::Range(0, INT32_MAX));
 
     try {
         app.parse(argc, argv);
