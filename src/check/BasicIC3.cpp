@@ -34,8 +34,7 @@ BasicIC3::BasicIC3(Settings settings,
         SetSolvingOptions(m_T);
         if (m_settings.bad_pred) {
             m_log->Tick();
-            m_TT = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
-            m_TT->AddTrans();
+            m_TT = make_shared<SATSolver>(m_T);
             m_TT->AddTransK(1);
             m_log->StatSolverCreate();
             SetPreprocessingOptions(m_TT);
@@ -257,6 +256,7 @@ bool BasicIC3::Check(int badId) {
     while (true) {
         m_log->L(1, "============================================", " Starting IC3 iteration at F_", MaxLevel(), " ============================================");
         m_log->L(1, FramesInfo());
+        m_log->L(1, "lemmaCount: ", lemmaCount);
 
         if (m_settings.bad_pred)
             NewStartSolver();
@@ -697,8 +697,9 @@ bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, 
         } else {
             ctgs = 0;
             shared_ptr<cube> joinCube = make_shared<cube>();
+            unordered_set<int> ctgCubeSet(ctgCube->begin(), ctgCube->end());
             for (int i = downCube->size() - 1; i >= 0; i--) {
-                if (binary_search(ctgCube->begin(), ctgCube->end(), downCube->at(i))) {
+                if (ctgCubeSet.count(downCube->at(i))) {
                     joinCube->push_back(downCube->at(i));
                 } else if (triedLits.count(downCube->at(i))) {
                     return false;
