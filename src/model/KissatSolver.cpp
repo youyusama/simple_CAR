@@ -6,7 +6,7 @@
 namespace car {
 KissatSolver::KissatSolver(shared_ptr<Model> m) {
     m_model = m;
-    m_maxId = m_model->GetMaxId();
+    m_maxId = m_model->TrueId() + 1;
     // m_tempVar = 0;
     m_solver = kissat_init();
     kissat_reserve(m_solver, m_maxId);

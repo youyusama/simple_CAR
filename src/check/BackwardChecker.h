@@ -112,7 +112,9 @@ class BackwardChecker : public BaseChecker {
 
     pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
 
-    shared_ptr<cube> GetUnsatCore(int lvl);
+    shared_ptr<cube> GetUnsatCore(int lvl, const shared_ptr<cube> state);
+
+    shared_ptr<cube> GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions);
 
     shared_ptr<State> EnumerateStartState();
 

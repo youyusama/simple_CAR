@@ -81,7 +81,6 @@ void BasicIC3::Extend() {
     m_startSolver->AddProperty();
     m_startSolver->AddConstraints();
     m_startSolver->AddConstraintsK(1);
-    AddSamePrimeConstraints(m_startSolver);
 
     auto blockingCubes = m_frames[m_k].borderCubes;
     for (const auto &blockingCube : blockingCubes) {
@@ -95,7 +94,7 @@ void BasicIC3::Extend() {
 }
 
 bool BasicIC3::Check(int badId) {
-    if (m_model->GetFalseId() == badId) {
+    if (m_model->TrueId() == -badId) {
         m_log->L(1, "SAFE: Constant bad.");
         return true;
     }
@@ -169,13 +168,11 @@ bool BasicIC3::BaseCases() {
     step1Solver->AddProperty();
     step1Solver->AddConstraints();
     step1Solver->AddConstraintsK(1);
-    AddSamePrimeConstraints(step1Solver);
 
     if (step1Solver->Solve(assumption)) {
         m_log->L(1, "UNSAFE: Property fails at step 1.");
         cube primeInputs;
-        shared_ptr<vector<int>> coiInputs = m_model->GetCOIInputs();
-        for (int i : *coiInputs) {
+        for (int i : m_model->GetPropertyCOIInputs()) {
             int i_p = m_model->GetPrimeK(i, 1);
             if (step1Solver->GetModel(i_p))
                 primeInputs.push_back(i);
@@ -211,7 +208,6 @@ void BasicIC3::AddNewFrame() {
     newFrame.solver->AddTrans();
     newFrame.solver->AddConstraints();
     newFrame.solver->AddProperty();
-    AddSamePrimeConstraints(newFrame.solver);
     m_frames.push_back(newFrame);
 }
 
@@ -275,8 +271,7 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
 
         cube primeInputs;
         cube badInputs;
-        shared_ptr<vector<int>> coiInputs = m_model->GetCOIInputs();
-        for (int i : *coiInputs) {
+        for (int i : m_model->GetPropertyCOIInputs()) {
             int i_p = m_model->GetPrimeK(i, 1);
             if (m_startSolver->GetModel(i_p)) {
                 primeInputs.push_back(i_p);
@@ -795,7 +790,7 @@ void BasicIC3::OutputWitness(int bad) {
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
     string outPath = m_settings.witnessOutputDir + aigName + ".w.aig";
-    aiger *model_aig = m_model->GetAig();
+    aiger *model_aig = m_model->GetAiger().get();
 
     unsigned lvl_i;
     // bad is constant
@@ -830,36 +825,6 @@ void BasicIC3::OutputWitness(int bad) {
     }
 
     assert(model_aig->maxvar == witness_aig->maxvar);
-
-    // same prime constraint
-    // if l1 and l2 have same prime l', then l1 and l2 shoud have same value, except the initial states
-    // sp_cons = init | cons
-    // init = l1 & l2 & ... & lk
-    // cons = ( x1 <-> x2 ) & ( x1 <-> x3 ) & ( ... )
-    unordered_map<int, vector<int>> map;
-    m_model->GetPreValueOfLatchMap(map);
-    vector<unsigned> cons_lits;
-    for (auto it = map.begin(); it != map.end(); it++) {
-        if (it->second.size() > 1) {
-            unsigned x0 = it->second[0] > 0 ? (2 * it->second[0]) : (2 * -it->second[0] + 1);
-            for (int i = 1; i < it->second.size(); i++) {
-                unsigned xi = it->second[i] > 0 ? (2 * it->second[i]) : (2 * -it->second[i] + 1);
-                cons_lits.push_back(addCubeToANDGates(witness_aig, {x0, xi ^ 1}) ^ 1);
-                cons_lits.push_back(addCubeToANDGates(witness_aig, {x0 ^ 1, xi}) ^ 1);
-            }
-        }
-    }
-    unsigned sp_cons;
-    if (cons_lits.size() > 0) {
-        vector<unsigned> init_lits;
-        for (auto l : m_model->GetInitialState()) {
-            int ll = l > 0 ? (2 * l) : (2 * -l + 1);
-            init_lits.push_back(ll);
-        }
-        unsigned init = addCubeToANDGates(witness_aig, init_lits);
-        unsigned cons = addCubeToANDGates(witness_aig, cons_lits);
-        sp_cons = addCubeToANDGates(witness_aig, {init ^ 1, cons ^ 1}) ^ 1;
-    }
 
     // P' = P & invariant
     // P' = !bad & ( O_0 | O_1 | ... | O_i )
@@ -896,10 +861,6 @@ void BasicIC3::OutputWitness(int bad) {
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
 
-    if (cons_lits.size() > 0) {
-        p_prime = addCubeToANDGates(witness_aig, {p_prime, sp_cons});
-    }
-
     if (model_aig->num_bad == 1) {
         aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);
     } else if (model_aig->num_outputs == 1) {
@@ -922,33 +883,6 @@ void BasicIC3::Witness() {
         OutputWitness(m_model->GetBad());
     } else {
         m_log->L(1, "Unknown check result.");
-    }
-}
-
-void BasicIC3::AddSamePrimeConstraints(shared_ptr<SATSolver> slv) {
-    // if l_1 and l_2 have the same primed value l',
-    // then l_1 and l_2 shoud have same value, except the initial states
-    int init = slv->GetNewVar();
-    int cons = slv->GetNewVar();
-
-    // init | cons
-    slv->AddClause(clause{init, cons});
-
-    unordered_map<int, vector<int>> preValueMap;
-    m_model->GetPreValueOfLatchMap(preValueMap);
-    for (auto it = preValueMap.begin(); it != preValueMap.end(); it++) {
-        if (it->second.size() > 1) {
-            // cons -> ( p <-> v )
-            int v = slv->GetNewVar();
-            for (int p : it->second) {
-                slv->AddClause(clause{-cons, -p, v});
-                slv->AddClause(clause{-cons, p, -v});
-            }
-        }
-    }
-    // init -> i
-    for (int i : m_model->GetInitialState()) {
-        slv->AddClause(clause{-init, i});
     }
 }
 

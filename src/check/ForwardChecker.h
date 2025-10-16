@@ -110,15 +110,13 @@ class ForwardChecker : public BaseChecker {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
-    void AddSamePrimeConstraints(shared_ptr<SATSolver> slv);
-
     bool IsReachable(int lvl, const shared_ptr<cube> assumption);
 
     pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
 
     shared_ptr<cube> GetUnsatCore(int lvl, const shared_ptr<cube> state);
 
-    void MakeSubset(shared_ptr<cube> c1, shared_ptr<cube> c2);
+    shared_ptr<cube> GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions);
 
     shared_ptr<cube> TopDomain();
 

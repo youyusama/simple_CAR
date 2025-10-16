@@ -6,8 +6,6 @@
 #include "minisat/core/Solver.h"
 #include <memory>
 
-using namespace Minisat;
-
 namespace car {
 
 class MinisatSolver : public ISolver, public Minisat::Solver {
@@ -20,7 +18,6 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     bool Solve() override;
     bool Solve(const shared_ptr<cube> assumption) override;
     pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override;
-    shared_ptr<cube> GetUC(bool prime) override;
     unordered_set<int> GetConflict() override;
     inline int GetNewVar() {
         return ++m_maxId;
@@ -28,10 +25,10 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     void AddTempClause(const cube &cls) override;
     void ReleaseTempClause() override;
     inline bool GetModel(int id) {
-        if (model[id - 1] == l_True)
+        if (model[id] == Minisat::l_True)
             return true;
         else {
-            assert(model[id - 1] == l_False);
+            assert(model[id] == Minisat::l_False);
             return false;
         }
     }
@@ -46,16 +43,16 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     inline void ResetTempDomain() {}
 
   protected:
-    inline int GetLiteralId(const Lit &l);
-    inline Lit GetLit(int id) {
-        int var = abs(id) - 1;
+    inline int GetLiteralId(const Minisat::Lit &l);
+    inline Minisat::Lit GetLit(int id) {
+        int var = abs(id);
         while (var >= nVars()) newVar();
-        return ((id > 0) ? mkLit(var) : ~mkLit(var));
+        return ((id > 0) ? Minisat::mkLit(var) : ~Minisat::mkLit(var));
     };
 
     shared_ptr<Model> m_model;
     int m_maxId;
-    vec<Lit> m_assumptions;
+    Minisat::vec<Minisat::Lit> m_assumptions;
     int m_tempVar;
 };
 

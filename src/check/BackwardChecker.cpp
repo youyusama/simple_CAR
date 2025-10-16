@@ -37,9 +37,6 @@ void BackwardChecker::Witness() {
 }
 
 bool BackwardChecker::Check(int badId) {
-    if (m_model->GetFalseId() == badId)
-        return true;
-
     Init();
     m_log->L(2, "Initialized");
 
@@ -142,7 +139,7 @@ bool BackwardChecker::Check(int badId) {
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     m_log->L(2, "Result >>> UNSAT <<<");
-                    auto uc = GetUnsatCore(task.frameLevel);
+                    auto uc = GetUnsatCore(task.frameLevel, task.state->latches);
                     m_log->L(3, "Get UC:", CubeToStr(uc));
                     if (Generalize(uc, task.frameLevel))
                         m_branching->Update(uc);
@@ -308,7 +305,7 @@ void BackwardChecker::OverSequenceRefine(int lvl) {
 
         bool sat = IsReachable(lvl + 1, s.second);
         assert(!sat);
-        auto uc = GetUnsatCore(lvl + 1);
+        auto uc = GetUnsatCore(lvl + 1, s.second);
         for (int i = 0; i <= lvl; i++)
             AddUnsatisfiableCore(uc, i);
         clause cls;
@@ -427,7 +424,7 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, sha
         // F_i & T & temp_uc'
         if (!IsReachable(frame_lvl, assumption)) {
             m_log->StatMainSolver();
-            auto uc_ctg = GetUnsatCore(frame_lvl);
+            auto uc_ctg = GetUnsatCore(frame_lvl, uc);
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
             uc->swap(*uc_ctg);
             return true;
@@ -447,7 +444,7 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, sha
             if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass)) {
                 m_log->StatMainSolver();
                 ctgs++;
-                auto uc_cts = GetUnsatCore(cts_lvl);
+                auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
                 m_log->L(3, "CTG Get UC:", CubeToStr(uc_cts));
                 if (Generalize(uc_cts, cts_lvl, rec_lvl + 1)) m_branching->Update(uc_cts);
                 m_log->L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
@@ -491,7 +488,7 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
         return true;
     } else {
         m_log->L(2, "Result >>> UNSAT <<<");
-        auto uc = m_badSolver->GetUC(false);
+        auto uc = GetUnsatAssumption(m_badSolver, assumption);
         // Generalization
         unordered_set<int> required_lits;
         for (int i = uc->size() - 1; i >= 0; i--) {
@@ -509,7 +506,7 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
             bool result = m_badSolver->Solve(assumption);
             m_log->StatMainSolver();
             if (!result) {
-                auto new_uc = m_badSolver->GetUC(false);
+                auto new_uc = GetUnsatAssumption(m_badSolver, assumption);
                 uc->swap(*new_uc);
                 OrderAssumption(uc);
                 i = uc->size();
@@ -537,8 +534,22 @@ pair<shared_ptr<cube>, shared_ptr<cube>> BackwardChecker::GetInputAndState(int l
 }
 
 
-shared_ptr<cube> BackwardChecker::GetUnsatCore(int lvl) {
-    return m_transSolvers[lvl]->GetUC(false);
+shared_ptr<cube> BackwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> state) {
+    return GetUnsatAssumption(m_transSolvers[lvl], state);
+}
+
+
+shared_ptr<cube> BackwardChecker::GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions) {
+    const unordered_set<int> &conflict = solver->GetConflict();
+    shared_ptr<cube> res = make_shared<cube>();
+
+    for (auto a : *assumptions) {
+        if (conflict.find(a) != conflict.end())
+            res->emplace_back(a);
+    }
+
+    sort(res->begin(), res->end(), cmp);
+    return res;
 }
 
 
@@ -567,7 +578,7 @@ bool BackwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
     bool result;
     if (!IsReachable(lvl, c)) {
         m_log->StatPropagation();
-        auto uc = GetUnsatCore(lvl);
+        auto uc = GetUnsatCore(lvl, c);
         AddUnsatisfiableCore(uc, lvl + 1, true);
         result = true;
     } else {
@@ -602,16 +613,15 @@ void BackwardChecker::OutputWitness(int bad) {
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
     string outPath = m_settings.witnessOutputDir + aigName + ".w.aig";
-    aiger *model_aig = m_model->GetAig();
+    aiger *model_aig = m_model->GetAiger().get();
 
-    unsigned lvl_i;
-    if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
+    if (m_overSequence->GetInvariantLevel() < 0 && m_model->GetEquivalenceMap().size() == 0) {
         aiger_open_and_write_to_file(model_aig, outPath.c_str());
         return;
     }
-    lvl_i = m_overSequence->GetInvariantLevel();
 
-    aiger *witness_aig = aiger_init();
+    shared_ptr<aiger> witness_aig_ptr(aiger_init(), aigerDeleter);
+    aiger *witness_aig = witness_aig_ptr.get();
     // copy inputs
     for (unsigned i = 0; i < model_aig->num_inputs; i++) {
         aiger_symbol &input = model_aig->inputs[i];
@@ -636,6 +646,51 @@ void BackwardChecker::OutputWitness(int bad) {
 
     assert(model_aig->maxvar == witness_aig->maxvar);
 
+    // add equivalence
+    // (l1 <-> l2) & (l1 <-> l3) & ( ... )
+    auto &eq_map = m_model->GetEquivalenceMap();
+    vector<unsigned> eq_lits;
+    for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
+        if (itr->first == m_model->TrueId()) {
+            unsigned true_eq_lit = m_model->GetAigerLit(itr->second);
+            eq_lits.emplace_back(addCubeToANDGates(witness_aig, {true_eq_lit, (unsigned)0}) ^ 1);
+            eq_lits.emplace_back(addCubeToANDGates(witness_aig, {true_eq_lit ^ 1, (unsigned)1}) ^ 1);
+            continue;
+        }
+        unsigned l1 = m_model->GetAigerLit(itr->first);
+        unsigned l2 = m_model->GetAigerLit(itr->second);
+        eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
+        eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
+    }
+
+    unsigned eq_cons;
+    if (eq_lits.size() > 0) {
+        eq_cons = addCubeToANDGates(witness_aig, eq_lits);
+    }
+
+    // prove on lvl 0
+    if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
+        unsigned bad_lit = m_model->GetAigerLit(bad);
+        unsigned p = aiger_not(bad_lit);
+        unsigned p_prime = p;
+        if (eq_lits.size() > 0) {
+            p_prime = addCubeToANDGates(witness_aig, {p, eq_cons});
+        }
+
+        if (model_aig->num_bad == 1) {
+            aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);
+        } else if (model_aig->num_outputs == 1) {
+            aiger_add_output(witness_aig, aiger_not(p_prime), model_aig->outputs[0].name);
+        } else {
+            assert(false);
+        }
+
+        aiger_reencode(witness_aig);
+        aiger_open_and_write_to_file(witness_aig, outPath.c_str());
+        return;
+    }
+    unsigned lvl_i = m_overSequence->GetInvariantLevel();
+
     // P' = P & invariant
     // P' = !bad & !( O_0 | O_1 | ... | O_i )
     //             ( !O_0 & !O_1 & ...  & !O_i )
@@ -656,9 +711,13 @@ void BackwardChecker::OutputWitness(int bad) {
         inv_lits.push_back(O_i ^ 1);
     }
     unsigned inv = addCubeToANDGates(witness_aig, inv_lits);
-    unsigned bad_lit = bad > 0 ? (2 * bad) : (2 * -bad) + 1;
+    unsigned bad_lit = m_model->GetAigerLit(bad);
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
+
+    if (eq_lits.size() > 0) {
+        p_prime = addCubeToANDGates(witness_aig, {p_prime, eq_cons});
+    }
 
     if (model_aig->num_bad == 1) {
         aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);

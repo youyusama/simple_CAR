@@ -4,7 +4,7 @@
 namespace car {
 MinicoreSolver::MinicoreSolver(shared_ptr<Model> m) {
     m_model = m;
-    m_maxId = m_model->GetFalseId() + 1; // reserve variable numbers for one step reachability check
+    m_maxId = m_model->TrueId() + 1; // reserve variable numbers for one step reachability check
     // verbosity = 1;
 }
 
@@ -49,16 +49,14 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinicoreSolver::GetAssignment(bool prim
     shared_ptr<cube> latches(new cube());
     inputs->reserve(m_model->GetNumInputs());
     latches->reserve(m_model->GetNumLatches());
-    for (int i = 1, end = m_model->GetNumInputs() + 1; i < end; ++i) {
+    for (int i : m_model->GetModelInputs()) {
         if (model[i] == minicore::l_True) {
             inputs->emplace_back(i);
         } else if (model[i] == minicore::l_False) {
             inputs->emplace_back(-i);
         }
     }
-    for (int i = m_model->GetNumInputs() + 1,
-             end = m_model->GetNumInputs() + m_model->GetNumLatches() + 1;
-         i < end; ++i) {
+    for (int i : m_model->GetModelLatches()) {
         if (!prime) {
             if (model[i] == minicore::l_True) {
                 latches->emplace_back(i);
@@ -75,7 +73,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinicoreSolver::GetAssignment(bool prim
             }
         }
     }
-    for (int i : *m_model->GetInnards()) {
+    for (int i : m_model->GetInnards()) {
         if (!prime) {
             if (model[i] == minicore::l_True) {
                 latches->emplace_back(i);
@@ -95,35 +93,6 @@ pair<shared_ptr<cube>, shared_ptr<cube>> MinicoreSolver::GetAssignment(bool prim
     return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
 }
 
-
-shared_ptr<cube> MinicoreSolver::GetUC(bool prime) {
-    shared_ptr<cube> uc(new cube());
-    if (prime) {
-        for (minicore::Lit l : conflict) {
-            int val = -GetLiteralId(l);
-            cube ids = m_model->GetPrevious(val);
-            if (val > 0) {
-                for (auto x : ids) {
-                    uc->push_back(x);
-                }
-            } else {
-                for (auto x : ids) {
-                    uc->push_back(-x);
-                }
-            }
-        }
-    } else {
-        for (minicore::Lit l : conflict) {
-            int val = -GetLiteralId(l);
-            if (m_model->IsLatch(val) || m_model->IsInnard(val)) {
-                uc->emplace_back(val);
-            }
-        }
-    }
-
-    sort(uc->begin(), uc->end(), cmp);
-    return uc;
-}
 
 unordered_set<int> MinicoreSolver::GetConflict() {
     unordered_set<int> conflictSet;

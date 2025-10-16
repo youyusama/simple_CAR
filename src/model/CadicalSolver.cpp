@@ -4,7 +4,7 @@
 namespace car {
 CadicalSolver::CadicalSolver(shared_ptr<Model> m) {
     m_model = m;
-    m_maxId = m_model->GetFalseId() + 1; // reserve variable numbers for one step reachability check
+    m_maxId = m_model->TrueId() + 1; // reserve variable numbers for one step reachability check
     m_assumptions = make_shared<cube>();
     m_tempClause = cube();
 }
@@ -58,7 +58,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime
     shared_ptr<cube> latches(new cube());
     inputs->reserve(m_model->GetNumInputs());
     latches->reserve(m_model->GetNumLatches());
-    for (int i = 1; i < m_model->GetNumInputs() + 1; ++i) {
+    for (int i : m_model->GetModelInputs()) {
         if (val(i) > 0) {
             inputs->emplace_back(i);
         } else {
@@ -66,7 +66,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime
             inputs->emplace_back(-i);
         }
     }
-    for (int i = m_model->GetNumInputs() + 1, end = m_model->GetNumInputs() + m_model->GetNumLatches() + 1; i < end; ++i) {
+    for (int i : m_model->GetModelLatches()) {
         if (!prime) {
             if (val(i) > 0) {
                 latches->emplace_back(i);
@@ -84,7 +84,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime
             }
         }
     }
-    for (int i : *m_model->GetInnards()) {
+    for (int i : m_model->GetInnards()) {
         if (!prime) {
             if (val(i) > 0) {
                 latches->emplace_back(i);
@@ -105,37 +105,6 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime
     return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
 }
 
-
-shared_ptr<cube> CadicalSolver::GetUC(bool prime) {
-    shared_ptr<cube> uc(new cube());
-    if (prime) {
-        for (auto v : *m_assumptions) {
-            if (failed(v)) {
-                cube ids = m_model->GetPrevious(v);
-                if (v > 0) {
-                    for (auto x : ids) {
-                        uc->push_back(x);
-                    }
-                } else {
-                    for (auto x : ids) {
-                        uc->push_back(-x);
-                    }
-                }
-            }
-        }
-    } else {
-        for (auto v : *m_assumptions) {
-            if (failed(v) && (m_model->IsLatch(v) || m_model->IsInnard(v))) {
-                uc->emplace_back(v);
-            }
-        }
-    }
-
-    sort(uc->begin(), uc->end(), cmp);
-    auto last = unique(uc->begin(), uc->end());
-    uc->erase(last, uc->end());
-    return uc;
-}
 
 unordered_set<int> CadicalSolver::GetConflict() {
     unordered_set<int> conflictSet;

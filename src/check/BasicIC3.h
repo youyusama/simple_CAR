@@ -109,7 +109,6 @@ class BasicIC3 : public BaseChecker {
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
     void OutputWitness(int bad);
     void OutputCounterExample();
-    void AddSamePrimeConstraints(shared_ptr<SATSolver> slv);
 
 
     std::shared_ptr<cube> GetCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube, bool prime);

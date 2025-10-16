@@ -41,10 +41,6 @@ class SATSolver : public ISolver {
         return m_slv->GetAssignment(prime);
     }
 
-    shared_ptr<cube> GetUC(bool prime) {
-        return m_slv->GetUC(prime);
-    }
-
     unordered_set<int> GetConflict() {
         return m_slv->GetConflict();
     }
