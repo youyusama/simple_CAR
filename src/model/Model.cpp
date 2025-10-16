@@ -683,7 +683,11 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     m_equivalenceSolver->clause({-new_var, -a_prime, -b_prime});
     m_equivalenceSolver->assume(new_var);
     bool sat = (m_equivalenceSolver->solve() == 10);
-    if (!sat) m_eqSolverUnsats++;
+    if (!sat) {
+        m_equivalenceSolver->clause({a, -b});
+        m_equivalenceSolver->clause({-a, b});
+        m_eqSolverUnsats++;
+    }
     return !sat;
 }
 
@@ -710,7 +714,11 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
     m_equivalenceSolver->clause({-new_var, -a, -b});
     m_equivalenceSolver->assume(new_var);
     bool sat = (m_equivalenceSolver->solve() == 10);
-    if (!sat) m_eqSolverUnsats++;
+    if (!sat) {
+        m_equivalenceSolver->clause({a, -b});
+        m_equivalenceSolver->clause({-a, b});
+        m_eqSolverUnsats++;
+    }
     return !sat;
 }
 
