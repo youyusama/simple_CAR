@@ -10,8 +10,10 @@ extern "C" {
 #include "Settings.h"
 #include "TernarySim.h"
 #include "cadical/src/cadical.hpp"
+#include "minicore/src/solver.h"
 #include <algorithm>
 #include <assert.h>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <math.h>
@@ -58,6 +60,10 @@ template <int N>
 struct SimulationSignature {
     std::array<uint64_t, N> chunks;
 
+    SimulationSignature() {
+        chunks.fill(0);
+    }
+
     bool operator==(const SimulationSignature<N> &other) const {
         return chunks == other.chunks;
     }
@@ -84,7 +90,7 @@ struct SimulationSignatureHash {
     }
 };
 
-constexpr size_t NUM_CHUNKS = 16;
+constexpr size_t NUM_CHUNKS = 32;
 using SignatureN64 = SimulationSignature<NUM_CHUNKS>;
 using VarMapN64 = std::unordered_map<SignatureN64, std::vector<int>, SimulationSignatureHash<NUM_CHUNKS>>;
 
@@ -254,8 +260,9 @@ class Model {
 
     shared_ptr<EquivalenceManager> m_equivalenceManager;
 
-    shared_ptr<CaDiCaL::Solver> m_equivalenceSolver;
-    int m_eqSolverUnsats;
+    shared_ptr<minicore::Solver> m_equivalenceSolver;
+    int m_eqSolverUnsats{0};
+    int m_eqSolverCalls{0};
 
     unordered_set<int> m_innards;
     vector<int> m_innardsVec;

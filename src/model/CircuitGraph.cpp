@@ -56,7 +56,7 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
         fairness.emplace_back(GetCarId(aig->fairness[i].lit));
     }
 
-    // gates //TODO: it's only valid for safety property
+    // get gates
     unordered_set<unsigned> coi_lits;
     for (int i = 0; i < aig->num_latches; i++)
         coi_lits.emplace(aiger_strip(aig->latches[i].next));
@@ -81,21 +81,11 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
         }
     }
 
-    // gatesCOI and inputsCOI
-    for (auto lit : coi_lits) {
-        int id = GetCarId(lit);
-        if (andsSet.find(id) != andsSet.end()) {
-            modelGates.emplace_back(id);
-        } else if (inputsSet.find(id) != inputsSet.end()) {
-            modelInputs.emplace_back(id);
-        }
-    }
-
-    // in topological order
-    sort(modelGates.begin(), modelGates.end(), cmp);
-    sort(modelInputs.begin(), modelInputs.end(), cmp);
-
+    // model inputs, latches, and gates, to be coi refined
+    modelInputs = inputs;
     modelLatches = latches;
+    modelGates = ands;
+    COIRefine();
 
     // get property coi inputs
     unordered_set<int> coi_ids;
@@ -116,6 +106,72 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
         }
     }
     sort(propertyCOIInputs.begin(), propertyCOIInputs.end(), cmp);
+}
+
+
+void CircuitGraph::COIRefine() {
+    unordered_set<int> coi_ids;
+    vector<int> todo_stack;
+
+    for (int id : constraints) {
+        coi_ids.emplace(abs(id));
+        todo_stack.emplace_back(abs(id));
+    }
+    for (int id : bad) {
+        coi_ids.emplace(abs(id));
+        todo_stack.emplace_back(abs(id));
+    }
+
+    while (!todo_stack.empty()) {
+        int id = todo_stack.back();
+        todo_stack.pop_back();
+
+        // is gate
+        if (andsSet.find(id) != andsSet.end()) {
+            assert(gatesMap.find(id) != gatesMap.end());
+            auto &gate = gatesMap[id];
+            for (int fanin : gate.fanins) {
+                if (coi_ids.find(abs(fanin)) == coi_ids.end()) {
+                    coi_ids.emplace(abs(fanin));
+                    todo_stack.emplace_back(abs(fanin));
+                }
+            }
+        }
+        // is latch
+        else if (latchesSet.find(id) != latchesSet.end()) {
+            int next = latchNextMap[id];
+            if (coi_ids.find(abs(next)) == coi_ids.end()) {
+                coi_ids.emplace(abs(next));
+                todo_stack.emplace_back(abs(next));
+            }
+        }
+    }
+
+
+    // refine model inputs, latches, and gates
+    vector<int> new_modelInputs;
+    for (int id : modelInputs) {
+        if (coi_ids.find(id) != coi_ids.end()) {
+            new_modelInputs.emplace_back(id);
+        }
+    }
+    modelInputs = new_modelInputs;
+
+    vector<int> new_modelLatches;
+    for (int id : modelLatches) {
+        if (coi_ids.find(id) != coi_ids.end()) {
+            new_modelLatches.emplace_back(id);
+        }
+    }
+    modelLatches = new_modelLatches;
+
+    vector<int> new_modelGates;
+    for (int id : modelGates) {
+        if (coi_ids.find(id) != coi_ids.end()) {
+            new_modelGates.emplace_back(id);
+        }
+    }
+    modelGates = new_modelGates;
 }
 
 

@@ -63,7 +63,8 @@ TernarySimulator::TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, shared
     : m_log(log),
       m_circuitGraph(circuitGraph),
       m_step(0),
-      m_cycleStart(-1) {
+      m_cycleStart(-1),
+      m_randomSeed(42) {
     // initialize step 0
     m_values.emplace_back(make_shared<unordered_map<int, tbool>>());
     m_values.back()->operator[](m_circuitGraph->trueId) = t_True;
@@ -201,7 +202,8 @@ void TernarySimulator::simulateRandom(int maxSteps) {
 
     reset();
 
-    std::mt19937 generator(6838);
+    std::mt19937 generator(m_randomSeed);
+    m_randomSeed++;
     std::uniform_int_distribution<uint8_t> distribution(0, 1);
 
     // set initial values
@@ -242,7 +244,7 @@ void TernarySimulator::simulateRandom(int maxSteps) {
 void TernarySimulator::pushState(int step, shared_ptr<vector<int>> &state) {
     unordered_map<int, tbool> &vmap = *m_values[step];
 
-    for (int latch_id : m_circuitGraph->latches) {
+    for (int latch_id : m_circuitGraph->modelLatches) {
         if (vmap[latch_id] == t_True)
             state->emplace_back(latch_id);
         else if (vmap[latch_id] == t_False)

@@ -109,6 +109,8 @@ class TernarySimulator {
 
     vector<shared_ptr<vector<int>>> m_gateStates;
 
+    int m_randomSeed;
+
     int m_step; // next step to simulate
 
     void reset();

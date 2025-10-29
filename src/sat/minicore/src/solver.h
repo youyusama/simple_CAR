@@ -32,18 +32,28 @@ class Solver {
     Var newVar(); // Add a new variable with parameters specifying variable mode.
 
     bool addClause(const std::vector<Lit> &ps); // Add a clause to the solver.
-    bool addClause_(std::vector<Lit> &ps);      // Add a clause to the solver without making superflous internal copy. Will
-                                                // change the passed vector 'ps'.
+    bool addClause(const std::vector<int> &ps); // Add a clause to the solver.
+    bool addClause_(std::vector<Lit> &ps);      // Add a clause to the solver without making superflous internal copy. Will change the passed vector 'ps'.
 
     bool addTempClause(const std::vector<Lit> &ps); // Add a temp clause that only effects next solve
 
+    // Incremental modelchecking decision domain:
+    //
+    bool inDomain(Var x) const;
+    void setDomain(const std::vector<Var> dvars);
+    void setTempDomain(const std::vector<Var> dvars);
+    void resetTempDomain();
+
     // Solving:
     //
-    bool simplify();                             // Removes already satisfied clauses.
-    bool solve(const std::vector<Lit> &assumps); // Search for a model that respects a given set of assumptions.
-    bool solve();                                // Search without assumptions.
-    lbool solve_main();                          // Search invoked from main.cpp
-    bool okay() const;                           // FALSE means solver is in a conflicting state
+    bool simplify();                              // Removes already satisfied clauses.
+    lbool solve(const std::vector<Lit> &assumps); // Search for a model that respects a given set of assumptions.
+    lbool solve(const std::vector<int> &assumps); // Search for a model that respects a given set of assumptions.
+    lbool solve();                                // Search without assumptions.
+    lbool solve_main();                           // Search invoked from main.cpp
+    bool okay() const;                            // FALSE means solver is in a conflicting state
+
+    void setRestartLimit(int limit); // Set the restart limit.
 
     // Read state:
     //
@@ -107,6 +117,8 @@ class Solver {
     bool solve_in_domain_runtime_flag;  // Decide in domain in runtime.
     std::vector<char> permanent_domain; // A variable is a decision variable in all queries.
     std::vector<char> temporary_domain; // A variable is a decision variable in the next query.
+
+    int restart_limit; // The restart limit.
 
     DecisionBuckets order_list; // A priority queue of variables ordered with respect to the variable activity.
 
@@ -181,12 +193,8 @@ class Solver {
     double progressEstimate() const;
     void relocAll(std::shared_ptr<ClauseAllocator> new_ca);
 
-    // Incremental modelchecking decision domain:
-    //
-    bool inDomain(Var x) const;
-    void setDomain(const std::vector<Var> dvars);
-    void setTempDomain(const std::vector<Var> dvars);
-    void resetTempDomain();
+    // Restart Limit:
+    bool restartInLimit(int current_restarts) const;
 
     // Static helpers:
     //
@@ -236,6 +244,17 @@ inline bool Solver::addClause(const std::vector<Lit> &cls) {
     return addClause_(add_tmp);
 }
 
+inline bool Solver::addClause(const std::vector<int> &cls) {
+    std::vector<Lit> add_tmp;
+    add_tmp.reserve(cls.size());
+    for (int l : cls) {
+        Var v = abs(l);
+        while (v >= nVars()) newVar();
+        add_tmp.push_back(mkLit(v, l < 0));
+    }
+    return addClause_(add_tmp);
+}
+
 inline bool Solver::isRemoved(CRef cr) const { return ca->get_clause(cr).get_mark() == 1; }
 inline bool Solver::locked(const Clause &c) const { return value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && reason(var(c[0])) == &c; }
 inline void Solver::newDecisionLevel() { trail_lim.emplace_back(trail.size()); }
@@ -251,11 +270,11 @@ inline int Solver::nClauses() const { return num_clauses; }
 inline int Solver::nLearnts() const { return num_learnts; }
 inline int Solver::nVars() const { return next_var; }
 
-inline bool Solver::solve() {
+inline lbool Solver::solve() {
     assumptions.clear();
-    return solve_() == l_True;
+    return solve_();
 }
-inline bool Solver::solve(const std::vector<Lit> &assumps) {
+inline lbool Solver::solve(const std::vector<Lit> &assumps) {
     if (temp_cls_activated) {
         assumptions.clear();
         assumptions.emplace_back(mkLit(temp_cls_act_var));
@@ -263,8 +282,22 @@ inline bool Solver::solve(const std::vector<Lit> &assumps) {
         std::copy(assumps.begin(), assumps.end(), assumptions.begin() + 1);
     } else
         assumptions = assumps;
-    return solve_() == l_True;
+    return solve_();
 }
+
+inline lbool Solver::solve(const std::vector<int> &assumps) {
+    std::vector<Lit> assump_lits;
+    assump_lits.reserve(assumps.size());
+    for (int l : assumps) {
+        Var v = abs(l);
+        while (v >= nVars()) newVar();
+        assump_lits.push_back(mkLit(v, l < 0));
+    }
+    return solve(assump_lits);
+}
+
+inline void Solver::setRestartLimit(int limit) { restart_limit = limit; }
+
 inline lbool Solver::solve_main() {
     assumptions.clear();
     return solve_();
@@ -284,6 +317,8 @@ inline void Solver::setTempDomain(const std::vector<Var> dvars) {
 inline void Solver::resetTempDomain() {
     std::fill(temporary_domain.begin(), temporary_domain.end(), 0);
 }
+
+inline bool Solver::restartInLimit(int current_restarts) const { return restart_limit == -1 || current_restarts < restart_limit; }
 
 } // namespace minicore
 

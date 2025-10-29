@@ -86,15 +86,16 @@ Model::Model(Settings settings, shared_ptr<Log> log) : m_settings(settings),
     m_log->L(1, "Model initialized: ",
              m_circuitGraph->numInputs, " inputs, ", m_circuitGraph->numLatches, " latches, ",
              m_circuitGraph->numAnds, " gates, ", m_circuitGraph->numConstraints, " constraints.");
+    m_log->L(1, "COI Refined Model: ",
+             m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
     m_maxId = m_circuitGraph->trueId;
 
     // try to find equivalences
     m_equivalenceManager = make_shared<EquivalenceManager>();
-    m_eqSolverUnsats = 0;
     if (m_settings.eq == 1) {
-        if (!SimplifyModelByTernarySimulation() || m_equivalenceManager->Size() == 0) {
-            SimplifyModelByRandomSimulation();
-        }
+        SimplifyModelByTernarySimulation();
+        ApplyEquivalence();
+        SimplifyModelByRandomSimulation();
     } else if (m_settings.eq == 2) {
         SimplifyModelByTernarySimulation();
     } else if (m_settings.eq == 3) {
@@ -155,6 +156,8 @@ Model::Model(Settings settings, shared_ptr<Log> log) : m_settings(settings),
 
 
 void Model::ApplyEquivalence() {
+    if (m_equivalenceManager->Size() == 0) return;
+
     // refine the model by equivalence
     for (auto it = m_circuitGraph->modelLatches.begin(); it != m_circuitGraph->modelLatches.end();) {
         m_circuitGraph->latchResetMap[*it] = m_equivalenceManager->Find(m_circuitGraph->latchResetMap[*it]);
@@ -183,58 +186,20 @@ void Model::ApplyEquivalence() {
     for (int i = 0; i < m_circuitGraph->constraints.size(); i++) {
         m_circuitGraph->constraints[i] = m_equivalenceManager->Find(m_circuitGraph->constraints[i]);
     }
+
+    m_circuitGraph->COIRefine();
 }
 
 
 void Model::UpdateDependencyMap() {
-    // model inputs
-    unordered_set<int> coi_ids, pcoi_ids;
-    for (auto id : m_circuitGraph->modelLatches) {
-        int pid = m_circuitGraph->latchNextMap[id];
-        coi_ids.emplace(id);
-        coi_ids.emplace(abs(pid));
-    }
-    for (auto id : m_circuitGraph->constraints) {
-        coi_ids.emplace(abs(id));
-        pcoi_ids.emplace(abs(id));
-    }
-    for (auto id : m_circuitGraph->bad) {
-        coi_ids.emplace(abs(id));
-        pcoi_ids.emplace(abs(id));
-    }
-
     for (int i = m_circuitGraph->modelGates.size() - 1; i >= 0; i--) {
         int g = m_circuitGraph->modelGates[i];
-        if (coi_ids.find(g) != coi_ids.end()) {
-            for (int fanin : m_circuitGraph->gatesMap[g].fanins) {
-                coi_ids.emplace(abs(fanin));
-                // dependency
-                assert(abs(fanin) <= g);
-                m_dependencyMap[g].emplace(abs(fanin));
-            }
-        }
-        if (pcoi_ids.find(g) != pcoi_ids.end()) {
-            for (int fanin : m_circuitGraph->gatesMap[g].fanins) {
-                pcoi_ids.emplace(abs(fanin));
-            }
+        for (int fanin : m_circuitGraph->gatesMap[g].fanins) {
+            // dependency
+            assert(abs(fanin) <= g);
+            m_dependencyMap[g].emplace(abs(fanin));
         }
     }
-    m_circuitGraph->modelInputs.clear();
-    for (int id : coi_ids) {
-        if (IsInput(id)) {
-            m_circuitGraph->modelInputs.emplace_back(id);
-        }
-    }
-    sort(m_circuitGraph->modelInputs.begin(), m_circuitGraph->modelInputs.end(), cmp);
-
-    // property coi inputs
-    m_circuitGraph->propertyCOIInputs.clear();
-    for (int id : pcoi_ids) {
-        if (IsInput(id)) {
-            m_circuitGraph->propertyCOIInputs.emplace_back(id);
-        }
-    }
-    sort(m_circuitGraph->propertyCOIInputs.begin(), m_circuitGraph->propertyCOIInputs.end(), cmp);
 }
 
 
@@ -533,17 +498,32 @@ void Model::SimplifyModelByRandomSimulation() {
 
 
     TernarySimulator simulator(m_circuitGraph, m_log);
-    simulator.simulateRandom(256);
+    vector<shared_ptr<unordered_map<int, tbool>>> simulation_values;
+    for (int i = 0; i < NUM_CHUNKS; i++) {
+        simulator.simulateRandom(64);
+        for (auto &values : simulator.getValues()) {
+            simulation_values.emplace_back(values);
+        }
+    }
 
     // find may equivalent latches
     VarMapN64 signaturesVariablesMap;
-    EncodeStatesToN64Signatuers(simulator.getValues(), m_circuitGraph->latches, signaturesVariablesMap);
+    vector<int> eqcheck_latches = m_circuitGraph->modelLatches;
+    eqcheck_latches.emplace_back(TrueId());
+    EncodeStatesToN64Signatuers(simulation_values, eqcheck_latches, signaturesVariablesMap);
     int mayeq_counter = 0;
     int eq_counter = 0;
 
     unordered_set<SignatureN64, SimulationSignatureHash<NUM_CHUNKS>> processed_signatures;
+
+    auto start_time = chrono::steady_clock::now();
     // signatures to equivalent variables
     for (auto &s : signaturesVariablesMap) {
+        if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
+            m_log->L(1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
+            break;
+        }
+
         if (s.second.size() < 2) continue;
         if (processed_signatures.find(s.first) != processed_signatures.end()) continue;
 
@@ -569,13 +549,19 @@ void Model::SimplifyModelByRandomSimulation() {
 
     // find may equivalent variables
     signaturesVariablesMap.clear();
-    EncodeStatesToN64Signatuers(simulator.getValues(), m_circuitGraph->modelGates, signaturesVariablesMap);
+    vector<int> eqcheck_gates = m_circuitGraph->modelGates;
+    eqcheck_gates.emplace_back(TrueId());
+    EncodeStatesToN64Signatuers(simulation_values, eqcheck_gates, signaturesVariablesMap);
     mayeq_counter = 0;
     eq_counter = 0;
 
     processed_signatures.clear();
     // signatures to equivalent variables
     for (auto &s : signaturesVariablesMap) {
+        if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
+            m_log->L(1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
+            break;
+        }
         if (s.second.size() < 2) continue;
         if (processed_signatures.find(s.first) != processed_signatures.end()) continue;
 
@@ -633,7 +619,7 @@ void Model::EncodeStatesToN64Signatuers(const vector<shared_ptr<unordered_map<in
     assert(values.size() == 64 * NUM_CHUNKS);
 
     for (auto l : vars) {
-        SignatureN64 signature{0, 0, 0, 0};
+        SignatureN64 signature;
         for (int i = 0; i < values.size(); i++) {
             const auto &vmapi = *values[i];
             int j = i / 64;
@@ -659,14 +645,16 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     if (init_a != init_b) return false;
 
     // inductive step
-    if (m_equivalenceSolver == nullptr || m_eqSolverUnsats > 2000) {
+    if (m_equivalenceSolver == nullptr || m_eqSolverUnsats > 2000 || m_eqSolverCalls % 2000 == 0) {
         ApplyEquivalence();
+        UpdateDependencyMap();
         CollectNextValueMapping();
         CollectClauses();
 
-        m_equivalenceSolver = make_shared<CaDiCaL::Solver>();
+        m_equivalenceSolver = make_shared<minicore::Solver>();
+        m_equivalenceSolver->setRestartLimit(1);
         for (auto &c : m_clauses) {
-            m_equivalenceSolver->clause(c);
+            m_equivalenceSolver->addClause(c);
         }
         m_eqSolverUnsats = 0;
     }
@@ -677,30 +665,38 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     int a_prime = GetPrime(a);
     int b_prime = GetPrime(b);
     int new_var = GetNewId();
-    m_equivalenceSolver->clause({-new_var, a, -b});
-    m_equivalenceSolver->clause({-new_var, -a, b});
-    m_equivalenceSolver->clause({-new_var, a_prime, b_prime});
-    m_equivalenceSolver->clause({-new_var, -a_prime, -b_prime});
-    m_equivalenceSolver->assume(new_var);
-    bool sat = (m_equivalenceSolver->solve() == 10);
-    if (!sat) {
-        m_equivalenceSolver->clause({a, -b});
-        m_equivalenceSolver->clause({-a, b});
+    m_equivalenceSolver->addClause({-new_var, a, -b});
+    m_equivalenceSolver->addClause({-new_var, -a, b});
+    m_equivalenceSolver->addClause({-new_var, a_prime, b_prime});
+    m_equivalenceSolver->addClause({-new_var, -a_prime, -b_prime});
+
+    auto d = GetCOIDomain(make_shared<cube>(cube{new_var, abs(a), abs(b), abs(a_prime), abs(b_prime)}));
+    m_equivalenceSolver->resetTempDomain();
+    m_equivalenceSolver->setTempDomain(*d);
+    m_eqSolverCalls++;
+
+    minicore::lbool res = m_equivalenceSolver->solve(cube{new_var});
+    bool unsat = (res == minicore::l_False);
+
+    if (unsat) {
+        m_equivalenceSolver->addClause({a, -b});
+        m_equivalenceSolver->addClause({-a, b});
         m_eqSolverUnsats++;
     }
-    return !sat;
+    return unsat;
 }
 
 
 bool Model::CheckGateEquivalenceBySAT(int a, int b) {
-    if (m_equivalenceSolver == nullptr || m_eqSolverUnsats > 2000) {
+    if (m_equivalenceSolver == nullptr || m_eqSolverUnsats > 2000 || m_eqSolverCalls % 2000 == 0) {
         ApplyEquivalence();
         CollectNextValueMapping();
         CollectClauses();
 
-        m_equivalenceSolver = make_shared<CaDiCaL::Solver>();
+        m_equivalenceSolver = make_shared<minicore::Solver>();
+        m_equivalenceSolver->setRestartLimit(1);
         for (auto &c : m_clauses) {
-            m_equivalenceSolver->clause(c);
+            m_equivalenceSolver->addClause(c);
         }
         m_eqSolverUnsats = 0;
     }
@@ -710,16 +706,23 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
     // ((a & !b) | (b & !a))
     // (a | b) & (!a | !b)
     int new_var = GetNewId();
-    m_equivalenceSolver->clause({-new_var, a, b});
-    m_equivalenceSolver->clause({-new_var, -a, -b});
-    m_equivalenceSolver->assume(new_var);
-    bool sat = (m_equivalenceSolver->solve() == 10);
-    if (!sat) {
-        m_equivalenceSolver->clause({a, -b});
-        m_equivalenceSolver->clause({-a, b});
+    m_equivalenceSolver->addClause({-new_var, a, b});
+    m_equivalenceSolver->addClause({-new_var, -a, -b});
+
+    auto d = GetCOIDomain(make_shared<cube>(cube{new_var, abs(a), abs(b)}));
+    m_equivalenceSolver->resetTempDomain();
+    m_equivalenceSolver->setTempDomain(*d);
+    m_eqSolverCalls++;
+
+    minicore::lbool res = m_equivalenceSolver->solve(cube{new_var});
+    bool unsat = (res == minicore::l_False);
+
+    if (unsat) {
+        m_equivalenceSolver->addClause({a, -b});
+        m_equivalenceSolver->addClause({-a, b});
         m_eqSolverUnsats++;
     }
-    return !sat;
+    return unsat;
 }
 
 } // namespace car

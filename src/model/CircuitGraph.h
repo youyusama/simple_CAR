@@ -89,6 +89,9 @@ class CircuitGraph {
     // ture id
     int trueId;
 
+    // refine the COI of property & constraints, get new model inputs, latches, and gates
+    void COIRefine();
+
     // variables really matter
     vector<int> modelInputs;
     vector<int> modelLatches;

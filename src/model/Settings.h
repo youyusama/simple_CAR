@@ -41,6 +41,7 @@ struct Settings {
     bool satSolveInDomain = false;
     int bmc_step = 1;
     int eq = 1;
+    int eqTimeout = 600;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

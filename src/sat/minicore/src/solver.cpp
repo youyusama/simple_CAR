@@ -28,7 +28,7 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false) {
+                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
 }
@@ -678,7 +678,7 @@ lbool Solver::solve_() {
 
     // Search:
     int curr_restarts = 0;
-    while (status == l_Undef) {
+    while (status == l_Undef && restartInLimit(curr_restarts)) {
         double rest_base = luby(restart_inc, curr_restarts);
         status = search(rest_base * restart_first);
         curr_restarts++;

@@ -14,7 +14,7 @@ bool MinicoreSolver::Solve() {
     if (!m_tempClause.empty()) {
         addTempClause(m_tempClause);
     }
-    return solve(m_assumptions);
+    return solve(m_assumptions) == minicore::l_True;
 }
 
 
