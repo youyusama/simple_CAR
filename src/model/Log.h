@@ -44,6 +44,12 @@ class Log {
         m_tick = chrono::steady_clock::now();
     }
 
+    inline double Tock() {
+        return chrono::duration_cast<chrono::duration<double>>(
+                   chrono::steady_clock::now() - m_tick)
+            .count();
+    }
+
     inline void StatMainSolver() {
         m_mainSolverTime += chrono::duration_cast<std::chrono::microseconds>(
             chrono::steady_clock::now() - m_tick);

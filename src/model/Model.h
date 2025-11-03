@@ -260,9 +260,8 @@ class Model {
 
     shared_ptr<EquivalenceManager> m_equivalenceManager;
 
-    shared_ptr<minicore::Solver> m_equivalenceSolver;
+    unique_ptr<minicore::Solver> m_equivalenceSolver;
     int m_eqSolverUnsats{0};
-    int m_eqSolverCalls{0};
 
     unordered_set<int> m_innards;
     vector<int> m_innardsVec;

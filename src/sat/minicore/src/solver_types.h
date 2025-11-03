@@ -45,6 +45,10 @@ inline Lit operator^(Lit p, bool b) {
 }
 inline bool sign(Lit p) { return p.x & 1; }
 inline int var(Lit p) { return p.x >> 1; }
+inline std::string str(Lit p) {
+    if (var(p) == 0) return (sign(p) ? "-a" : "a");
+    return (sign(p) ? "-" : "") + std::to_string(var(p));
+}
 
 inline int toInt(Var v) { return v; }
 inline int toInt(Lit p) { return p.x; }
@@ -241,7 +245,7 @@ class Clause {
         std::string res;
         for (uint32_t i = 0; i < size() && i < 10; i++) {
             Lit p = data()[i];
-            res += std::to_string((!sign(p) ? var(p) : -var(p))) + " ";
+            res += str(p) + " ";
         }
         if (learnt()) res += "learnt";
         return res;
@@ -458,13 +462,13 @@ class ClauseAllocator {
         const size_t total_size = base_size + lits_size + extra_size;
 
         // Align memory for deallocation
-        // constexpr size_t alignment = alignof(Clause);
-        // const size_t aligned_size = (total_size + alignment - 1) & ~(alignment - 1);
-        // assert(total_size == aligned_size);
+        constexpr size_t alignment = alignof(Clause);
+        const size_t aligned_size = (total_size + alignment - 1) & ~(alignment - 1);
+        assert(total_size == aligned_size);
 
         // release memory
         stats_.wasted_memory += total_size;
-        // active_resource_->deallocate(clause, aligned_size, alignment);
+        active_resource_->deallocate(clause, aligned_size, alignof(void *));
     }
 };
 

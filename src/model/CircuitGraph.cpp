@@ -156,6 +156,7 @@ void CircuitGraph::COIRefine() {
         }
     }
     modelInputs = new_modelInputs;
+    sort(modelInputs.begin(), modelInputs.end());
 
     vector<int> new_modelLatches;
     for (int id : modelLatches) {
@@ -164,6 +165,7 @@ void CircuitGraph::COIRefine() {
         }
     }
     modelLatches = new_modelLatches;
+    sort(modelLatches.begin(), modelLatches.end());
 
     vector<int> new_modelGates;
     for (int id : modelGates) {
@@ -172,6 +174,7 @@ void CircuitGraph::COIRefine() {
         }
     }
     modelGates = new_modelGates;
+    sort(modelGates.begin(), modelGates.end());
 }
 
 

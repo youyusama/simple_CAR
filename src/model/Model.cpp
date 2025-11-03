@@ -95,6 +95,7 @@ Model::Model(Settings settings, shared_ptr<Log> log) : m_settings(settings),
     if (m_settings.eq == 1) {
         SimplifyModelByTernarySimulation();
         ApplyEquivalence();
+        UpdateDependencyMap();
         SimplifyModelByRandomSimulation();
     } else if (m_settings.eq == 2) {
         SimplifyModelByTernarySimulation();
@@ -192,6 +193,7 @@ void Model::ApplyEquivalence() {
 
 
 void Model::UpdateDependencyMap() {
+    m_dependencyMap.clear();
     for (int i = m_circuitGraph->modelGates.size() - 1; i >= 0; i--) {
         int g = m_circuitGraph->modelGates[i];
         for (int fanin : m_circuitGraph->gatesMap[g].fanins) {
@@ -275,8 +277,8 @@ shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
         if (m_dependencyMap.find(v) != m_dependencyMap.end()) {
             for (int d : m_dependencyMap[v]) {
                 if (coi_vars.find(d) == coi_vars.end()) {
-                    todo_vars.emplace(d);
-                    coi_vars.emplace(d);
+                    todo_vars.emplace(abs(d));
+                    coi_vars.emplace(abs(d));
                 }
             }
         }
@@ -284,7 +286,7 @@ shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
     }
 
     shared_ptr<cube> domain = make_shared<cube>(coi_vars.begin(), coi_vars.end());
-    domain->emplace_back(m_equivalenceManager->Find(TrueId()));
+    domain->emplace_back(abs(m_equivalenceManager->Find(TrueId())));
     return domain;
 }
 
@@ -425,11 +427,13 @@ void Model::SimplifyClauses() {
 
 
 bool Model::SimplifyModelByTernarySimulation() {
-    m_log->L(1, "Simplify model by ternary simulation");
+    m_log->L(1, "Simplify model by ternary simulation.");
 
+    m_log->Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
     simulator.simulate(250);
     if (!simulator.isCycleReached()) return false;
+    m_log->L(1, "Simulation takes ", m_log->Tock(), " seconds.");
 
     // find equivalent latches
     unordered_map<string, vector<int>> signaturesVariablesMap;
@@ -458,7 +462,7 @@ bool Model::SimplifyModelByTernarySimulation() {
             }
         }
     }
-    m_log->L(1, "Found ", eq_counter, " equivalent latches");
+    m_log->L(1, "Found ", eq_counter, " equivalent latches.");
 
     // find equivalent gates
     unordered_map<string, vector<int>> signaturesGatesMap;
@@ -487,16 +491,17 @@ bool Model::SimplifyModelByTernarySimulation() {
             }
         }
     }
-    m_log->L(1, "Found ", eq_counter, " equivalent gates");
+    m_log->L(1, "Found ", eq_counter, " equivalent gates.");
 
     return true;
 }
 
 
 void Model::SimplifyModelByRandomSimulation() {
-    m_log->L(1, "Simplify model by random simulation");
+    m_log->L(1, "Simplify model by random simulation.");
+    if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
 
-
+    m_log->Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
     vector<shared_ptr<unordered_map<int, tbool>>> simulation_values;
     for (int i = 0; i < NUM_CHUNKS; i++) {
@@ -505,6 +510,7 @@ void Model::SimplifyModelByRandomSimulation() {
             simulation_values.emplace_back(values);
         }
     }
+    m_log->L(1, "Simulation takes ", m_log->Tock(), " seconds.");
 
     // find may equivalent latches
     VarMapN64 signaturesVariablesMap;
@@ -513,8 +519,6 @@ void Model::SimplifyModelByRandomSimulation() {
     EncodeStatesToN64Signatuers(simulation_values, eqcheck_latches, signaturesVariablesMap);
     int mayeq_counter = 0;
     int eq_counter = 0;
-
-    unordered_set<SignatureN64, SimulationSignatureHash<NUM_CHUNKS>> processed_signatures;
 
     auto start_time = chrono::steady_clock::now();
     // signatures to equivalent variables
@@ -525,28 +529,29 @@ void Model::SimplifyModelByRandomSimulation() {
         }
 
         if (s.second.size() < 2) continue;
-        if (processed_signatures.find(s.first) != processed_signatures.end()) continue;
 
         vector<int> may_equal_vars(s.second);
         sort(may_equal_vars.begin(), may_equal_vars.end(), cmp);
 
-        for (int i = 1; i < may_equal_vars.size(); i++) {
-            mayeq_counter++;
-            if (!m_equivalenceManager->IsEquivalent(may_equal_vars[0], may_equal_vars[i]) &&
-                CheckLatchEquivalenceBySAT(may_equal_vars[0], may_equal_vars[i])) {
-                eq_counter++;
-                m_equivalenceManager->AddEquivalence(may_equal_vars[0], may_equal_vars[i]);
+        for (int i = 0; i < may_equal_vars.size() - 1; i++) {
+            if (m_equivalenceManager->HasEquivalence(may_equal_vars[i])) continue;
+
+            for (int j = i + 1; j < may_equal_vars.size(); j++) {
+                if (m_equivalenceManager->HasEquivalence(may_equal_vars[j])) continue;
+
+                mayeq_counter++;
+                if (CheckLatchEquivalenceBySAT(may_equal_vars[i], may_equal_vars[j])) {
+                    eq_counter++;
+                    m_equivalenceManager->AddEquivalence(may_equal_vars[i], may_equal_vars[j]);
+                }
             }
         }
-
-        // record processed
-        processed_signatures.emplace(s.first);
-        processed_signatures.emplace(~s.first);
     }
-    m_log->L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent latches");
-    m_log->L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%");
+    m_log->L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent latches.");
+    if (mayeq_counter > 0)
+        m_log->L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
 
-
+    if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
     // find may equivalent variables
     signaturesVariablesMap.clear();
     vector<int> eqcheck_gates = m_circuitGraph->modelGates;
@@ -555,7 +560,6 @@ void Model::SimplifyModelByRandomSimulation() {
     mayeq_counter = 0;
     eq_counter = 0;
 
-    processed_signatures.clear();
     // signatures to equivalent variables
     for (auto &s : signaturesVariablesMap) {
         if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
@@ -563,7 +567,6 @@ void Model::SimplifyModelByRandomSimulation() {
             break;
         }
         if (s.second.size() < 2) continue;
-        if (processed_signatures.find(s.first) != processed_signatures.end()) continue;
 
         vector<int> may_equal_vars(s.second);
         sort(may_equal_vars.begin(), may_equal_vars.end(), cmp);
@@ -576,13 +579,11 @@ void Model::SimplifyModelByRandomSimulation() {
                 m_equivalenceManager->AddEquivalence(may_equal_vars[0], may_equal_vars[i]);
             }
         }
-
-        // record processed
-        processed_signatures.emplace(s.first);
-        processed_signatures.emplace(~s.first);
     }
-    m_log->L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent gates");
-    m_log->L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%");
+    m_log->L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent gates.");
+    if (mayeq_counter > 0)
+        m_log->L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
+    if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
 }
 
 
@@ -628,35 +629,50 @@ void Model::EncodeStatesToN64Signatuers(const vector<shared_ptr<unordered_map<in
                 signature.chunks[j] |= 1;
             }
         }
-        signatures[signature].emplace_back(l);
-        signature = ~signature;
-        signatures[signature].emplace_back(-l);
+
+        SignatureN64 neg_signature = ~signature;
+        if (signatures.find(signature) != signatures.end()) {
+            signatures[signature].emplace_back(l);
+        } else if (signatures.find(neg_signature) != signatures.end()) {
+            signatures[neg_signature].emplace_back(-l);
+        } else {
+            signatures[signature].emplace_back(l);
+        }
     }
 }
 
 
 bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     // initial step
-    if (m_circuitGraph->latchResetMap.find(abs(a)) == m_circuitGraph->latchResetMap.end() ||
-        m_circuitGraph->latchResetMap.find(abs(b)) == m_circuitGraph->latchResetMap.end())
+    if (m_circuitGraph->latchResetMap.find(abs(a)) == m_circuitGraph->latchResetMap.end())
         return false;
     int init_a = (a > 0) ? m_circuitGraph->latchResetMap[a] : -m_circuitGraph->latchResetMap[-a];
-    int init_b = (b > 0) ? m_circuitGraph->latchResetMap[b] : -m_circuitGraph->latchResetMap[-b];
-    if (init_a != init_b) return false;
+    if (b == TrueId()) {
+        if (init_a != TrueId()) return false;
+    } else if (b == -TrueId()) {
+        if (init_a != -TrueId()) return false;
+    } else {
+        if (m_circuitGraph->latchResetMap.find(abs(b)) == m_circuitGraph->latchResetMap.end())
+            return false;
+        int init_b = (b > 0) ? m_circuitGraph->latchResetMap[b] : -m_circuitGraph->latchResetMap[-b];
+        if (init_a != init_b) return false;
+    }
 
     // inductive step
-    if (m_equivalenceSolver == nullptr || m_eqSolverUnsats > 2000 || m_eqSolverCalls % 2000 == 0) {
+    if (m_equivalenceSolver == nullptr ||
+        m_eqSolverUnsats > 1000) {
+        m_eqSolverUnsats = 0;
         ApplyEquivalence();
         UpdateDependencyMap();
         CollectNextValueMapping();
         CollectClauses();
 
-        m_equivalenceSolver = make_shared<minicore::Solver>();
-        m_equivalenceSolver->setRestartLimit(1);
+        m_equivalenceSolver = make_unique<minicore::Solver>();
         for (auto &c : m_clauses) {
-            m_equivalenceSolver->addClause(c);
+            m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec(c));
         }
-        m_eqSolverUnsats = 0;
+        m_equivalenceSolver->solve_in_domain = true;
+        // m_equivalenceSolver->verbosity = 1;
     }
 
     // (a <-> b) -> (a' <-> b')
@@ -664,23 +680,22 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     // (a | !b) & (!a | b) & (a' | b') & (!a' | !b')
     int a_prime = GetPrime(a);
     int b_prime = GetPrime(b);
-    int new_var = GetNewId();
-    m_equivalenceSolver->addClause({-new_var, a, -b});
-    m_equivalenceSolver->addClause({-new_var, -a, b});
-    m_equivalenceSolver->addClause({-new_var, a_prime, b_prime});
-    m_equivalenceSolver->addClause({-new_var, -a_prime, -b_prime});
 
-    auto d = GetCOIDomain(make_shared<cube>(cube{new_var, abs(a), abs(b), abs(a_prime), abs(b_prime)}));
     m_equivalenceSolver->resetTempDomain();
-    m_equivalenceSolver->setTempDomain(*d);
-    m_eqSolverCalls++;
+    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a, -b}));
+    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a, b}));
+    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a_prime, b_prime}));
+    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a_prime, -b_prime}));
 
-    minicore::lbool res = m_equivalenceSolver->solve(cube{new_var});
+    auto d = GetCOIDomain(make_shared<cube>(cube{abs(a), abs(b), abs(a_prime), abs(b_prime)}));
+    m_equivalenceSolver->setTempDomain(*d);
+
+    minicore::lbool res = m_equivalenceSolver->solve();
     bool unsat = (res == minicore::l_False);
 
     if (unsat) {
-        m_equivalenceSolver->addClause({a, -b});
-        m_equivalenceSolver->addClause({-a, b});
+        m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec({a, -b}));
+        m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec({-a, b}));
         m_eqSolverUnsats++;
     }
     return unsat;
@@ -688,38 +703,39 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
 
 
 bool Model::CheckGateEquivalenceBySAT(int a, int b) {
-    if (m_equivalenceSolver == nullptr || m_eqSolverUnsats > 2000 || m_eqSolverCalls % 2000 == 0) {
+    if (m_equivalenceSolver == nullptr ||
+        m_eqSolverUnsats > 1000) {
+        m_eqSolverUnsats = 0;
         ApplyEquivalence();
+        UpdateDependencyMap();
         CollectNextValueMapping();
         CollectClauses();
 
-        m_equivalenceSolver = make_shared<minicore::Solver>();
+        m_equivalenceSolver = make_unique<minicore::Solver>();
         m_equivalenceSolver->setRestartLimit(1);
         for (auto &c : m_clauses) {
-            m_equivalenceSolver->addClause(c);
+            m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec(c));
         }
-        m_eqSolverUnsats = 0;
+        m_equivalenceSolver->solve_in_domain = true;
     }
 
     // (a <-> b)
     // !(a <-> b) is unsat
     // ((a & !b) | (b & !a))
     // (a | b) & (!a | !b)
-    int new_var = GetNewId();
-    m_equivalenceSolver->addClause({-new_var, a, b});
-    m_equivalenceSolver->addClause({-new_var, -a, -b});
-
-    auto d = GetCOIDomain(make_shared<cube>(cube{new_var, abs(a), abs(b)}));
     m_equivalenceSolver->resetTempDomain();
-    m_equivalenceSolver->setTempDomain(*d);
-    m_eqSolverCalls++;
+    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a, b}));
+    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a, -b}));
 
-    minicore::lbool res = m_equivalenceSolver->solve(cube{new_var});
+    auto d = GetCOIDomain(make_shared<cube>(cube{abs(a), abs(b)}));
+    m_equivalenceSolver->setTempDomain(*d);
+
+    minicore::lbool res = m_equivalenceSolver->solve();
     bool unsat = (res == minicore::l_False);
 
     if (unsat) {
-        m_equivalenceSolver->addClause({a, -b});
-        m_equivalenceSolver->addClause({-a, b});
+        m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec({a, -b}));
+        m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec({-a, b}));
         m_eqSolverUnsats++;
     }
     return unsat;

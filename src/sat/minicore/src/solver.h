@@ -25,17 +25,17 @@ class Solver {
     // Constructor/Destructor:
     //
     Solver();
-    virtual ~Solver();
+    ~Solver();
 
     // Problem specification:
     //
     Var newVar(); // Add a new variable with parameters specifying variable mode.
 
     bool addClause(const std::vector<Lit> &ps); // Add a clause to the solver.
-    bool addClause(const std::vector<int> &ps); // Add a clause to the solver.
     bool addClause_(std::vector<Lit> &ps);      // Add a clause to the solver without making superflous internal copy. Will change the passed vector 'ps'.
 
     bool addTempClause(const std::vector<Lit> &ps); // Add a temp clause that only effects next solve
+    bool solve_in_domain;                           // Deciside in domain.
 
     // Incremental modelchecking decision domain:
     //
@@ -54,6 +54,8 @@ class Solver {
     bool okay() const;                            // FALSE means solver is in a conflicting state
 
     void setRestartLimit(int limit); // Set the restart limit.
+
+    std::vector<Lit> intVec2LitVec(const std::vector<int> &vec); // Convert a vector of integers to a vector of literals.
 
     // Read state:
     //
@@ -113,7 +115,6 @@ class Solver {
     std::vector<VarData> vardata; // Stores reason and level for each variable.
     OccLists watches;             // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
 
-    bool solve_in_domain;               // Deciside in domain.
     bool solve_in_domain_runtime_flag;  // Decide in domain in runtime.
     std::vector<char> permanent_domain; // A variable is a decision variable in all queries.
     std::vector<char> temporary_domain; // A variable is a decision variable in the next query.
@@ -244,17 +245,6 @@ inline bool Solver::addClause(const std::vector<Lit> &cls) {
     return addClause_(add_tmp);
 }
 
-inline bool Solver::addClause(const std::vector<int> &cls) {
-    std::vector<Lit> add_tmp;
-    add_tmp.reserve(cls.size());
-    for (int l : cls) {
-        Var v = abs(l);
-        while (v >= nVars()) newVar();
-        add_tmp.push_back(mkLit(v, l < 0));
-    }
-    return addClause_(add_tmp);
-}
-
 inline bool Solver::isRemoved(CRef cr) const { return ca->get_clause(cr).get_mark() == 1; }
 inline bool Solver::locked(const Clause &c) const { return value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && reason(var(c[0])) == &c; }
 inline void Solver::newDecisionLevel() { trail_lim.emplace_back(trail.size()); }
@@ -272,6 +262,9 @@ inline int Solver::nVars() const { return next_var; }
 
 inline lbool Solver::solve() {
     assumptions.clear();
+    if (temp_cls_activated) {
+        assumptions.emplace_back(mkLit(temp_cls_act_var));
+    }
     return solve_();
 }
 inline lbool Solver::solve(const std::vector<Lit> &assumps) {
@@ -319,6 +312,17 @@ inline void Solver::resetTempDomain() {
 }
 
 inline bool Solver::restartInLimit(int current_restarts) const { return restart_limit == -1 || current_restarts < restart_limit; }
+
+inline std::vector<Lit> Solver::intVec2LitVec(const std::vector<int> &vec) {
+    std::vector<Lit> res;
+    res.reserve(vec.size());
+    for (int l : vec) {
+        Var v = abs(l);
+        while (v >= nVars()) newVar();
+        res.push_back(mkLit(v, l < 0));
+    }
+    return res;
+}
 
 } // namespace minicore
 

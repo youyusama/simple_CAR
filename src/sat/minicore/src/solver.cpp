@@ -92,7 +92,6 @@ bool Solver::addClause_(std::vector<Lit> &ps) {
 bool Solver::addTempClause(const std::vector<Lit> &cls) {
     assert(decisionLevel() == 0);
     if (!ok) return false;
-    assert(!temp_cls_activated);
     temp_cls_activated = true;
     temporary_domain[temp_cls_act_var] = 1;
 

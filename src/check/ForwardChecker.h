@@ -60,8 +60,12 @@ class ForwardChecker : public BaseChecker {
             float score_a = 0, score_b = 0;
             for (int i = 0; i < a.size(); i++) {
                 score_a += branching->PriorityOf(a[i]);
+            }
+            score_a /= a.size();
+            for (int i = 0; i < b.size(); i++) {
                 score_b += branching->PriorityOf(b[i]);
             }
+            score_b /= b.size();
             return score_a > score_b;
         }
     } blockerOrder;
