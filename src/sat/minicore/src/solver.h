@@ -1,6 +1,7 @@
 #ifndef MINICORE_SOLVER_H
 #define MINICORE_SOLVER_H
 
+#include "cstring"
 #include "math.h"
 #include "solver_types.h"
 #include "utils.hpp"
@@ -230,9 +231,12 @@ inline void Solver::varBumpActivity(Var v) {
 }
 
 inline void Solver::claBumpActivity(Clause &c) {
-    cla_inc++;
-    c.activity() += cla_inc;
-    c.activity() = c.activity() >> 1;
+    if ((c.activity() += cla_inc) > 1e20) {
+        // Rescale:
+        for (int i = 0; i < learnts.size(); i++)
+            ca->get_clause(learnts[i]).activity() *= 1e-20;
+        cla_inc *= 1e-20;
+    }
 }
 
 inline void Solver::checkGarbage(void) {
@@ -246,7 +250,7 @@ inline bool Solver::addClause(const std::vector<Lit> &cls) {
 }
 
 inline bool Solver::isRemoved(CRef cr) const { return ca->get_clause(cr).get_mark() == 1; }
-inline bool Solver::locked(const Clause &c) const { return value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && reason(var(c[0])) == &c; }
+inline bool Solver::locked(const Clause &c) const { return value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && reason(var(c[0])) == ca->get_ref(c); }
 inline void Solver::newDecisionLevel() { trail_lim.emplace_back(trail.size()); }
 
 inline size_t Solver::decisionLevel() const { return trail_lim.size(); }

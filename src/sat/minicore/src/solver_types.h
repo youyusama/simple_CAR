@@ -3,11 +3,10 @@
 
 #include <algorithm>
 #include <assert.h>
-#include <functional>
+#include <iomanip>
 #include <iostream>
-#include <list>
 #include <memory>
-#include <memory_resource>
+#include <sstream>
 #include <stdint.h>
 #include <vector>
 
@@ -15,12 +14,12 @@ namespace minicore {
 
 
 // variable
-typedef int Var;
+typedef int32_t Var;
 const Var var_Undef = -1;
 
 // literal
 struct Lit {
-    int x;
+    int32_t x;
 
     friend Lit mkLit(Var var, bool sign);
 
@@ -106,13 +105,13 @@ const lbool l_Undef((uint8_t)2);
 
 
 // clause reference
-using CRef = void *;
-static constexpr CRef CRef_Undef = nullptr;
+using CRef = uint32_t;
+const CRef CRef_Undef = UINT32_MAX;
 
 
 // clause
 class Clause {
-  public:
+  private:
     struct Header {
         uint32_t mark : 2;
         uint32_t learnt : 1;
@@ -121,87 +120,75 @@ class Clause {
         uint32_t size : 27;
     };
 
-  private:
-    Header header;
+    Header header_;
 
-    Lit *data() noexcept {
+  public:
+    Lit *lits() noexcept {
         return reinterpret_cast<Lit *>(this + 1);
     }
 
-    const Lit *data() const noexcept {
+    const Lit *lits() const noexcept {
         return reinterpret_cast<const Lit *>(this + 1);
     }
 
-  public:
     // Disable copying
     Clause(const Clause &) = delete;
     Clause &operator=(const Clause &) = delete;
 
     // Constructor for new clauses
-    Clause(const std::vector<Lit> &ps, bool use_extra, bool learnt) {
-        header = {0, static_cast<uint32_t>(learnt), static_cast<uint32_t>(use_extra), 0, static_cast<uint32_t>(ps.size())};
+    explicit Clause(const std::vector<Lit> &ps, bool learnt) {
+        header_ = {0,
+                   static_cast<uint32_t>(learnt),
+                   static_cast<uint32_t>(learnt),
+                   0,
+                   static_cast<uint32_t>(ps.size())};
         if (!ps.empty()) {
-            std::copy(ps.begin(), ps.end(), data());
+            std::copy(ps.begin(), ps.end(), lits());
         }
-        if (header.has_extra) {
-            if (header.learnt) {
+        if (header_.has_extra) {
+            if (header_.learnt)
                 activity() = 0.0f;
-            } else {
-                calc_abstraction();
-            }
         }
     }
 
     // Constructor for cloning clauses
-    Clause(const Clause &other, bool use_extra) : header(other.header) {
-        header.has_extra = use_extra;
-        if (header.size > 0) {
-            std::copy_n(other.data(), header.size, data());
+    explicit Clause(const Clause &other, bool use_extra) : header_(other.header_) {
+        header_.has_extra = use_extra;
+        if (header_.size > 0) {
+            std::copy_n(other.lits(), header_.size, lits());
         }
-        if (header.has_extra && other.header.has_extra) {
-            if (header.learnt) {
+        if (header_.has_extra && other.header_.has_extra) {
+            if (header_.learnt) {
                 activity() = other.activity();
-            } else {
-                abstraction() = other.abstraction();
             }
         }
     }
 
-    void calc_abstraction() noexcept {
-        assert(has_extra() && !learnt());
-        uint32_t abs = 0;
-        for (uint32_t i = 0; i < header.size; ++i) {
-            abs |= 1 << (var(data()[i]) & 31);
-        }
-        extra_field() = abs;
-    }
-
     // Accessors
-    uint32_t size() const noexcept { return header.size; }
-    bool learnt() const noexcept { return header.learnt; }
-    bool has_extra() const noexcept { return header.has_extra; }
-    uint32_t get_mark() const noexcept { return header.mark; }
-    void set_mark(uint32_t m) noexcept { header.mark = m; }
-    bool reloced() const noexcept { return header.reloced; }
+    uint32_t size() const noexcept { return header_.size; }
+    bool learnt() const noexcept { return header_.learnt; }
+    bool has_extra() const noexcept { return header_.has_extra; }
+    uint32_t get_mark() const noexcept { return header_.mark; }
+    void set_mark(uint32_t m) noexcept { header_.mark = m; }
+    bool reloced() const noexcept { return header_.reloced; }
 
     CRef relocation() const noexcept {
-        assert(reloced());
-        return *reinterpret_cast<const CRef *>(data());
+        return *reinterpret_cast<const CRef *>(lits());
     }
 
     void relocate(CRef c) noexcept {
         assert(!reloced());
-        header.reloced = 1;
-        *reinterpret_cast<CRef *>(data()) = c;
+        header_.reloced = 1;
+        *reinterpret_cast<CRef *>(lits()) = c;
     }
 
     // Memory operations
     void shrink(uint32_t n) noexcept {
         assert(n <= size());
-        if (has_extra() && n > 0) {
-            extra_field() = *reinterpret_cast<uint32_t *>(data() + header.size);
+        if (has_extra()) {
+            lits()[header_.size - n] = lits()[header_.size];
         }
-        header.size -= n;
+        header_.size -= n;
     }
 
     void pop() noexcept { shrink(1); }
@@ -209,161 +196,171 @@ class Clause {
     // Element access
     const Lit &operator[](uint32_t i) const noexcept {
         assert(i < size());
-        return data()[i];
+        return lits()[i];
     }
 
     Lit &operator[](uint32_t i) noexcept {
         assert(i < size());
-        return data()[i];
+        return lits()[i];
     }
 
-    operator const Lit *() const noexcept { return data(); }
+    operator const Lit *() const noexcept { return lits(); }
     const Lit &last() const noexcept { return (*this)[size() - 1]; }
 
     // Extra field access
-    uint32_t &activity() noexcept {
+    float &activity() noexcept {
         assert(has_extra() && learnt());
-        return *reinterpret_cast<uint32_t *>(data() + header.size);
+        return *reinterpret_cast<float *>(lits() + header_.size);
     }
 
-    uint32_t activity() const noexcept {
+    float activity() const noexcept {
         assert(has_extra() && learnt());
-        return *reinterpret_cast<const uint32_t *>(data() + header.size);
-    }
-
-    uint32_t &abstraction() noexcept {
-        assert(has_extra() && !learnt());
-        return *reinterpret_cast<uint32_t *>(data() + header.size);
-    }
-
-    uint32_t abstraction() const noexcept {
-        assert(has_extra() && !learnt());
-        return *reinterpret_cast<const uint32_t *>(data() + header.size);
+        return *reinterpret_cast<const float *>(lits() + header_.size);
     }
 
     std::string tostring() const noexcept {
         std::string res;
         for (uint32_t i = 0; i < size() && i < 10; i++) {
-            Lit p = data()[i];
+            Lit p = lits()[i];
             res += str(p) + " ";
         }
         if (learnt()) res += "learnt";
         return res;
     }
-
-  private:
-    uint32_t &extra_field() noexcept {
-        return *reinterpret_cast<uint32_t *>(data() + header.size);
-    }
-
-    friend class ClauseAllocator;
 };
 
 
-class TrackingMemoryResource : public std::pmr::memory_resource {
-  public:
-    explicit TrackingMemoryResource(std::pmr::memory_resource *upstream =
-                                        std::pmr::get_default_resource())
-        : upstream_(upstream), allocated_(0), wasted_(0) {}
-
-    size_t allocated() const noexcept { return allocated_; }
-    size_t wasted() const noexcept { return wasted_; }
-    void reset_stats() noexcept {
-        allocated_ = 0;
-        wasted_ = 0;
-    }
-
-    void *do_allocate(size_t bytes, size_t alignment) override {
-        void *p = upstream_->allocate(bytes, alignment);
-        if (p) allocated_ += bytes;
-        return p;
-    }
-
-    void do_deallocate(void *p, size_t bytes, size_t alignment) override {
-        if (p) {
-            wasted_ += bytes;
-            upstream_->deallocate(p, bytes, alignment);
-        }
-    }
-
-    bool do_is_equal(const std::pmr::memory_resource &other) const noexcept override {
-        return this == &other;
-    }
-
-  private:
-    std::pmr::memory_resource *upstream_;
-    size_t allocated_;
-    size_t wasted_;
-};
-
-
-// clause allocator
 class ClauseAllocator {
   private:
-    // Constants
-    static constexpr size_t INITIAL_BUFFER_SIZE = 16 * 1024;
+    uint8_t *base_;         // memory base pointer
+    size_t capacity_;       // memory capacity
+    uint32_t allocated_{0}; // pointer to next free location in memory
+    size_t wasted_{0};      //  wasted bytes for freed clauses
 
-    // Memory resource management
-    TrackingMemoryResource tracking_resource_;
-    std::pmr::monotonic_buffer_resource buffer_resource_;
-    std::pmr::memory_resource *active_resource_;
+    static constexpr size_t INITIAL_SIZE_ = 1 << 20;
+    static constexpr uint8_t GROWTH_FACTOR_ = 2;
+    static constexpr size_t MINIMAL_ALIGNMENT_ = 4;
 
-    // Statistics
-    struct {
-        size_t clause_allocs = 0;
-        size_t wasted_memory = 0;
-    } stats_;
+    static inline uint32_t align_offset(uint32_t offset) {
+        return (offset + MINIMAL_ALIGNMENT_ - 1) & ~(MINIMAL_ALIGNMENT_ - 1);
+    }
+
+    void grow(size_t required_size) {
+        size_t new_capacity = capacity_ * GROWTH_FACTOR_;
+        while (new_capacity < required_size) {
+            new_capacity *= GROWTH_FACTOR_;
+        }
+
+        uint8_t *new_base = nullptr;
+        try {
+            new_base = new uint8_t[new_capacity];
+        } catch (std::bad_alloc &e) {
+            std::cerr << "Fatal Error: Memory allocation failed during ClauseAllocator expansion." << std::endl;
+            std::cerr << "Required size: " << new_capacity << " bytes." << std::endl;
+            std::cerr << "Exception: " << e.what() << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+
+        std::memcpy(new_base, base_, allocated_);
+
+        delete[] base_;
+        base_ = new_base;
+        capacity_ = new_capacity;
+    }
 
   public:
     explicit ClauseAllocator()
-        : buffer_resource_(
-              tracking_resource_.allocate(INITIAL_BUFFER_SIZE, alignof(std::max_align_t)),
-              INITIAL_BUFFER_SIZE,
-              &tracking_resource_),
-          active_resource_(&buffer_resource_) {
+        : capacity_(INITIAL_SIZE_) {
+        try {
+            base_ = new uint8_t[capacity_];
+        } catch (std::bad_alloc &e) {
+            std::cerr << "Fatal Error: Initial memory allocation failed for ClauseAllocator." << std::endl;
+            std::cerr << "Required size: " << capacity_ << " bytes." << std::endl;
+            std::cerr << "Exception: " << e.what() << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
     }
 
     explicit ClauseAllocator(size_t initial_size)
-        : buffer_resource_(
-              tracking_resource_.allocate(initial_size, alignof(std::max_align_t)),
-              initial_size,
-              &tracking_resource_),
-          active_resource_(&buffer_resource_) {
+        : capacity_(initial_size) {
+        try {
+            base_ = new uint8_t[capacity_];
+        } catch (std::bad_alloc &e) {
+            std::cerr << "Fatal Error: Initial memory allocation failed for ClauseAllocator." << std::endl;
+            std::cerr << "Required size: " << capacity_ << " bytes." << std::endl;
+            std::cerr << "Exception: " << e.what() << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
     }
 
     ~ClauseAllocator() {
-        buffer_resource_.release();
+        delete[] base_;
     }
 
-    // Disallow copying
     ClauseAllocator(const ClauseAllocator &) = delete;
     ClauseAllocator &operator=(const ClauseAllocator &) = delete;
 
-    // ================================
-    // Public Interface
-    // ================================
-
-    // Allocate a new clause
-    inline CRef alloc(const std::vector<Lit> &ps, bool learnt = false) {
-
-        // Large clause handling
-        return allocate_large(ps, learnt, learnt);
+    Clause &get_clause(CRef ref) const noexcept {
+        assert(ref < allocated_);
+        return *reinterpret_cast<Clause *>(base_ + ref);
     }
 
-    inline CRef alloc(const Clause &from) {
-        const bool use_extra = from.learnt();
+    CRef get_ref(const Clause &c) const noexcept {
+        const uint8_t *clause_ptr = reinterpret_cast<const uint8_t *>(&c);
 
-        // Large clause handling
-        return allocate_large(from, use_extra);
+        const uint8_t *base_ptr = base_;
+        assert(clause_ptr >= base_ptr && clause_ptr < base_ptr + allocated_);
+        size_t offset = clause_ptr - base_ptr;
+        assert(offset <= std::numeric_limits<uint32_t>::max());
+
+        return static_cast<CRef>(offset);
     }
 
-    // Release a clause
+    size_t clause_size(size_t size, bool use_extra) const noexcept {
+        return (1 + size + (use_extra ? 1 : 0)) * sizeof(Lit);
+    }
+
+    CRef alloc(const std::vector<Lit> &ps, bool learnt) {
+        size_t aligned_size = clause_size(ps.size(), learnt);
+        size_t new_offset = align_offset(allocated_);
+
+        if (new_offset + aligned_size > capacity_) {
+            grow(new_offset + aligned_size);
+        }
+
+        CRef ref = new_offset;
+        void *mem = base_ + ref;
+
+        new (mem) Clause(ps, learnt);
+
+        allocated_ = new_offset + aligned_size;
+
+        return ref;
+    }
+
+    CRef alloc(const Clause &from) {
+        size_t aligned_size = clause_size(from.size(), from.has_extra());
+        size_t new_offset = align_offset(allocated_);
+
+        if (new_offset + aligned_size > capacity_) {
+            grow(new_offset + aligned_size);
+        }
+
+        CRef ref = new_offset;
+        void *mem = base_ + ref;
+
+        new (mem) Clause(from, from.has_extra());
+
+        allocated_ = new_offset + aligned_size;
+
+        return ref;
+    }
+
     void free(CRef ref) {
-        // Large clause - handle through PMR
-        release_large(ref);
+        Clause &c = get_clause(ref);
+        wasted_ += clause_size(c.size(), c.has_extra());
     }
 
-    // relocate clause in another allocator
     void reloc(CRef &cr, std::shared_ptr<ClauseAllocator> to) {
         Clause &c = get_clause(cr);
 
@@ -372,104 +369,15 @@ class ClauseAllocator {
             return;
         }
 
-        cr = to->alloc(c);
-        c.relocate(cr);
+        CRef new_cr = to->alloc(c);
+
+        c.relocate(new_cr);
+        cr = new_cr;
     }
 
-    // Access clause data
-    Clause &get_clause(CRef ref) const noexcept {
-        return *reinterpret_cast<Clause *>(ref);
-    }
-
-    // Statistics access
-    size_t allocated_memory() const noexcept { return tracking_resource_.allocated(); }
-    size_t wasted_memory() const noexcept { return stats_.wasted_memory; }
-    size_t active_memory() const noexcept { return allocated_memory() - wasted_memory(); }
-
-    void reset_statistics() noexcept {
-        stats_ = {};
-        tracking_resource_.reset_stats();
-    }
-
-  private:
-    // ================================
-    // Private Implementation
-    // ================================
-
-    static inline size_t round_up(size_t x, size_t a) {
-        return (x + a - 1) & ~(a - 1);
-    }
-
-    // Large clause allocation
-    CRef allocate_large(const std::vector<Lit> &ps, bool learnt, bool use_extra) {
-        stats_.clause_allocs++;
-
-        // Calculate required memory
-        const size_t base_size = sizeof(Clause);
-        const size_t lits_size = sizeof(Lit) * ps.size();
-        const size_t extra_size = use_extra ? sizeof(uint32_t) : 0;
-
-        const size_t tail_padded = round_up(lits_size + extra_size, alignof(void *));
-        const size_t total_size = base_size + tail_padded;
-
-        // Align memory for Clause
-        // constexpr size_t alignment = alignof(Clause);
-        // const size_t aligned_size = (total_size + alignment - 1) & ~(alignment - 1);
-        // assert(total_size == aligned_size);
-
-        // Allocate memory through PMR
-        void *mem = active_resource_->allocate(total_size, alignof(void *));
-
-        // Construct clause in place
-        Clause *clause = new (mem) Clause(ps, use_extra, learnt);
-        return reinterpret_cast<CRef>(clause);
-    }
-
-    CRef allocate_large(const Clause &from, bool use_extra) {
-        stats_.clause_allocs++;
-
-        // Calculate required memory
-        const size_t base_size = sizeof(Clause);
-        const size_t lits_size = sizeof(Lit) * from.size();
-        const size_t extra_size = use_extra ? sizeof(uint32_t) : 0;
-
-        const size_t tail_padded = round_up(lits_size + extra_size, alignof(void *));
-        const size_t total_size = base_size + tail_padded;
-
-        // Align memory for Clause
-        // constexpr size_t alignment = alignof(Clause);
-        // const size_t aligned_size = (total_size + alignment - 1) & ~(alignment - 1);
-        // assert(total_size == aligned_size);
-
-        // Allocate memory through PMR
-        void *mem = active_resource_->allocate(total_size, alignof(void *));
-
-        // Construct clause in place
-        Clause *clause = new (mem) Clause(from, use_extra);
-        return reinterpret_cast<CRef>(clause);
-    }
-
-
-    // Large clause release
-    void release_large(CRef ref) {
-        Clause *clause = reinterpret_cast<Clause *>(ref);
-
-        // Calculate memory size
-        const bool use_extra = clause->has_extra();
-        const size_t base_size = sizeof(Clause);
-        const size_t lits_size = sizeof(Lit) * clause->size();
-        const size_t extra_size = use_extra ? sizeof(uint32_t) : 0;
-        const size_t total_size = base_size + lits_size + extra_size;
-
-        // Align memory for deallocation
-        constexpr size_t alignment = alignof(Clause);
-        const size_t aligned_size = (total_size + alignment - 1) & ~(alignment - 1);
-        assert(total_size == aligned_size);
-
-        // release memory
-        stats_.wasted_memory += total_size;
-        active_resource_->deallocate(clause, aligned_size, alignof(void *));
-    }
+    size_t allocated_memory() const { return allocated_; }
+    size_t wasted_memory() const { return wasted_; }
+    size_t total_capacity() const { return capacity_; }
 };
 
 
@@ -503,6 +411,7 @@ struct VarOrderLt {
 struct reduceDB_lt {
     std::shared_ptr<ClauseAllocator> ca_;
     reduceDB_lt(std::shared_ptr<ClauseAllocator> ca) : ca_(ca) {}
+    void update(std::shared_ptr<ClauseAllocator> ca) { ca_ = ca; }
     bool operator()(CRef x, CRef y) {
         return ca_->get_clause(x).size() > 2 &&
                (ca_->get_clause(y).size() == 2 ||
@@ -518,6 +427,8 @@ class OccLists {
 
   public:
     explicit OccLists(std::shared_ptr<ClauseAllocator> ca) : cls_allocator(ca) {}
+
+    void update(std::shared_ptr<ClauseAllocator> ca) { cls_allocator = ca; }
 
     void ensure(size_t key) {
         dirty_flags.resize(key, false);

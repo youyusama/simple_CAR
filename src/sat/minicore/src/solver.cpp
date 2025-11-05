@@ -810,11 +810,12 @@ void Solver::relocAll(std::shared_ptr<ClauseAllocator> new_ca) {
 
 
 void Solver::garbageCollect() {
-    // std::cout << "garbage collect" << std::endl;
     std::shared_ptr<ClauseAllocator> new_ca =
-        std::make_shared<ClauseAllocator>(ca->allocated_memory());
+        std::make_shared<ClauseAllocator>(ca->total_capacity());
     relocAll(new_ca);
     ca = new_ca;
+    reduce_db_lt.update(ca);
+    watches.update(ca);
 }
 
 
