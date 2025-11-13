@@ -84,6 +84,10 @@ add_executable(simpleCAR ${SRCS})
 target_include_directories(simpleCAR PUBLIC ${DIRS})
 target_link_libraries(simpleCAR PUBLIC ${LIBS})
 
-target_link_options(simpleCAR PUBLIC 
-    $<$<CONFIG:Release>:-s -static -flto>
-)
+if(APPLE)
+    # On macOS, avoid -static (causes missing crt0.o); keep strip and LTO.
+    target_link_options(simpleCAR PUBLIC $<$<CONFIG:Release>:-s -flto>)
+else()
+    # On other Unices we may use static linking for release builds.
+    target_link_options(simpleCAR PUBLIC $<$<CONFIG:Release>:-s -static -flto>)
+endif()
