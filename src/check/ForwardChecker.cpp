@@ -478,7 +478,6 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
 // @output:
 // ================================================================================
 bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
-    [[maybe_unused]] auto scoped = m_log->Section("FC_Gen");
     [[maybe_unused]] auto setupScope = m_log->Section("FC_Gen_Set");
     unordered_set<int> required_lits;
 
@@ -529,7 +528,6 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
 
 
 bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses) {
-    [[maybe_unused]] auto scoped = m_log->Section("FC_Down");
     [[maybe_unused]] auto downSetup = m_log->Section("FC_Dn_Set");
     int ctgs = 0;
     m_log->L(3, "Down:", CubeToStr(uc));
