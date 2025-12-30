@@ -46,6 +46,7 @@ set(SRCS
     src/check/BasicIC3.cpp
     src/model/SATSolver.cpp
     src/model/IncrCheckerHelpers.cpp
+    src/SimpleCAR.cpp
     src/main.cpp
     # restart
     src/model/Restart.h
