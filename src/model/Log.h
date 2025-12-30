@@ -31,6 +31,7 @@ class Log {
 
     class ScopedTimer {
       public:
+        ScopedTimer() : m_log(nullptr), m_active(false) {}
         ScopedTimer(Log &log, string name);
         ~ScopedTimer();
         ScopedTimer(const ScopedTimer &) = delete;
@@ -61,7 +62,10 @@ class Log {
 
     void PrintStatistics();
 
-    ScopedTimer Section(const string &name) { return ScopedTimer(*this, name); }
+    ScopedTimer Section(const string &name) {
+        if (m_verbosity == 0) return ScopedTimer();
+        return ScopedTimer(*this, name);
+    }
 
     inline void Tick() {
         m_tick = chrono::steady_clock::now();
