@@ -39,6 +39,7 @@ void ForwardChecker::Witness() {
 }
 
 bool ForwardChecker::Check(int badId) {
+    [[maybe_unused]] auto checkScope = m_log->Section("FC_Check");
     Init(badId);
     m_log->L(2, "Initialized");
 
@@ -68,6 +69,7 @@ bool ForwardChecker::Check(int badId) {
     m_k = 0;
     stack<Task> workingStack;
     while (true) {
+        [[maybe_unused]] auto frameScope = m_log->Section("FC_Frame");
         m_minUpdateLevel = m_k + 1;
         if (m_settings.dt) { // Dynamic Traversal
             shared_ptr<vector<shared_ptr<State>>> dtseq = m_underSequence.GetSeqDT();
@@ -84,9 +86,7 @@ bool ForwardChecker::Check(int badId) {
         m_log->L(2, "Start Frame: ", m_k);
         m_log->L(2, "Working Stack Size: ", workingStack.size());
 
-        m_log->Tick();
         shared_ptr<State> startState = EnumerateStartState();
-        m_log->StatStartSolver();
         // T & c & P & T' & c' & bad' is unsat
         if (m_k > 0 && startState == nullptr && m_overSequence->IsEmpty(m_k)) {
             m_overSequence->SetInvariantLevel(-1);
@@ -99,6 +99,7 @@ bool ForwardChecker::Check(int badId) {
             workingStack.emplace(startState, m_k - 1);
 
             while (!workingStack.empty()) {
+                [[maybe_unused]] auto taskScope = m_log->Section("FC_Task");
                 Task &task = workingStack.top();
 
                 if (m_settings.restart && m_restart->RestartCheck()) {
@@ -110,12 +111,13 @@ bool ForwardChecker::Check(int badId) {
                     continue;
                 }
 
-                m_log->Tick();
-                while (task.frameLevel < m_k &&
-                       m_overSequence->IsBlockedByFrameLazy(*task.state->latches, task.frameLevel + 1)) {
-                    task.frameLevel++;
+                {
+                    [[maybe_unused]] auto levelScope = m_log->Section("FC_GetNewLevel");
+                    while (task.frameLevel < m_k &&
+                           m_overSequence->IsBlockedByFrameLazy(*task.state->latches, task.frameLevel + 1)) {
+                        task.frameLevel++;
+                    }
                 }
-                m_log->StatGetNewLevel();
 
                 if (task.frameLevel >= m_k) {
                     workingStack.pop();
@@ -139,9 +141,7 @@ bool ForwardChecker::Check(int badId) {
                 OrderAssumption(assumption);
                 GetPrimed(assumption);
                 if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
-                m_log->Tick();
-                bool result = IsReachable(task.frameLevel, assumption);
-                m_log->StatMainSolver();
+                bool result = IsReachable(task.frameLevel, assumption, "SAT_R_Main");
                 if (result) {
                     // Solver return SAT, get a new State, then continue
                     m_log->L(2, "Result >>> SAT <<<");
@@ -173,9 +173,7 @@ bool ForwardChecker::Check(int badId) {
                     if (m_settings.satSolveInDomain) PopDomain();
                 }
             } // end while (!workingStack.empty())
-            m_log->Tick();
             startState = EnumerateStartState();
-            m_log->StatStartSolver();
         }
 
         // inv
@@ -215,6 +213,7 @@ bool ForwardChecker::Check(int badId) {
 
 
 void ForwardChecker::Init(int badId) {
+    [[maybe_unused]] auto initScope = m_log->Section("FC_Init");
     shared_ptr<cube> inputs(new cube(State::numInputs, 0));
     shared_ptr<cube> latches(new cube(m_model->GetInitialState()));
     m_initialState.reset(new State(nullptr, inputs, latches, 0));
@@ -257,9 +256,8 @@ void ForwardChecker::Init(int badId) {
 }
 
 bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck) {
+    [[maybe_unused]] auto scoped = m_log->Section("DS_AddUC");
     m_restart->UcCountsPlus1();
-    m_log->Tick();
-
     if (!m_overSequence->Insert(*uc, frameLevel, implyCheck)) return false;
 
     if (frameLevel >= m_transSolvers.size()) {
@@ -278,23 +276,31 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, b
         m_minUpdateLevel = frameLevel;
     }
 
-    m_log->StatUpdateUc();
     return true;
 }
 
 bool ForwardChecker::ImmediateSatisfiable(int badId) {
+    [[maybe_unused]] auto scoped = m_log->Section("FC_ImmSAT");
     shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
     assumptions->push_back(badId);
-    m_log->Tick();
     if (m_settings.satSolveInDomain) m_transSolvers[0]->SetTempDomainCOI(assumptions);
-    bool result = m_transSolvers[0]->Solve(assumptions);
-    m_log->StatMainSolver();
+    bool result;
+    {
+        [[maybe_unused]] auto satScope = m_log->Section("SAT_Imm");
+        result = m_transSolvers[0]->Solve(assumptions);
+    }
     return result;
 }
 
 
 shared_ptr<State> ForwardChecker::EnumerateStartState() {
-    if (m_startSolver->Solve()) {
+    [[maybe_unused]] auto scoped = m_log->Section("FC_StartEnum");
+    bool sat = false;
+    {
+        [[maybe_unused]] auto satScope = m_log->Section("SAT_Start");
+        sat = m_startSolver->Solve();
+    }
+    if (sat) {
         auto p = m_startSolver->GetAssignment(false);
 
         cube inputs_prime;
@@ -326,7 +332,11 @@ shared_ptr<State> ForwardChecker::EnumerateStartState() {
             copy(p.first->begin(), p.first->end(), back_inserter(*assumption));
             copy(inputs_prime.begin(), inputs_prime.end(), back_inserter(*assumption));
 
-            bool res = m_badPredLiftSolver->Solve(assumption);
+            bool res;
+            {
+                [[maybe_unused]] auto satBadPred = m_log->Section("SAT_BadLift");
+                res = m_badPredLiftSolver->Solve(assumption);
+            }
             assert(!res);
             shared_ptr<cube> temp_p = GetUnsatAssumption(m_badPredLiftSolver, partial_latch);
             if (temp_p->size() == partial_latch->size() &&
@@ -357,8 +367,7 @@ shared_ptr<State> ForwardChecker::EnumerateStartState() {
 
 
 bool ForwardChecker::IsInvariant(int frameLevel) {
-    m_log->Tick();
-
+    [[maybe_unused]] auto scoped = m_log->Section("FC_Invariant");
     shared_ptr<frame> frame_i = m_overSequence->GetFrame(frameLevel);
 
     if (frameLevel < m_minUpdateLevel) {
@@ -367,11 +376,14 @@ bool ForwardChecker::IsInvariant(int frameLevel) {
     }
 
     AddConstraintAnd(frame_i);
-    bool result = !m_invSolver->Solve();
+    bool result;
+    {
+        [[maybe_unused]] auto satInv = m_log->Section("SAT_Inv");
+        result = !m_invSolver->Solve();
+    }
     m_invSolver->FlipLastConstrain();
     AddConstraintOr(frame_i);
 
-    m_log->StatInvSolver();
     return result;
 }
 
@@ -419,8 +431,7 @@ void ForwardChecker::AddConstraintAnd(const shared_ptr<frame> f) {
 // @output: pair<input, partial latch>
 // ================================================================================
 void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &s, shared_ptr<State> t) {
-    m_log->Tick();
-
+    [[maybe_unused]] auto scoped = m_log->Section("FC_GenPred");
     shared_ptr<cube> partial_latch = make_shared<cube>(*s.second);
 
     // (!t' | !c)
@@ -442,7 +453,11 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
         OrderAssumption(assumption);
         copy(s.first->begin(), s.first->end(), back_inserter(*assumption));
 
-        bool res = m_liftSolver->Solve(assumption);
+        bool res;
+        {
+            [[maybe_unused]] auto satLift = m_log->Section("SAT_Lift");
+            res = m_liftSolver->Solve(assumption);
+        }
         assert(!res);
         shared_ptr<cube> temp_p = GetUnsatAssumption(m_liftSolver, partial_latch);
         if (*temp_p == *partial_latch)
@@ -454,7 +469,6 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
     m_liftSolver->ReleaseTempClause();
     s.second = partial_latch;
 
-    m_log->StatLiftSolver();
 }
 
 
@@ -464,6 +478,8 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
 // @output:
 // ================================================================================
 bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
+    [[maybe_unused]] auto scoped = m_log->Section("FC_Gen");
+    [[maybe_unused]] auto setupScope = m_log->Section("FC_Gen_Set");
     unordered_set<int> required_lits;
 
     vector<cube> uc_blockers;
@@ -484,9 +500,11 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
         GetPrimed(puc);
         GetAndPushDomain(puc);
     }
+    setupScope = m_log->Section("FC_Gen_Loop");
     for (int i = uc->size() - 1; i >= 0; i--) {
         if (uc->size() < 2) break;
         if (required_lits.find(uc->at(i)) != required_lits.end()) continue;
+        [[maybe_unused]] auto iterScope = m_log->Section("FC_Gen_Try");
         shared_ptr<cube> temp_uc(new cube());
         temp_uc->reserve(uc->size());
         for (auto ll : *uc)
@@ -499,6 +517,7 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
             required_lits.emplace(uc->at(i));
         }
     }
+    setupScope = m_log->Section("FC_Gen_Post");
     if (m_settings.satSolveInDomain) PopDomain();
     sort(uc->begin(), uc->end(), cmp);
     if (uc->size() > uc_blocker.size() && frame_lvl != 0) {
@@ -510,26 +529,25 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
 
 
 bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses) {
+    [[maybe_unused]] auto scoped = m_log->Section("FC_Down");
+    [[maybe_unused]] auto downSetup = m_log->Section("FC_Dn_Set");
     int ctgs = 0;
     m_log->L(3, "Down:", CubeToStr(uc));
     shared_ptr<cube> assumption(new cube(*uc));
     GetPrimed(assumption);
     shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
+    downSetup = m_log->Section("FC_Dn_Loop");
     while (true) {
         // F_i & T & temp_uc'
-        m_log->Tick();
-        if (!IsReachable(frame_lvl, assumption)) {
-            m_log->StatMainSolver();
+        if (!IsReachable(frame_lvl, assumption, "SAT_R_Down")) {
             sort(uc->begin(), uc->end(), cmp);
             auto uc_ctg = GetUnsatCore(frame_lvl, uc);
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
             uc->swap(*uc_ctg);
             return true;
         } else if (rec_lvl > m_settings.ctgMaxRecursionDepth) {
-            m_log->StatMainSolver();
             return false;
         } else {
-            m_log->StatMainSolver();
             auto p = GetInputAndState(frame_lvl);
             GeneralizePredecessor(p, p_ucs);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
@@ -542,9 +560,8 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shar
             if (m_settings.satSolveInDomain) GetAndPushDomain(cts_ass);
             // F_i-1 & T & cts'
             m_log->L(3, "Try ctg:", CubeToStr(cts->latches));
-            m_log->Tick();
-            if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass)) {
-                m_log->StatMainSolver();
+            [[maybe_unused]] auto ctgScope = m_log->Section("FC_Dn_CTG");
+            if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass, "SAT_R_CTG")) {
                 ctgs++;
                 auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
                 m_log->L(3, "CTG Get UC:", CubeToStr(uc_cts));
@@ -555,7 +572,6 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shar
                 PropagateUp(uc_cts, cts_lvl + 1);
                 if (m_settings.satSolveInDomain) PopDomain();
             } else {
-                m_log->StatMainSolver();
                 failed_ctses->emplace_back(*cts->latches);
                 if (m_settings.satSolveInDomain) PopDomain();
                 return false;
@@ -576,15 +592,14 @@ bool ForwardChecker::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<ve
 
 
 bool ForwardChecker::CheckInit(shared_ptr<State> s) {
+    [[maybe_unused]] auto scoped = m_log->Section("FC_InitChk");
     m_log->L(2, "SAT Check Init ");
     m_log->L(2, "From State: ", CubeToStrShort(s->latches));
     m_log->L(3, "State Detail: ", CubeToStr(s->latches));
     shared_ptr<cube> assumption(new cube(*s->latches));
     OrderAssumption(assumption);
     if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
-    m_log->Tick();
-    bool result = IsReachable(0, assumption);
-    m_log->StatMainSolver();
+    bool result = IsReachable(0, assumption, "SAT_R_Init");
     if (result) {
         // Solver return SAT
         m_log->L(2, "Result >>> SAT <<<");
@@ -609,9 +624,7 @@ bool ForwardChecker::CheckInit(shared_ptr<State> s) {
             assumption->clear();
             copy(temp_uc->begin(), temp_uc->end(), back_inserter(*assumption));
             OrderAssumption(assumption);
-            m_log->Tick();
-            bool result = IsReachable(0, assumption);
-            m_log->StatMainSolver();
+            bool result = IsReachable(0, assumption, "SAT_R_Init");
             if (!result) {
                 auto new_uc = GetUnsatAssumption(m_transSolvers[0], assumption);
                 uc->swap(*new_uc);
@@ -633,18 +646,16 @@ bool ForwardChecker::CheckInit(shared_ptr<State> s) {
 
 
 bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
+    [[maybe_unused]] auto scoped = m_log->Section("FC_Prop");
     bool result;
     shared_ptr<cube> assumption(new cube(*c));
     GetPrimed(assumption);
     if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
-    m_log->Tick();
-    if (!IsReachable(lvl, assumption)) {
-        m_log->StatPropagation();
+    if (!IsReachable(lvl, assumption, "SAT_R_Prop")) {
         auto uc = GetUnsatCore(lvl, c);
         AddUnsatisfiableCore(uc, lvl + 1, true);
         result = true;
     } else {
-        m_log->StatPropagation();
         result = false;
     }
     if (m_settings.satSolveInDomain) PopDomain();
@@ -653,6 +664,7 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
 
 
 int ForwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
+    [[maybe_unused]] auto scoped = m_log->Section("FC_PropUp");
     while (lvl < m_k) {
         if (Propagate(c, lvl))
             m_branching->Update(c);
@@ -664,11 +676,12 @@ int ForwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
 }
 
 
-bool ForwardChecker::IsReachable(int lvl, const shared_ptr<cube> assumption) {
+bool ForwardChecker::IsReachable(int lvl, const shared_ptr<cube> assumption, const string &label) {
     if (m_settings.satSolveInDomain) {
         m_transSolvers[lvl]->ResetTempDomain();
         m_transSolvers[lvl]->SetTempDomain(TopDomain());
     }
+    [[maybe_unused]] auto scoped = m_log->Section(label);
     return m_transSolvers[lvl]->Solve(assumption);
 }
 
@@ -679,6 +692,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> ForwardChecker::GetInputAndState(int lv
 
 
 shared_ptr<cube> ForwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> state) {
+    [[maybe_unused]] auto scoped = m_log->Section("DS_UCore");
     const unordered_set<int> &conflict = m_transSolvers[lvl]->GetConflict();
     shared_ptr<cube> res = make_shared<cube>();
 
@@ -696,6 +710,7 @@ shared_ptr<cube> ForwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> st
 
 
 shared_ptr<cube> ForwardChecker::GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions) {
+    [[maybe_unused]] auto scoped = m_log->Section("DS_UAssump");
     const unordered_set<int> &conflict = solver->GetConflict();
     shared_ptr<cube> res = make_shared<cube>();
 

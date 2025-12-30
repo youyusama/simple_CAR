@@ -71,6 +71,7 @@ class ForwardChecker : public BaseChecker {
     } blockerOrder;
 
     void OrderAssumption(shared_ptr<cube> c) {
+        [[maybe_unused]] auto scoped = m_log->Section("DS_OrdAsm");
         if (m_settings.randomSeed > 0) {
             shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
             return;
@@ -99,6 +100,8 @@ class ForwardChecker : public BaseChecker {
     bool Propagate(shared_ptr<cube> c, int lvl);
 
     int PropagateUp(shared_ptr<cube> c, int lvl);
+
+    bool IsReachable(int lvl, const shared_ptr<cube> assumption, const string &label = "SAT_R");
 
     shared_ptr<State> EnumerateStartState();
 

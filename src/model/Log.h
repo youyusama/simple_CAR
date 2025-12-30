@@ -9,6 +9,8 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <unordered_map>
+#include <vector>
 
 namespace car {
 
@@ -22,6 +24,25 @@ void signalHandler(int signum);
 
 class Log {
   public:
+    struct CustomTimeStat {
+        uint64_t calls = 0;
+        chrono::microseconds total{0};
+    };
+
+    class ScopedTimer {
+      public:
+        ScopedTimer(Log &log, string name);
+        ~ScopedTimer();
+        ScopedTimer(const ScopedTimer &) = delete;
+        ScopedTimer &operator=(const ScopedTimer &) = delete;
+        ScopedTimer(ScopedTimer &&other) noexcept;
+        ScopedTimer &operator=(ScopedTimer &&other) noexcept;
+
+      private:
+        Log *m_log;
+        bool m_active = false;
+    };
+
     Log(int verb) : m_verbosity(verb) {
         m_begin = chrono::steady_clock::now();
         m_tick = chrono::steady_clock::now();
@@ -39,6 +60,8 @@ class Log {
     }
 
     void PrintStatistics();
+
+    ScopedTimer Section(const string &name) { return ScopedTimer(*this, name); }
 
     inline void Tick() {
         m_tick = chrono::steady_clock::now();
@@ -107,6 +130,14 @@ class Log {
     }
 
   private:
+    struct ActiveSection {
+        string name;
+        chrono::time_point<chrono::steady_clock> start;
+        chrono::microseconds elapsed{0};
+    };
+
+    friend class ScopedTimer;
+
     template <typename T, typename... Args>
     void logHelper(std::ostringstream &oss, const T &first, const Args &...args) {
         oss << first;
@@ -140,6 +171,14 @@ class Log {
 
     chrono::time_point<chrono::steady_clock> m_tick;
     chrono::time_point<chrono::steady_clock> m_begin;
+
+    unordered_map<string, CustomTimeStat> m_customStats;
+    vector<ActiveSection> m_timerStack;
+
+    void AddCustomTime(const string &name, chrono::microseconds time);
+    void PrintCustomStatistics();
+    void BeginSection(const string &name);
+    void EndSection();
 };
 
 extern shared_ptr<Log> GLOBAL_LOG;
