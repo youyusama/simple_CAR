@@ -29,25 +29,25 @@ static std::shared_ptr<BaseChecker> CreateChecker(
     }
 }
 
-SimpleCAR::SimpleCAR(const Settings &settings) : settings_(settings) {}
+SimpleCAR::SimpleCAR(const Settings &settings) : m_settings(settings) {}
 
 SimpleCAR::~SimpleCAR() = default;
 
 bool SimpleCAR::LoadModel() {
-    log_ = std::shared_ptr<Log>(new Log(settings_.verbosity));
-    aigerModel_ = std::shared_ptr<Model>(new Model(settings_, log_));
-    log_->StatInit();
-    checker_ = CreateChecker(settings_, aigerModel_, log_);
-    return static_cast<bool>(checker_);
+    m_log = std::shared_ptr<Log>(new Log(m_settings.verbosity));
+    m_model = std::shared_ptr<Model>(new Model(m_settings, m_log));
+    m_log->StatInit();
+    m_checker = CreateChecker(m_settings, m_model, m_log);
+    return static_cast<bool>(m_checker);
 }
 
 CheckResult SimpleCAR::Prove() {
-    if (!checker_) return CheckResult::Unknown;
+    if (!m_checker) return CheckResult::Unknown;
 
-    CheckResult res = checker_->Run();
+    CheckResult res = m_checker->Run();
 
-    if (!settings_.witnessOutputDir.empty())
-        checker_->Witness();
+    if (!m_settings.witnessOutputDir.empty())
+        m_checker->Witness();
 
     switch (res) {
     case CheckResult::Safe:

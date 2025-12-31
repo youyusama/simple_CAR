@@ -19,10 +19,10 @@ class SimpleCAR {
     CheckResult Prove();
 
   private:
-    Settings settings_;
-    std::shared_ptr<Log> log_;
-    std::shared_ptr<Model> aigerModel_;
-    std::shared_ptr<BaseChecker> checker_;
+    Settings m_settings;
+    std::shared_ptr<Log> m_log;
+    std::shared_ptr<Model> m_model;
+    std::shared_ptr<BaseChecker> m_checker;
 };
 
 } // namespace car
