@@ -5,12 +5,13 @@
 namespace car {
 
 BackwardChecker::BackwardChecker(Settings settings,
-                                 shared_ptr<Model> model,
+                                 Model &model,
                                  Log &log) : m_settings(settings),
                                             m_model(model),
-                                            m_log(log) {
-    State::numInputs = model->GetNumInputs();
-    State::numLatches = model->GetNumLatches();
+                                            m_log(log),
+                                            innOrder(model) {
+    State::numInputs = model.GetNumInputs();
+    State::numLatches = model.GetNumLatches();
     m_lastState = nullptr;
     GLOBAL_LOG = &m_log;
 }
@@ -18,7 +19,7 @@ BackwardChecker::BackwardChecker(Settings settings,
 CheckResult BackwardChecker::Run() {
     signal(SIGINT, signalHandler);
 
-    if (Check(m_model->GetBad()))
+    if (Check(m_model.GetBad()))
         m_checkResult = CheckResult::Safe;
     else
         m_checkResult = CheckResult::Unsafe;
@@ -30,9 +31,9 @@ CheckResult BackwardChecker::Run() {
 
 void BackwardChecker::Witness() {
     if (m_checkResult == CheckResult::Safe) {
-        OutputWitness(m_model->GetBad());
+        OutputWitness(m_model.GetBad());
     } else if (m_checkResult == CheckResult::Unsafe) {
-        OutputCounterExample(m_model->GetBad());
+        OutputCounterExample(m_model.GetBad());
     }
 }
 
@@ -199,7 +200,6 @@ void BackwardChecker::Init() {
     m_branching = make_shared<Branching>(m_settings.branching);
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
-    innOrder.m = m_model;
 
     // s & T & c & O_i'
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
@@ -209,7 +209,7 @@ void BackwardChecker::Init() {
     m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_startSolver->AddTrans();
     m_startSolver->AddConstraints();
-    for (auto l : m_model->GetInitialState()) {
+    for (auto l : m_model.GetInitialState()) {
         m_startSolver->AddClause({l});
     }
     m_startSolver->AddInitialClauses();
@@ -280,7 +280,7 @@ void BackwardChecker::OverSequenceRefine(int lvl) {
     // solver: I & c & (O_0 | O_1 | ... | O_i)
     shared_ptr<SATSolver> refine_solver = make_shared<SATSolver>(m_model, m_settings.solver);
     refine_solver->AddConstraints();
-    for (auto l : m_model->GetInitialState()) refine_solver->AddClause({l});
+    for (auto l : m_model.GetInitialState()) refine_solver->AddClause({l});
     refine_solver->AddInitialClauses();
     clause inv;
     for (int i = 0; i <= lvl; i++) {
@@ -501,7 +501,7 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
             assumption->clear();
             copy(temp_uc->begin(), temp_uc->end(), back_inserter(*assumption));
             OrderAssumption(assumption);
-            assumption->push_back(m_model->GetBad());
+            assumption->push_back(m_model.GetBad());
             m_log.Tick();
             bool result = m_badSolver->Solve(assumption);
             m_log.StatMainSolver();
@@ -613,9 +613,9 @@ void BackwardChecker::OutputWitness(int bad) {
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
     string outPath = m_settings.witnessOutputDir + aigName + ".w.aig";
-    aiger *model_aig = m_model->GetAiger().get();
+    aiger *model_aig = m_model.GetAiger().get();
 
-    if (m_overSequence->GetInvariantLevel() < 0 && m_model->GetEquivalenceMap().size() == 0) {
+    if (m_overSequence->GetInvariantLevel() < 0 && m_model.GetEquivalenceMap().size() == 0) {
         aiger_open_and_write_to_file(model_aig, outPath.c_str());
         return;
     }
@@ -648,17 +648,17 @@ void BackwardChecker::OutputWitness(int bad) {
 
     // add equivalence
     // (l1 <-> l2) & (l1 <-> l3) & ( ... )
-    auto &eq_map = m_model->GetEquivalenceMap();
+    auto &eq_map = m_model.GetEquivalenceMap();
     vector<unsigned> eq_lits;
     for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
-        if (itr->first == m_model->TrueId()) {
-            unsigned true_eq_lit = m_model->GetAigerLit(itr->second);
+        if (itr->first == m_model.TrueId()) {
+            unsigned true_eq_lit = m_model.GetAigerLit(itr->second);
             eq_lits.emplace_back(addCubeToANDGates(witness_aig, {true_eq_lit, (unsigned)0}) ^ 1);
             eq_lits.emplace_back(addCubeToANDGates(witness_aig, {true_eq_lit ^ 1, (unsigned)1}) ^ 1);
             continue;
         }
-        unsigned l1 = m_model->GetAigerLit(itr->first);
-        unsigned l2 = m_model->GetAigerLit(itr->second);
+        unsigned l1 = m_model.GetAigerLit(itr->first);
+        unsigned l2 = m_model.GetAigerLit(itr->second);
         eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
         eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
     }
@@ -670,7 +670,7 @@ void BackwardChecker::OutputWitness(int bad) {
 
     // prove on lvl 0
     if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
-        unsigned bad_lit = m_model->GetAigerLit(bad);
+        unsigned bad_lit = m_model.GetAigerLit(bad);
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
         if (eq_lits.size() > 0) {
@@ -711,7 +711,7 @@ void BackwardChecker::OutputWitness(int bad) {
         inv_lits.push_back(O_i ^ 1);
     }
     unsigned inv = addCubeToANDGates(witness_aig, inv_lits);
-    unsigned bad_lit = m_model->GetAigerLit(bad);
+    unsigned bad_lit = m_model.GetAigerLit(bad);
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
 

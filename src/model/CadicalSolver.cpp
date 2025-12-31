@@ -2,9 +2,8 @@
 #include <algorithm>
 
 namespace car {
-CadicalSolver::CadicalSolver(shared_ptr<Model> m) {
-    m_model = m;
-    m_maxId = m_model->TrueId() + 1; // reserve variable numbers for one step reachability check
+CadicalSolver::CadicalSolver(Model &m) : m_model(m) {
+    m_maxId = m_model.TrueId() + 1; // reserve variable numbers for one step reachability check
     m_assumptions = make_shared<cube>();
     m_tempClause = cube();
 }
@@ -56,9 +55,9 @@ void CadicalSolver::AddClause(const cube &cls) {
 pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime) {
     shared_ptr<cube> inputs(new cube());
     shared_ptr<cube> latches(new cube());
-    inputs->reserve(m_model->GetNumInputs());
-    latches->reserve(m_model->GetNumLatches());
-    for (int i : m_model->GetModelInputs()) {
+    inputs->reserve(m_model.GetNumInputs());
+    latches->reserve(m_model.GetNumLatches());
+    for (int i : m_model.GetModelInputs()) {
         if (val(i) > 0) {
             inputs->emplace_back(i);
         } else {
@@ -66,7 +65,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime
             inputs->emplace_back(-i);
         }
     }
-    for (int i : m_model->GetModelLatches()) {
+    for (int i : m_model.GetModelLatches()) {
         if (!prime) {
             if (val(i) > 0) {
                 latches->emplace_back(i);
@@ -75,7 +74,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime
                 latches->emplace_back(-i);
             }
         } else {
-            int p = m_model->GetPrime(i);
+            int p = m_model.GetPrime(i);
             if (val(p) > 0) {
                 latches->emplace_back(i);
             } else {
@@ -84,7 +83,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime
             }
         }
     }
-    for (int i : m_model->GetInnards()) {
+    for (int i : m_model.GetInnards()) {
         if (!prime) {
             if (val(i) > 0) {
                 latches->emplace_back(i);
@@ -93,7 +92,7 @@ pair<shared_ptr<cube>, shared_ptr<cube>> CadicalSolver::GetAssignment(bool prime
                 latches->emplace_back(-i);
             }
         } else {
-            int p = m_model->GetPrime(i);
+            int p = m_model.GetPrime(i);
             if (val(p) > 0) {
                 latches->emplace_back(i);
             } else {

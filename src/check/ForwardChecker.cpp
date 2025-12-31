@@ -4,12 +4,13 @@
 namespace car {
 
 ForwardChecker::ForwardChecker(Settings settings,
-                               shared_ptr<Model> model,
+                               Model &model,
                                Log &log) : m_settings(settings),
                                           m_model(model),
-                                          m_log(log) {
-    State::numInputs = model->GetNumInputs();
-    State::numLatches = model->GetNumLatches();
+                                          m_log(log),
+                                          innOrder(model) {
+    State::numInputs = model.GetNumInputs();
+    State::numLatches = model.GetNumLatches();
     m_lastState = nullptr;
     GLOBAL_LOG = &m_log;
     m_checkResult = CheckResult::Unknown;
@@ -20,7 +21,7 @@ ForwardChecker::ForwardChecker(Settings settings,
 CheckResult ForwardChecker::Run() {
     signal(SIGINT, signalHandler);
 
-    if (Check(m_model->GetBad()))
+    if (Check(m_model.GetBad()))
         m_checkResult = CheckResult::Safe;
     else
         m_checkResult = CheckResult::Unsafe;
@@ -32,9 +33,9 @@ CheckResult ForwardChecker::Run() {
 
 void ForwardChecker::Witness() {
     if (m_checkResult == CheckResult::Safe) {
-        OutputWitness(m_model->GetBad());
+        OutputWitness(m_model.GetBad());
     } else if (m_checkResult == CheckResult::Unsafe) {
-        OutputCounterExample(m_model->GetBad());
+        OutputCounterExample(m_model.GetBad());
     }
 }
 
@@ -215,7 +216,7 @@ bool ForwardChecker::Check(int badId) {
 void ForwardChecker::Init(int badId) {
     [[maybe_unused]] auto initScope = m_log.Section("FC_Init");
     shared_ptr<cube> inputs(new cube(State::numInputs, 0));
-    shared_ptr<cube> latches(new cube(m_model->GetInitialState()));
+    shared_ptr<cube> latches(new cube(m_model.GetInitialState()));
     m_initialState.reset(new State(nullptr, inputs, latches, 0));
 
     m_badId = badId;
@@ -224,7 +225,6 @@ void ForwardChecker::Init(int badId) {
     m_branching = make_shared<Branching>(m_settings.branching);
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
-    innOrder.m = m_model;
     m_domainStack = make_shared<vector<shared_ptr<cube>>>();
 
     // O_i & T & c & s'
@@ -238,7 +238,7 @@ void ForwardChecker::Init(int badId) {
     if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
     m_liftSolver->AddTrans();
     if (m_settings.satSolveInDomain)
-        m_liftSolver->SetDomainCOI(make_shared<cube>(m_model->GetConstraints()));
+        m_liftSolver->SetDomainCOI(make_shared<cube>(m_model.GetConstraints()));
     // s & T & c & P & T' & c' & bad'
     m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
     m_startSolver->AddTrans();
@@ -304,8 +304,8 @@ shared_ptr<State> ForwardChecker::EnumerateStartState() {
         auto p = m_startSolver->GetAssignment(false);
 
         cube inputs_prime;
-        for (int i : m_model->GetPropertyCOIInputs()) {
-            int i_p = m_model->GetPrimeK(i, 1);
+        for (int i : m_model.GetPropertyCOIInputs()) {
+            int i_p = m_model.GetPrimeK(i, 1);
             if (m_startSolver->GetModel(i_p))
                 inputs_prime.push_back(i_p);
             else
@@ -318,10 +318,10 @@ shared_ptr<State> ForwardChecker::EnumerateStartState() {
 
         // (!bad' | !c' | !c)
         clause cls;
-        cls.push_back(-m_model->GetPrimeK(m_badId, 1));
-        for (auto cons : m_model->GetConstraints())
-            cls.push_back(-m_model->GetPrimeK(cons, 1));
-        for (auto cons : m_model->GetConstraints())
+        cls.push_back(-m_model.GetPrimeK(m_badId, 1));
+        for (auto cons : m_model.GetConstraints())
+            cls.push_back(-m_model.GetPrimeK(cons, 1));
+        for (auto cons : m_model.GetConstraints())
             cls.push_back(-cons);
         m_badPredLiftSolver->AddTempClause(cls);
 
@@ -350,8 +350,8 @@ shared_ptr<State> ForwardChecker::EnumerateStartState() {
         p.second = partial_latch;
 
         cube inputs_bad;
-        for (int i : m_model->GetPropertyCOIInputs()) {
-            int i_p = m_model->GetPrimeK(i, 1);
+        for (int i : m_model.GetPropertyCOIInputs()) {
+            int i_p = m_model.GetPrimeK(i, 1);
             if (m_startSolver->GetModel(i_p))
                 inputs_bad.push_back(i);
             else
@@ -438,9 +438,9 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
     clause cls;
     cls.reserve(t->latches->size());
     for (auto l : *t->latches) {
-        cls.emplace_back(m_model->GetPrime(-l));
+        cls.emplace_back(m_model.GetPrime(-l));
     }
-    for (auto cons : m_model->GetConstraints()) cls.push_back(-cons);
+    for (auto cons : m_model.GetConstraints()) cls.push_back(-cons);
     m_liftSolver->AddTempClause(cls);
     if (m_settings.satSolveInDomain) {
         m_liftSolver->ResetTempDomain();
@@ -696,7 +696,7 @@ shared_ptr<cube> ForwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> st
 
     cube prime_state;
     for (auto l : *state) {
-        prime_state.emplace_back(m_model->GetPrime(l));
+        prime_state.emplace_back(m_model.GetPrime(l));
     }
 
     for (int i = 0; i < prime_state.size(); i++) {
@@ -729,7 +729,7 @@ shared_ptr<cube> ForwardChecker::TopDomain() {
 
 shared_ptr<cube> ForwardChecker::GetAndPushDomain(shared_ptr<cube> c) {
     shared_ptr<cube> domain = make_shared<cube>();
-    domain = m_model->GetCOIDomain(c);
+    domain = m_model.GetCOIDomain(c);
     m_domainStack->emplace_back(domain);
     return domain;
 }
@@ -771,9 +771,9 @@ void ForwardChecker::OutputWitness(int bad) {
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
     string outPath = m_settings.witnessOutputDir + aigName + ".w.aig";
-    aiger *model_aig = m_model->GetAiger().get();
+    aiger *model_aig = m_model.GetAiger().get();
 
-    if (m_overSequence->GetInvariantLevel() < 0 && m_model->GetEquivalenceMap().size() == 0) {
+    if (m_overSequence->GetInvariantLevel() < 0 && m_model.GetEquivalenceMap().size() == 0) {
         aiger_open_and_write_to_file(model_aig, outPath.c_str());
         return;
     }
@@ -807,18 +807,18 @@ void ForwardChecker::OutputWitness(int bad) {
     // add equivalence
     // (l1 <-> l2) & (l1 <-> l3) & ( ... ) & l_true
     // ! ( !l1 & l2 ) & ! ( l1 & !l2 )
-    auto &eq_map = m_model->GetEquivalenceMap();
+    auto &eq_map = m_model.GetEquivalenceMap();
     vector<unsigned> eq_lits;
     for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
-        if (itr->first == m_model->TrueId()) {
-            unsigned true_eq_lit = m_model->GetAigerLit(itr->second);
+        if (itr->first == m_model.TrueId()) {
+            unsigned true_eq_lit = m_model.GetAigerLit(itr->second);
             eq_lits.emplace_back(true_eq_lit);
             continue;
         }
         assert(abs(itr->first) < witness_aig->maxvar);
         assert(abs(itr->second) < witness_aig->maxvar);
-        unsigned l1 = m_model->GetAigerLit(itr->first);
-        unsigned l2 = m_model->GetAigerLit(itr->second);
+        unsigned l1 = m_model.GetAigerLit(itr->first);
+        unsigned l2 = m_model.GetAigerLit(itr->second);
         eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
         eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
     }
@@ -830,7 +830,7 @@ void ForwardChecker::OutputWitness(int bad) {
 
     // prove on lvl 0
     if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
-        unsigned bad_lit = m_model->GetAigerLit(bad);
+        unsigned bad_lit = m_model.GetAigerLit(bad);
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
         if (eq_lits.size() > 0) {
@@ -871,7 +871,7 @@ void ForwardChecker::OutputWitness(int bad) {
         inv_lits.push_back(O_i ^ 1);
     }
     unsigned inv = addCubeToANDGates(witness_aig, inv_lits) ^ 1;
-    unsigned bad_lit = m_model->GetAigerLit(bad);
+    unsigned bad_lit = m_model.GetAigerLit(bad);
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
 

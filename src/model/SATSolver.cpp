@@ -2,7 +2,7 @@
 
 namespace car {
 
-SATSolver::SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind)
+SATSolver::SATSolver(Model &model, MCSATSolver slv_kind)
     : m_model(model), m_slvKind(slv_kind) {
 
     switch (m_slvKind) {
@@ -38,12 +38,12 @@ SATSolver::SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind)
 // ================================================================================
 void SATSolver::AddTrans() {
     if (m_solveInDomain) {
-        vector<clause> &clauses = m_model->GetClauses();
+        vector<clause> &clauses = m_model.GetClauses();
         for (int i = 0; i < clauses.size(); ++i) {
             AddClause(clauses[i]);
         }
     } else {
-        vector<clause> &clauses = m_model->GetSimpClauses();
+        vector<clause> &clauses = m_model.GetSimpClauses();
         for (int i = 0; i < clauses.size(); ++i) {
             AddClause(clauses[i]);
         }
@@ -57,7 +57,7 @@ void SATSolver::AddTrans() {
 // @output:
 // ================================================================================
 void SATSolver::AddConstraints() {
-    for (auto c : m_model->GetConstraints()) {
+    for (auto c : m_model.GetConstraints()) {
         AddClause(clause{c});
         SetDomainCOI(make_shared<cube>(cube{c}));
     }
@@ -70,12 +70,12 @@ void SATSolver::AddConstraints() {
 // @output:
 // ================================================================================
 void SATSolver::AddTransK(int k) {
-    vector<clause> &clauses = m_model->GetSimpClauses();
+    vector<clause> &clauses = m_model.GetSimpClauses();
     for (int i = 0; i < clauses.size(); ++i) {
         clause &ori = clauses[i];
         clause cls_k;
         for (int v : ori) {
-            cls_k.push_back(m_model->GetPrimeK(v, k));
+            cls_k.push_back(m_model.GetPrimeK(v, k));
         }
         AddClause(cls_k);
     }
@@ -88,21 +88,21 @@ void SATSolver::AddTransK(int k) {
 // @output:
 // ================================================================================
 void SATSolver::AddConstraintsK(int k) {
-    for (auto c : m_model->GetConstraints()) {
-        AddClause(clause{m_model->GetPrimeK(c, k)});
+    for (auto c : m_model.GetConstraints()) {
+        AddClause(clause{m_model.GetPrimeK(c, k)});
     }
 }
 
 
 void SATSolver::AddBad() {
-    int bad = m_model->GetBad();
+    int bad = m_model.GetBad();
     AddClause(clause{bad});
 }
 
 
 void SATSolver::AddBadk(int k) {
-    int bad = m_model->GetBad();
-    int bad_k = m_model->GetPrimeK(bad, k);
+    int bad = m_model.GetBad();
+    int bad_k = m_model.GetPrimeK(bad, k);
     AddClause(clause{bad_k});
 }
 
@@ -113,7 +113,7 @@ void SATSolver::AddBadk(int k) {
 // @output:
 // ================================================================================
 void SATSolver::AddInitialClauses() {
-    vector<clause> &clauses = m_model->GetInitialClauses();
+    vector<clause> &clauses = m_model.GetInitialClauses();
     for (auto &c : clauses) {
         AddClause(c);
         SetDomainCOI(make_shared<cube>(cube{c}));
@@ -179,7 +179,7 @@ void SATSolver::AddUC(const shared_ptr<cube> uc) {
 // @output:
 // ================================================================================
 void SATSolver::AddProperty() {
-    clause cls = clause{m_model->GetProperty()};
+    clause cls = clause{m_model.GetProperty()};
     AddClause(cls);
     SetDomainCOI(make_shared<cube>(cls));
 }

@@ -10,7 +10,7 @@ namespace car {
 
 class CadicalSolver : public ISolver, public CaDiCaL::Solver {
   public:
-    CadicalSolver(shared_ptr<Model> m);
+    CadicalSolver(Model &m);
     ~CadicalSolver();
 
     void AddClause(const cube &cls) override;
@@ -43,7 +43,7 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     inline void ResetTempDomain() {}
 
   protected:
-    shared_ptr<Model> m_model;
+    Model &m_model;
     int m_maxId;
     shared_ptr<cube> m_assumptions;
     cube m_tempClause;

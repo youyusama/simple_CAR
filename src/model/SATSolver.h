@@ -17,7 +17,7 @@ namespace car {
 
 class SATSolver : public ISolver {
   public:
-    SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind);
+    SATSolver(Model &model, MCSATSolver slv_kind);
     ~SATSolver() {}
 
     // general SAT interface
@@ -102,13 +102,13 @@ class SATSolver : public ISolver {
 
     void SetDomainCOI(const shared_ptr<cube> c) {
         if (m_slvKind != MCSATSolver::minicore) return;
-        shared_ptr<cube> domain = m_model->GetCOIDomain(c);
+        shared_ptr<cube> domain = m_model.GetCOIDomain(c);
         SetDomain(domain);
     }
 
     void SetTempDomainCOI(const shared_ptr<cube> c) {
         if (m_slvKind != MCSATSolver::minicore) return;
-        shared_ptr<cube> domain = m_model->GetCOIDomain(c);
+        shared_ptr<cube> domain = m_model.GetCOIDomain(c);
         SetTempDomain(domain);
     }
 
@@ -142,7 +142,7 @@ class SATSolver : public ISolver {
     void UpdateStartSolverFlag();
 
   protected:
-    shared_ptr<Model> m_model;
+    Model &m_model;
     MCSATSolver m_slvKind;
     shared_ptr<ISolver> m_slv;
     bool m_solveInDomain;

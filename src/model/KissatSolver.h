@@ -16,7 +16,7 @@ namespace car {
 
 class KissatSolver : public ISolver {
   public:
-    KissatSolver(shared_ptr<Model> m);
+    KissatSolver(Model &m);
     ~KissatSolver() { kissat_release(m_solver); }
 
     void AddClause(const cube &cls) override;
@@ -58,7 +58,7 @@ class KissatSolver : public ISolver {
       };
       */
 
-    shared_ptr<Model> m_model;
+    Model &m_model;
     int m_maxId;
     // vec<Lit> m_assumptions;
     // int m_tempVar;

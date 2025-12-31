@@ -7,12 +7,12 @@
 namespace car {
 
 BasicIC3::BasicIC3(Settings settings,
-                   shared_ptr<Model> model,
+                   Model &model,
                    Log &log) : m_settings(settings),
                               m_log(log),
                               m_model(model) {
-    State::numInputs = model->GetNumInputs();
-    State::numLatches = model->GetNumLatches();
+    State::numInputs = model.GetNumInputs();
+    State::numLatches = model.GetNumLatches();
     m_cexStart = nullptr;
 
     // Initialize the dedicated solver for predecessor generalization (lifting).
@@ -21,24 +21,24 @@ BasicIC3::BasicIC3(Settings settings,
     m_liftSolver->AddTrans();
     // set permanent domain
     if (m_settings.satSolveInDomain)
-        m_liftSolver->SetDomainCOI(make_shared<cube>(m_model->GetConstraints()));
+        m_liftSolver->SetDomainCOI(make_shared<cube>(m_model.GetConstraints()));
 
     // no need to set domain for bad
     m_badPredLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_badPredLiftSolver->AddTrans();
     m_badPredLiftSolver->AddTransK(1);
     clause cls;
-    cls.push_back(-m_model->GetPrimeK(m_model->GetBad(), 1));
-    for (auto cons : m_model->GetConstraints()) {
-        cls.push_back(-m_model->GetPrimeK(cons, 1));
+    cls.push_back(-m_model.GetPrimeK(m_model.GetBad(), 1));
+    for (auto cons : m_model.GetConstraints()) {
+        cls.push_back(-m_model.GetPrimeK(cons, 1));
     }
-    for (auto cons : m_model->GetConstraints()) {
+    for (auto cons : m_model.GetConstraints()) {
         cls.push_back(-cons);
     }
     m_badPredLiftSolver->AddClause(cls);
 
     // Store the initial state literals in a set for efficient lookups.
-    const auto &initState = m_model->GetInitialState();
+    const auto &initState = m_model.GetInitialState();
     m_initialStateSet.insert(initState.begin(), initState.end());
     m_log.L(1, "BasicIC3 checker initialized.");
 
@@ -61,7 +61,7 @@ BasicIC3::~BasicIC3() {
 CheckResult BasicIC3::Run() {
     signal(SIGINT, signalHandler);
 
-    if (Check(m_model->GetBad()))
+    if (Check(m_model.GetBad()))
         m_checkResult = CheckResult::Safe;
     else
         m_checkResult = CheckResult::Unsafe;
@@ -94,7 +94,7 @@ void BasicIC3::Extend() {
 }
 
 bool BasicIC3::Check(int badId) {
-    if (m_model->TrueId() == -badId) {
+    if (m_model.TrueId() == -badId) {
         m_log.L(1, "SAFE: Constant bad.");
         return true;
     }
@@ -172,8 +172,8 @@ bool BasicIC3::BaseCases() {
     if (step1Solver->Solve(assumption)) {
         m_log.L(1, "UNSAFE: Property fails at step 1.");
         cube primeInputs;
-        for (int i : m_model->GetPropertyCOIInputs()) {
-            int i_p = m_model->GetPrimeK(i, 1);
+        for (int i : m_model.GetPropertyCOIInputs()) {
+            int i_p = m_model.GetPrimeK(i, 1);
             if (step1Solver->GetModel(i_p))
                 primeInputs.push_back(i);
             else
@@ -255,7 +255,7 @@ shared_ptr<cube> BasicIC3::GetCore(const shared_ptr<SATSolver> &solver, const sh
         return core;
     } else {
         for (const auto &lit : *fallbackCube) {
-            int lit_p = m_model->GetPrimeK(lit, 1);
+            int lit_p = m_model.GetPrimeK(lit, 1);
             if (conflictSet.count(lit_p)) {
                 core->push_back(lit);
             }
@@ -271,8 +271,8 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
 
         cube primeInputs;
         cube badInputs;
-        for (int i : m_model->GetPropertyCOIInputs()) {
-            int i_p = m_model->GetPrimeK(i, 1);
+        for (int i : m_model.GetPropertyCOIInputs()) {
+            int i_p = m_model.GetPrimeK(i, 1);
             if (m_startSolver->GetModel(i_p)) {
                 primeInputs.push_back(i_p);
                 badInputs.push_back(i);
@@ -561,16 +561,16 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
     clause succNegationClause;
     succNegationClause.reserve(successorState->latches->size());
     for (const auto &lit : *(successorState->latches)) {
-        succNegationClause.push_back(-m_model->GetPrimeK(lit, 1));
+        succNegationClause.push_back(-m_model.GetPrimeK(lit, 1));
     }
-    for (auto cons : m_model->GetConstraints()) {
+    for (auto cons : m_model.GetConstraints()) {
         succNegationClause.push_back(-cons);
     }
     m_liftSolver->AddTempClause(succNegationClause);
 
     shared_ptr<cube> primeLatches = make_shared<cube>();
     for (const auto &lit : *(successorState->latches)) {
-        primeLatches->push_back(m_model->GetPrimeK(lit, 1));
+        primeLatches->push_back(m_model.GetPrimeK(lit, 1));
     }
     const auto &partialLatch = predecessorState->latches;
 
@@ -790,7 +790,7 @@ void BasicIC3::OutputWitness(int bad) {
     assert(endIndex != string::npos);
     string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
     string outPath = m_settings.witnessOutputDir + aigName + ".w.aig";
-    aiger *model_aig = m_model->GetAiger().get();
+    aiger *model_aig = m_model.GetAiger().get();
 
     unsigned lvl_i;
     // bad is constant
@@ -880,7 +880,7 @@ void BasicIC3::Witness() {
         OutputCounterExample();
     } else if (m_checkResult == CheckResult::Safe) {
         m_log.L(1, "Generating proof.");
-        OutputWitness(m_model->GetBad());
+        OutputWitness(m_model.GetBad());
     } else {
         m_log.L(1, "Unknown check result.");
     }

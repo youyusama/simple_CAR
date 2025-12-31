@@ -3,12 +3,12 @@
 namespace car {
 
 BMC::BMC(Settings settings,
-         shared_ptr<Model> model,
+         Model &model,
          Log &log) : m_settings(settings),
                     m_model(model),
                     m_log(log) {
-    State::numInputs = model->GetNumInputs();
-    State::numLatches = model->GetNumLatches();
+    State::numInputs = model.GetNumInputs();
+    State::numLatches = model.GetNumLatches();
     GLOBAL_LOG = &m_log;
     m_k = 0;
     m_maxK = m_settings.bmcK;
@@ -21,11 +21,11 @@ BMC::BMC(Settings settings,
 CheckResult BMC::Run() {
     signal(SIGINT, signalHandler);
     if (m_settings.solver == MCSATSolver::kissat) {
-        if (Check_nonincremental(m_model->GetBad())) {
+        if (Check_nonincremental(m_model.GetBad())) {
             m_checkResult = CheckResult::Unsafe;
         }
     } else {
-        if (Check(m_model->GetBad()))
+        if (Check(m_model.GetBad()))
             m_checkResult = CheckResult::Unsafe;
     }
 
@@ -36,7 +36,7 @@ CheckResult BMC::Run() {
 
 void BMC::Witness() {
     if (m_checkResult == CheckResult::Unsafe) {
-        OutputCounterExample(m_model->GetBad());
+        OutputCounterExample(m_model.GetBad());
     }
 }
 
@@ -152,7 +152,7 @@ void BMC::Init(int badId) {
     m_Solver = make_shared<SATSolver>(m_model, m_settings.solver);
 
     // send initial state
-    for (auto l : m_model->GetInitialState()) {
+    for (auto l : m_model.GetInitialState()) {
         m_Solver->AddClause({l});
     }
     m_Solver->AddInitialClauses();
@@ -160,12 +160,12 @@ void BMC::Init(int badId) {
 
 
 void BMC::GetClausesK(int m_k, shared_ptr<vector<clause>> clauses) {
-    auto &originalClauses = m_model->GetSimpClauses();
+    auto &originalClauses = m_model.GetSimpClauses();
     for (int i = 0; i < originalClauses.size(); ++i) {
         clause &ori = originalClauses[i];
         clause cls_k;
         for (int v : ori) {
-            cls_k.push_back(m_model->GetPrimeK(v, m_k));
+            cls_k.push_back(m_model.GetPrimeK(v, m_k));
         }
         clauses->push_back(cls_k);
     }
@@ -173,14 +173,14 @@ void BMC::GetClausesK(int m_k, shared_ptr<vector<clause>> clauses) {
 
 
 int BMC::GetBadK(int m_k) {
-    return m_model->GetPrimeK(m_badId, m_k);
+    return m_model.GetPrimeK(m_badId, m_k);
 }
 
 
 vector<int> BMC::GetConstraintsK(int m_k) {
     vector<int> res;
-    for (auto c : m_model->GetConstraints()) {
-        res.push_back(m_model->GetPrimeK(c, m_k));
+    for (auto c : m_model.GetConstraints()) {
+        res.push_back(m_model.GetPrimeK(c, m_k));
     }
     return res;
 }
@@ -204,14 +204,14 @@ void BMC::OutputCounterExample(int bad) {
     cexFile << "1" << endl
             << "b0" << endl;
 
-    for (int i = 0; i < m_model->GetNumLatches(); i++) {
-        int latch_id = m_model->GetNumInputs() + i + 1;
+    for (int i = 0; i < m_model.GetNumLatches(); i++) {
+        int latch_id = m_model.GetNumInputs() + i + 1;
         cexFile << m_Solver->GetModel(latch_id) ? "1" : "0";
     }
     cexFile << endl;
     for (int j = 0; j <= m_k; j++) {
-        for (int i = 0; i < m_model->GetNumInputs(); i++) {
-            int input_id = m_model->GetPrimeK(i + 1, j);
+        for (int i = 0; i < m_model.GetNumInputs(); i++) {
+            int input_id = m_model.GetPrimeK(i + 1, j);
             cexFile << m_Solver->GetModel(input_id) ? "1" : "0";
         }
         cexFile << endl;

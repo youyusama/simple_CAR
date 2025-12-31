@@ -10,7 +10,7 @@ namespace car {
 
 class MinisatSolver : public ISolver, public Minisat::Solver {
   public:
-    MinisatSolver(shared_ptr<Model> m);
+    MinisatSolver(Model &m);
     ~MinisatSolver();
 
     void AddClause(const cube &cls) override;
@@ -50,7 +50,7 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
         return ((id > 0) ? Minisat::mkLit(var) : ~Minisat::mkLit(var));
     };
 
-    shared_ptr<Model> m_model;
+    Model &m_model;
     int m_maxId;
     Minisat::vec<Minisat::Lit> m_assumptions;
     int m_tempVar;

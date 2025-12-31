@@ -10,7 +10,7 @@ namespace car {
 
 class MinicoreSolver : public ISolver, public minicore::Solver {
   public:
-    MinicoreSolver(shared_ptr<Model> m);
+    MinicoreSolver(Model &m);
     ~MinicoreSolver();
 
     void AddClause(const cube &cls) override;
@@ -48,7 +48,7 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
         return ((id > 0) ? minicore::mkLit(var) : ~minicore::mkLit(var));
     };
 
-    shared_ptr<Model> m_model;
+    Model &m_model;
     int m_maxId;
     vector<minicore::Lit> m_assumptions;
     vector<minicore::Lit> m_tempClause;

@@ -35,7 +35,7 @@ struct IC3Frame {
 class BasicIC3 : public BaseChecker {
   public:
     BasicIC3(Settings settings,
-             shared_ptr<Model> model,
+             Model &model,
              Log &log);
     ~BasicIC3();
 
@@ -60,7 +60,7 @@ class BasicIC3 : public BaseChecker {
 
     inline void GetPrimed(shared_ptr<cube> p) {
         for (auto &x : *p) {
-            x = m_model->GetPrimeK(x, 1);
+            x = m_model.GetPrimeK(x, 1);
         }
     }
     string FramesInfo() const;
@@ -127,7 +127,7 @@ class BasicIC3 : public BaseChecker {
 
     Settings m_settings;
     Log &m_log;
-    shared_ptr<Model> m_model;
+    Model &m_model;
     vector<IC3Frame> m_frames;
     shared_ptr<SATSolver> m_liftSolver;
     shared_ptr<SATSolver> m_startSolver;

@@ -67,7 +67,7 @@ using frame = unordered_set<cube, CubeHash>;
 
 class OverSequenceSet {
   public:
-    OverSequenceSet(shared_ptr<Model> model) : m_model(model) {
+    OverSequenceSet(Model &model) : m_model(model) {
         m_blockSolver = make_shared<SATSolver>(model, MCSATSolver::minisat);
         m_invariantLevel = 0;
         m_blockCounter.emplace_back(0);
@@ -99,7 +99,7 @@ class OverSequenceSet {
   private:
     bool Imply(const cube &a, const cube &b);
 
-    shared_ptr<Model> m_model;
+    Model &m_model;
     vector<shared_ptr<frame>> m_sequence;
     shared_ptr<SATSolver> m_blockSolver;
     vector<int> m_blockCounter;

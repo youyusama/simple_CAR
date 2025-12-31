@@ -17,7 +17,7 @@ namespace car {
 class BackwardChecker : public BaseChecker {
   public:
     BackwardChecker(Settings settings,
-                    shared_ptr<Model> model,
+                    Model &model,
                     Log &log);
     CheckResult Run();
     void Witness();
@@ -44,12 +44,12 @@ class BackwardChecker : public BaseChecker {
     } litOrder;
 
     struct InnOrder {
-        shared_ptr<Model> m;
+        Model &m;
 
-        InnOrder() {}
+        explicit InnOrder(Model &model) : m(model) {}
 
         bool operator()(const int &inn_1, const int &inn_2) const {
-            return (m->GetInnardslvl(inn_1) > m->GetInnardslvl(inn_2));
+            return (m.GetInnardslvl(inn_1) > m.GetInnardslvl(inn_2));
         }
     } innOrder;
 
@@ -86,7 +86,7 @@ class BackwardChecker : public BaseChecker {
 
     inline void GetPrimed(shared_ptr<cube> p) {
         for (auto &x : *p) {
-            x = m_model->GetPrime(x);
+            x = m_model.GetPrime(x);
         }
     }
 
@@ -132,7 +132,7 @@ class BackwardChecker : public BaseChecker {
     UnderSequence m_underSequence;
     Settings m_settings;
     Log &m_log;
-    shared_ptr<Model> m_model;
+    Model &m_model;
     vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badSolver;

@@ -11,7 +11,7 @@ namespace car {
 class BMC : public BaseChecker {
   public:
     BMC(Settings settings,
-        shared_ptr<Model> model,
+        Model &model,
         Log &log);
 
     CheckResult Run();
@@ -22,7 +22,7 @@ class BMC : public BaseChecker {
     bool Check_nonincremental(int badId);
     Settings m_settings;
     Log &m_log;
-    shared_ptr<Model> m_model;
+    Model &m_model;
     int m_k;
     int m_maxK;
     int m_step;
