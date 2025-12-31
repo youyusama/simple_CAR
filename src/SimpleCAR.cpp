@@ -11,19 +11,19 @@
 
 namespace car {
 
-static std::shared_ptr<BaseChecker> CreateChecker(
+static std::unique_ptr<BaseChecker> CreateChecker(
     const Settings &settings,
     Model &aigerModel,
     Log &log) {
     switch (settings.alg) {
     case MCAlgorithm::FCAR:
-        return std::make_shared<ForwardChecker>(settings, aigerModel, log);
+        return std::make_unique<ForwardChecker>(settings, aigerModel, log);
     case MCAlgorithm::BCAR:
-        return std::make_shared<BackwardChecker>(settings, aigerModel, log);
+        return std::make_unique<BackwardChecker>(settings, aigerModel, log);
     case MCAlgorithm::BMC:
-        return std::make_shared<BMC>(settings, aigerModel, log);
+        return std::make_unique<BMC>(settings, aigerModel, log);
     case MCAlgorithm::IC3:
-        return std::make_shared<BasicIC3>(settings, aigerModel, log);
+        return std::make_unique<BasicIC3>(settings, aigerModel, log);
     default:
         return nullptr;
     }
