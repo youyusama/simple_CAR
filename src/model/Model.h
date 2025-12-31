@@ -97,7 +97,7 @@ using VarMapN64 = std::unordered_map<SignatureN64, std::vector<int>, SimulationS
 
 class Model {
   public:
-    Model(Settings settings, shared_ptr<Log> log);
+    Model(Settings settings, Log &log);
 
     inline int TrueId() {
         return m_circuitGraph->trueId;
@@ -242,7 +242,7 @@ class Model {
     inline int GetNewId() { return ++m_maxId; };
 
     Settings m_settings;
-    shared_ptr<Log> m_log;
+    Log &m_log;
     shared_ptr<aiger> m_aiger;
     shared_ptr<CircuitGraph> m_circuitGraph;
 

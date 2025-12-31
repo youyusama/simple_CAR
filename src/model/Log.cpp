@@ -6,8 +6,10 @@
 namespace car {
 
 void signalHandler(int signum) {
-    GLOBAL_LOG->PrintStatistics();
-    GLOBAL_LOG->L(0, "Unknown");
+    if (GLOBAL_LOG != nullptr) {
+        GLOBAL_LOG->PrintStatistics();
+        GLOBAL_LOG->L(0, "Unknown");
+    }
     exit(signum);
 }
 
@@ -42,7 +44,7 @@ Log::ScopedTimer::~ScopedTimer() {
 }
 
 
-shared_ptr<Log> GLOBAL_LOG = nullptr;
+Log *GLOBAL_LOG = nullptr;
 
 
 string CubeToStr(const shared_ptr<vector<int>> c) {

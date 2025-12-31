@@ -73,7 +73,7 @@ void testTruthTables();
 
 class TernarySimulator {
   public:
-    TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, shared_ptr<Log> log);
+    TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, Log &log);
     ~TernarySimulator() {};
 
     bool setVal(int id, tbool v, int step);
@@ -95,7 +95,7 @@ class TernarySimulator {
     const vector<shared_ptr<vector<int>>> &getGateStates() { return m_gateStates; };
 
   private:
-    shared_ptr<Log> m_log;
+    Log &m_log;
 
     shared_ptr<CircuitGraph> m_circuitGraph;
 

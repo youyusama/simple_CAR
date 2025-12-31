@@ -20,7 +20,7 @@ class SimpleCAR {
 
   private:
     Settings m_settings;
-    std::shared_ptr<Log> m_log;
+    std::unique_ptr<Log> m_log;
     std::shared_ptr<Model> m_model;
     std::shared_ptr<BaseChecker> m_checker;
 };

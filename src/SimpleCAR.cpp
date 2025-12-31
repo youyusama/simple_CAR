@@ -14,7 +14,7 @@ namespace car {
 static std::shared_ptr<BaseChecker> CreateChecker(
     const Settings &settings,
     const std::shared_ptr<Model> &aigerModel,
-    const std::shared_ptr<Log> &log) {
+    Log &log) {
     switch (settings.alg) {
     case MCAlgorithm::FCAR:
         return std::make_shared<ForwardChecker>(settings, aigerModel, log);
@@ -31,13 +31,15 @@ static std::shared_ptr<BaseChecker> CreateChecker(
 
 SimpleCAR::SimpleCAR(const Settings &settings) : m_settings(settings) {}
 
-SimpleCAR::~SimpleCAR() = default;
+SimpleCAR::~SimpleCAR() {
+    GLOBAL_LOG = nullptr;
+}
 
 bool SimpleCAR::LoadModel() {
-    m_log = std::shared_ptr<Log>(new Log(m_settings.verbosity));
-    m_model = std::shared_ptr<Model>(new Model(m_settings, m_log));
+    m_log = std::make_unique<Log>(m_settings.verbosity);
+    m_model = std::shared_ptr<Model>(new Model(m_settings, *m_log));
     m_log->StatInit();
-    m_checker = CreateChecker(m_settings, m_model, m_log);
+    m_checker = CreateChecker(m_settings, m_model, *m_log);
     return static_cast<bool>(m_checker);
 }
 

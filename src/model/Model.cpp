@@ -56,8 +56,8 @@ pair<int, int> EquivalenceManager::FindRootRecursive(int key) {
 }
 
 
-Model::Model(Settings settings, shared_ptr<Log> log) : m_settings(settings),
-                                                       m_log(log) {
+Model::Model(Settings settings, Log &log) : m_settings(settings),
+                                            m_log(log) {
     // load aiger
     string aigFilePath = settings.aigFilePath;
     m_aiger = shared_ptr<aiger>(aiger_init(), aigerDeleter);
@@ -76,17 +76,17 @@ Model::Model(Settings settings, shared_ptr<Log> log) : m_settings(settings),
     // multiple bad to check
     int num_bad = m_circuitGraph->bad.size();
     if (num_bad > 1) {
-        m_log->L(0, "aiger has more than one safety property to check.");
+        m_log.L(0, "aiger has more than one safety property to check.");
         exit(0);
     } else if (num_bad == 0) {
-        m_log->L(0, "aiger has no safety property to check.");
+        m_log.L(0, "aiger has no safety property to check.");
         exit(0);
     }
 
-    m_log->L(1, "Model initialized: ",
+    m_log.L(1, "Model initialized: ",
              m_circuitGraph->numInputs, " inputs, ", m_circuitGraph->numLatches, " latches, ",
              m_circuitGraph->numAnds, " gates, ", m_circuitGraph->numConstraints, " constraints.");
-    m_log->L(1, "COI Refined Model: ",
+    m_log.L(1, "COI Refined Model: ",
              m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
     m_maxId = m_circuitGraph->trueId;
 
@@ -150,9 +150,9 @@ Model::Model(Settings settings, shared_ptr<Log> log) : m_settings(settings),
     //     cout << endl;
     // }
 
-    m_log->L(1, "Model reduced: ",
+    m_log.L(1, "Model reduced: ",
              m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
-    m_log->L(1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
+    m_log.L(1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
 }
 
 
@@ -427,13 +427,13 @@ void Model::SimplifyClauses() {
 
 
 bool Model::SimplifyModelByTernarySimulation() {
-    m_log->L(1, "Simplify model by ternary simulation.");
+    m_log.L(1, "Simplify model by ternary simulation.");
 
-    m_log->Tick();
+    m_log.Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
     simulator.simulate(250);
     if (!simulator.isCycleReached()) return false;
-    m_log->L(1, "Simulation takes ", m_log->Tock(), " seconds.");
+    m_log.L(1, "Simulation takes ", m_log.Tock(), " seconds.");
 
     // find equivalent latches
     unordered_map<string, vector<int>> signaturesVariablesMap;
@@ -462,7 +462,7 @@ bool Model::SimplifyModelByTernarySimulation() {
             }
         }
     }
-    m_log->L(1, "Found ", eq_counter, " equivalent latches.");
+    m_log.L(1, "Found ", eq_counter, " equivalent latches.");
 
     // find equivalent gates
     unordered_map<string, vector<int>> signaturesGatesMap;
@@ -491,17 +491,17 @@ bool Model::SimplifyModelByTernarySimulation() {
             }
         }
     }
-    m_log->L(1, "Found ", eq_counter, " equivalent gates.");
+    m_log.L(1, "Found ", eq_counter, " equivalent gates.");
 
     return true;
 }
 
 
 void Model::SimplifyModelByRandomSimulation() {
-    m_log->L(1, "Simplify model by random simulation.");
+    m_log.L(1, "Simplify model by random simulation.");
     if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
 
-    m_log->Tick();
+    m_log.Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
     vector<shared_ptr<unordered_map<int, tbool>>> simulation_values;
     for (int i = 0; i < NUM_CHUNKS; i++) {
@@ -510,7 +510,7 @@ void Model::SimplifyModelByRandomSimulation() {
             simulation_values.emplace_back(values);
         }
     }
-    m_log->L(1, "Simulation takes ", m_log->Tock(), " seconds.");
+    m_log.L(1, "Simulation takes ", m_log.Tock(), " seconds.");
 
     // find may equivalent latches
     VarMapN64 signaturesVariablesMap;
@@ -524,7 +524,7 @@ void Model::SimplifyModelByRandomSimulation() {
     // signatures to equivalent variables
     for (auto &s : signaturesVariablesMap) {
         if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
-            m_log->L(1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
+            m_log.L(1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
             break;
         }
 
@@ -547,9 +547,9 @@ void Model::SimplifyModelByRandomSimulation() {
             }
         }
     }
-    m_log->L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent latches.");
+    m_log.L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent latches.");
     if (mayeq_counter > 0)
-        m_log->L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
+        m_log.L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
 
     if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
     // find may equivalent variables
@@ -563,7 +563,7 @@ void Model::SimplifyModelByRandomSimulation() {
     // signatures to equivalent variables
     for (auto &s : signaturesVariablesMap) {
         if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
-            m_log->L(1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
+            m_log.L(1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
             break;
         }
         if (s.second.size() < 2) continue;
@@ -580,9 +580,9 @@ void Model::SimplifyModelByRandomSimulation() {
             }
         }
     }
-    m_log->L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent gates.");
+    m_log.L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent gates.");
     if (mayeq_counter > 0)
-        m_log->L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
+        m_log.L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
     if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
 }
 

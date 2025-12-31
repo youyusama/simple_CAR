@@ -185,7 +185,7 @@ class Log {
     void EndSection();
 };
 
-extern shared_ptr<Log> GLOBAL_LOG;
+extern Log *GLOBAL_LOG;
 
 } // namespace car
 

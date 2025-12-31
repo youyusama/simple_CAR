@@ -12,7 +12,7 @@ class BMC : public BaseChecker {
   public:
     BMC(Settings settings,
         shared_ptr<Model> model,
-        shared_ptr<Log> log);
+        Log &log);
 
     CheckResult Run();
     void Witness();
@@ -21,7 +21,7 @@ class BMC : public BaseChecker {
     bool Check(int badId);
     bool Check_nonincremental(int badId);
     Settings m_settings;
-    shared_ptr<Log> m_log;
+    Log &m_log;
     shared_ptr<Model> m_model;
     int m_k;
     int m_maxK;

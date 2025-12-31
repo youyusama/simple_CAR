@@ -36,7 +36,7 @@ class BasicIC3 : public BaseChecker {
   public:
     BasicIC3(Settings settings,
              shared_ptr<Model> model,
-             shared_ptr<Log> log);
+             Log &log);
     ~BasicIC3();
 
     CheckResult Run();
@@ -126,7 +126,7 @@ class BasicIC3 : public BaseChecker {
     int m_k;
 
     Settings m_settings;
-    shared_ptr<Log> m_log;
+    Log &m_log;
     shared_ptr<Model> m_model;
     vector<IC3Frame> m_frames;
     shared_ptr<SATSolver> m_liftSolver;

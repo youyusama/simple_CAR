@@ -16,7 +16,7 @@ class ForwardChecker : public BaseChecker {
   public:
     ForwardChecker(Settings settings,
                    shared_ptr<Model> model,
-                   shared_ptr<Log> log);
+                   Log &log);
     CheckResult Run();
     void Witness();
 
@@ -71,7 +71,7 @@ class ForwardChecker : public BaseChecker {
     } blockerOrder;
 
     void OrderAssumption(shared_ptr<cube> c) {
-        [[maybe_unused]] auto scoped = m_log->Section("DS_OrdAsm");
+        [[maybe_unused]] auto scoped = m_log.Section("DS_OrdAsm");
         if (m_settings.randomSeed > 0) {
             shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
             return;
@@ -138,7 +138,7 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
-    shared_ptr<Log> m_log;
+    Log &m_log;
     shared_ptr<Model> m_model;
     shared_ptr<State> m_initialState;
     vector<shared_ptr<SATSolver>> m_transSolvers;

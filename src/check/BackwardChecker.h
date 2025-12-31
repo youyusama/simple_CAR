@@ -18,7 +18,7 @@ class BackwardChecker : public BaseChecker {
   public:
     BackwardChecker(Settings settings,
                     shared_ptr<Model> model,
-                    shared_ptr<Log> log);
+                    Log &log);
     CheckResult Run();
     void Witness();
 
@@ -131,7 +131,7 @@ class BackwardChecker : public BaseChecker {
     shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
-    shared_ptr<Log> m_log;
+    Log &m_log;
     shared_ptr<Model> m_model;
     vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_startSolver;

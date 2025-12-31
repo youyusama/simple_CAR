@@ -59,7 +59,7 @@ void testTruthTables() {
 }
 
 
-TernarySimulator::TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, shared_ptr<Log> log)
+TernarySimulator::TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, Log &log)
     : m_log(log),
       m_circuitGraph(circuitGraph),
       m_step(0),
@@ -148,7 +148,7 @@ void TernarySimulator::reset() {
 
 
 void TernarySimulator::simulate(int maxSteps) {
-    m_log->L(2, "Simulating circuit for ", maxSteps, " steps");
+    m_log.L(2, "Simulating circuit for ", maxSteps, " steps");
 
     reset();
     // set initial values // TODO: gate reset not supported
@@ -173,21 +173,21 @@ void TernarySimulator::simulate(int maxSteps) {
         }
 
         simulateOneStep();
-        m_log->L(4, "Step ", m_step, ": ", stepValuesToString(m_step));
+        m_log.L(4, "Step ", m_step, ": ", stepValuesToString(m_step));
         m_states.emplace_back(make_shared<vector<int>>());
         pushState(m_step, m_states[m_step]);
         m_gateStates.emplace_back(make_shared<vector<int>>());
         pushGateState(m_step, m_gateStates[m_step]);
 
         if (m_states.back()->size() == 1) {
-            m_log->L(2, "All X states, terminating simulation");
+            m_log.L(2, "All X states, terminating simulation");
             break;
         }
 
         if (reachCycle()) {
             m_states.pop_back();
             m_gateStates.pop_back();
-            m_log->L(2, "Cycle detected at step: ", m_cycleStart);
+            m_log.L(2, "Cycle detected at step: ", m_cycleStart);
             break;
         }
         m_step++;
@@ -198,7 +198,7 @@ void TernarySimulator::simulate(int maxSteps) {
 
 
 void TernarySimulator::simulateRandom(int maxSteps) {
-    m_log->L(2, "Simulating circuit for ", maxSteps, " steps (random inputs)");
+    m_log.L(2, "Simulating circuit for ", maxSteps, " steps (random inputs)");
 
     reset();
 
@@ -235,7 +235,7 @@ void TernarySimulator::simulateRandom(int maxSteps) {
         }
 
         simulateOneStep();
-        m_log->L(4, "Step ", m_step, ": ", stepValuesToString(m_step));
+        m_log.L(4, "Step ", m_step, ": ", stepValuesToString(m_step));
         m_step++;
     }
 }

@@ -4,12 +4,12 @@ namespace car {
 
 BMC::BMC(Settings settings,
          shared_ptr<Model> model,
-         shared_ptr<Log> log) : m_settings(settings),
-                                m_model(model),
-                                m_log(log) {
+         Log &log) : m_settings(settings),
+                    m_model(model),
+                    m_log(log) {
     State::numInputs = model->GetNumInputs();
     State::numLatches = model->GetNumLatches();
-    GLOBAL_LOG = m_log;
+    GLOBAL_LOG = &m_log;
     m_k = 0;
     m_maxK = m_settings.bmcK;
     m_checkResult = CheckResult::Unknown;
@@ -29,7 +29,7 @@ CheckResult BMC::Run() {
             m_checkResult = CheckResult::Unsafe;
     }
 
-    m_log->PrintStatistics();
+    m_log.PrintStatistics();
 
     return m_checkResult;
 }
@@ -45,7 +45,7 @@ bool BMC::Check(int badId) {
     Init(badId);
 
     while (true) {
-        m_log->L(1, "BMC Bound: ", m_k);
+        m_log.L(1, "BMC Bound: ", m_k);
 
         shared_ptr<vector<clause>> clauses = make_shared<vector<clause>>();
         GetClausesK(m_k, clauses);
@@ -53,7 +53,7 @@ bool BMC::Check(int badId) {
         // & T^k
         for (int i = 0; i < clauses->size(); ++i) {
             m_Solver->AddClause(clauses->at(i));
-            m_log->L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
+            m_log.L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
         }
 
         // assume( bad^k & cons^k )
@@ -63,20 +63,20 @@ bool BMC::Check(int badId) {
         for (auto c : GetConstraintsK(m_k)) {
             assumptions->push_back(c);
         }
-        m_log->L(3, "Assumption: ", CubeToStr(assumptions));
-        m_log->Tick();
+        m_log.L(3, "Assumption: ", CubeToStr(assumptions));
+        m_log.Tick();
         bool sat = m_Solver->Solve(assumptions);
-        m_log->StatMainSolver();
+        m_log.StatMainSolver();
         if (sat) return true;
 
         // & cons^k
         for (auto c : GetConstraintsK(m_k)) {
             m_Solver->AddClause({c});
-            m_log->L(3, "Add Clause: ", c);
+            m_log.L(3, "Add Clause: ", c);
         }
         // & !bad^k
         m_Solver->AddClause({-k_bad});
-        m_log->L(3, "Add Clause: ", -k_bad);
+        m_log.L(3, "Add Clause: ", -k_bad);
         m_k++;
         if (m_maxK != -1 && m_k > m_maxK) return false;
     }
@@ -94,12 +94,12 @@ bool BMC::Check_nonincremental(int badId) {
         // add clauses before K unrollings to the Kissat solver
         for (int i = 0; i < m_clauses->size(); ++i) {
             m_Solver->AddClause(m_clauses->at(i));
-            m_log->L(
+            m_log.L(
                 3, "Add Clause: ", CubeToStr(make_shared<cube>(m_clauses->at(i))));
         }
         badClause.clear();
         for (int s = 0; s < m_step; s++) {
-            m_log->L(1, "BMC Bound: ", m_k);
+            m_log.L(1, "BMC Bound: ", m_k);
 
             shared_ptr<vector<clause>> clauses = make_shared<vector<clause>>();
             GetClausesK(m_k, clauses);
@@ -108,18 +108,18 @@ bool BMC::Check_nonincremental(int badId) {
             for (int i = 0; i < clauses->size(); ++i) {
                 m_Solver->AddClause(clauses->at(i));
                 m_clauses->emplace_back(clauses->at(i)); // store for further use
-                m_log->L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
+                m_log.L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
             }
 
             int k_bad = GetBadK(m_k);
 
             badClause.push_back({k_bad});
             // m_Solver->AddClause({k_bad});
-            m_log->L(3, "Add Clause: ", k_bad);
+            m_log.L(3, "Add Clause: ", k_bad);
             for (auto c : GetConstraintsK(m_k)) {
                 m_Solver->AddClause({c});
                 m_clauses->push_back({c}); // store for further use
-                m_log->L(3, "Add Clause: ", c);
+                m_log.L(3, "Add Clause: ", c);
             }
 
             clause cl({-k_bad}); // store bad^k for
@@ -128,9 +128,9 @@ bool BMC::Check_nonincremental(int badId) {
             m_k++;
             if (m_maxK != -1 && m_k > m_maxK) {
                 m_Solver->AddClause(badClause);
-                m_log->Tick();
+                m_log.Tick();
                 bool sat = m_Solver->Solve();
-                m_log->StatMainSolver();
+                m_log.StatMainSolver();
                 if (sat)
                     return true;
                 else
@@ -138,9 +138,9 @@ bool BMC::Check_nonincremental(int badId) {
             }
         }
         m_Solver->AddClause(badClause);
-        m_log->Tick();
+        m_log.Tick();
         bool sat = m_Solver->Solve();
-        m_log->StatMainSolver();
+        m_log.StatMainSolver();
         if (sat)
             return true;
     }
