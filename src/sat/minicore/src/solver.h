@@ -64,7 +64,7 @@ class Solver {
     lbool value(Lit p) const;      // The current value of a literal.
     lbool modelValue(Var x) const; // The value of a variable in the last model. The last call to solve must have been satisfiable.
     lbool modelValue(Lit p) const; // The value of a literal in the last model. The last call to solve must have been satisfiable.
-    int nAssigns() const;          // The current number of assigned literals.
+    size_t nAssigns() const;       // The current number of assigned literals.
     int nClauses() const;          // The current number of original clauses.
     int nLearnts() const;          // The current number of learnt clauses.
     int nVars() const;             // The current number of variables.
@@ -108,7 +108,7 @@ class Solver {
     std::vector<CRef> learnts;      // List of learnt clauses.
     std::vector<CRef> temp_clauses; // List of clauses learnt from the temp clause.
     std::vector<Lit> trail;         // Assignment stack; stores all assigments made in the order they were made.
-    std::vector<int> trail_lim;     // Separator indices for different decision levels in 'trail'.
+    std::vector<size_t> trail_lim;  // Separator indices for different decision levels in 'trail'.
     std::vector<Lit> assumptions;   // Current set of assumptions provided to solve by the user.
 
     std::vector<lbool> assigns;   // The current assignments.
@@ -130,7 +130,7 @@ class Solver {
     bool ok;                  // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
     uint32_t cla_inc;         // Amount to bump next clause with.
     size_t qhead;             // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
-    int simpDB_assigns;       // Number of top-level assignments since last execution of 'simplify()'.
+    size_t simpDB_assigns;    // Number of top-level assignments since last execution of 'simplify()'.
     int64_t simpDB_props;     // Remaining number of propagations that must be made before next execution of 'simplify()'.
     double progress_estimate; // Set by 'search()'.
     bool remove_satisfied;    // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
@@ -138,7 +138,7 @@ class Solver {
     Var alloced_var;          // Variable with structure created.
     Var temp_cls_act_var;     // Variable to activate temp clause.
     bool temp_cls_activated;  // A temp clause is added.
-    int traillim_snapshot;    // Snapshot of trail_lim before temp clause/solve in domain is activated.
+    size_t traillim_snapshot; // Snapshot of trail_lim before temp clause/solve in domain is activated.
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
@@ -161,7 +161,7 @@ class Solver {
     void cancelUntil(size_t level);                // Backtrack until a certain level.
     void analyze(CRef confl,
                  std::vector<Lit> &out_learnt,
-                 int &out_btlevel); // (bt = backtrack)
+                 size_t &out_btlevel); // (bt = backtrack)
     void analyzeFinal(Lit p,
                       std::unordered_set<Lit, LitHash> &out_conflict);
     bool litRedundant(Lit p);                    // (helper method for 'analyze()')
@@ -233,7 +233,7 @@ inline void Solver::varBumpActivity(Var v) {
 inline void Solver::claBumpActivity(Clause &c) {
     if ((c.activity() += cla_inc) > 1e20) {
         // Rescale:
-        for (int i = 0; i < learnts.size(); i++)
+        for (size_t i = 0; i < learnts.size(); i++)
             ca->get_clause(learnts[i]).activity() *= 1e-20;
         cla_inc *= 1e-20;
     }
@@ -254,12 +254,12 @@ inline bool Solver::locked(const Clause &c) const { return value(c[0]) == l_True
 inline void Solver::newDecisionLevel() { trail_lim.emplace_back(trail.size()); }
 
 inline size_t Solver::decisionLevel() const { return trail_lim.size(); }
-inline uint32_t Solver::abstractLevel(Var x) const { return 1 << (level(x) & 31); }
+inline uint32_t Solver::abstractLevel(Var x) const { return 1u << (level(x) & 31); }
 inline lbool Solver::value(Var x) const { return assigns[x]; }
 inline lbool Solver::value(Lit p) const { return assigns[var(p)] ^ sign(p); }
 inline lbool Solver::modelValue(Var x) const { return model[x]; }
 inline lbool Solver::modelValue(Lit p) const { return model[var(p)] ^ sign(p); }
-inline int Solver::nAssigns() const { return trail.size(); }
+inline size_t Solver::nAssigns() const { return trail.size(); }
 inline int Solver::nClauses() const { return num_clauses; }
 inline int Solver::nLearnts() const { return num_learnts; }
 inline int Solver::nVars() const { return next_var; }

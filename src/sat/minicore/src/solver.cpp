@@ -28,7 +28,7 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1) {
+                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
 }
@@ -163,7 +163,7 @@ bool Solver::deducedByTemp(const std::vector<Lit> &cls) const {
 
 void Solver::cancelUntil(size_t level) {
     if (decisionLevel() > level) {
-        for (int c = trail.size() - 1; c >= trail_lim[level]; c--) {
+        for (size_t c = trail.size(); c-- > trail_lim[level];) {
             Var x = var(trail[c]);
             assigns[x] = l_Undef;
             polarity[x] = sign(trail[c]);
@@ -196,14 +196,14 @@ Lit Solver::pickBranchLit() {
 }
 
 
-void Solver::analyze(CRef confl, std::vector<Lit> &out_learnt, int &out_btlevel) {
+void Solver::analyze(CRef confl, std::vector<Lit> &out_learnt, size_t &out_btlevel) {
     int pathC = 0;
     Lit p = lit_Undef;
 
     // Generate conflict clause:
     //
     out_learnt.resize(1);
-    int index = trail.size() - 1;
+    size_t index = trail.size();
 
     do {
         assert(confl != CRef_Undef); // (otherwise should be UIP)
@@ -226,8 +226,8 @@ void Solver::analyze(CRef confl, std::vector<Lit> &out_learnt, int &out_btlevel)
         }
 
         // Select next clause to look at:
-        while (!seen[var(trail[index--])]);
-        p = trail[index + 1];
+        while (!seen[var(trail[--index])]);
+        p = trail[index];
         confl = reason(var(p));
         seen[var(p)] = 0;
         pathC--;
@@ -341,7 +341,7 @@ void Solver::analyzeFinal(Lit p, std::unordered_set<Lit, LitHash> &out_conflict)
     seen[var(p)] = 1;
     // std::cout << "final conflict var: " << (!sign(p) ? var(p) : -var(p)) << std::endl;
 
-    for (int i = trail.size() - 1; i >= trail_lim[0]; i--) {
+    for (size_t i = trail.size(); i-- > trail_lim[0];) {
         Var x = var(trail[i]);
         if (seen[x]) {
             if (reason(x) == CRef_Undef) {
@@ -511,7 +511,7 @@ bool Solver::simplify() {
 
 lbool Solver::search(int nof_conflicts) {
     assert(ok);
-    int backtrack_level;
+    size_t backtrack_level;
     int conflictC = 0;
     std::vector<Lit> learnt_clause;
     starts++;
