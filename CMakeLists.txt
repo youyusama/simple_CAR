@@ -1,14 +1,19 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(simpleCAR VERSION 0.1)
+# Compiler
+if(NOT DEFINED CMAKE_C_COMPILER AND NOT DEFINED CMAKE_CXX_COMPILER)
+    set(CMAKE_C_COMPILER   clang   CACHE STRING "C compiler" FORCE)
+    set(CMAKE_CXX_COMPILER clang++ CACHE STRING "CXX compiler" FORCE)
+endif()
+
+project(simpleCAR VERSION 0.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ENABLE_SANITIZERS "Enable Address/UB Sanitizers and extra debug flags" OFF)
 
-
-# debug
+# Debug
 set(CMAKE_C_FLAGS_DEBUG "-g -ggdb")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -ggdb -fpermissive")
 
@@ -22,9 +27,33 @@ else()
     message(STATUS "Sanitizers disabled for Debug builds")
 endif()
 
-# release
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -flto")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -fpermissive -flto")
+# Release
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -fpermissive")
+
+# Enable IPO/LTO only for Release
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+
+# LLD linker and ThinLTO
+option(USE_LLD "Use lld linker (recommended with Clang)" ON)
+option(ENABLE_THINLTO "Use ThinLTO in Release (recommended)" ON)
+
+if(USE_LLD)
+  add_link_options($<$<COMPILE_LANG_AND_ID:C,Clang>:-fuse-ld=lld>
+                   $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-fuse-ld=lld>)
+endif()
+
+if(ENABLE_THINLTO)
+  add_compile_options($<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,Clang>>:-flto=thin>
+                      $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:CXX,Clang>>:-flto=thin>)
+  add_link_options($<$<AND:$<CONFIG:Release>,$<LINK_LANG_AND_ID:C,Clang>>:-flto=thin>
+                   $<$<AND:$<CONFIG:Release>,$<LINK_LANG_AND_ID:CXX,Clang>>:-flto=thin>)
+endif()
+
+if(ENABLE_THINLTO AND USE_LLD)
+  add_link_options($<$<AND:$<CONFIG:Release>,$<LINK_LANG_AND_ID:CXX,Clang>>:-Wl,--thinlto-jobs=all>)
+endif()
+
 
 set(DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -87,8 +116,11 @@ target_link_libraries(simpleCAR PUBLIC ${LIBS})
 
 if(APPLE)
     # On macOS, avoid -static (causes missing crt0.o); keep strip and LTO.
-    target_link_options(simpleCAR PUBLIC $<$<CONFIG:Release>:-s -flto>)
+    target_link_options(simpleCAR PUBLIC $<$<CONFIG:Release>:-s>)
 else()
     # On other Unices we may use static linking for release builds.
-    target_link_options(simpleCAR PUBLIC $<$<CONFIG:Release>:-s -static -flto>)
+    target_link_options(simpleCAR PUBLIC $<$<CONFIG:Release>:-s -static>)
 endif()
+
+message(STATUS "C compiler:   ${CMAKE_C_COMPILER}")
+message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
