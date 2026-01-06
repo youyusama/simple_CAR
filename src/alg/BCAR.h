@@ -4,7 +4,6 @@
 #include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
-#include "Restart.h"
 #include "SATSolver.h"
 #include "random"
 #include <algorithm>
