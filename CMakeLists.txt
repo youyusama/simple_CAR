@@ -58,35 +58,35 @@ endif()
 set(DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/model
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/check
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/alg
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sat
 )
 
 set(SRCS
     src/model/aiger.c
-    src/model/Settings.cpp
     src/model/CircuitGraph.cpp
     src/model/TernarySim.cpp
     src/model/Model.cpp
-    src/model/Log.cpp
-    src/check/BackwardChecker.cpp
-    src/check/ForwardChecker.cpp
-    src/check/BMC.cpp
-    src/check/BasicIC3.cpp
-    src/model/SATSolver.cpp
-    src/model/IncrCheckerHelpers.cpp
+    src/Settings.cpp
+    src/Log.cpp
+    src/alg/BCAR.cpp
+    src/alg/FCAR.cpp
+    src/alg/BMC.cpp
+    src/alg/BasicIC3.cpp
+    src/sat/SATSolver.cpp
+    src/IncrCheckerHelpers.cpp
     src/SimpleCAR.cpp
     src/main.cpp
     # restart
-    src/model/Restart.h
+    src/Restart.h
     # minisat
-    src/model/MinisatSolver.cpp
+    src/sat/MinisatSolver.cpp
     src/sat/minisat/core/Solver.cc
     src/sat/minisat/simp/SimpSolver.cc
     src/sat/minisat/utils/Options.cc
     src/sat/minisat/utils/System.cc
     # minicore
-    src/model/MinicoreSolver.cpp
+    src/sat/MinicoreSolver.cpp
     src/sat/minicore/src/solver.cpp
 )
 
@@ -95,7 +95,7 @@ if(CADICAL)
     add_definitions(-DCADICAL)
     set(SRCS
         ${SRCS}
-        src/model/CadicalSolver.cpp
+        src/sat/CadicalSolver.cpp
     )
     set(LIBS ${LIBS} ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/cadical/build/libcadical.a)
 endif()
@@ -105,7 +105,7 @@ if(KISSAT)
     add_definitions(-DKISSAT)
     set(SRCS
         ${SRCS}
-        src/model/KissatSolver.cpp
+        src/sat/KissatSolver.cpp
     )
     set(LIBS ${LIBS} ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/kissat/build/libkissat.a)
 endif()

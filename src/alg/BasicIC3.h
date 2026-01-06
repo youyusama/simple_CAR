@@ -1,7 +1,7 @@
 #ifndef BASICIC3_H
 #define BASICIC3_H
 
-#include "BaseChecker.h"
+#include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
@@ -32,7 +32,7 @@ struct IC3Frame {
     set<shared_ptr<cube>, cubePtrComp> borderCubes;
 };
 
-class BasicIC3 : public BaseChecker {
+class BasicIC3 : public BaseAlg {
   public:
     BasicIC3(Settings settings,
              Model &model,

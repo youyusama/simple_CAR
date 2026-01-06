@@ -1,7 +1,7 @@
-#ifndef BACKWARDCHECKER_H
-#define BACKWARDCHECKER_H
+#ifndef BCAR_H
+#define BCAR_H
 
-#include "BaseChecker.h"
+#include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "Restart.h"
@@ -14,11 +14,11 @@
 
 namespace car {
 
-class BackwardChecker : public BaseChecker {
+class BCAR : public BaseAlg {
   public:
-    BackwardChecker(Settings settings,
-                    Model &model,
-                    Log &log);
+    BCAR(Settings settings,
+         Model &model,
+         Log &log);
     CheckResult Run();
     void Witness();
 

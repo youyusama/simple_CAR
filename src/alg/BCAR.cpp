@@ -1,10 +1,10 @@
-#include "BackwardChecker.h"
+#include "BCAR.h"
 #include <stack>
 #include <string>
 
 namespace car {
 
-BackwardChecker::BackwardChecker(Settings settings,
+BCAR::BCAR(Settings settings,
                                  Model &model,
                                  Log &log) : m_settings(settings),
                                             m_model(model),
@@ -16,7 +16,7 @@ BackwardChecker::BackwardChecker(Settings settings,
     GLOBAL_LOG = &m_log;
 }
 
-CheckResult BackwardChecker::Run() {
+CheckResult BCAR::Run() {
     signal(SIGINT, signalHandler);
 
     if (Check(m_model.GetBad()))
@@ -29,7 +29,7 @@ CheckResult BackwardChecker::Run() {
     return m_checkResult;
 }
 
-void BackwardChecker::Witness() {
+void BCAR::Witness() {
     if (m_checkResult == CheckResult::Safe) {
         OutputWitness(m_model.GetBad());
     } else if (m_checkResult == CheckResult::Unsafe) {
@@ -37,7 +37,7 @@ void BackwardChecker::Witness() {
     }
 }
 
-bool BackwardChecker::Check(int badId) {
+bool BCAR::Check(int badId) {
     Init();
     m_log.L(2, "Initialized");
 
@@ -194,7 +194,7 @@ bool BackwardChecker::Check(int badId) {
 }
 
 
-void BackwardChecker::Init() {
+void BCAR::Init() {
     m_overSequence = make_shared<OverSequenceSet>(m_model);
     m_underSequence = UnderSequence();
     m_branching = make_shared<Branching>(m_settings.branching);
@@ -222,7 +222,7 @@ void BackwardChecker::Init() {
     m_restart.reset(new Restart(m_settings));
 }
 
-bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck) {
+bool BCAR::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck) {
     m_restart->UcCountsPlus1();
     m_log.Tick();
 
@@ -249,7 +249,7 @@ bool BackwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, 
     return true;
 }
 
-bool BackwardChecker::ImmediateSatisfiable(int badId) {
+bool BCAR::ImmediateSatisfiable(int badId) {
     shared_ptr<cube> assumptions = make_shared<cube>();
     assumptions->push_back(badId);
     m_log.Tick();
@@ -260,7 +260,7 @@ bool BackwardChecker::ImmediateSatisfiable(int badId) {
 }
 
 
-shared_ptr<State> BackwardChecker::EnumerateStartState() {
+shared_ptr<State> BCAR::EnumerateStartState() {
     if (!m_startSolver->Solve()) return nullptr;
     auto p = m_startSolver->GetAssignment(true);
     shared_ptr<State> startState(new State(nullptr, p.first, p.second, 0));
@@ -268,7 +268,7 @@ shared_ptr<State> BackwardChecker::EnumerateStartState() {
 }
 
 
-void BackwardChecker::OverSequenceRefine(int lvl) {
+void BCAR::OverSequenceRefine(int lvl) {
     // sometimes we have I & T & c & (O_0 | O_1 | ... | O_i+1)' is UNSAT,
     // but to output a correct witness,
     // we need I & c & (O_0 | O_1 | ... | O_i) is UNSAT.
@@ -315,7 +315,7 @@ void BackwardChecker::OverSequenceRefine(int lvl) {
 }
 
 
-bool BackwardChecker::IsInvariant(int frameLevel) {
+bool BCAR::IsInvariant(int frameLevel) {
     m_log.Tick();
 
     shared_ptr<frame> frame_i = m_overSequence->GetFrame(frameLevel);
@@ -340,7 +340,7 @@ bool BackwardChecker::IsInvariant(int frameLevel) {
 // @input:
 // @output:
 // ================================================================================
-void BackwardChecker::AddConstraintOr(const shared_ptr<frame> f) {
+void BCAR::AddConstraintOr(const shared_ptr<frame> f) {
     cube cls;
     for (const cube &frame_cube : *f) {
         int flag = m_invSolver->GetNewVar();
@@ -358,7 +358,7 @@ void BackwardChecker::AddConstraintOr(const shared_ptr<frame> f) {
 // @input:
 // @output:
 // ================================================================================
-void BackwardChecker::AddConstraintAnd(const shared_ptr<frame> f) {
+void BCAR::AddConstraintAnd(const shared_ptr<frame> f) {
     int flag = m_invSolver->GetNewVar();
     for (const cube &frame_cube : *f) {
         cube cls;
@@ -377,7 +377,7 @@ void BackwardChecker::AddConstraintAnd(const shared_ptr<frame> f) {
 // @input:
 // @output:
 // ================================================================================
-bool BackwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
+bool BCAR::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
     unordered_set<int> required_lits;
 
     vector<cube> uc_blockers;
@@ -415,7 +415,7 @@ bool BackwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lv
 }
 
 
-bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses) {
+bool BCAR::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses) {
     int ctgs = 0;
     shared_ptr<cube> assumption(new cube(*uc));
     shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
@@ -460,7 +460,7 @@ bool BackwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, sha
 }
 
 
-bool BackwardChecker::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses) {
+bool BCAR::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses) {
     for (auto f : *failed_ctses) {
         // if f->s , return true
         if (f.size() > s->size()) continue;
@@ -470,7 +470,7 @@ bool BackwardChecker::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<v
 }
 
 
-bool BackwardChecker::CheckBad(shared_ptr<State> s) {
+bool BCAR::CheckBad(shared_ptr<State> s) {
     m_log.L(2, "\nSAT CHECK on bad");
     m_log.L(3, "From state: ", CubeToStr(s->latches));
     shared_ptr<cube> assumption(new cube(*s->latches));
@@ -524,22 +524,22 @@ bool BackwardChecker::CheckBad(shared_ptr<State> s) {
 }
 
 
-bool BackwardChecker::IsReachable(int lvl, const shared_ptr<cube> assumption) {
+bool BCAR::IsReachable(int lvl, const shared_ptr<cube> assumption) {
     return m_transSolvers[lvl]->Solve(assumption);
 }
 
 
-pair<shared_ptr<cube>, shared_ptr<cube>> BackwardChecker::GetInputAndState(int lvl) {
+pair<shared_ptr<cube>, shared_ptr<cube>> BCAR::GetInputAndState(int lvl) {
     return m_transSolvers[lvl]->GetAssignment(true);
 }
 
 
-shared_ptr<cube> BackwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> state) {
+shared_ptr<cube> BCAR::GetUnsatCore(int lvl, const shared_ptr<cube> state) {
     return GetUnsatAssumption(m_transSolvers[lvl], state);
 }
 
 
-shared_ptr<cube> BackwardChecker::GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions) {
+shared_ptr<cube> BCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions) {
     const unordered_set<int> &conflict = solver->GetConflict();
     shared_ptr<cube> res = make_shared<cube>();
 
@@ -558,7 +558,7 @@ shared_ptr<cube> BackwardChecker::GetUnsatAssumption(shared_ptr<SATSolver> solve
 // @input:
 // @output:
 // ================================================================================
-unsigned BackwardChecker::addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
+unsigned BCAR::addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
     assert(cube.size() > 0);
     unsigned res = cube[0];
     assert(res / 2 <= circuit->maxvar);
@@ -572,7 +572,7 @@ unsigned BackwardChecker::addCubeToANDGates(aiger *circuit, vector<unsigned> cub
 }
 
 
-bool BackwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
+bool BCAR::Propagate(shared_ptr<cube> c, int lvl) {
     m_log.Tick();
 
     bool result;
@@ -589,7 +589,7 @@ bool BackwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
 }
 
 
-int BackwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
+int BCAR::PropagateUp(shared_ptr<cube> c, int lvl) {
     while (lvl < m_k) {
         if (Propagate(c, lvl))
             m_branching->Update(c);
@@ -601,7 +601,7 @@ int BackwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
 }
 
 
-void BackwardChecker::OutputWitness(int bad) {
+void BCAR::OutputWitness(int bad) {
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/");
     if (startIndex == string::npos) {
@@ -732,7 +732,7 @@ void BackwardChecker::OutputWitness(int bad) {
 }
 
 
-void BackwardChecker::OutputCounterExample(int bad) {
+void BCAR::OutputCounterExample(int bad) {
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
     if (startIndex == string::npos) {

@@ -1,14 +1,14 @@
 #ifndef BMC_H
 #define BMC_H
 
-#include "BaseChecker.h"
+#include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
 
 namespace car {
 
-class BMC : public BaseChecker {
+class BMC : public BaseAlg {
   public:
     BMC(Settings settings,
         Model &model,

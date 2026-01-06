@@ -1,9 +1,9 @@
-#include "ForwardChecker.h"
+#include "FCAR.h"
 #include <stack>
 #include <string>
 namespace car {
 
-ForwardChecker::ForwardChecker(Settings settings,
+FCAR::FCAR(Settings settings,
                                Model &model,
                                Log &log) : m_settings(settings),
                                           m_model(model),
@@ -18,7 +18,7 @@ ForwardChecker::ForwardChecker(Settings settings,
     m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
 }
 
-CheckResult ForwardChecker::Run() {
+CheckResult FCAR::Run() {
     signal(SIGINT, signalHandler);
 
     if (Check(m_model.GetBad()))
@@ -31,7 +31,7 @@ CheckResult ForwardChecker::Run() {
     return m_checkResult;
 }
 
-void ForwardChecker::Witness() {
+void FCAR::Witness() {
     if (m_checkResult == CheckResult::Safe) {
         OutputWitness(m_model.GetBad());
     } else if (m_checkResult == CheckResult::Unsafe) {
@@ -39,7 +39,7 @@ void ForwardChecker::Witness() {
     }
 }
 
-bool ForwardChecker::Check(int badId) {
+bool FCAR::Check(int badId) {
     [[maybe_unused]] auto checkScope = m_log.Section("FC_Check");
     Init(badId);
     m_log.L(2, "Initialized");
@@ -213,7 +213,7 @@ bool ForwardChecker::Check(int badId) {
 }
 
 
-void ForwardChecker::Init(int badId) {
+void FCAR::Init(int badId) {
     [[maybe_unused]] auto initScope = m_log.Section("FC_Init");
     shared_ptr<cube> inputs(new cube(State::numInputs, 0));
     shared_ptr<cube> latches(new cube(m_model.GetInitialState()));
@@ -255,7 +255,7 @@ void ForwardChecker::Init(int badId) {
     m_restart.reset(new Restart(m_settings));
 }
 
-bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck) {
+bool FCAR::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_AddUC");
     m_restart->UcCountsPlus1();
     if (!m_overSequence->Insert(*uc, frameLevel, implyCheck)) return false;
@@ -279,7 +279,7 @@ bool ForwardChecker::AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, b
     return true;
 }
 
-bool ForwardChecker::ImmediateSatisfiable(int badId) {
+bool FCAR::ImmediateSatisfiable(int badId) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_ImmSAT");
     shared_ptr<cube> assumptions(new cube(*m_initialState->latches));
     assumptions->push_back(badId);
@@ -293,7 +293,7 @@ bool ForwardChecker::ImmediateSatisfiable(int badId) {
 }
 
 
-shared_ptr<State> ForwardChecker::EnumerateStartState() {
+shared_ptr<State> FCAR::EnumerateStartState() {
     [[maybe_unused]] auto scoped = m_log.Section("FC_StartEnum");
     bool sat = false;
     {
@@ -366,7 +366,7 @@ shared_ptr<State> ForwardChecker::EnumerateStartState() {
 }
 
 
-bool ForwardChecker::IsInvariant(int frameLevel) {
+bool FCAR::IsInvariant(int frameLevel) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_Invariant");
     shared_ptr<frame> frame_i = m_overSequence->GetFrame(frameLevel);
 
@@ -393,7 +393,7 @@ bool ForwardChecker::IsInvariant(int frameLevel) {
 // @input:
 // @output:
 // ================================================================================
-void ForwardChecker::AddConstraintOr(const shared_ptr<frame> f) {
+void FCAR::AddConstraintOr(const shared_ptr<frame> f) {
     cube cls;
     for (const cube &frame_cube : *f) {
         int flag = m_invSolver->GetNewVar();
@@ -411,7 +411,7 @@ void ForwardChecker::AddConstraintOr(const shared_ptr<frame> f) {
 // @input:
 // @output:
 // ================================================================================
-void ForwardChecker::AddConstraintAnd(const shared_ptr<frame> f) {
+void FCAR::AddConstraintAnd(const shared_ptr<frame> f) {
     int flag = m_invSolver->GetNewVar();
     for (const cube &frame_cube : *f) {
         cube cls;
@@ -430,7 +430,7 @@ void ForwardChecker::AddConstraintAnd(const shared_ptr<frame> f) {
 // @input: pair<input, latch>
 // @output: pair<input, partial latch>
 // ================================================================================
-void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &s, shared_ptr<State> t) {
+void FCAR::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &s, shared_ptr<State> t) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_GenPred");
     shared_ptr<cube> partial_latch = make_shared<cube>(*s.second);
 
@@ -477,7 +477,7 @@ void ForwardChecker::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cub
 // @input:
 // @output:
 // ================================================================================
-bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
+bool FCAR::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
     [[maybe_unused]] auto setupScope = m_log.Section("FC_Gen_Set");
     unordered_set<int> required_lits;
 
@@ -527,7 +527,7 @@ bool ForwardChecker::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl
 }
 
 
-bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses) {
+bool FCAR::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses) {
     [[maybe_unused]] auto downSetup = m_log.Section("FC_Dn_Set");
     int ctgs = 0;
     m_log.L(3, "Down:", CubeToStr(uc));
@@ -579,7 +579,7 @@ bool ForwardChecker::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shar
 }
 
 
-bool ForwardChecker::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses) {
+bool FCAR::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses) {
     for (auto f : *failed_ctses) {
         // if f->s , return true
         if (f.size() > s->size()) continue;
@@ -589,7 +589,7 @@ bool ForwardChecker::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<ve
 }
 
 
-bool ForwardChecker::CheckInit(shared_ptr<State> s) {
+bool FCAR::CheckInit(shared_ptr<State> s) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_InitChk");
     m_log.L(2, "SAT Check Init ");
     m_log.L(2, "From State: ", CubeToStrShort(s->latches));
@@ -643,7 +643,7 @@ bool ForwardChecker::CheckInit(shared_ptr<State> s) {
 }
 
 
-bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
+bool FCAR::Propagate(shared_ptr<cube> c, int lvl) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_Prop");
     bool result;
     shared_ptr<cube> assumption(new cube(*c));
@@ -661,7 +661,7 @@ bool ForwardChecker::Propagate(shared_ptr<cube> c, int lvl) {
 }
 
 
-int ForwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
+int FCAR::PropagateUp(shared_ptr<cube> c, int lvl) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_PropUp");
     while (lvl < m_k) {
         if (Propagate(c, lvl))
@@ -674,7 +674,7 @@ int ForwardChecker::PropagateUp(shared_ptr<cube> c, int lvl) {
 }
 
 
-bool ForwardChecker::IsReachable(int lvl, const shared_ptr<cube> assumption, const string &label) {
+bool FCAR::IsReachable(int lvl, const shared_ptr<cube> assumption, const string &label) {
     if (m_settings.satSolveInDomain) {
         m_transSolvers[lvl]->ResetTempDomain();
         m_transSolvers[lvl]->SetTempDomain(TopDomain());
@@ -684,12 +684,12 @@ bool ForwardChecker::IsReachable(int lvl, const shared_ptr<cube> assumption, con
 }
 
 
-pair<shared_ptr<cube>, shared_ptr<cube>> ForwardChecker::GetInputAndState(int lvl) {
+pair<shared_ptr<cube>, shared_ptr<cube>> FCAR::GetInputAndState(int lvl) {
     return m_transSolvers[lvl]->GetAssignment(false);
 }
 
 
-shared_ptr<cube> ForwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> state) {
+shared_ptr<cube> FCAR::GetUnsatCore(int lvl, const shared_ptr<cube> state) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UCore");
     const unordered_set<int> &conflict = m_transSolvers[lvl]->GetConflict();
     shared_ptr<cube> res = make_shared<cube>();
@@ -707,7 +707,7 @@ shared_ptr<cube> ForwardChecker::GetUnsatCore(int lvl, const shared_ptr<cube> st
 }
 
 
-shared_ptr<cube> ForwardChecker::GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions) {
+shared_ptr<cube> FCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UAssump");
     const unordered_set<int> &conflict = solver->GetConflict();
     shared_ptr<cube> res = make_shared<cube>();
@@ -722,12 +722,12 @@ shared_ptr<cube> ForwardChecker::GetUnsatAssumption(shared_ptr<SATSolver> solver
 }
 
 
-shared_ptr<cube> ForwardChecker::TopDomain() {
+shared_ptr<cube> FCAR::TopDomain() {
     return m_domainStack->back();
 }
 
 
-shared_ptr<cube> ForwardChecker::GetAndPushDomain(shared_ptr<cube> c) {
+shared_ptr<cube> FCAR::GetAndPushDomain(shared_ptr<cube> c) {
     shared_ptr<cube> domain = make_shared<cube>();
     domain = m_model.GetCOIDomain(c);
     m_domainStack->emplace_back(domain);
@@ -735,7 +735,7 @@ shared_ptr<cube> ForwardChecker::GetAndPushDomain(shared_ptr<cube> c) {
 }
 
 
-void ForwardChecker::PopDomain() {
+void FCAR::PopDomain() {
     m_domainStack->pop_back();
 }
 
@@ -745,7 +745,7 @@ void ForwardChecker::PopDomain() {
 // @input:
 // @output:
 // ================================================================================
-unsigned ForwardChecker::addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
+unsigned FCAR::addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
     assert(cube.size() > 0);
     unsigned res = cube[0];
     assert(res / 2 <= circuit->maxvar);
@@ -759,7 +759,7 @@ unsigned ForwardChecker::addCubeToANDGates(aiger *circuit, vector<unsigned> cube
 }
 
 
-void ForwardChecker::OutputWitness(int bad) {
+void FCAR::OutputWitness(int bad) {
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/");
     if (startIndex == string::npos) {
@@ -892,7 +892,7 @@ void ForwardChecker::OutputWitness(int bad) {
 }
 
 
-void ForwardChecker::OutputCounterExample(int bad) {
+void FCAR::OutputCounterExample(int bad) {
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
     if (startIndex == string::npos) {

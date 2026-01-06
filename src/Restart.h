@@ -2,7 +2,7 @@
 #define RESTART_H
 
 #include "IncrCheckerHelpers.h"
-#include <Settings.h>
+#include "Settings.h"
 #include <memory>
 #include <stack>
 #include <vector>

@@ -1,9 +1,9 @@
 #include "SimpleCAR.h"
 
 #include "BMC.h"
-#include "BackwardChecker.h"
+#include "BCAR.h"
 #include "BasicIC3.h"
-#include "ForwardChecker.h"
+#include "FCAR.h"
 #include "Log.h"
 #include "Model.h"
 #include <iostream>
@@ -11,15 +11,15 @@
 
 namespace car {
 
-static std::unique_ptr<BaseChecker> CreateChecker(
+static std::unique_ptr<BaseAlg> CreateChecker(
     const Settings &settings,
     Model &aigerModel,
     Log &log) {
     switch (settings.alg) {
     case MCAlgorithm::FCAR:
-        return std::make_unique<ForwardChecker>(settings, aigerModel, log);
+        return std::make_unique<FCAR>(settings, aigerModel, log);
     case MCAlgorithm::BCAR:
-        return std::make_unique<BackwardChecker>(settings, aigerModel, log);
+        return std::make_unique<BCAR>(settings, aigerModel, log);
     case MCAlgorithm::BMC:
         return std::make_unique<BMC>(settings, aigerModel, log);
     case MCAlgorithm::IC3:

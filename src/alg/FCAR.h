@@ -1,7 +1,7 @@
-#ifndef FORWARDCHECKER_H
-#define FORWARDCHECKER_H
+#ifndef FCAR_H
+#define FCAR_H
 
-#include "BaseChecker.h"
+#include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "Restart.h"
@@ -12,11 +12,11 @@
 
 namespace car {
 
-class ForwardChecker : public BaseChecker {
+class FCAR : public BaseAlg {
   public:
-    ForwardChecker(Settings settings,
-                   Model &model,
-                   Log &log);
+    FCAR(Settings settings,
+         Model &model,
+         Log &log);
     CheckResult Run();
     void Witness();
 
