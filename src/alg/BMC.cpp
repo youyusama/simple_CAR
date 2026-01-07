@@ -5,8 +5,8 @@ namespace car {
 BMC::BMC(Settings settings,
          Model &model,
          Log &log) : m_settings(settings),
-                    m_model(model),
-                    m_log(log) {
+                     m_model(model),
+                     m_log(log) {
     State::numInputs = model.GetNumInputs();
     State::numLatches = model.GetNumLatches();
     GLOBAL_LOG = &m_log;
@@ -14,7 +14,7 @@ BMC::BMC(Settings settings,
     m_maxK = m_settings.bmcK;
     m_checkResult = CheckResult::Unknown;
     m_step = m_settings.bmc_step;
-    m_clauses = make_shared<vector<clause>>();
+    m_clauses.clear();
 }
 
 
@@ -47,13 +47,13 @@ bool BMC::Check(int badId) {
     while (true) {
         m_log.L(1, "BMC Bound: ", m_k);
 
-        shared_ptr<vector<clause>> clauses = make_shared<vector<clause>>();
+        vector<clause> clauses;
         GetClausesK(m_k, clauses);
 
         // & T^k
-        for (int i = 0; i < clauses->size(); ++i) {
-            m_Solver->AddClause(clauses->at(i));
-            m_log.L(3, "Add Clause: ", CubeToStr(clauses->at(i)));
+        for (int i = 0; i < clauses.size(); ++i) {
+            m_Solver->AddClause(clauses[i]);
+            m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
         }
 
         // assume( bad^k & cons^k )
@@ -92,23 +92,23 @@ bool BMC::Check_nonincremental(int badId) {
     while (true) {
         Init(badId);
         // add clauses before K unrollings to the Kissat solver
-        for (int i = 0; i < m_clauses->size(); ++i) {
-            m_Solver->AddClause(m_clauses->at(i));
+        for (int i = 0; i < m_clauses.size(); ++i) {
+            m_Solver->AddClause(m_clauses[i]);
             m_log.L(
-                3, "Add Clause: ", CubeToStr(m_clauses->at(i)));
+                3, "Add Clause: ", CubeToStr(m_clauses[i]));
         }
         badClause.clear();
         for (int s = 0; s < m_step; s++) {
             m_log.L(1, "BMC Bound: ", m_k);
 
-            shared_ptr<vector<clause>> clauses = make_shared<vector<clause>>();
+            vector<clause> clauses;
             GetClausesK(m_k, clauses);
 
             // & T^k
-            for (int i = 0; i < clauses->size(); ++i) {
-                m_Solver->AddClause(clauses->at(i));
-                m_clauses->emplace_back(clauses->at(i)); // store for further use
-                m_log.L(3, "Add Clause: ", CubeToStr(clauses->at(i)));
+            for (int i = 0; i < clauses.size(); ++i) {
+                m_Solver->AddClause(clauses[i]);
+                m_clauses.emplace_back(clauses[i]); // store for further use
+                m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
             }
 
             int k_bad = GetBadK(m_k);
@@ -118,12 +118,12 @@ bool BMC::Check_nonincremental(int badId) {
             m_log.L(3, "Add Clause: ", k_bad);
             for (auto c : GetConstraintsK(m_k)) {
                 m_Solver->AddClause({c});
-                m_clauses->push_back({c}); // store for further use
+                m_clauses.push_back({c}); // store for further use
                 m_log.L(3, "Add Clause: ", c);
             }
 
             clause cl({-k_bad}); // store bad^k for
-            m_clauses->emplace_back(cl);
+            m_clauses.emplace_back(cl);
 
             m_k++;
             if (m_maxK != -1 && m_k > m_maxK) {
@@ -159,7 +159,7 @@ void BMC::Init(int badId) {
 }
 
 
-void BMC::GetClausesK(int m_k, shared_ptr<vector<clause>> clauses) {
+void BMC::GetClausesK(int m_k, vector<clause> &clauses) {
     auto &originalClauses = m_model.GetSimpClauses();
     for (int i = 0; i < originalClauses.size(); ++i) {
         clause &ori = originalClauses[i];
@@ -167,7 +167,7 @@ void BMC::GetClausesK(int m_k, shared_ptr<vector<clause>> clauses) {
         for (int v : ori) {
             cls_k.push_back(m_model.GetPrimeK(v, m_k));
         }
-        clauses->push_back(cls_k);
+        clauses.push_back(cls_k);
     }
 }
 
@@ -206,13 +206,13 @@ void BMC::OutputCounterExample(int bad) {
 
     for (int i = 0; i < m_model.GetNumLatches(); i++) {
         int latch_id = m_model.GetNumInputs() + i + 1;
-        cexFile << m_Solver->GetModel(latch_id) ? "1" : "0";
+        cexFile << (m_Solver->GetModel(latch_id) ? "1" : "0");
     }
     cexFile << endl;
     for (int j = 0; j <= m_k; j++) {
         for (int i = 0; i < m_model.GetNumInputs(); i++) {
             int input_id = m_model.GetPrimeK(i + 1, j);
-            cexFile << m_Solver->GetModel(input_id) ? "1" : "0";
+            cexFile << (m_Solver->GetModel(input_id) ? "1" : "0");
         }
         cexFile << endl;
     }

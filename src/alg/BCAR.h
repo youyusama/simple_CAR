@@ -18,8 +18,8 @@ class BCAR : public BaseAlg {
     BCAR(Settings settings,
          Model &model,
          Log &log);
-    CheckResult Run();
-    void Witness();
+    CheckResult Run() override;
+    void Witness() override;
 
   private:
     bool Check(int badId);
@@ -71,20 +71,20 @@ class BCAR : public BaseAlg {
         }
     } blockerOrder;
 
-    void OrderAssumption(shared_ptr<cube> uc) {
+    void OrderAssumption(cube &uc) {
         if (m_settings.randomSeed > 0) {
-            shuffle(uc->begin(), uc->end(), default_random_engine(m_settings.randomSeed));
+            shuffle(uc.begin(), uc.end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        stable_sort(uc->begin(), uc->end(), litOrder);
+        stable_sort(uc.begin(), uc.end(), litOrder);
         if (m_settings.internalSignals) {
-            stable_sort(uc->begin(), uc->end(), innOrder);
+            stable_sort(uc.begin(), uc.end(), innOrder);
         }
     }
 
-    inline void GetPrimed(shared_ptr<cube> p) {
-        for (auto &x : *p) {
+    inline void GetPrimed(cube &p) {
+        for (auto &x : p) {
             x = m_model.GetPrime(x);
         }
     }
@@ -93,11 +93,11 @@ class BCAR : public BaseAlg {
 
     bool Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses);
 
-    bool DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses);
+    bool DownHasFailed(const cube &s, const vector<cube> &failed_ctses);
 
-    bool Propagate(shared_ptr<cube> c, int lvl);
+    bool Propagate(const cube &c, int lvl);
 
-    int PropagateUp(shared_ptr<cube> c, int lvl);
+    int PropagateUp(const cube &c, int lvl);
 
     void OutputWitness(int bad);
 
@@ -111,13 +111,13 @@ class BCAR : public BaseAlg {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
-    bool IsReachable(int lvl, const shared_ptr<cube> assumption);
+    bool IsReachable(int lvl, const cube &assumption);
 
     pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
 
-    shared_ptr<cube> GetUnsatCore(int lvl, const shared_ptr<cube> state);
+    shared_ptr<cube> GetUnsatCore(int lvl, const cube &state);
 
-    shared_ptr<cube> GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions);
+    shared_ptr<cube> GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
 
     shared_ptr<State> EnumerateStartState();
 

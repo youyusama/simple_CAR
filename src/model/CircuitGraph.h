@@ -5,8 +5,6 @@ extern "C" {
 #include "aiger.h"
 }
 
-using namespace std;
-
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -15,6 +13,8 @@ using namespace std;
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+using namespace std;
 
 namespace car {
 

@@ -21,81 +21,81 @@ class SATSolver : public ISolver {
     ~SATSolver() {}
 
     // general SAT interface
-    void AddClause(const cube &cls) {
+    void AddClause(const cube &cls) override {
         m_slv->AddClause(cls);
     }
 
-    void AddAssumption(const shared_ptr<cube> assumption) {
+    void AddAssumption(const shared_ptr<cube> assumption) override {
         m_slv->AddAssumption(assumption);
     }
 
-    bool Solve() {
+    bool Solve() override {
         return m_slv->Solve();
     }
 
-    bool Solve(const shared_ptr<cube> assumption) {
+    bool Solve(const shared_ptr<cube> assumption) override {
         return m_slv->Solve(assumption);
     }
 
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) {
+    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override {
         return m_slv->GetAssignment(prime);
     }
 
-    unordered_set<int> GetConflict() {
+    unordered_set<int> GetConflict() override {
         return m_slv->GetConflict();
     }
 
-    int GetNewVar() {
+    int GetNewVar() override {
         return m_slv->GetNewVar();
     }
 
-    void AddTempClause(const cube &cls) {
+    void AddTempClause(const cube &cls) override {
         m_slv->AddTempClause(cls);
     }
 
-    void ReleaseTempClause() {
+    void ReleaseTempClause() override {
         m_slv->ReleaseTempClause();
     }
 
-    bool GetModel(int id) {
+    bool GetModel(int id) override {
         return m_slv->GetModel(id);
     }
 
-    void ClearAssumption() {
+    void ClearAssumption() override {
         m_slv->ClearAssumption();
     }
 
-    void PushAssumption(int a) {
+    void PushAssumption(int a) override {
         m_slv->PushAssumption(a);
     }
 
-    int PopAssumption() {
+    int PopAssumption() override {
         return m_slv->PopAssumption();
     }
 
     // special interface in minicore
-    void SetSolveInDomain() {
+    void SetSolveInDomain() override {
         m_solveInDomain = true;
         if (m_slvKind != MCSATSolver::minicore) return;
         m_slv->SetSolveInDomain();
     }
 
 
-    void SetDomain(const shared_ptr<cube> domain) {
+    void SetDomain(const shared_ptr<cube> domain) override {
         if (m_slvKind != MCSATSolver::minicore) return;
         shared_ptr<cube> d = make_shared<cube>();
         for (int v : *domain) d->emplace_back(abs(v));
         m_slv->SetDomain(d);
     }
 
-    void SetTempDomain(const shared_ptr<cube> domain) {
+    void SetTempDomain(const shared_ptr<cube> domain) override {
         if (m_slvKind != MCSATSolver::minicore) return;
         shared_ptr<cube> d = make_shared<cube>();
         for (int v : *domain) d->emplace_back(abs(v));
         m_slv->SetTempDomain(d);
     }
 
-    void ResetTempDomain() {
+    void ResetTempDomain() override {
         if (m_slvKind != MCSATSolver::minicore) return;
         m_slv->ResetTempDomain();
     }

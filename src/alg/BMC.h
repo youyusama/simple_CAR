@@ -14,8 +14,8 @@ class BMC : public BaseAlg {
         Model &model,
         Log &log);
 
-    CheckResult Run();
-    void Witness();
+    CheckResult Run() override;
+    void Witness() override;
 
   private:
     bool Check(int badId);
@@ -31,12 +31,12 @@ class BMC : public BaseAlg {
     shared_ptr<SATSolver> m_Solver;
 
     // for kissat to store clauses from previous unrolling
-    shared_ptr<vector<clause>> m_clauses;
+    vector<clause> m_clauses;
 
     CheckResult m_checkResult;
     void Init(int badId);
     void OutputCounterExample(int bad);
-    void GetClausesK(int m_k, shared_ptr<vector<clause>> clauses);
+    void GetClausesK(int m_k, vector<clause> &clauses);
     int GetBadK(int m_k);
     vector<int> GetConstraintsK(int m_k);
 };

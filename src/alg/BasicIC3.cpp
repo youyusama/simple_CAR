@@ -288,7 +288,7 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
         while (true) {
             shared_ptr<cube> assumps = make_shared<cube>();
             assumps->insert(assumps->end(), partialLatch->begin(), partialLatch->end());
-            OrderAssumption(assumps);
+            OrderAssumption(*assumps);
             assumps->insert(assumps->end(), assignment.first->begin(), assignment.first->end());
             assumps->insert(assumps->end(), primeInputs.begin(), primeInputs.end());
 
@@ -384,8 +384,8 @@ bool BasicIC3::InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSo
     }
     slv->AddTempClause(cls);
     auto assumption = make_shared<cube>(*cb);
-    OrderAssumption(assumption);
-    GetPrimed(assumption);
+    OrderAssumption(*assumption);
+    GetPrimed(*assumption);
     if (m_settings.satSolveInDomain) {
         slv->ResetTempDomain();
         slv->SetTempDomainCOI(make_shared<cube>(*cb));
@@ -466,12 +466,12 @@ bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, 
     }
 }
 
-void BasicIC3::GetBlockers(const shared_ptr<cube> &blockingCube, int framelevel, vector<shared_ptr<cube>> &blockers) {
+void BasicIC3::GetBlockers(const cube &blockingCube, int framelevel, vector<shared_ptr<cube>> &blockers) {
     int size = -1;
     for (auto it : m_frames[framelevel].borderCubes) {
         shared_ptr<cube> cb = make_shared<cube>(*it);
         if (size != -1 && size < cb->size()) break;
-        if (includes(blockingCube->begin(), blockingCube->end(), cb->begin(), cb->end(), cmp)) {
+        if (includes(blockingCube.begin(), blockingCube.end(), cb->begin(), cb->end(), cmp)) {
             size = cb->size();
             blockers.push_back(cb);
         }
@@ -497,7 +497,7 @@ bool BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
     set<int> triedLits;
 
     if (m_settings.referSkipping && frameLvl > 0) {
-        GetBlockers(cb, frameLvl, blockers);
+        GetBlockers(*cb, frameLvl, blockers);
         if (blockers.size() > 0) {
             if (m_settings.branching > 0) {
                 sort(blockers.begin(), blockers.end(), blockerOrder);
@@ -513,7 +513,7 @@ bool BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
     const int maxMicAttempts = 3;
     size_t attempts = maxMicAttempts;
 
-    OrderAssumption(cb);
+    OrderAssumption(*cb);
     // Iterate backwards to handle the shrinking cube size gracefully.
     for (int i = cb->size() - 1; i >= 0; --i) {
         if (cb->size() < 2) break;
@@ -535,7 +535,7 @@ bool BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
         if (Down(dropCube, frameLvl, recLvl, triedLits)) {
             // dropCube is sorted
             cb->swap(*dropCube);
-            OrderAssumption(cb);
+            OrderAssumption(*cb);
             i = cb->size();
             attempts = maxMicAttempts;
         } else {
@@ -576,7 +576,7 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
 
     while (true) {
         auto assumption = make_shared<cube>(*partialLatch);
-        OrderAssumption(assumption);
+        OrderAssumption(*assumption);
         assumption->insert(assumption->begin(), predecessorState->inputs->begin(), predecessorState->inputs->end());
         // There exist some successors whose predecessors are the entire set. (All latches are determined solely by the inputs.)
         if (m_settings.satSolveInDomain) {
@@ -646,8 +646,8 @@ string BasicIC3::FramesInfo() const {
 
 bool BasicIC3::UnreachabilityCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv) {
     auto assumption = make_shared<cube>(*cb);
-    OrderAssumption(assumption);
-    GetPrimed(assumption);
+    OrderAssumption(*assumption);
+    GetPrimed(*assumption);
     if (m_settings.satSolveInDomain) {
         slv->ResetTempDomain();
         slv->SetTempDomainCOI(assumption);

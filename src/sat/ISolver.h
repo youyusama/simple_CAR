@@ -1,10 +1,11 @@
 #ifndef ISOLVER_H
 #define ISOLVER_H
 
-using namespace std;
 #include <memory>
 #include <unordered_set>
 #include <vector>
+
+using namespace std;
 typedef vector<int> cube;
 
 namespace car {

@@ -39,8 +39,8 @@ class BasicIC3 : public BaseAlg {
              Log &log);
     ~BasicIC3();
 
-    CheckResult Run();
-    void Witness();
+    CheckResult Run() override;
+    void Witness() override;
 
   private:
     bool Check(int badId);
@@ -58,8 +58,8 @@ class BasicIC3 : public BaseAlg {
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 
 
-    inline void GetPrimed(shared_ptr<cube> p) {
-        for (auto &x : *p) {
+    inline void GetPrimed(cube &p) {
+        for (auto &x : p) {
             x = m_model.GetPrimeK(x, 1);
         }
     }
@@ -91,13 +91,13 @@ class BasicIC3 : public BaseAlg {
         }
     } blockerOrder;
 
-    void OrderAssumption(const shared_ptr<cube> &c) {
+    void OrderAssumption(cube &c) {
         if (m_settings.randomSeed > 0) {
-            shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
+            shuffle(c.begin(), c.end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        sort(c->begin(), c->end(), litOrder);
+        sort(c.begin(), c.end(), litOrder);
     }
 
     void Extend();
@@ -118,7 +118,7 @@ class BasicIC3 : public BaseAlg {
     void InitiationAugmentation(const shared_ptr<cube> &failureCube, const shared_ptr<cube> &fallbackCube);
     bool InitiationCheck(const shared_ptr<cube> &cb);
 
-    void GetBlockers(const shared_ptr<cube> &c, int framelevel, vector<shared_ptr<cube>> &blockers);
+    void GetBlockers(const cube &c, int framelevel, vector<shared_ptr<cube>> &blockers);
 
     CheckResult m_checkResult;
 

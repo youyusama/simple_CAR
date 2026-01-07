@@ -20,17 +20,17 @@ class KissatSolver : public ISolver {
     ~KissatSolver() { kissat_release(m_solver); }
 
     void AddClause(const cube &cls) override;
-    void AddAssumption(const shared_ptr<cube> assumption) {}
+    void AddAssumption(const shared_ptr<cube> assumption) override {}
     bool Solve() override;
-    bool Solve(const shared_ptr<cube> assumption) { return false; }
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) { return pair<shared_ptr<cube>, shared_ptr<cube>>(NULL, NULL); }
+    bool Solve(const shared_ptr<cube> assumption) override { return false; }
+    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override { return pair<shared_ptr<cube>, shared_ptr<cube>>(NULL, NULL); }
     shared_ptr<cube> GetUC(bool prime) { return NULL; }
-    unordered_set<int> GetConflict() { return unordered_set<int>(); }
-    int GetNewVar() { return 0; }
-    void AddTempClause(const cube &cls) {}
-    void ReleaseTempClause() {}
+    unordered_set<int> GetConflict() override { return unordered_set<int>(); }
+    int GetNewVar() override { return 0; }
+    void AddTempClause(const cube &cls) override {}
+    void ReleaseTempClause() override {}
 
-    inline bool GetModel(int id) {
+    inline bool GetModel(int id) override {
         int val = kissat_value(m_solver, id);
         assert(!val);
         if (val < 0)
@@ -38,15 +38,15 @@ class KissatSolver : public ISolver {
         else
             return true;
     }
-    void ClearAssumption() {}
-    void PushAssumption(int a) {}
-    int PopAssumption() { return 0; }
+    void ClearAssumption() override {}
+    void PushAssumption(int a) override {}
+    int PopAssumption() override { return 0; }
 
     // not available
-    inline void SetSolveInDomain() {}
-    inline void SetDomain(const shared_ptr<cube> domain) {}
-    inline void SetTempDomain(const shared_ptr<cube> domain) {}
-    inline void ResetTempDomain() {}
+    inline void SetSolveInDomain() override {}
+    inline void SetDomain(const shared_ptr<cube> domain) override {}
+    inline void SetTempDomain(const shared_ptr<cube> domain) override {}
+    inline void ResetTempDomain() override {}
 
   protected:
     /*

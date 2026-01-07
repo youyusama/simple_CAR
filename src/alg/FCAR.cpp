@@ -138,7 +138,7 @@ bool FCAR::Check(int badId) {
                 m_log.L(2, "SAT Check on Frame: ", task.frameLevel);
                 m_log.L(2, "From State: ", CubeToStrShort(*task.state->latches));
                 m_log.L(3, "State Detail: ", CubeToStr(*task.state->latches));
-                shared_ptr<cube> assumption(new cube(*task.state->latches));
+                cube assumption(*task.state->latches);
                 OrderAssumption(assumption);
                 GetPrimed(assumption);
                 if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
@@ -161,7 +161,7 @@ bool FCAR::Check(int badId) {
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     m_log.L(2, "Result >>> UNSAT <<<");
-                    auto uc = GetUnsatCore(task.frameLevel, task.state->latches);
+                    auto uc = GetUnsatCore(task.frameLevel, *task.state->latches);
                     assert(uc->size() > 0);
                     m_log.L(3, "Get UC: ", CubeToStr(*uc));
                     if (Generalize(uc, task.frameLevel))
@@ -169,7 +169,7 @@ bool FCAR::Check(int badId) {
                     m_log.L(2, "Get Generalized UC: ", CubeToStr(*uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     if (m_settings.dt) task.state->HasUC();
-                    task.frameLevel = PropagateUp(uc, task.frameLevel + 1);
+                    task.frameLevel = PropagateUp(*uc, task.frameLevel + 1);
                     m_log.L(3, "Frames: ", m_overSequence->FramesInfo());
                     if (m_settings.satSolveInDomain) PopDomain();
                 }
@@ -188,7 +188,7 @@ bool FCAR::Check(int badId) {
                 frame::iterator iter;
                 for (const cube &uc : *fi) {
                     if (fi_plus_1->find(uc) != fi_plus_1->end()) continue; // propagated
-                    if (Propagate(make_shared<cube>(uc), i))
+                    if (Propagate(uc, i))
                         m_branching->Update(make_shared<cube>(uc));
                 }
             }
@@ -326,19 +326,19 @@ shared_ptr<State> FCAR::EnumerateStartState() {
         m_badPredLiftSolver->AddTempClause(cls);
 
         while (true) {
-            shared_ptr<cube> assumption(new cube());
-            copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
+            cube assumption;
+            copy(partial_latch->begin(), partial_latch->end(), back_inserter(assumption));
             OrderAssumption(assumption);
-            copy(p.first->begin(), p.first->end(), back_inserter(*assumption));
-            copy(inputs_prime.begin(), inputs_prime.end(), back_inserter(*assumption));
+            copy(p.first->begin(), p.first->end(), back_inserter(assumption));
+            copy(inputs_prime.begin(), inputs_prime.end(), back_inserter(assumption));
 
             bool res;
             {
                 [[maybe_unused]] auto satBadPred = m_log.Section("SAT_BadLift");
-                res = m_badPredLiftSolver->Solve(assumption);
+                res = m_badPredLiftSolver->Solve(make_shared<cube>(assumption));
             }
             assert(!res);
-            shared_ptr<cube> temp_p = GetUnsatAssumption(m_badPredLiftSolver, partial_latch);
+            shared_ptr<cube> temp_p = GetUnsatAssumption(m_badPredLiftSolver, *partial_latch);
             if (temp_p->size() == partial_latch->size() &&
                 equal(temp_p->begin(), temp_p->end(), partial_latch->begin()))
                 break;
@@ -448,18 +448,18 @@ void FCAR::GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &s, sh
     }
 
     while (true) {
-        shared_ptr<cube> assumption(new cube());
-        copy(partial_latch->begin(), partial_latch->end(), back_inserter(*assumption));
+        cube assumption;
+        copy(partial_latch->begin(), partial_latch->end(), back_inserter(assumption));
         OrderAssumption(assumption);
-        copy(s.first->begin(), s.first->end(), back_inserter(*assumption));
+        copy(s.first->begin(), s.first->end(), back_inserter(assumption));
 
         bool res;
         {
             [[maybe_unused]] auto satLift = m_log.Section("SAT_Lift");
-            res = m_liftSolver->Solve(assumption);
+            res = m_liftSolver->Solve(make_shared<cube>(assumption));
         }
         assert(!res);
-        shared_ptr<cube> temp_p = GetUnsatAssumption(m_liftSolver, partial_latch);
+        shared_ptr<cube> temp_p = GetUnsatAssumption(m_liftSolver, *partial_latch);
         if (*temp_p == *partial_latch)
             break;
         else {
@@ -493,9 +493,9 @@ bool FCAR::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
     if (m_settings.referSkipping)
         for (auto b : uc_blocker) required_lits.emplace(b);
     shared_ptr<vector<cube>> failed_ctses = make_shared<vector<cube>>();
-    OrderAssumption(uc);
+    OrderAssumption(*uc);
     if (m_settings.satSolveInDomain) {
-        shared_ptr<cube> puc(new cube(*uc));
+        cube puc(*uc);
         GetPrimed(puc);
         GetAndPushDomain(puc);
     }
@@ -510,7 +510,7 @@ bool FCAR::Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl) {
             if (ll != uc->at(i)) temp_uc->emplace_back(ll);
         if (Down(temp_uc, frame_lvl, rec_lvl, failed_ctses)) {
             uc->swap(*temp_uc);
-            OrderAssumption(uc);
+            OrderAssumption(*uc);
             i = uc->size();
         } else {
             required_lits.emplace(uc->at(i));
@@ -531,7 +531,7 @@ bool FCAR::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vec
     [[maybe_unused]] auto downSetup = m_log.Section("FC_Dn_Set");
     int ctgs = 0;
     m_log.L(3, "Down:", CubeToStr(*uc));
-    shared_ptr<cube> assumption(new cube(*uc));
+    cube assumption(*uc);
     GetPrimed(assumption);
     shared_ptr<State> p_ucs(new State(nullptr, nullptr, uc, 0));
     downSetup = m_log.Section("FC_Dn_Loop");
@@ -539,7 +539,7 @@ bool FCAR::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vec
         // F_i & T & temp_uc'
         if (!IsReachable(frame_lvl, assumption, "SAT_R_Down")) {
             sort(uc->begin(), uc->end(), cmp);
-            auto uc_ctg = GetUnsatCore(frame_lvl, uc);
+            auto uc_ctg = GetUnsatCore(frame_lvl, *uc);
             if (uc->size() < uc_ctg->size()) return false; // there are cases that uc_ctg longer than uc
             uc->swap(*uc_ctg);
             return true;
@@ -549,10 +549,10 @@ bool FCAR::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vec
             auto p = GetInputAndState(frame_lvl);
             GeneralizePredecessor(p, p_ucs);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
-            if (DownHasFailed(cts->latches, failed_ctses)) return false;
+            if (DownHasFailed(*cts->latches, *failed_ctses)) return false;
             // int cts_lvl = GetNewLevel(cts);
             int cts_lvl = frame_lvl - 1;
-            shared_ptr<cube> cts_ass(new cube(*cts->latches));
+            cube cts_ass(*cts->latches);
             OrderAssumption(cts_ass);
             GetPrimed(cts_ass);
             if (m_settings.satSolveInDomain) GetAndPushDomain(cts_ass);
@@ -561,13 +561,13 @@ bool FCAR::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vec
             [[maybe_unused]] auto ctgScope = m_log.Section("FC_Dn_CTG");
             if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass, "SAT_R_CTG")) {
                 ctgs++;
-                auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
+                auto uc_cts = GetUnsatCore(cts_lvl, *cts->latches);
                 m_log.L(3, "CTG Get UC:", CubeToStr(*uc_cts));
                 if (Generalize(uc_cts, cts_lvl, rec_lvl + 1))
                     m_branching->Update(uc_cts);
                 m_log.L(3, "CTG Get Generalized UC:", CubeToStr(*uc_cts));
                 AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
-                PropagateUp(uc_cts, cts_lvl + 1);
+                PropagateUp(*uc_cts, cts_lvl + 1);
                 if (m_settings.satSolveInDomain) PopDomain();
             } else {
                 failed_ctses->emplace_back(*cts->latches);
@@ -579,11 +579,11 @@ bool FCAR::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vec
 }
 
 
-bool FCAR::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses) {
-    for (auto f : *failed_ctses) {
+bool FCAR::DownHasFailed(const cube &s, const vector<cube> &failed_ctses) {
+    for (auto f : failed_ctses) {
         // if f->s , return true
-        if (f.size() > s->size()) continue;
-        if (includes(s->begin(), s->end(), f.begin(), f.end(), cmp)) return true;
+        if (f.size() > s.size()) continue;
+        if (includes(s.begin(), s.end(), f.begin(), f.end(), cmp)) return true;
     }
     return false;
 }
@@ -594,7 +594,7 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
     m_log.L(2, "SAT Check Init ");
     m_log.L(2, "From State: ", CubeToStrShort(*s->latches));
     m_log.L(3, "State Detail: ", CubeToStr(*s->latches));
-    shared_ptr<cube> assumption(new cube(*s->latches));
+    cube assumption(*s->latches);
     OrderAssumption(assumption);
     if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
     bool result = IsReachable(0, assumption, "SAT_R_Init");
@@ -619,14 +619,14 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
             temp_uc->reserve(uc->size());
             for (auto ll : *uc)
                 if (ll != uc->at(i)) temp_uc->emplace_back(ll);
-            assumption->clear();
-            copy(temp_uc->begin(), temp_uc->end(), back_inserter(*assumption));
+            assumption.clear();
+            copy(temp_uc->begin(), temp_uc->end(), back_inserter(assumption));
             OrderAssumption(assumption);
             bool result = IsReachable(0, assumption, "SAT_R_Init");
             if (!result) {
                 auto new_uc = GetUnsatAssumption(m_transSolvers[0], assumption);
                 uc->swap(*new_uc);
-                OrderAssumption(uc);
+                OrderAssumption(*uc);
                 i = uc->size();
             } else {
                 required_lits.emplace(uc->at(i));
@@ -635,7 +635,7 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
         sort(uc->begin(), uc->end(), cmp);
         m_log.L(2, "Get UC: ", CubeToStr(*uc));
         AddUnsatisfiableCore(uc, 0);
-        PropagateUp(uc, 0);
+        PropagateUp(*uc, 0);
         m_log.L(3, "Frames: ", m_overSequence->FramesInfo());
         if (m_settings.satSolveInDomain) PopDomain();
         return false;
@@ -643,10 +643,10 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
 }
 
 
-bool FCAR::Propagate(shared_ptr<cube> c, int lvl) {
+bool FCAR::Propagate(const cube &c, int lvl) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_Prop");
     bool result;
-    shared_ptr<cube> assumption(new cube(*c));
+    cube assumption(c);
     GetPrimed(assumption);
     if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
     if (!IsReachable(lvl, assumption, "SAT_R_Prop")) {
@@ -661,11 +661,11 @@ bool FCAR::Propagate(shared_ptr<cube> c, int lvl) {
 }
 
 
-int FCAR::PropagateUp(shared_ptr<cube> c, int lvl) {
+int FCAR::PropagateUp(const cube &c, int lvl) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_PropUp");
     while (lvl < m_k) {
         if (Propagate(c, lvl))
-            m_branching->Update(c);
+            m_branching->Update(make_shared<cube>(c));
         else
             break;
         lvl++;
@@ -674,13 +674,18 @@ int FCAR::PropagateUp(shared_ptr<cube> c, int lvl) {
 }
 
 
-bool FCAR::IsReachable(int lvl, const shared_ptr<cube> assumption, const string &label) {
+bool FCAR::IsReachable(int lvl, const cube &assumption, const string &label) {
     if (m_settings.satSolveInDomain) {
         m_transSolvers[lvl]->ResetTempDomain();
         m_transSolvers[lvl]->SetTempDomain(TopDomain());
     }
     [[maybe_unused]] auto scoped = m_log.Section(label);
-    return m_transSolvers[lvl]->Solve(assumption);
+    return m_transSolvers[lvl]->Solve(make_shared<cube>(assumption));
+}
+
+
+bool FCAR::IsReachable(int lvl, const cube &assumption) {
+    return IsReachable(lvl, assumption, "SAT_R");
 }
 
 
@@ -689,30 +694,30 @@ pair<shared_ptr<cube>, shared_ptr<cube>> FCAR::GetInputAndState(int lvl) {
 }
 
 
-shared_ptr<cube> FCAR::GetUnsatCore(int lvl, const shared_ptr<cube> state) {
+shared_ptr<cube> FCAR::GetUnsatCore(int lvl, const cube &state) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UCore");
     const unordered_set<int> &conflict = m_transSolvers[lvl]->GetConflict();
     shared_ptr<cube> res = make_shared<cube>();
 
     cube prime_state;
-    for (auto l : *state) {
+    for (auto l : state) {
         prime_state.emplace_back(m_model.GetPrime(l));
     }
 
     for (int i = 0; i < prime_state.size(); i++) {
         if (conflict.find(prime_state[i]) != conflict.end())
-            res->emplace_back(state->operator[](i));
+            res->emplace_back(state[i]);
     }
     return res;
 }
 
 
-shared_ptr<cube> FCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions) {
+shared_ptr<cube> FCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UAssump");
     const unordered_set<int> &conflict = solver->GetConflict();
     shared_ptr<cube> res = make_shared<cube>();
 
-    for (auto a : *assumptions) {
+    for (auto a : assumptions) {
         if (conflict.find(a) != conflict.end())
             res->emplace_back(a);
     }
@@ -727,8 +732,8 @@ shared_ptr<cube> FCAR::TopDomain() {
 }
 
 
-shared_ptr<cube> FCAR::GetAndPushDomain(shared_ptr<cube> c) {
-    cube domain = m_model.GetCOIDomain(*c);
+shared_ptr<cube> FCAR::GetAndPushDomain(const cube &c) {
+    cube domain = m_model.GetCOIDomain(c);
     shared_ptr<cube> domain_ptr = make_shared<cube>(domain);
     m_domainStack->emplace_back(domain_ptr);
     return domain_ptr;

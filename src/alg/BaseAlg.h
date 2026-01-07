@@ -14,6 +14,7 @@ class BaseAlg {
   public:
     virtual CheckResult Run() = 0;
     virtual void Witness() = 0;
+    virtual ~BaseAlg() = default;
 };
 
 } // namespace car

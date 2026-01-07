@@ -19,21 +19,21 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     bool Solve(const shared_ptr<cube> assumption) override;
     pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override;
     unordered_set<int> GetConflict() override;
-    inline int GetNewVar() {
+    inline int GetNewVar() override {
         return ++m_maxId;
     }
     void AddTempClause(const cube &cls) override;
     void ReleaseTempClause() override;
-    inline bool GetModel(int id) {
+    inline bool GetModel(int id) override {
         if (model[id] == minicore::l_True)
             return true;
         else {
             return false;
         }
     }
-    void ClearAssumption();
-    void PushAssumption(int a);
-    int PopAssumption();
+    void ClearAssumption() override;
+    void PushAssumption(int a) override;
+    int PopAssumption() override;
 
     inline void SetSolveInDomain() override;
     inline void SetDomain(const shared_ptr<cube> domain) override;
