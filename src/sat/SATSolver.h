@@ -102,14 +102,14 @@ class SATSolver : public ISolver {
 
     void SetDomainCOI(const shared_ptr<cube> c) {
         if (m_slvKind != MCSATSolver::minicore) return;
-        shared_ptr<cube> domain = m_model.GetCOIDomain(c);
-        SetDomain(domain);
+        cube domain = m_model.GetCOIDomain(*c);
+        SetDomain(make_shared<cube>(domain));
     }
 
     void SetTempDomainCOI(const shared_ptr<cube> c) {
         if (m_slvKind != MCSATSolver::minicore) return;
-        shared_ptr<cube> domain = m_model.GetCOIDomain(c);
-        SetTempDomain(domain);
+        cube domain = m_model.GetCOIDomain(*c);
+        SetTempDomain(make_shared<cube>(domain));
     }
 
     // SAT interface for IC3/CAR

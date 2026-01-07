@@ -53,7 +53,7 @@ bool BMC::Check(int badId) {
         // & T^k
         for (int i = 0; i < clauses->size(); ++i) {
             m_Solver->AddClause(clauses->at(i));
-            m_log.L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
+            m_log.L(3, "Add Clause: ", CubeToStr(clauses->at(i)));
         }
 
         // assume( bad^k & cons^k )
@@ -63,7 +63,7 @@ bool BMC::Check(int badId) {
         for (auto c : GetConstraintsK(m_k)) {
             assumptions->push_back(c);
         }
-        m_log.L(3, "Assumption: ", CubeToStr(assumptions));
+        m_log.L(3, "Assumption: ", CubeToStr(*assumptions));
         m_log.Tick();
         bool sat = m_Solver->Solve(assumptions);
         m_log.StatMainSolver();
@@ -95,7 +95,7 @@ bool BMC::Check_nonincremental(int badId) {
         for (int i = 0; i < m_clauses->size(); ++i) {
             m_Solver->AddClause(m_clauses->at(i));
             m_log.L(
-                3, "Add Clause: ", CubeToStr(make_shared<cube>(m_clauses->at(i))));
+                3, "Add Clause: ", CubeToStr(m_clauses->at(i)));
         }
         badClause.clear();
         for (int s = 0; s < m_step; s++) {
@@ -108,7 +108,7 @@ bool BMC::Check_nonincremental(int badId) {
             for (int i = 0; i < clauses->size(); ++i) {
                 m_Solver->AddClause(clauses->at(i));
                 m_clauses->emplace_back(clauses->at(i)); // store for further use
-                m_log.L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
+                m_log.L(3, "Add Clause: ", CubeToStr(clauses->at(i)));
             }
 
             int k_bad = GetBadK(m_k);

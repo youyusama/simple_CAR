@@ -47,24 +47,24 @@ Log::ScopedTimer::~ScopedTimer() {
 Log *GLOBAL_LOG = nullptr;
 
 
-string CubeToStr(const shared_ptr<vector<int>> c) {
+string CubeToStr(const vector<int> &c) {
     string s;
-    for (int l : *c) s.append(to_string(l) + " ");
+    for (int l : c) s.append(to_string(l) + " ");
     return s;
 }
 
 
-void compress_vector(shared_ptr<vector<int>> res, const shared_ptr<vector<int>> v) {
+void compress_vector(vector<int> &res, const vector<int> &v) {
     int count = 0;
     int tempi = 0;
-    for (int l : *v) {
+    for (int l : v) {
         if (l > 0)
             tempi = (tempi << 1) + 1;
         else
             tempi <<= 1;
         count++;
-        if (count == 32 || l == v->back()) {
-            res->emplace_back(tempi);
+        if (count == 32 || l == v.back()) {
+            res.emplace_back(tempi);
             tempi = 0;
             count = 0;
         }
@@ -72,8 +72,8 @@ void compress_vector(shared_ptr<vector<int>> res, const shared_ptr<vector<int>> 
 }
 
 
-string CubeToStrShort(const shared_ptr<vector<int>> c) {
-    shared_ptr<vector<int>> s(new vector<int>());
+string CubeToStrShort(const vector<int> &c) {
+    vector<int> s;
     compress_vector(s, c);
     return CubeToStr(s);
 }

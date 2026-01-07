@@ -45,7 +45,7 @@ bool BCAR::Check(int badId) {
     if (ImmediateSatisfiable(badId)) {
         m_log.L(2, "Result >>> SAT <<<");
         auto p = m_startSolver->GetAssignment(false);
-        m_log.L(3, "Get Assignment:", CubeToStr(p.second));
+        m_log.L(3, "Get Assignment:", CubeToStr(*p.second));
 
         shared_ptr<State> newState(new State(nullptr, p.first, p.second, 1));
         m_lastState = newState;
@@ -85,8 +85,8 @@ bool BCAR::Check(int badId) {
         m_log.StatStartSolver();
 
         while (startState != nullptr) {
-            m_log.L(2, "State from StartSolver: ", CubeToStrShort(startState->latches));
-            m_log.L(3, "State Detail: ", CubeToStr(startState->latches));
+            m_log.L(2, "State from StartSolver: ", CubeToStrShort(*startState->latches));
+            m_log.L(3, "State Detail: ", CubeToStr(*startState->latches));
             workingStack.emplace(startState, m_k - 1);
 
             while (!workingStack.empty()) {
@@ -123,7 +123,7 @@ bool BCAR::Check(int badId) {
                 shared_ptr<cube> assumption(new cube(*task.state->latches));
                 OrderAssumption(assumption);
                 m_log.L(2, "\nSAT Check on frame: ", task.frameLevel);
-                m_log.L(3, "From state: ", CubeToStr(task.state->latches));
+                m_log.L(3, "From state: ", CubeToStr(*task.state->latches));
                 m_log.Tick();
                 bool result = IsReachable(task.frameLevel, assumption);
                 m_log.StatMainSolver();
@@ -132,7 +132,7 @@ bool BCAR::Check(int badId) {
                     m_log.L(2, "Result >>> SAT <<<");
                     auto p = GetInputAndState(task.frameLevel);
                     shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
-                    m_log.L(3, "Get state: ", CubeToStr(newState->latches));
+                    m_log.L(3, "Get state: ", CubeToStr(*newState->latches));
                     m_underSequence.push(newState);
                     if (m_settings.dt) task.state->HasSucc();
                     workingStack.emplace(newState, task.frameLevel - 1);
@@ -141,10 +141,10 @@ bool BCAR::Check(int badId) {
                     // Solver return UNSAT, get uc, then continue
                     m_log.L(2, "Result >>> UNSAT <<<");
                     auto uc = GetUnsatCore(task.frameLevel, task.state->latches);
-                    m_log.L(3, "Get UC:", CubeToStr(uc));
+                    m_log.L(3, "Get UC:", CubeToStr(*uc));
                     if (Generalize(uc, task.frameLevel))
                         m_branching->Update(uc);
-                    m_log.L(2, "Get Generalized UC:", CubeToStr(uc));
+                    m_log.L(2, "Get Generalized UC:", CubeToStr(*uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     if (m_settings.dt) task.state->HasUC();
                     task.frameLevel = PropagateUp(uc, task.frameLevel + 1);
@@ -445,9 +445,9 @@ bool BCAR::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vec
                 m_log.StatMainSolver();
                 ctgs++;
                 auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
-                m_log.L(3, "CTG Get UC:", CubeToStr(uc_cts));
+                m_log.L(3, "CTG Get UC:", CubeToStr(*uc_cts));
                 if (Generalize(uc_cts, cts_lvl, rec_lvl + 1)) m_branching->Update(uc_cts);
-                m_log.L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
+                m_log.L(3, "CTG Get Generalized UC:", CubeToStr(*uc_cts));
                 AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
                 PropagateUp(uc_cts, cts_lvl + 1);
             } else {
@@ -472,7 +472,7 @@ bool BCAR::DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>
 
 bool BCAR::CheckBad(shared_ptr<State> s) {
     m_log.L(2, "\nSAT CHECK on bad");
-    m_log.L(3, "From state: ", CubeToStr(s->latches));
+    m_log.L(3, "From state: ", CubeToStr(*s->latches));
     shared_ptr<cube> assumption(new cube(*s->latches));
     OrderAssumption(assumption);
     m_log.Tick();
@@ -481,7 +481,7 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
     if (result) {
         m_log.L(2, "Result >>> SAT <<<");
         auto p = m_badSolver->GetAssignment(false);
-        m_log.L(3, "Get Assignment:", CubeToStr(p.second));
+        m_log.L(3, "Get Assignment:", CubeToStr(*p.second));
         shared_ptr<State> newState(new State(s, p.first, p.second, s->depth + 1));
         m_lastState = newState;
         m_log.L(3, m_overSequence->FramesInfo());
@@ -515,7 +515,7 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
             }
         }
         sort(uc->begin(), uc->end(), cmp);
-        m_log.L(2, "Get UC:", CubeToStr(uc));
+        m_log.L(2, "Get UC:", CubeToStr(*uc));
         m_branching->Update(uc);
         AddUnsatisfiableCore(uc, 0);
         PropagateUp(uc, 0);

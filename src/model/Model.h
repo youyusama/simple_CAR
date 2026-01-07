@@ -204,7 +204,7 @@ class Model {
 
     vector<int> &GetPropertyCOIInputs() { return m_circuitGraph->propertyCOIInputs; };
 
-    shared_ptr<cube> GetCOIDomain(const shared_ptr<cube> c);
+    cube GetCOIDomain(const cube &c);
 
     const unordered_map<int, int> &GetEquivalenceMap() const {
         return m_equivalenceManager->GetEquivalenceMap();
@@ -231,9 +231,9 @@ class Model {
 
     void SimplifyModelByRandomSimulation();
 
-    void EncodeStatesToSignatuers(const vector<shared_ptr<vector<int>>> &states, unordered_map<string, vector<int>> &signatures);
+    void EncodeStatesToSignatuers(const vector<vector<int>> &states, unordered_map<string, vector<int>> &signatures);
 
-    void EncodeStatesToN64Signatuers(const vector<shared_ptr<unordered_map<int, tbool>>> &values, const vector<int> &vars, VarMapN64 &signatures);
+    void EncodeStatesToN64Signatuers(const vector<unordered_map<int, tbool>> &values, const vector<int> &vars, VarMapN64 &signatures);
 
     bool CheckLatchEquivalenceBySAT(int a, int b);
 

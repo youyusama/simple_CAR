@@ -221,7 +221,7 @@ void BasicIC3::AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLe
     m_earliest = min(m_earliest, frameLevel);
     if (toAll) {
         lemmaCount++;
-        m_log.L(2, "Frame ", frameLevel, ": ", CubeToStr(blockingCube));
+        m_log.L(2, "Frame ", frameLevel, ": ", CubeToStr(*blockingCube));
     }
 
 
@@ -310,7 +310,7 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
             assignment.first,
             assignment.second,
             1);
-        m_log.L(2, "Found start state at level ", m_k, ": ", CubeToStr(ctiState->latches), ", input: ", CubeToStr(ctiState->inputs));
+        m_log.L(2, "Found start state at level ", m_k, ": ", CubeToStr(*ctiState->latches), ", input: ", CubeToStr(*ctiState->inputs));
         return ctiState;
     } else {
         m_log.L(2, "No start state found at level ", m_k);
@@ -397,7 +397,7 @@ bool BasicIC3::InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSo
 }
 
 bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
-    m_log.L(3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
+    m_log.L(3, "Down: ", CubeToStr(*downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
     const auto solverLvl = m_frames[frameLvl].solver;
@@ -416,7 +416,7 @@ bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, 
     }
 
     while (true) {
-        m_log.L(3, "Down attempt: ", CubeToStr(downCube));
+        m_log.L(3, "Down attempt: ", CubeToStr(*downCube));
         if (!InitiationCheck(downCube)) {
             return false;
         }
@@ -432,7 +432,7 @@ bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, 
         GeneralizePredecessor(ctgState, downState);
 
         const shared_ptr<cube> &ctgCube = ctgState->latches;
-        m_log.L(3, "CTG cube: ", CubeToStr(ctgCube));
+        m_log.L(3, "CTG cube: ", CubeToStr(*ctgCube));
 
         if (!InitiationCheck(ctgCube)) {
             return false;
@@ -460,7 +460,7 @@ bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, 
                     return false;
                 }
             }
-            m_log.L(3, "Joint cube: ", CubeToStr(joinCube));
+            m_log.L(3, "Joint cube: ", CubeToStr(*joinCube));
             downCube->swap(*joinCube);
         }
     }
@@ -479,7 +479,7 @@ void BasicIC3::GetBlockers(const shared_ptr<cube> &blockingCube, int framelevel,
 }
 
 size_t BasicIC3::Generalize(const shared_ptr<cube> &cb, int frameLvl) {
-    m_log.L(3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
+    m_log.L(3, "Generalizing cube: ", CubeToStr(*cb), ", at frameLvl: ", frameLvl);
     if (MIC(cb, frameLvl, 1)) {
         m_branching->Update(cb);
     }
@@ -490,7 +490,7 @@ size_t BasicIC3::Generalize(const shared_ptr<cube> &cb, int frameLvl) {
 }
 
 bool BasicIC3::MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl) {
-    m_log.L(3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
+    m_log.L(3, "MIC: ", CubeToStr(*cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
     vector<shared_ptr<cube>> blockers;
     shared_ptr<cube> blocker = make_shared<cube>();
@@ -626,7 +626,7 @@ void BasicIC3::InitiationAugmentation(const shared_ptr<cube> &failureCube, const
 // fallbackCube is sorted
 shared_ptr<cube> BasicIC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube) {
     shared_ptr<cube> core = GetCore(solver, fallbackCube, true);
-    m_log.L(3, "Got UNSAT core: ", CubeToStr(core));
+    m_log.L(3, "Got UNSAT core: ", CubeToStr(*core));
     if (!InitiationCheck(core)) {
         m_log.L(3, "GetAndValidateCore: core intersects with initial states. Reverting to fallback cube.");
         // InitiationAugmentation(core, fallbackCube);

@@ -88,26 +88,26 @@ class TernarySimulator {
 
     bool isCycleReached() { return m_cycleStart != -1; };
 
-    const vector<shared_ptr<unordered_map<int, tbool>>> &getValues() { return m_values; };
+    const vector<unordered_map<int, tbool>> &getValues() { return m_values; };
 
-    const vector<shared_ptr<vector<int>>> &getStates() { return m_states; };
+    const vector<vector<int>> &getStates() { return m_states; };
 
-    const vector<shared_ptr<vector<int>>> &getGateStates() { return m_gateStates; };
+    const vector<vector<int>> &getGateStates() { return m_gateStates; };
 
   private:
     Log &m_log;
 
     shared_ptr<CircuitGraph> m_circuitGraph;
 
-    vector<shared_ptr<unordered_map<int, tbool>>> m_values;
+    vector<unordered_map<int, tbool>> m_values;
 
-    void pushState(int step, shared_ptr<vector<int>> &state);
+    void pushState(int step, vector<int> &state);
 
-    vector<shared_ptr<vector<int>>> m_states;
+    vector<vector<int>> m_states;
 
-    void pushGateState(int step, shared_ptr<vector<int>> &gatestate);
+    void pushGateState(int step, vector<int> &gatestate);
 
-    vector<shared_ptr<vector<int>>> m_gateStates;
+    vector<vector<int>> m_gateStates;
 
     int m_randomSeed;
 

@@ -265,10 +265,10 @@ void Model::CollectClauses() {
 }
 
 
-shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
+cube Model::GetCOIDomain(const cube &c) {
     unordered_set<int> coi_vars;
     queue<int> todo_vars;
-    for (int v : *c) {
+    for (int v : c) {
         todo_vars.emplace(abs(v));
         coi_vars.emplace(abs(v));
     }
@@ -285,8 +285,8 @@ shared_ptr<cube> Model::GetCOIDomain(const shared_ptr<cube> c) {
         todo_vars.pop();
     }
 
-    shared_ptr<cube> domain = make_shared<cube>(coi_vars.begin(), coi_vars.end());
-    domain->emplace_back(abs(m_equivalenceManager->Find(TrueId())));
+    cube domain(coi_vars.begin(), coi_vars.end());
+    domain.emplace_back(abs(m_equivalenceManager->Find(TrueId())));
     return domain;
 }
 
@@ -503,7 +503,7 @@ void Model::SimplifyModelByRandomSimulation() {
 
     m_log.Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
-    vector<shared_ptr<unordered_map<int, tbool>>> simulation_values;
+    vector<unordered_map<int, tbool>> simulation_values;
     for (int i = 0; i < NUM_CHUNKS; i++) {
         simulator.simulateRandom(64);
         for (auto &values : simulator.getValues()) {
@@ -587,11 +587,11 @@ void Model::SimplifyModelByRandomSimulation() {
 }
 
 
-void Model::EncodeStatesToSignatuers(const vector<shared_ptr<vector<int>>> &states, unordered_map<string, vector<int>> &signatures) {
+void Model::EncodeStatesToSignatuers(const vector<vector<int>> &states, unordered_map<string, vector<int>> &signatures) {
     // encode locations
     unordered_map<int, vector<int>> signal_locations;
     for (int i = 0; i < states.size(); i++) {
-        const auto &state = *states[i];
+        const auto &state = states[i];
         for (auto v : state) {
             signal_locations[v].emplace_back(i + 1);
             signal_locations[-v].emplace_back(-i - 1);
@@ -616,13 +616,13 @@ void Model::EncodeStatesToSignatuers(const vector<shared_ptr<vector<int>>> &stat
 }
 
 
-void Model::EncodeStatesToN64Signatuers(const vector<shared_ptr<unordered_map<int, tbool>>> &values, const vector<int> &vars, VarMapN64 &signatures) {
+void Model::EncodeStatesToN64Signatuers(const vector<unordered_map<int, tbool>> &values, const vector<int> &vars, VarMapN64 &signatures) {
     assert(values.size() == 64 * NUM_CHUNKS);
 
     for (auto l : vars) {
         SignatureN64 signature;
         for (int i = 0; i < values.size(); i++) {
-            const auto &vmapi = *values[i];
+            const auto &vmapi = values[i];
             int j = i / 64;
             signature.chunks[j] = signature.chunks[j] << 1;
             if (vmapi.at(l) == t_True) {
@@ -687,8 +687,8 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a_prime, b_prime}));
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a_prime, -b_prime}));
 
-    auto d = GetCOIDomain(make_shared<cube>(cube{abs(a), abs(b), abs(a_prime), abs(b_prime)}));
-    m_equivalenceSolver->setTempDomain(*d);
+    cube d = GetCOIDomain(cube{abs(a), abs(b), abs(a_prime), abs(b_prime)});
+    m_equivalenceSolver->setTempDomain(d);
 
     minicore::lbool res = m_equivalenceSolver->solve();
     bool unsat = (res == minicore::l_False);
@@ -727,8 +727,8 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a, b}));
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a, -b}));
 
-    auto d = GetCOIDomain(make_shared<cube>(cube{abs(a), abs(b)}));
-    m_equivalenceSolver->setTempDomain(*d);
+    cube d = GetCOIDomain(cube{abs(a), abs(b)});
+    m_equivalenceSolver->setTempDomain(d);
 
     minicore::lbool res = m_equivalenceSolver->solve();
     bool unsat = (res == minicore::l_False);
