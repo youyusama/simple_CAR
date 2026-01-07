@@ -65,8 +65,8 @@ bool BCAR::Check(int badId) {
     while (true) {
         m_minUpdateLevel = m_k + 1;
         if (m_settings.dt) { // Dynamic Traversal
-            shared_ptr<vector<shared_ptr<State>>> dtseq = m_underSequence.GetSeqDT();
-            for (auto state : *dtseq) {
+            auto dtseq = m_underSequence.GetSeqDT();
+            for (auto state : dtseq) {
                 workingStack.emplace(state, m_k - 1);
             }
         } else { // from the shallow and the start
@@ -143,7 +143,7 @@ bool BCAR::Check(int badId) {
                     auto uc = GetUnsatCore(task.frameLevel, *task.state->latches);
                     m_log.L(3, "Get UC:", CubeToStr(*uc));
                     if (Generalize(uc, task.frameLevel))
-                        m_branching->Update(uc);
+                        m_branching->Update(*uc);
                     m_log.L(2, "Get Generalized UC:", CubeToStr(*uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     if (m_settings.dt) task.state->HasUC();
@@ -169,7 +169,7 @@ bool BCAR::Check(int badId) {
                 for (const cube &uc : *fi) {
                     if (fi_plus_1->find(uc) != fi_plus_1->end()) continue; // propagated
                     if (Propagate(uc, i))
-                        m_branching->Update(make_shared<cube>(uc));
+                        m_branching->Update(uc);
                 }
             }
 
@@ -446,7 +446,7 @@ bool BCAR::Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vec
                 ctgs++;
                 auto uc_cts = GetUnsatCore(cts_lvl, *cts->latches);
                 m_log.L(3, "CTG Get UC:", CubeToStr(*uc_cts));
-                if (Generalize(uc_cts, cts_lvl, rec_lvl + 1)) m_branching->Update(uc_cts);
+                if (Generalize(uc_cts, cts_lvl, rec_lvl + 1)) m_branching->Update(*uc_cts);
                 m_log.L(3, "CTG Get Generalized UC:", CubeToStr(*uc_cts));
                 AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
                 PropagateUp(*uc_cts, cts_lvl + 1);
@@ -516,7 +516,7 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
         }
         sort(uc->begin(), uc->end(), cmp);
         m_log.L(2, "Get UC:", CubeToStr(*uc));
-        m_branching->Update(uc);
+        m_branching->Update(*uc);
         AddUnsatisfiableCore(uc, 0);
         PropagateUp(*uc, 0);
         return false;
@@ -592,7 +592,7 @@ bool BCAR::Propagate(const cube &c, int lvl) {
 int BCAR::PropagateUp(const cube &c, int lvl) {
     while (lvl < m_k) {
         if (Propagate(c, lvl))
-            m_branching->Update(make_shared<cube>(c));
+            m_branching->Update(c);
         else
             break;
         lvl++;

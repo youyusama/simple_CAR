@@ -446,7 +446,7 @@ bool BasicIC3::Down(const shared_ptr<cube> &downCube, int frameLvl, int recLvl, 
 
             int pushLevel = PushLemmaForward(ctgCore, frameLvl);
             if (MIC(ctgCore, pushLevel - 1, recLvl + 1)) {
-                m_branching->Update(ctgCore);
+                m_branching->Update(*ctgCore);
             }
             m_log.L(2, "Learned ctg clause and pushed to frame ", pushLevel);
             AddBlockingCube(ctgCore, pushLevel, true);
@@ -481,7 +481,7 @@ void BasicIC3::GetBlockers(const cube &blockingCube, int framelevel, vector<shar
 size_t BasicIC3::Generalize(const shared_ptr<cube> &cb, int frameLvl) {
     m_log.L(3, "Generalizing cube: ", CubeToStr(*cb), ", at frameLvl: ", frameLvl);
     if (MIC(cb, frameLvl, 1)) {
-        m_branching->Update(cb);
+        m_branching->Update(*cb);
     }
     int pushLevel = PushLemmaForward(cb, frameLvl + 1);
     m_log.L(2, "Learned clause and pushed to frame ", pushLevel);
@@ -662,7 +662,7 @@ int BasicIC3::PushLemmaForward(const shared_ptr<cube> &cb, int startLevel) {
         if (!UnreachabilityCheck(cb, m_frames[pushLevel].solver)) {
             break;
         }
-        m_branching->Update(cb);
+        m_branching->Update(*cb);
         pushLevel++;
     }
     return pushLevel;
@@ -704,7 +704,7 @@ bool BasicIC3::Propagate() {
                 cubesPropagated++;
                 auto core = GetAndValidateCore(framei.solver, cb);
                 AddBlockingCube(core, i + 1, core->size() < cb->size());
-                m_branching->Update(core);
+                m_branching->Update(*core);
                 // Safely erase and advance the iterator
                 it = framei.borderCubes.erase(it);
             } else {

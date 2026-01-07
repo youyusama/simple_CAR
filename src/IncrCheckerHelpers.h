@@ -18,9 +18,9 @@ class Branching {
   public:
     Branching(int type = 1);
     ~Branching();
-    void Update(const shared_ptr<cube> uc);
+    void Update(const cube &uc);
     void Decay();
-    void Decay(const shared_ptr<cube> uc, int gap);
+    void Decay(const cube &uc, int gap);
 
     inline float PriorityOf(int lit) {
         if (abs(lit) >= counts.size()) return 0;
@@ -171,15 +171,15 @@ class UnderSequence {
         return s1->dtScore > s2->dtScore;
     }
 
-    shared_ptr<vector<shared_ptr<State>>> GetSeqDT() {
-        shared_ptr<vector<shared_ptr<State>>> res(new vector<shared_ptr<State>>());
+    vector<shared_ptr<State>> GetSeqDT() {
+        vector<shared_ptr<State>> res;
         for (int i = 0; i < m_sequence.size(); ++i) {
             for (int j = 0; j < m_sequence[i].size(); ++j) {
-                res->emplace_back(m_sequence[i][j]);
+                res.emplace_back(m_sequence[i][j]);
             }
         }
-        sort(res->begin(), res->end(), state_ptr_cmp);
-        res->resize(res->size() / 5);
+        sort(res.begin(), res.end(), state_ptr_cmp);
+        res.resize(res.size() / 5);
         return res;
     }
 

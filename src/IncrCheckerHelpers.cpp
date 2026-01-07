@@ -13,8 +13,8 @@ Branching::Branching(int type) {
 Branching::~Branching() {}
 
 
-void Branching::Update(const shared_ptr<cube> uc) {
-    if (uc->size() == 0) return;
+void Branching::Update(const cube &uc) {
+    if (uc.empty()) return;
     conflict_index++;
     switch (branching_type) {
     case 1: {
@@ -31,10 +31,10 @@ void Branching::Update(const shared_ptr<cube> uc) {
     }
     }
     // assumes cube is ordered
-    int sz = abs(uc->back());
+    int sz = abs(uc.back());
     if (sz >= counts.size()) counts.resize(sz + 1);
-    if (mini > abs(uc->at(0))) mini = abs(uc->at(0));
-    for (auto l : *uc) {
+    if (mini > abs(uc.at(0))) mini = abs(uc.at(0));
+    for (auto l : uc) {
         switch (branching_type) {
         case 1:
         case 2: {
@@ -56,14 +56,14 @@ void Branching::Decay() {
 }
 
 
-void Branching::Decay(const shared_ptr<cube> uc, int gap = 1) {
-    if (uc->size() == 0) return;
+void Branching::Decay(const cube &uc, int gap) {
+    if (uc.empty()) return;
     conflict_index++;
     // assumes cube is ordered
-    int sz = abs(uc->back());
+    int sz = abs(uc.back());
     if (sz >= counts.size()) counts.resize(sz + 1);
-    if (mini > abs(uc->at(0))) mini = abs(uc->at(0));
-    for (auto l : *uc) {
+    if (mini > abs(uc.at(0))) mini = abs(uc.at(0));
+    for (auto l : uc) {
         counts[abs(l)] *= 1 - 0.01 * (gap - 1);
     }
 }
