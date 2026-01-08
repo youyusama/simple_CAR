@@ -84,10 +84,10 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     }
 
     m_log.L(1, "Model initialized: ",
-             m_circuitGraph->numInputs, " inputs, ", m_circuitGraph->numLatches, " latches, ",
-             m_circuitGraph->numAnds, " gates, ", m_circuitGraph->numConstraints, " constraints.");
+            m_circuitGraph->numInputs, " inputs, ", m_circuitGraph->numLatches, " latches, ",
+            m_circuitGraph->numAnds, " gates, ", m_circuitGraph->numConstraints, " constraints.");
     m_log.L(1, "COI Refined Model: ",
-             m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
+            m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
     m_maxId = m_circuitGraph->trueId;
 
     // try to find equivalences
@@ -151,7 +151,7 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // }
 
     m_log.L(1, "Model reduced: ",
-             m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
+            m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
     m_log.L(1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
 }
 
@@ -193,15 +193,27 @@ void Model::ApplyEquivalence() {
 
 
 void Model::UpdateDependencyMap() {
-    m_dependencyMap.clear();
+    m_dependencyVec.assign(m_maxId + 1, vector<int>());
     for (int i = m_circuitGraph->modelGates.size() - 1; i >= 0; i--) {
         int g = m_circuitGraph->modelGates[i];
         for (int fanin : m_circuitGraph->gatesMap[g].fanins) {
             // dependency
             assert(abs(fanin) <= g);
-            m_dependencyMap[g].emplace(abs(fanin));
+            m_dependencyVec[g].emplace_back(abs(fanin));
         }
     }
+
+    m_coiCache.clear();
+    m_coiCacheReady.clear();
+    m_coiVisited.clear();
+    m_coiCacheVisited.clear();
+    m_coiDomain.clear();
+    m_coiCacheTodo.clear();
+
+    m_coiCache.resize(m_maxId + 1);
+    m_coiCacheReady.assign(m_maxId + 1, 0);
+    m_coiVisited.assign(m_maxId + 1, 0);
+    m_coiCacheVisited.assign(m_maxId + 1, 0);
 }
 
 
@@ -266,28 +278,47 @@ void Model::CollectClauses() {
 
 
 cube Model::GetCOIDomain(const cube &c) {
-    unordered_set<int> coi_vars;
-    queue<int> todo_vars;
+    m_coiDomain.clear();
     for (int v : c) {
-        todo_vars.emplace(abs(v));
-        coi_vars.emplace(abs(v));
-    }
-    while (!todo_vars.empty()) {
-        int v = todo_vars.front();
-        if (m_dependencyMap.find(v) != m_dependencyMap.end()) {
-            for (int d : m_dependencyMap[v]) {
-                if (coi_vars.find(d) == coi_vars.end()) {
-                    todo_vars.emplace(abs(d));
-                    coi_vars.emplace(abs(d));
-                }
+        int a = abs(v);
+        EnsureCOICache(a);
+        for (int d : m_coiCache[a]) {
+            if (!m_coiVisited[d]) {
+                m_coiVisited[d] = 1;
+                m_coiDomain.emplace_back(d);
             }
         }
-        todo_vars.pop();
     }
 
-    cube domain(coi_vars.begin(), coi_vars.end());
+    for (int v : m_coiDomain) m_coiVisited[v] = 0;
+
+    cube domain = m_coiDomain;
     domain.emplace_back(abs(m_equivalenceManager->Find(TrueId())));
     return domain;
+}
+
+void Model::EnsureCOICache(int v) {
+    if (m_coiCacheReady[v]) return;
+
+    m_coiCacheReady[v] = 1;
+    m_coiCache[v].clear();
+    m_coiCacheTodo.clear();
+
+    m_coiCacheTodo.emplace_back(v);
+    m_coiCacheVisited[v] = 1;
+
+    for (size_t i = 0; i < m_coiCacheTodo.size(); ++i) {
+        int cur = m_coiCacheTodo[i];
+        m_coiCache[v].emplace_back(cur);
+        for (int d : m_dependencyVec[cur]) {
+            if (!m_coiCacheVisited[d]) {
+                m_coiCacheVisited[d] = 1;
+                m_coiCacheTodo.emplace_back(d);
+            }
+        }
+    }
+
+    for (int t : m_coiCache[v]) m_coiCacheVisited[t] = 0;
 }
 
 

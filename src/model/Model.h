@@ -14,6 +14,7 @@ extern "C" {
 #include <algorithm>
 #include <assert.h>
 #include <chrono>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <math.h>
@@ -239,6 +240,8 @@ class Model {
 
     bool CheckGateEquivalenceBySAT(int a, int b);
 
+    void EnsureCOICache(int v);
+
     inline int GetNewId() { return ++m_maxId; };
 
     Settings m_settings;
@@ -256,7 +259,14 @@ class Model {
     vector<unordered_map<int, int>> m_primeMaps;
     unordered_map<int, vector<int>> m_preValueOfLatchMap;
 
-    unordered_map<int, unordered_set<int>> m_dependencyMap;
+    vector<vector<int>> m_dependencyVec;
+
+    vector<vector<int>> m_coiCache;
+    vector<uint8_t> m_coiCacheReady;
+    vector<uint8_t> m_coiVisited;
+    vector<uint8_t> m_coiCacheVisited;
+    vector<int> m_coiDomain;
+    vector<int> m_coiCacheTodo;
 
     shared_ptr<EquivalenceManager> m_equivalenceManager;
 

@@ -4,11 +4,11 @@
 namespace car {
 
 FCAR::FCAR(Settings settings,
-                               Model &model,
-                               Log &log) : m_settings(settings),
-                                          m_model(model),
-                                          m_log(log),
-                                          innOrder(model) {
+           Model &model,
+           Log &log) : m_settings(settings),
+                       m_model(model),
+                       m_log(log),
+                       innOrder(model) {
     State::numInputs = model.GetNumInputs();
     State::numLatches = model.GetNumLatches();
     m_lastState = nullptr;
@@ -468,7 +468,6 @@ void FCAR::GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t) {
     }
     m_liftSolver->ReleaseTempClause();
     s.second.swap(partial_latch);
-
 }
 
 
@@ -733,6 +732,7 @@ const cube &FCAR::TopDomain() {
 
 
 void FCAR::GetAndPushDomain(const cube &c) {
+    [[maybe_unused]] auto scope = m_log.Section("FC_GetDom");
     cube domain = m_model.GetCOIDomain(c);
     m_domainStack.emplace_back(domain);
 }
