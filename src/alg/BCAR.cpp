@@ -240,7 +240,7 @@ bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel, bool implyCheck)
         m_transSolvers.back()->AddConstraints();
         if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
     }
-    m_transSolvers[frameLevel]->AddUC(puc, frameLevel);
+    m_transSolvers[frameLevel]->AddUC(puc);
 
     if (frameLevel >= m_k) {
         m_startSolver->AddUC(puc, frameLevel);
@@ -548,11 +548,6 @@ bool BCAR::IsReachable(int lvl, const cube &assumption, const string &label) {
     [[maybe_unused]] auto scoped = m_log.Section(label);
     return m_transSolvers[lvl]->Solve(assumption);
 }
-
-bool BCAR::IsReachable(int lvl, const cube &assumption) {
-    return IsReachable(lvl, assumption, "SAT_BC");
-}
-
 
 pair<cube, cube> BCAR::GetInputAndState(int lvl) {
     return m_transSolvers[lvl]->GetAssignment(true);

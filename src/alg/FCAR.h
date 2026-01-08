@@ -100,7 +100,7 @@ class FCAR : public BaseAlg {
 
     int PropagateUp(const cube &c, int lvl);
 
-    bool IsReachable(int lvl, const cube &assumption, const string &label = "SAT_R");
+    bool IsReachable(int lvl, const cube &assumption, const string &label);
 
     shared_ptr<State> EnumerateStartState();
 
@@ -115,8 +115,6 @@ class FCAR : public BaseAlg {
     void AddConstraintOr(const shared_ptr<frame> f);
 
     void AddConstraintAnd(const shared_ptr<frame> f);
-
-    bool IsReachable(int lvl, const cube &assumption);
 
     pair<cube, cube> GetInputAndState(int lvl);
 

@@ -683,11 +683,6 @@ bool FCAR::IsReachable(int lvl, const cube &assumption, const string &label) {
 }
 
 
-bool FCAR::IsReachable(int lvl, const cube &assumption) {
-    return IsReachable(lvl, assumption, "SAT_R");
-}
-
-
 pair<cube, cube> FCAR::GetInputAndState(int lvl) {
     return m_transSolvers[lvl]->GetAssignment(false);
 }
