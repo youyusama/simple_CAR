@@ -80,7 +80,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->excludes("--is");
 
     app.add_option("--eq", settings.eq, "equivalent variable checking ( 0: none,\n\
-                                                                                1: combination,\n\
+                                                                                1: combination of 2 and 3,\n\
                                                                                 2: ternary simulation,\n\
                                                                                 3: random simulation)")
         ->default_val(1);
