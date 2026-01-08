@@ -211,10 +211,10 @@ string State::GetLatchesString() {
     result.reserve(numLatches);
     int j = 0;
     for (int i = 0; i < numLatches; ++i) {
-        if (j >= latches->size() || numInputs + i + 1 < abs(latches->at(j))) {
+        if (j >= latches.size() || numInputs + i + 1 < abs(latches.at(j))) {
             result += "x";
         } else {
-            result += (latches->at(j) > 0) ? "1" : "0";
+            result += (latches.at(j) > 0) ? "1" : "0";
             ++j;
         }
     }
@@ -227,10 +227,10 @@ string State::GetInputsString() {
     result.reserve(numInputs);
     int j = 0;
     for (int i = 1; i <= numInputs; ++i) {
-        if (j >= inputs->size() || i < abs(inputs->at(j))) {
+        if (j >= inputs.size() || i < abs(inputs.at(j))) {
             result += "x";
         } else {
-            result += (inputs->at(j) > 0) ? "1" : "0";
+            result += (inputs.at(j) > 0) ? "1" : "0";
             ++j;
         }
     }

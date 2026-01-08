@@ -111,9 +111,9 @@ bool BasicIC3::Check(int badId) {
     // F_0 is defined as exactly the initial states.
     for (const auto &lit : m_initialStateSet) {
         frame0.solver->AddClause({lit});
-        auto blockingCube = make_shared<cube>(cube{-lit});
+        cube blockingCube = cube{-lit};
         if (m_settings.satSolveInDomain) {
-            frame0.solver->SetDomainCOI(*blockingCube);
+            frame0.solver->SetDomainCOI(blockingCube);
         }
     }
     frame0.solver->AddInitialClauses();
@@ -153,8 +153,8 @@ bool BasicIC3::BaseCases() {
         pair<cube, cube> assignment = baseSolver->GetAssignment(false);
         m_cexStart = make_shared<State>(
             nullptr,
-            make_shared<cube>(assignment.first),
-            make_shared<cube>(assignment.second),
+            assignment.first,
+            assignment.second,
             0);
         return false;
     }
@@ -180,11 +180,11 @@ bool BasicIC3::BaseCases() {
                 primeInputs.push_back(-i);
         }
         pair<cube, cube> assignment = step1Solver->GetAssignment(false);
-        shared_ptr<State> badState(new State(nullptr, make_shared<cube>(primeInputs), nullptr, 0));
+        shared_ptr<State> badState(new State(nullptr, primeInputs, cube(), 0));
         m_cexStart = make_shared<State>(
             badState,
-            make_shared<cube>(assignment.first),
-            make_shared<cube>(assignment.second),
+            assignment.first,
+            assignment.second,
             1 // depth
         );
         return false;
@@ -304,13 +304,13 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
 
         assignment.second = partialLatch;
 
-        shared_ptr<State> badState(new State(nullptr, make_shared<cube>(badInputs), nullptr, 0));
+        shared_ptr<State> badState(new State(nullptr, badInputs, cube(), 0));
         shared_ptr<State> ctiState = make_shared<State>(
             badState,
-            make_shared<cube>(assignment.first),
-            make_shared<cube>(assignment.second),
+            assignment.first,
+            assignment.second,
             1);
-        m_log.L(2, "Found start state at level ", m_k, ": ", CubeToStr(*ctiState->latches), ", input: ", CubeToStr(*ctiState->inputs));
+        m_log.L(2, "Found start state at level ", m_k, ": ", CubeToStr(ctiState->latches), ", input: ", CubeToStr(ctiState->inputs));
         return ctiState;
     } else {
         m_log.L(2, "No start state found at level ", m_k);
@@ -346,7 +346,7 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
         m_log.L(2, "Handling obligation for state at level ", ob.level, " with depth ", ob.depth);
 
         const shared_ptr<SATSolver> &frameSolver = m_frames[ob.level].solver;
-        const cube &ctiCube = *ob.state->latches;
+        const cube &ctiCube = ob.state->latches;
 
         if (UnreachabilityCheck(ctiCube, frameSolver)) {
             obligations.erase(obligations.begin());
@@ -362,8 +362,8 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
             pair<cube, cube> assignment = frameSolver->GetAssignment(false);
             auto predecessorState = make_shared<State>(
                 ob.state,
-                make_shared<cube>(assignment.first),
-                make_shared<cube>(assignment.second),
+                assignment.first,
+                assignment.second,
                 ob.depth + 1);
             if (ob.level == 0) {
                 m_log.L(1, "UNSAFE: Found a path from the initial state.");
@@ -430,16 +430,16 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
             return true;
         }
 
-        shared_ptr<State> downState = make_shared<State>(nullptr, nullptr, make_shared<cube>(downCube), 0);
+        shared_ptr<State> downState = make_shared<State>(nullptr, cube(), downCube, 0);
         pair<cube, cube> ctgAssignment = solverLvl->GetAssignment(false);
         auto ctgState = make_shared<State>(
             downState,
-            make_shared<cube>(ctgAssignment.first),
-            make_shared<cube>(ctgAssignment.second),
+            ctgAssignment.first,
+            ctgAssignment.second,
             0);
         GeneralizePredecessor(ctgState, downState);
 
-        const cube &ctgCube = *ctgState->latches;
+        const cube &ctgCube = ctgState->latches;
         m_log.L(3, "CTG cube: ", CubeToStr(ctgCube));
 
         if (!InitiationCheck(ctgCube)) {
@@ -563,11 +563,11 @@ bool BasicIC3::MIC(cube &cb, int frameLvl, int recLvl) {
 
 
 void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState) {
-    m_log.L(3, "Generalizing predecessor. Initial latch size: ", predecessorState->latches->size(), ", input size: ", predecessorState->inputs->size(), ", Successor state latch size: ", successorState->latches->size());
+    m_log.L(3, "Generalizing predecessor. Initial latch size: ", predecessorState->latches.size(), ", input size: ", predecessorState->inputs.size(), ", Successor state latch size: ", successorState->latches.size());
 
     clause succNegationClause;
-    succNegationClause.reserve(successorState->latches->size());
-    for (const auto &lit : *(successorState->latches)) {
+    succNegationClause.reserve(successorState->latches.size());
+    for (const auto &lit : successorState->latches) {
         succNegationClause.push_back(-m_model.GetPrimeK(lit, 1));
     }
     for (auto cons : m_model.GetConstraints()) {
@@ -576,15 +576,15 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
     m_liftSolver->AddTempClause(succNegationClause);
 
     cube primeLatches;
-    for (const auto &lit : *(successorState->latches)) {
+    for (const auto &lit : successorState->latches) {
         primeLatches.push_back(m_model.GetPrimeK(lit, 1));
     }
-    const auto &partialLatch = predecessorState->latches;
+    auto &partialLatch = predecessorState->latches;
 
     while (true) {
-        cube assumption(*partialLatch);
+        cube assumption(partialLatch);
         OrderAssumption(assumption);
-        assumption.insert(assumption.begin(), predecessorState->inputs->begin(), predecessorState->inputs->end());
+        assumption.insert(assumption.begin(), predecessorState->inputs.begin(), predecessorState->inputs.end());
         // There exist some successors whose predecessors are the entire set. (All latches are determined solely by the inputs.)
         if (m_settings.satSolveInDomain) {
             m_liftSolver->ResetTempDomain();
@@ -595,17 +595,17 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
         bool result = m_liftSolver->Solve(assumption);
         assert(!result);
 
-        auto core = GetCore(m_liftSolver, *partialLatch, false);
-        m_log.L(3, "Core size: ", core.size(), ", Partial latch size: ", partialLatch->size());
+        auto core = GetCore(m_liftSolver, partialLatch, false);
+        m_log.L(3, "Core size: ", core.size(), ", Partial latch size: ", partialLatch.size());
 
-        if (core.size() >= partialLatch->size()) {
+        if (core.size() >= partialLatch.size()) {
             break;
         } else {
-            partialLatch->swap(core);
+            partialLatch.swap(core);
         }
     }
     m_liftSolver->ReleaseTempClause();
-    m_log.L(3, "Generalized predecessor. Final latch size: ", predecessorState->latches->size());
+    m_log.L(3, "Generalized predecessor. Final latch size: ", predecessorState->latches.size());
 }
 
 bool BasicIC3::InitiationCheck(const cube &cb) {

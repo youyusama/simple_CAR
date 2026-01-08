@@ -35,25 +35,6 @@ class Branching {
 };
 
 
-static bool _cubePtrComp(const shared_ptr<cube> &c1, const shared_ptr<cube> &c2) {
-    if (c1->size() != c2->size()) return c1->size() < c2->size();
-    for (size_t i = 0; i < c1->size(); ++i) {
-        int v1 = c1->at(i), v2 = c2->at(i);
-        if (abs(v1) != abs(v2))
-            return abs(v1) < abs(v2);
-        else if (v1 != v2)
-            return v1 > v2;
-    }
-    return false;
-}
-
-struct cubePtrComp {
-  public:
-    bool operator()(const shared_ptr<cube> &c1, const shared_ptr<cube> &c2) const {
-        return _cubePtrComp(c1, c2);
-    }
-};
-
 struct CubeHash {
     size_t operator()(const vector<int> &cube) const noexcept {
         size_t seed = cube.size();
@@ -108,15 +89,14 @@ class OverSequenceSet {
 };
 
 
-class State {
-  public:
+struct State {
     State(shared_ptr<State> inPreState,
-          shared_ptr<cube> inInputs,
-          shared_ptr<cube> inLatches,
-          int inDepth) : preState(inPreState),
+          const cube &inInputs,
+          const cube &inLatches,
+          int inDepth) : depth(inDepth),
+                         preState(inPreState),
                          inputs(inInputs),
                          latches(inLatches),
-                         depth(inDepth),
                          dtScore(0) {}
     static int numInputs;
     static int numLatches;
@@ -126,8 +106,8 @@ class State {
 
     int depth;
     shared_ptr<State> preState = nullptr;
-    shared_ptr<cube> inputs;
-    shared_ptr<cube> latches;
+    cube inputs;
+    cube latches;
     double dtScore;
 
     void HasUC() {

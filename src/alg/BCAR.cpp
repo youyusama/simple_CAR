@@ -47,7 +47,7 @@ bool BCAR::Check(int badId) {
         auto p = m_startSolver->GetAssignment(false);
         m_log.L(3, "Get Assignment:", CubeToStr(p.second));
 
-        shared_ptr<State> newState(new State(nullptr, make_shared<cube>(p.first), make_shared<cube>(p.second), 1));
+        shared_ptr<State> newState(new State(nullptr, p.first, p.second, 1));
         m_lastState = newState;
         return false;
     }
@@ -85,8 +85,8 @@ bool BCAR::Check(int badId) {
         m_log.StatStartSolver();
 
         while (startState != nullptr) {
-            m_log.L(2, "State from StartSolver: ", CubeToStrShort(*startState->latches));
-            m_log.L(3, "State Detail: ", CubeToStr(*startState->latches));
+            m_log.L(2, "State from StartSolver: ", CubeToStrShort(startState->latches));
+            m_log.L(3, "State Detail: ", CubeToStr(startState->latches));
             workingStack.emplace(startState, m_k - 1);
 
             while (!workingStack.empty()) {
@@ -103,7 +103,7 @@ bool BCAR::Check(int badId) {
 
                 m_log.Tick();
                 while (task.frameLevel < m_k &&
-                       m_overSequence->IsBlockedByFrameLazy(*task.state->latches, task.frameLevel + 1)) {
+                       m_overSequence->IsBlockedByFrameLazy(task.state->latches, task.frameLevel + 1)) {
                     task.frameLevel++;
                 }
                 m_log.StatGetNewLevel();
@@ -120,10 +120,10 @@ bool BCAR::Check(int badId) {
                         continue;
                 }
 
-                cube assumption(*task.state->latches);
+                cube assumption(task.state->latches);
                 OrderAssumption(assumption);
                 m_log.L(2, "\nSAT Check on frame: ", task.frameLevel);
-                m_log.L(3, "From state: ", CubeToStr(*task.state->latches));
+                m_log.L(3, "From state: ", CubeToStr(task.state->latches));
                 m_log.Tick();
                 bool result = IsReachable(task.frameLevel, assumption);
                 m_log.StatMainSolver();
@@ -131,8 +131,8 @@ bool BCAR::Check(int badId) {
                     // Solver return SAT, get a new State, then continue
                     m_log.L(2, "Result >>> SAT <<<");
                     auto p = GetInputAndState(task.frameLevel);
-                    shared_ptr<State> newState(new State(task.state, make_shared<cube>(p.first), make_shared<cube>(p.second), task.state->depth + 1));
-                    m_log.L(3, "Get state: ", CubeToStr(*newState->latches));
+                    shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
+                    m_log.L(3, "Get state: ", CubeToStr(newState->latches));
                     m_underSequence.push(newState);
                     if (m_settings.dt) task.state->HasSucc();
                     workingStack.emplace(newState, task.frameLevel - 1);
@@ -140,7 +140,7 @@ bool BCAR::Check(int badId) {
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     m_log.L(2, "Result >>> UNSAT <<<");
-                    auto uc = GetUnsatCore(task.frameLevel, *task.state->latches);
+                    auto uc = GetUnsatCore(task.frameLevel, task.state->latches);
                     m_log.L(3, "Get UC:", CubeToStr(uc));
                     if (Generalize(uc, task.frameLevel))
                         m_branching->Update(uc);
@@ -263,7 +263,7 @@ bool BCAR::ImmediateSatisfiable(int badId) {
 shared_ptr<State> BCAR::EnumerateStartState() {
     if (!m_startSolver->Solve()) return nullptr;
     auto p = m_startSolver->GetAssignment(true);
-    shared_ptr<State> startState(new State(nullptr, make_shared<cube>(p.first), make_shared<cube>(p.second), 0));
+    shared_ptr<State> startState(new State(nullptr, p.first, p.second, 0));
     return startState;
 }
 
@@ -433,17 +433,17 @@ bool BCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
         } else {
             m_log.StatMainSolver();
             auto p = GetInputAndState(frame_lvl);
-            shared_ptr<State> cts(new State(nullptr, make_shared<cube>(p.first), make_shared<cube>(p.second), 0));
-            if (DownHasFailed(*cts->latches, failed_ctses)) return false;
+            shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
+            if (DownHasFailed(cts->latches, failed_ctses)) return false;
             int cts_lvl = frame_lvl - 1;
-            cube cts_ass(*cts->latches);
+            cube cts_ass(cts->latches);
             OrderAssumption(cts_ass);
             m_log.Tick();
             // F_i-1 & T & cts'
             if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass)) {
                 m_log.StatMainSolver();
                 ctgs++;
-                auto uc_cts = GetUnsatCore(cts_lvl, *cts->latches);
+                auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
                 m_log.L(3, "CTG Get UC:", CubeToStr(uc_cts));
                 if (Generalize(uc_cts, cts_lvl, rec_lvl + 1)) m_branching->Update(uc_cts);
                 m_log.L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
@@ -451,7 +451,7 @@ bool BCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
                 PropagateUp(uc_cts, cts_lvl + 1);
             } else {
                 m_log.StatMainSolver();
-                failed_ctses.emplace_back(*cts->latches);
+                failed_ctses.emplace_back(cts->latches);
                 return false;
             }
         }
@@ -471,8 +471,8 @@ bool BCAR::DownHasFailed(const cube &s, const vector<cube> &failed_ctses) {
 
 bool BCAR::CheckBad(shared_ptr<State> s) {
     m_log.L(2, "\nSAT CHECK on bad");
-    m_log.L(3, "From state: ", CubeToStr(*s->latches));
-    cube assumption(*s->latches);
+    m_log.L(3, "From state: ", CubeToStr(s->latches));
+    cube assumption(s->latches);
     OrderAssumption(assumption);
     m_log.Tick();
     bool result = m_badSolver->Solve(assumption);
@@ -481,7 +481,7 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
         m_log.L(2, "Result >>> SAT <<<");
         auto p = m_badSolver->GetAssignment(false);
         m_log.L(3, "Get Assignment:", CubeToStr(p.second));
-        shared_ptr<State> newState(new State(s, make_shared<cube>(p.first), make_shared<cube>(p.second), s->depth + 1));
+        shared_ptr<State> newState(new State(s, p.first, p.second, s->depth + 1));
         m_lastState = newState;
         m_log.L(3, m_overSequence->FramesInfo());
         return true;
@@ -761,8 +761,8 @@ void BCAR::OutputCounterExample(int bad) {
     // get determined initial state
     if (trace.size() > 1) {
         cube assumption;
-        cube succ(*trace.top()->latches);
-        cube input(*trace.top()->inputs);
+        cube succ(trace.top()->latches);
+        cube input(trace.top()->inputs);
         GetPrimed(succ);
         assumption.insert(assumption.end(), succ.begin(), succ.end());
         assumption.insert(assumption.end(), input.begin(), input.end());
@@ -770,7 +770,7 @@ void BCAR::OutputCounterExample(int bad) {
         bool sat = m_startSolver->Solve(assumption);
         assert(sat);
         auto p = m_startSolver->GetAssignment(false);
-        shared_ptr<State> initState(new State(nullptr, make_shared<cube>(p.first), make_shared<cube>(p.second), 0));
+        shared_ptr<State> initState(new State(nullptr, p.first, p.second, 0));
         cexFile << initState->GetLatchesString() << endl;
     } else {
         cexFile << trace.top()->GetLatchesString() << endl;
