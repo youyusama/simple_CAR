@@ -136,7 +136,7 @@ bool OverSequenceSet::IsBlockedByFrameLazy(const cube &latches, int frameLevel) 
 
     int &counter = m_blockCounter[frameLevel];
     if (counter == -1) { // by sat
-        bool sat = m_blockSolver->SolveFrame(make_shared<cube>(latches), frameLevel);
+        bool sat = m_blockSolver->SolveFrame(latches, frameLevel);
         return !sat;
     }
 
@@ -146,7 +146,7 @@ bool OverSequenceSet::IsBlockedByFrameLazy(const cube &latches, int frameLevel) 
     // whether it's need to change the way of checking
     if (counter > 1000) {
         auto start_time = std::chrono::high_resolution_clock::now();
-        m_blockSolver->SolveFrame(make_shared<cube>(latches), frameLevel);
+        m_blockSolver->SolveFrame(latches, frameLevel);
         auto sat_end = std::chrono::high_resolution_clock::now();
         bool res = IsBlockedByFrame(latches, frameLevel);
         auto for_end = std::chrono::high_resolution_clock::now();

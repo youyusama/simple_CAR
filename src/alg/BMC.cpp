@@ -58,12 +58,12 @@ bool BMC::Check(int badId) {
 
         // assume( bad^k & cons^k )
         int k_bad = GetBadK(m_k);
-        shared_ptr<cube> assumptions(new cube());
-        assumptions->push_back(k_bad);
+        cube assumptions;
+        assumptions.push_back(k_bad);
         for (auto c : GetConstraintsK(m_k)) {
-            assumptions->push_back(c);
+            assumptions.push_back(c);
         }
-        m_log.L(3, "Assumption: ", CubeToStr(*assumptions));
+        m_log.L(3, "Assumption: ", CubeToStr(assumptions));
         m_log.Tick();
         bool sat = m_Solver->Solve(assumptions);
         m_log.StatMainSolver();

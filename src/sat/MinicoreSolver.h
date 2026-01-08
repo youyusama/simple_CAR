@@ -14,10 +14,10 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     ~MinicoreSolver();
 
     void AddClause(const cube &cls) override;
-    void AddAssumption(const shared_ptr<cube> assumption) override;
+    void AddAssumption(const cube &assumption) override;
     bool Solve() override;
-    bool Solve(const shared_ptr<cube> assumption) override;
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override;
+    bool Solve(const cube &assumption) override;
+    pair<cube, cube> GetAssignment(bool prime) override;
     unordered_set<int> GetConflict() override;
     inline int GetNewVar() override {
         return ++m_maxId;
@@ -36,8 +36,8 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     int PopAssumption() override;
 
     inline void SetSolveInDomain() override;
-    inline void SetDomain(const shared_ptr<cube> domain) override;
-    inline void SetTempDomain(const shared_ptr<cube> domain) override;
+    inline void SetDomain(const cube &domain) override;
+    inline void SetTempDomain(const cube &domain) override;
     inline void ResetTempDomain() override;
 
   protected:

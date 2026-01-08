@@ -26,7 +26,7 @@ class BCAR : public BaseAlg {
 
     void Init();
 
-    bool AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck = false);
+    bool AddUnsatisfiableCore(const cube &uc, int frameLevel, bool implyCheck = false);
 
     bool ImmediateSatisfiable(int badId);
 
@@ -89,9 +89,9 @@ class BCAR : public BaseAlg {
         }
     }
 
-    bool Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1);
+    bool Generalize(cube &uc, int frame_lvl, int rec_lvl = 1);
 
-    bool Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses);
+    bool Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses);
 
     bool DownHasFailed(const cube &s, const vector<cube> &failed_ctses);
 
@@ -113,11 +113,11 @@ class BCAR : public BaseAlg {
 
     bool IsReachable(int lvl, const cube &assumption);
 
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
+    pair<cube, cube> GetInputAndState(int lvl);
 
-    shared_ptr<cube> GetUnsatCore(int lvl, const cube &state);
+    cube GetUnsatCore(int lvl, const cube &state);
 
-    shared_ptr<cube> GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
+    cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
 
     shared_ptr<State> EnumerateStartState();
 

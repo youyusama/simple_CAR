@@ -20,11 +20,11 @@ class KissatSolver : public ISolver {
     ~KissatSolver() { kissat_release(m_solver); }
 
     void AddClause(const cube &cls) override;
-    void AddAssumption(const shared_ptr<cube> assumption) override {}
+    void AddAssumption(const cube &assumption) override {}
     bool Solve() override;
-    bool Solve(const shared_ptr<cube> assumption) override { return false; }
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override { return pair<shared_ptr<cube>, shared_ptr<cube>>(NULL, NULL); }
-    shared_ptr<cube> GetUC(bool prime) { return NULL; }
+    bool Solve(const cube &assumption) override { return false; }
+    pair<cube, cube> GetAssignment(bool prime) override { return pair<cube, cube>(cube(), cube()); }
+    cube GetUC(bool prime) { return cube(); }
     unordered_set<int> GetConflict() override { return unordered_set<int>(); }
     int GetNewVar() override { return 0; }
     void AddTempClause(const cube &cls) override {}
@@ -44,8 +44,8 @@ class KissatSolver : public ISolver {
 
     // not available
     inline void SetSolveInDomain() override {}
-    inline void SetDomain(const shared_ptr<cube> domain) override {}
-    inline void SetTempDomain(const shared_ptr<cube> domain) override {}
+    inline void SetDomain(const cube &domain) override {}
+    inline void SetTempDomain(const cube &domain) override {}
     inline void ResetTempDomain() override {}
 
   protected:

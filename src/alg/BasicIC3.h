@@ -29,7 +29,20 @@ struct Obligation {
 struct IC3Frame {
     int k;
     shared_ptr<SATSolver> solver;
-    set<shared_ptr<cube>, cubePtrComp> borderCubes;
+    struct CubeComp {
+        bool operator()(const cube &a, const cube &b) const {
+            if (a.size() != b.size()) return a.size() < b.size();
+            for (size_t i = 0; i < a.size(); ++i) {
+                int v1 = a[i], v2 = b[i];
+                if (abs(v1) != abs(v2))
+                    return abs(v1) < abs(v2);
+                else if (v1 != v2)
+                    return v1 > v2;
+            }
+            return false;
+        }
+    };
+    set<cube, CubeComp> borderCubes;
 };
 
 class BasicIC3 : public BaseAlg {
@@ -48,13 +61,13 @@ class BasicIC3 : public BaseAlg {
     bool BaseCases();
     void AddNewFrame();
     void AddNewFrames();
-    void AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLevel, bool toAll);
+    void AddBlockingCube(const cube &blockingCube, int frameLevel, bool toAll);
 
     bool Strengthen();
     bool HandleObligations(set<Obligation> &obligations);
-    size_t Generalize(const shared_ptr<cube> &cb, int frameLvl);
-    bool MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl);
-    bool Down(const shared_ptr<cube> &c, int frameLvl, int recLvl, const set<int> &triedLits);
+    size_t Generalize(cube &cb, int frameLvl);
+    bool MIC(cube &cb, int frameLvl, int recLvl);
+    bool Down(cube &c, int frameLvl, int recLvl, const set<int> &triedLits);
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 
 
@@ -64,7 +77,7 @@ class BasicIC3 : public BaseAlg {
         }
     }
     string FramesInfo() const;
-    int PushLemmaForward(const shared_ptr<cube> &cb, int startLevel);
+    int PushLemmaForward(const cube &cb, int startLevel);
 
     struct LitOrder {
         shared_ptr<Branching> branching;
@@ -81,11 +94,11 @@ class BasicIC3 : public BaseAlg {
 
         BlockerOrder() {}
 
-        bool operator()(const shared_ptr<cube> &a, const shared_ptr<cube> &b) const {
+        bool operator()(const cube &a, const cube &b) const {
             float score_a = 0, score_b = 0;
-            for (int i = 0; i < a->size(); i++) {
-                score_a += branching->PriorityOf(a->at(i));
-                score_b += branching->PriorityOf(b->at(i));
+            for (int i = 0; i < a.size(); i++) {
+                score_a += branching->PriorityOf(a[i]);
+                score_b += branching->PriorityOf(b[i]);
             }
             return score_a > score_b;
         }
@@ -111,14 +124,14 @@ class BasicIC3 : public BaseAlg {
     void OutputCounterExample();
 
 
-    std::shared_ptr<cube> GetCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube, bool prime);
-    bool UnreachabilityCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv);
-    bool InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv);
-    shared_ptr<cube> GetAndValidateCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube);
-    void InitiationAugmentation(const shared_ptr<cube> &failureCube, const shared_ptr<cube> &fallbackCube);
-    bool InitiationCheck(const shared_ptr<cube> &cb);
+    cube GetCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube, bool prime);
+    bool UnreachabilityCheck(const cube &cb, const shared_ptr<SATSolver> &slv);
+    bool InductionCheck(const cube &cb, const shared_ptr<SATSolver> &slv);
+    cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube);
+    void InitiationAugmentation(const cube &failureCube, const cube &fallbackCube);
+    bool InitiationCheck(const cube &cb);
 
-    void GetBlockers(const cube &c, int framelevel, vector<shared_ptr<cube>> &blockers);
+    void GetBlockers(const cube &c, int framelevel, vector<cube> &blockers);
 
     CheckResult m_checkResult;
 

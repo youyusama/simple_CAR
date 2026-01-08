@@ -59,7 +59,7 @@ void SATSolver::AddTrans() {
 void SATSolver::AddConstraints() {
     for (auto c : m_model.GetConstraints()) {
         AddClause(clause{c});
-        SetDomainCOI(make_shared<cube>(cube{c}));
+        SetDomainCOI(cube{c});
     }
 }
 
@@ -116,7 +116,7 @@ void SATSolver::AddInitialClauses() {
     vector<clause> &clauses = m_model.GetInitialClauses();
     for (auto &c : clauses) {
         AddClause(c);
-        SetDomainCOI(make_shared<cube>(cube{c}));
+        SetDomainCOI(c);
     }
 }
 
@@ -126,7 +126,7 @@ void SATSolver::AddInitialClauses() {
 // @input:
 // @output:
 // ================================================================================
-bool SATSolver::SolveFrame(const shared_ptr<cube> assumption, int lvl) {
+bool SATSolver::SolveFrame(const cube &assumption, int lvl) {
     ClearAssumption();
     PushAssumption(GetFrameFlag(lvl));
     AddAssumption(assumption);
@@ -139,18 +139,6 @@ bool SATSolver::SolveFrame(const shared_ptr<cube> assumption, int lvl) {
 // @input:
 // @output:
 // ================================================================================
-void SATSolver::AddUC(const shared_ptr<cube> uc, int lvl) {
-    int flag = GetFrameFlag(lvl);
-    clause cls;
-    cls.reserve(uc->size() + 1);
-    cls.emplace_back(-flag);
-    for (auto ci : *uc) cls.emplace_back(-ci);
-
-    AddClause(cls);
-    SetDomain(make_shared<cube>(cls));
-}
-
-
 void SATSolver::AddUC(const cube &uc, int lvl) {
     int flag = GetFrameFlag(lvl);
     clause cls;
@@ -159,17 +147,16 @@ void SATSolver::AddUC(const cube &uc, int lvl) {
     for (auto ci : uc) cls.emplace_back(-ci);
 
     AddClause(cls);
-    SetDomain(make_shared<cube>(cls));
+    SetDomain(cls);
 }
 
-
-void SATSolver::AddUC(const shared_ptr<cube> uc) {
+void SATSolver::AddUC(const cube &uc) {
     clause cls;
-    cls.reserve(uc->size());
-    for (auto ci : *uc) cls.emplace_back(-ci);
+    cls.reserve(uc.size());
+    for (auto ci : uc) cls.emplace_back(-ci);
 
     AddClause(cls);
-    SetDomain(make_shared<cube>(cls));
+    SetDomain(cls);
 }
 
 
@@ -181,7 +168,7 @@ void SATSolver::AddUC(const shared_ptr<cube> uc) {
 void SATSolver::AddProperty() {
     clause cls = clause{m_model.GetProperty()};
     AddClause(cls);
-    SetDomainCOI(make_shared<cube>(cls));
+    SetDomainCOI(cls);
 }
 
 

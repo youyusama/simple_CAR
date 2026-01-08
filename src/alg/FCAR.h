@@ -24,7 +24,7 @@ class FCAR : public BaseAlg {
 
     void Init(int badId);
 
-    bool AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck = false);
+    bool AddUnsatisfiableCore(const cube &uc, int frameLevel, bool implyCheck = false);
 
     bool ImmediateSatisfiable(int badId);
 
@@ -88,11 +88,11 @@ class FCAR : public BaseAlg {
         }
     }
 
-    void GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &s, shared_ptr<State> t);
+    void GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t);
 
-    bool Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1);
+    bool Generalize(cube &uc, int frame_lvl, int rec_lvl = 1);
 
-    bool Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses);
+    bool Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses);
 
     bool DownHasFailed(const cube &s, const vector<cube> &failed_ctses);
 
@@ -118,15 +118,15 @@ class FCAR : public BaseAlg {
 
     bool IsReachable(int lvl, const cube &assumption);
 
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
+    pair<cube, cube> GetInputAndState(int lvl);
 
-    shared_ptr<cube> GetUnsatCore(int lvl, const cube &state);
+    cube GetUnsatCore(int lvl, const cube &state);
 
-    shared_ptr<cube> GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
+    cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
 
-    shared_ptr<cube> TopDomain();
+    const cube &TopDomain();
 
-    shared_ptr<cube> GetAndPushDomain(const cube &c);
+    void GetAndPushDomain(const cube &c);
 
     void PopDomain();
 
@@ -148,7 +148,7 @@ class FCAR : public BaseAlg {
     shared_ptr<Branching> m_branching;
     shared_ptr<State> m_lastState;
     shared_ptr<Restart> m_restart;
-    shared_ptr<vector<shared_ptr<cube>>> m_domainStack;
+    vector<cube> m_domainStack;
 };
 
 

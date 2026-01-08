@@ -17,17 +17,17 @@ bool MinicoreSolver::Solve() {
 }
 
 
-bool MinicoreSolver::Solve(const shared_ptr<cube> assumption) {
+bool MinicoreSolver::Solve(const cube &assumption) {
     m_assumptions.clear();
-    for (auto it : *assumption) {
+    for (auto it : assumption) {
         m_assumptions.emplace_back(GetLit(it));
     }
     return Solve();
 }
 
 
-void MinicoreSolver::AddAssumption(const shared_ptr<cube> assumption) {
-    for (auto it : *assumption) {
+void MinicoreSolver::AddAssumption(const cube &assumption) {
+    for (auto it : assumption) {
         m_assumptions.emplace_back(GetLit(it));
     }
 }
@@ -43,53 +43,53 @@ void MinicoreSolver::AddClause(const cube &cls) {
 }
 
 
-pair<shared_ptr<cube>, shared_ptr<cube>> MinicoreSolver::GetAssignment(bool prime) {
-    shared_ptr<cube> inputs(new cube());
-    shared_ptr<cube> latches(new cube());
-    inputs->reserve(m_model.GetNumInputs());
-    latches->reserve(m_model.GetNumLatches());
+pair<cube, cube> MinicoreSolver::GetAssignment(bool prime) {
+    cube inputs;
+    cube latches;
+    inputs.reserve(m_model.GetNumInputs());
+    latches.reserve(m_model.GetNumLatches());
     for (int i : m_model.GetModelInputs()) {
         if (model[i] == minicore::l_True) {
-            inputs->emplace_back(i);
+            inputs.emplace_back(i);
         } else if (model[i] == minicore::l_False) {
-            inputs->emplace_back(-i);
+            inputs.emplace_back(-i);
         }
     }
     for (int i : m_model.GetModelLatches()) {
         if (!prime) {
             if (model[i] == minicore::l_True) {
-                latches->emplace_back(i);
+                latches.emplace_back(i);
             } else if (model[i] == minicore::l_False) {
-                latches->emplace_back(-i);
+                latches.emplace_back(-i);
             }
         } else {
             int p = m_model.GetPrime(i);
             minicore::lbool val = model[abs(p)];
             if ((val == minicore::l_True && p > 0) || (val == minicore::l_False && p < 0)) {
-                latches->emplace_back(i);
+                latches.emplace_back(i);
             } else if ((val == minicore::l_True && p < 0) || (val == minicore::l_False && p > 0)) {
-                latches->emplace_back(-i);
+                latches.emplace_back(-i);
             }
         }
     }
     for (int i : m_model.GetInnards()) {
         if (!prime) {
             if (model[i] == minicore::l_True) {
-                latches->emplace_back(i);
+                latches.emplace_back(i);
             } else if (model[i] == minicore::l_False) {
-                latches->emplace_back(-i);
+                latches.emplace_back(-i);
             }
         } else {
             int p = m_model.GetPrime(i);
             minicore::lbool val = model[abs(p)];
             if ((val == minicore::l_True && p > 0) || (val == minicore::l_False && p < 0)) {
-                latches->emplace_back(i);
+                latches.emplace_back(i);
             } else if ((val == minicore::l_True && p < 0) || (val == minicore::l_False && p > 0)) {
-                latches->emplace_back(-i);
+                latches.emplace_back(-i);
             }
         }
     }
-    return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
+    return pair<cube, cube>(inputs, latches);
 }
 
 
@@ -144,16 +144,16 @@ inline void MinicoreSolver::SetSolveInDomain() {
 }
 
 
-inline void MinicoreSolver::SetDomain(const shared_ptr<cube> domain) {
+inline void MinicoreSolver::SetDomain(const cube &domain) {
     std::vector<minicore::Var> d;
-    for (auto v : *domain) d.emplace_back(v);
+    for (auto v : domain) d.emplace_back(v);
     setDomain(d);
 }
 
 
-inline void MinicoreSolver::SetTempDomain(const shared_ptr<cube> domain) {
+inline void MinicoreSolver::SetTempDomain(const cube &domain) {
     std::vector<minicore::Var> d;
-    for (auto v : *domain) d.emplace_back(v);
+    for (auto v : domain) d.emplace_back(v);
     setTempDomain(d);
 }
 
