@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <assert.h>
 #include <memory>
+#include <string>
 
 
 namespace car {
@@ -111,6 +112,7 @@ class BCAR : public BaseAlg {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
+    bool IsReachable(int lvl, const cube &assumption, const string &label);
     bool IsReachable(int lvl, const cube &assumption);
 
     pair<cube, cube> GetInputAndState(int lvl);

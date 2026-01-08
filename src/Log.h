@@ -60,7 +60,7 @@ class Log {
         }
     }
 
-    void PrintStatistics();
+    void PrintCustomStatistics();
 
     ScopedTimer Section(const string &name) {
         if (m_verbosity == 0) return ScopedTimer();
@@ -180,7 +180,6 @@ class Log {
     vector<ActiveSection> m_timerStack;
 
     void AddCustomTime(const string &name, chrono::microseconds time);
-    void PrintCustomStatistics();
     void BeginSection(const string &name);
     void EndSection();
 };

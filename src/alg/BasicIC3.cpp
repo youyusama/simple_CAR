@@ -66,7 +66,7 @@ CheckResult BasicIC3::Run() {
     else
         m_checkResult = CheckResult::Unsafe;
 
-    m_log.PrintStatistics();
+    m_log.PrintCustomStatistics();
 
     return m_checkResult;
 }

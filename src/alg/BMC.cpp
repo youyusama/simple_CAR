@@ -29,7 +29,7 @@ CheckResult BMC::Run() {
             m_checkResult = CheckResult::Unsafe;
     }
 
-    m_log.PrintStatistics();
+    m_log.PrintCustomStatistics();
 
     return m_checkResult;
 }
@@ -42,6 +42,7 @@ void BMC::Witness() {
 
 
 bool BMC::Check(int badId) {
+    [[maybe_unused]] auto checkScope = m_log.Section("BMC_Check");
     Init(badId);
 
     while (true) {
@@ -51,9 +52,12 @@ bool BMC::Check(int badId) {
         GetClausesK(m_k, clauses);
 
         // & T^k
-        for (int i = 0; i < clauses.size(); ++i) {
-            m_Solver->AddClause(clauses[i]);
-            m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
+        {
+            [[maybe_unused]] auto clauseScope = m_log.Section("Add_Trans_Cls");
+            for (int i = 0; i < clauses.size(); ++i) {
+                m_Solver->AddClause(clauses[i]);
+                m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
+            }
         }
 
         // assume( bad^k & cons^k )
@@ -64,25 +68,33 @@ bool BMC::Check(int badId) {
             assumptions.push_back(c);
         }
         m_log.L(3, "Assumption: ", CubeToStr(assumptions));
-        m_log.Tick();
-        bool sat = m_Solver->Solve(assumptions);
-        m_log.StatMainSolver();
-        if (sat) return true;
+        {
+            [[maybe_unused]] auto satScope = m_log.Section("SAT_BMC_Inc");
+            bool sat = m_Solver->Solve(assumptions);
+            if (sat) return true;
+        }
 
         // & cons^k
-        for (auto c : GetConstraintsK(m_k)) {
-            m_Solver->AddClause({c});
-            m_log.L(3, "Add Clause: ", c);
+        {
+            [[maybe_unused]] auto clauseScope = m_log.Section("Add_Cons_Cls");
+            for (auto c : GetConstraintsK(m_k)) {
+                m_Solver->AddClause({c});
+                m_log.L(3, "Add Clause: ", c);
+            }
         }
         // & !bad^k
-        m_Solver->AddClause({-k_bad});
-        m_log.L(3, "Add Clause: ", -k_bad);
+        {
+            [[maybe_unused]] auto clauseScope = m_log.Section("Add_Prop_Cls");
+            m_Solver->AddClause({-k_bad});
+            m_log.L(3, "Add Clause: ", -k_bad);
+        }
         m_k++;
         if (m_maxK != -1 && m_k > m_maxK) return false;
     }
 }
 
 bool BMC::Check_nonincremental(int badId) {
+    [[maybe_unused]] auto checkScope = m_log.Section("BMC_CheckNonInc");
     // before clause^k ConstraintsK(k) bad^k
 
     // before clause^k clause^(k+1) clause^(k+2) ConstraintsK(k) ConstraintsK(k+1) ConstraintsK(k+2) (bad^(k)|bad^(k+1)|bad^(k+2))
@@ -92,10 +104,13 @@ bool BMC::Check_nonincremental(int badId) {
     while (true) {
         Init(badId);
         // add clauses before K unrollings to the Kissat solver
-        for (int i = 0; i < m_clauses.size(); ++i) {
-            m_Solver->AddClause(m_clauses[i]);
-            m_log.L(
-                3, "Add Clause: ", CubeToStr(m_clauses[i]));
+        {
+            [[maybe_unused]] auto clauseScope = m_log.Section("Add_Init_Cls");
+            for (int i = 0; i < m_clauses.size(); ++i) {
+                m_Solver->AddClause(m_clauses[i]);
+                m_log.L(
+                    3, "Add Clause: ", CubeToStr(m_clauses[i]));
+            }
         }
         badClause.clear();
         for (int s = 0; s < m_step; s++) {
@@ -105,10 +120,13 @@ bool BMC::Check_nonincremental(int badId) {
             GetClausesK(m_k, clauses);
 
             // & T^k
-            for (int i = 0; i < clauses.size(); ++i) {
-                m_Solver->AddClause(clauses[i]);
-                m_clauses.emplace_back(clauses[i]); // store for further use
-                m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
+            {
+                [[maybe_unused]] auto clauseScope = m_log.Section("Add_Trans_Cls");
+                for (int i = 0; i < clauses.size(); ++i) {
+                    m_Solver->AddClause(clauses[i]);
+                    m_clauses.emplace_back(clauses[i]); // store for further use
+                    m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
+                }
             }
 
             int k_bad = GetBadK(m_k);
@@ -116,10 +134,14 @@ bool BMC::Check_nonincremental(int badId) {
             badClause.push_back({k_bad});
             // m_Solver->AddClause({k_bad});
             m_log.L(3, "Add Clause: ", k_bad);
-            for (auto c : GetConstraintsK(m_k)) {
-                m_Solver->AddClause({c});
-                m_clauses.push_back({c}); // store for further use
-                m_log.L(3, "Add Clause: ", c);
+
+            {
+                [[maybe_unused]] auto clauseScope = m_log.Section("Add_Cons_Cls");
+                for (auto c : GetConstraintsK(m_k)) {
+                    m_Solver->AddClause({c});
+                    m_clauses.push_back({c}); // store for further use
+                    m_log.L(3, "Add Clause: ", c);
+                }
             }
 
             clause cl({-k_bad}); // store bad^k for
@@ -127,20 +149,20 @@ bool BMC::Check_nonincremental(int badId) {
 
             m_k++;
             if (m_maxK != -1 && m_k > m_maxK) {
+                [[maybe_unused]] auto finalSatScope = m_log.Section("Add_Bad_Cls");
                 m_Solver->AddClause(badClause);
-                m_log.Tick();
+                [[maybe_unused]] auto satScope = m_log.Section("SAT_BMC_NonInc");
                 bool sat = m_Solver->Solve();
-                m_log.StatMainSolver();
                 if (sat)
                     return true;
                 else
                     return false;
             }
         }
+        [[maybe_unused]] auto finalSatScope = m_log.Section("Add_Bad_Cls");
         m_Solver->AddClause(badClause);
-        m_log.Tick();
+        [[maybe_unused]] auto satScope = m_log.Section("SAT_BMC_NonInc");
         bool sat = m_Solver->Solve();
-        m_log.StatMainSolver();
         if (sat)
             return true;
     }
@@ -148,6 +170,7 @@ bool BMC::Check_nonincremental(int badId) {
 
 
 void BMC::Init(int badId) {
+    [[maybe_unused]] auto initScope = m_log.Section("BMC_Init");
     m_badId = badId;
     m_Solver = make_shared<SATSolver>(m_model, m_settings.solver);
 

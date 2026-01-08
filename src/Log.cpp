@@ -7,7 +7,7 @@ namespace car {
 
 void signalHandler(int signum) {
     if (GLOBAL_LOG != nullptr) {
-        GLOBAL_LOG->PrintStatistics();
+        GLOBAL_LOG->PrintCustomStatistics();
         GLOBAL_LOG->L(0, "Unknown");
     }
     exit(signum);
@@ -110,14 +110,17 @@ void Log::EndSection() {
 
 
 void Log::PrintCustomStatistics() {
-    if (m_customStats.empty()) return;
+    if (m_verbosity == 0) return;
 
     vector<pair<string, CustomTimeStat>> sorted(m_customStats.begin(), m_customStats.end());
     sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) {
         return a.second.total > b.second.total;
     });
 
-    cout << "Detailed Timers:" << endl;
+    if (!sorted.empty()) {
+        cout << endl
+             << "Detailed Timers:" << endl;
+    }
     double totalSum = 0.0;
     for (const auto &entry : sorted) {
         double total = GetTimeDouble(entry.second.total);
@@ -127,57 +130,16 @@ void Log::PrintCustomStatistics() {
              << "per: " << fixed << setprecision(5) << per << endl;
         totalSum += total;
     }
-    cout << "  " << left << setw(18) << "Sum"
-         << "called: " << setw(10) << "-"
-         << "takes: " << fixed << setprecision(3) << setw(10) << totalSum
-         << "per: " << fixed << setprecision(5) << 0.0 << endl;
-}
+    if (!sorted.empty()) {
+        cout << "  " << left << setw(18) << "Sum"
+             << "called: " << setw(10) << "-"
+             << "takes: " << fixed << setprecision(3) << setw(10) << totalSum
+             << "per: " << fixed << setprecision(5) << 0.0 << endl;
+    }
 
-
-void Log::PrintStatistics() {
-    if (m_verbosity == 0) return;
-
-    double mainSolverTime = GetTimeDouble(m_mainSolverTime);
-    cout << endl
-         << "TransSolver    called: " << left << setw(12) << m_mainSolverCalls
-         << "takes: " << fixed << setprecision(3) << setw(10) << mainSolverTime
-         << "per: " << fixed << setprecision(5) << mainSolverTime / m_mainSolverCalls << endl;
-
-    double propagationTime = GetTimeDouble(m_propagationTime);
-    cout << "Propagation    called: " << left << setw(12) << m_propagation
-         << "takes: " << fixed << setprecision(3) << setw(10) << propagationTime
-         << "per: " << fixed << setprecision(5) << propagationTime / m_propagation << endl;
-
-    double liftSolverTime = GetTimeDouble(m_liftSolverTime);
-    cout << "LiftSolver     called: " << left << setw(12) << m_liftSolverCalls
-         << "takes: " << fixed << setprecision(3) << setw(10) << liftSolverTime
-         << "per: " << fixed << setprecision(5) << liftSolverTime / m_liftSolverCalls << endl;
-
-    double invSolverTime = GetTimeDouble(m_invSolverTime);
-    cout << "InvSolver      called: " << left << setw(12) << m_invSolverCalls
-         << "takes: " << fixed << setprecision(3) << setw(10) << invSolverTime
-         << "per: " << fixed << setprecision(5) << invSolverTime / m_invSolverCalls << endl;
-
-    double startSolverTime = GetTimeDouble(m_enumerateStartStateTime);
-    cout << "StartSolver    called: " << left << setw(12) << m_enumerateStartState
-         << "takes: " << fixed << setprecision(3) << setw(10) << startSolverTime
-         << "per: " << fixed << setprecision(5) << startSolverTime / m_enumerateStartState << endl;
-
-    double getNewLevelTime = GetTimeDouble(m_getNewLevelTime);
-    cout << "Locating lvl   called: " << left << setw(12) << m_getNewLevel
-         << "takes: " << fixed << setprecision(3) << setw(10) << getNewLevelTime
-         << "per: " << fixed << setprecision(5) << getNewLevelTime / m_getNewLevel << endl;
-
-    double updateUcTime = GetTimeDouble(m_updateUcTime);
-    cout << "Updating UC    called: " << left << setw(12) << m_updateUc
-         << "takes: " << fixed << setprecision(3) << setw(10) << updateUcTime
-         << "per: " << fixed << setprecision(5) << updateUcTime / m_updateUc << endl;
-
-    cout << "Initialization takes: " << fixed << setprecision(5) << GetTimeDouble(m_initTime) << endl;
-    cout << "Innards        takes: " << fixed << setprecision(5) << GetTimeDouble(m_internalSignalsTime) << endl;
-
-    PrintCustomStatistics();
-
-    cout << "Total Time     spent: " << fixed << setprecision(5) << GetTimeDouble(chrono::duration_cast<std::chrono::microseconds>(chrono::steady_clock::now() - m_begin)) << endl;
+    cout << "Total Time     spent: " << fixed << setprecision(5)
+         << GetTimeDouble(chrono::duration_cast<std::chrono::microseconds>(
+                chrono::steady_clock::now() - m_begin))
+         << endl;
 }
 } // namespace car

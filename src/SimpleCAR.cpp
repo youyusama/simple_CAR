@@ -1,7 +1,7 @@
 #include "SimpleCAR.h"
 
-#include "BMC.h"
 #include "BCAR.h"
+#include "BMC.h"
 #include "BasicIC3.h"
 #include "FCAR.h"
 #include "Log.h"
@@ -37,8 +37,8 @@ SimpleCAR::~SimpleCAR() {
 
 bool SimpleCAR::LoadModel() {
     m_log = std::make_unique<Log>(m_settings.verbosity);
+    [[maybe_unused]] auto initScope = m_log->Section("Model_Init");
     m_model = std::make_unique<Model>(m_settings, *m_log);
-    m_log->StatInit();
     m_checker = CreateChecker(m_settings, *m_model, *m_log);
     return static_cast<bool>(m_checker);
 }
