@@ -28,7 +28,7 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1) {
+                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
 }
@@ -120,13 +120,28 @@ void Solver::attachClause(CRef cr) {
 }
 
 
-void Solver::detachClause(CRef cr) {
+void Solver::detachClause(CRef cr, bool lazy) {
     const Clause &c = ca->get_clause(cr);
     assert(c.size() > 1);
 
-    // lazy detaching:
-    watches.smudge(~c[0]);
-    watches.smudge(~c[1]);
+    if (lazy) {
+        // lazy detaching:
+        watches.smudge(~c[0]);
+        watches.smudge(~c[1]);
+    } else {
+        for (int w = 0; w < 2; w++) {
+            Lit watch_lit = c[w];
+            std::vector<Watcher> &ws = watches.on(~watch_lit);
+            for (size_t i = 0; i < ws.size();) {
+                if (ws[i].cref == cr) {
+                    ws[i] = ws.back();
+                    ws.pop_back();
+                } else {
+                    i++;
+                }
+            }
+        }
+    }
 
     if (c.learnt())
         num_learnts--, learnts_literals -= c.size();
@@ -478,6 +493,152 @@ void Solver::removeSatisfied(std::vector<CRef> &cs) {
 }
 
 
+void Solver::removeSubsumed(std::vector<CRef> &cs) {
+    struct ClauseInfo {
+        CRef cref;
+        std::vector<Lit> lits;
+    };
+
+    std::vector<ClauseInfo> infos;
+    infos.reserve(cs.size());
+    for (CRef cr : cs) {
+        if (isRemoved(cr)) {
+            continue;
+        }
+        Clause &c = ca->get_clause(cr);
+        if (c.size() > 128) {
+            continue;
+        }
+        std::vector<Lit> lits;
+        lits.reserve(c.size());
+        for (uint32_t i = 0; i < c.size(); i++) {
+            lits.emplace_back(c[i]);
+        }
+        std::sort(lits.begin(), lits.end(),
+                  [](Lit a, Lit b) { return toInt(a) < toInt(b); });
+        infos.push_back(ClauseInfo{cr, std::move(lits)});
+    }
+
+    if (infos.empty()) return;
+
+    std::sort(infos.begin(), infos.end(),
+              [](const ClauseInfo &a, const ClauseInfo &b) {
+                  return a.lits.size() < b.lits.size();
+              });
+
+    std::vector<std::vector<size_t>> occurs;
+    occurs.resize(nVars());
+    for (size_t i = 0; i < infos.size(); i++) {
+        for (Lit l : infos[i].lits) {
+            occurs[var(l)].push_back(i);
+        }
+    }
+
+    auto subsume_except_one = [](const std::vector<Lit> &a,
+                                 const std::vector<Lit> &b,
+                                 Lit &diff) -> bool {
+        diff = lit_Undef;
+        if (a.size() > b.size()) {
+            return false;
+        }
+        size_t j = 0;
+        for (size_t i = 0; i < a.size(); i++) {
+            Var va = var(a[i]);
+            while (j < b.size() && var(b[j]) < va) {
+                j++;
+            }
+            if (j == b.size() || var(b[j]) != va) {
+                diff = lit_Undef;
+                return false;
+            }
+            if (a[i] != b[j]) {
+                if (diff != lit_Undef) {
+                    diff = lit_Undef;
+                    return false;
+                }
+                diff = a[i];
+            }
+            j++;
+        }
+        return diff == lit_Undef;
+    };
+
+    auto strengthen_clause = [&](CRef cr, Lit remove_lit) -> bool {
+        Clause &c = ca->get_clause(cr);
+        if (c.size() <= 2) {
+            return false;
+        }
+        detachClause(cr, false);
+        for (uint32_t i = 0; i < c.size(); i++) {
+            if (c[i] == remove_lit) {
+                c[i] = c[c.size() - 1];
+                c.pop();
+                break;
+            }
+        }
+        attachClause(cr);
+        return true;
+    };
+
+    for (size_t i = 0; i < infos.size(); i++) {
+        if (isRemoved(infos[i].cref)) continue;
+
+        Var best_var = var(infos[i].lits[0]);
+        size_t best_occurs = occurs[best_var].size();
+        for (Lit l : infos[i].lits) {
+            size_t occ_size = occurs[var(l)].size();
+            if (occ_size < best_occurs) {
+                best_occurs = occ_size;
+                best_var = var(l);
+            }
+        }
+        for (size_t idx : occurs[best_var]) {
+            if (idx == i || isRemoved(infos[idx].cref)) {
+                continue;
+            }
+            Lit diff = lit_Undef;
+            bool subsumes = subsume_except_one(infos[i].lits, infos[idx].lits, diff);
+            if (subsumes) {
+                removeClause(infos[idx].cref);
+                continue;
+            }
+            if (diff == lit_Undef) {
+                continue;
+            }
+            if (infos[i].lits.size() == infos[idx].lits.size()) {
+                if (infos[i].lits.size() > 2) {
+                    removeClause(infos[idx].cref);
+                    strengthen_clause(infos[i].cref, diff);
+                    auto &lits = infos[i].lits;
+                    auto it = std::find(lits.begin(), lits.end(), diff);
+                    if (it != lits.end()) {
+                        lits.erase(it);
+                    }
+                }
+            } else {
+                if (infos[idx].lits.size() > 2) {
+                    Lit remove_lit = ~diff;
+                    strengthen_clause(infos[idx].cref, remove_lit);
+                    auto &lits = infos[idx].lits;
+                    auto it = std::find(lits.begin(), lits.end(), remove_lit);
+                    if (it != lits.end()) {
+                        lits.erase(it);
+                    }
+                }
+            }
+        }
+    }
+
+    size_t j = 0;
+    for (size_t i = 0; i < cs.size(); i++) {
+        if (!isRemoved(cs[i])) {
+            cs[j++] = cs[i];
+        }
+    }
+    cs.resize(j);
+}
+
+
 void Solver::removeTempLearnt() {
     for (CRef cls : temp_clauses) {
         removeClause(cls);
@@ -486,26 +647,30 @@ void Solver::removeTempLearnt() {
 }
 
 
-bool Solver::simplify() {
+void Solver::simplify() {
     assert(decisionLevel() == 0);
 
-    if (!ok || propagate() != CRef_Undef)
-        return ok = false;
-
-    if (nAssigns() == simpDB_assigns || (simpDB_props > 0))
-        return true;
+    if (simpDB_called <= 128) return;
+    simpDB_called = 0;
 
     // Remove satisfied clauses:
-    removeSatisfied(learnts);
-    if (remove_satisfied) { // Can be turned off.
+    if (nAssigns() > simpDB_assigns) {
+        removeSatisfied(learnts);
         removeSatisfied(clauses);
+        simpDB_assigns = nAssigns();
     }
-    checkGarbage();
 
-    simpDB_assigns = nAssigns();
-    simpDB_props = clauses_literals + learnts_literals; // (shouldn't depend on stats really, but it will do for now)
+    // Remove subsumed clauses:
+    if (nClauses() > simpDB_clauses + 512) {
+        removeSubsumed(clauses);
+        simpDB_clauses = nClauses();
+    }
 
-    return true;
+    // check whether we need to rebuild the clauses db
+    if (simpDB_props <= 0) {
+        checkGarbage();
+        simpDB_props = clauses_literals + learnts_literals;
+    }
 }
 
 
@@ -571,10 +736,6 @@ lbool Solver::search(int nof_conflicts) {
                 cancelUntil(0);
                 return l_Undef;
             }
-
-            // // Simplify the set of problem clauses:
-            // if (decisionLevel() == 0 && !simplify())
-            //     return l_False;
 
             if (learnts.size() > max_learnts + nAssigns()) {
                 // Reduce the set of learnt clauses:
@@ -649,6 +810,7 @@ lbool Solver::solve_() {
     if (!ok) return l_False;
 
     solves++;
+    simpDB_called++;
 
     max_learnts = nClauses() * learntsize_factor;
 
@@ -662,6 +824,9 @@ lbool Solver::solve_() {
         std::cout << "|           |    Vars  Clauses Literals |    Limit  Clauses Lit/Cl |          |\n";
         std::cout << "===============================================================================\n";
     }
+
+    // Simplify the set of problem clauses before enabling domain-restricted solving.
+    simplify();
 
     if (solve_in_domain)
         solve_in_domain_runtime_flag = true;

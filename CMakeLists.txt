@@ -77,8 +77,6 @@ set(SRCS
     src/IncrCheckerHelpers.cpp
     src/SimpleCAR.cpp
     src/main.cpp
-    # restart
-    src/Restart.h
     # minisat
     src/sat/MinisatSolver.cpp
     src/sat/minisat/core/Solver.cc

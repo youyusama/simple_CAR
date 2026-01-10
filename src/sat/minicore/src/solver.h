@@ -47,7 +47,7 @@ class Solver {
 
     // Solving:
     //
-    bool simplify();                              // Removes already satisfied clauses.
+    void simplify();                              // Simplify clauses.
     lbool solve(const std::vector<Lit> &assumps); // Search for a model that respects a given set of assumptions.
     lbool solve(const std::vector<int> &assumps); // Search for a model that respects a given set of assumptions.
     lbool solve();                                // Search without assumptions.
@@ -133,12 +133,13 @@ class Solver {
     size_t simpDB_assigns;    // Number of top-level assignments since last execution of 'simplify()'.
     int64_t simpDB_props;     // Remaining number of propagations that must be made before next execution of 'simplify()'.
     double progress_estimate; // Set by 'search()'.
-    bool remove_satisfied;    // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
     Var next_var;             // Next variable to be created.
     Var alloced_var;          // Variable with structure created.
     Var temp_cls_act_var;     // Variable to activate temp clause.
     bool temp_cls_activated;  // A temp clause is added.
     size_t traillim_snapshot; // Snapshot of trail_lim before temp clause/solve in domain is activated.
+    int64_t simpDB_called;    // Number of times 'solve()' has been called.
+    int64_t simpDB_clauses;   // Number of clauses at last 'simplify()' call.
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
@@ -169,6 +170,7 @@ class Solver {
     lbool solve_();                              // Main solve method (assumptions given in 'assumptions').
     void reduceDB();                             // Reduce the set of learnt clauses.
     void removeSatisfied(std::vector<CRef> &cs); // Shrink 'cs' to contain only non-satisfied clauses.
+    void removeSubsumed(std::vector<CRef> &cs);  // Remove subsumed clauses from 'cs'.
     void removeTempLearnt();                     // Remove the clauses learnt from the temp clause.
 
     // Maintaining Variable/Clause activity:
@@ -179,7 +181,7 @@ class Solver {
     // Operations on clauses:
     //
     void attachClause(CRef cr);                            // Attach a clause to watcher lists.
-    void detachClause(CRef cr);                            // Detach a clause to watcher lists.
+    void detachClause(CRef cr, bool lazy = true);          // Detach a clause to watcher lists.
     void removeClause(CRef cr);                            // Detach and free a clause.
     bool isRemoved(CRef cr) const;                         // Test if a clause has been removed.
     bool locked(const Clause &c) const;                    // Returns TRUE if a clause is a reason for some implication in the current state.
