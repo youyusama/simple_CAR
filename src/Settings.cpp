@@ -83,7 +83,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                                                                                 1: combination of 2 and 3,\n\
                                                                                 2: ternary simulation,\n\
                                                                                 3: random simulation)")
-        ->default_val(1);
+        ->default_val(2);
 
     app.add_option("--eq_timeout", settings.eqTimeout, "equivalent variable checking timeout for random simulation (in seconds)")
         ->default_val(600);
