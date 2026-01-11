@@ -227,6 +227,7 @@ class Model {
     void CollectInnards();
 
     void SimplifyClauses();
+    void SimplifyDAGClauses();
 
     bool SimplifyModelByTernarySimulation();
 

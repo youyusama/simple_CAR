@@ -1,4 +1,5 @@
 #include "Model.h"
+#include "DAGCNFSimplifier.h"
 #include <bitset>
 
 
@@ -125,6 +126,7 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
 
     // transform to CNF
     CollectClauses();
+    SimplifyDAGClauses();
     SimplifyClauses();
 
     // cout << "model latches:" << endl;
@@ -454,6 +456,26 @@ void Model::SimplifyClauses() {
     // cout << "clauses: " << m_clauses.size() << endl;
     // cout << "simplified clauses: " << it.getClauses().size() << endl;
     m_simpClauses = it.getClauses();
+}
+
+void Model::SimplifyDAGClauses() {
+    DAGCNFSimplifier simplifier;
+    for (auto v : m_circuitGraph->modelInputs) simplifier.FreezeVar(v);
+    for (auto v : m_circuitGraph->modelLatches) {
+        simplifier.FreezeVar(v);
+        simplifier.FreezeVar(GetPrime(v));
+    }
+    for (int i : m_circuitGraph->constraints) simplifier.FreezeVar(i);
+    if (m_settings.internalSignals) {
+        for (int i : m_innardsVec) {
+            simplifier.FreezeVar(i);
+            simplifier.FreezeVar(GetPrime(i));
+        }
+    }
+    simplifier.FreezeVar(TrueId());
+    simplifier.FreezeVar(m_bad);
+
+    m_clauses = simplifier.Simplify(m_clauses);
 }
 
 

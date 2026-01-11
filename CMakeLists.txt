@@ -67,6 +67,7 @@ set(SRCS
     src/model/CircuitGraph.cpp
     src/model/TernarySim.cpp
     src/model/Model.cpp
+    src/model/DAGCNFSimplifier.cpp
     src/Settings.cpp
     src/Log.cpp
     src/alg/BCAR.cpp
