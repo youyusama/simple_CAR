@@ -1,4 +1,5 @@
 #include "IncrCheckerHelpers.h"
+#include <unordered_map>
 
 namespace car {
 
@@ -89,22 +90,19 @@ bool OverSequenceSet::Imply(const cube &a, const cube &b) {
 }
 
 
-bool OverSequenceSet::Insert(const cube &uc, int index, bool implyCheck) {
+bool OverSequenceSet::Insert(const cube &uc, int index) {
     auto f = GetFrame(index);
     if (f->find(uc) != f->end()) return false;
 
     m_blockSolver->AddUC(uc, index);
 
-    if (implyCheck) {
-        for (auto it = f->begin(); it != f->end();) {
-            if (Imply(uc, *it)) {
-                it = f->erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
     f->emplace(uc);
+    int &counter = m_insertCounter[index];
+    counter++;
+    if (counter >= kCleanupThreshold) {
+        counter = 0;
+        CleanupImplied(index);
+    }
 
     return true;
 }
@@ -114,8 +112,62 @@ shared_ptr<frame> OverSequenceSet::GetFrame(int lvl) {
     while (lvl >= m_sequence.size()) {
         m_sequence.emplace_back(make_shared<frame>());
         m_blockCounter.emplace_back(0);
+        m_insertCounter.emplace_back(0);
     }
     return m_sequence[lvl];
+}
+
+
+void OverSequenceSet::CleanupImplied(int frameLevel) {
+    auto f = GetFrame(frameLevel);
+
+    vector<cube> cubes;
+    cubes.reserve(f->size());
+    for (const auto &uc : *f) {
+        cubes.emplace_back(uc);
+    }
+
+    sort(cubes.begin(), cubes.end(), [](const cube &a, const cube &b) {
+        if (a.size() != b.size()) return a.size() < b.size();
+        return lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(), _cmp);
+    });
+
+    unordered_map<int, vector<size_t>> occurs;
+    occurs.reserve(cubes.size() * 4);
+    for (size_t i = 0; i < cubes.size(); ++i) {
+        for (int lit : cubes[i]) {
+            occurs[lit].emplace_back(i);
+        }
+    }
+
+    vector<bool> remove(cubes.size(), false);
+    for (size_t i = 0; i < cubes.size(); ++i) {
+        if (remove[i]) continue;
+
+        int best_lit = cubes[i][0];
+        size_t best_occ = occurs[best_lit].size();
+        for (int lit : cubes[i]) {
+            auto it = occurs.find(lit);
+            if (it == occurs.end()) continue;
+            size_t occ_size = it->second.size();
+            if (occ_size < best_occ) {
+                best_occ = occ_size;
+                best_lit = lit;
+            }
+        }
+        for (size_t idx : occurs[best_lit]) {
+            if (idx == i || remove[idx]) continue;
+            if (Imply(cubes[i], cubes[idx])) {
+                remove[idx] = true;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < cubes.size(); ++i) {
+        if (remove[i]) {
+            f->erase(cubes[i]);
+        }
+    }
 }
 
 

@@ -27,7 +27,7 @@ class BCAR : public BaseAlg {
 
     void Init();
 
-    bool AddUnsatisfiableCore(const cube &uc, int frameLevel, bool implyCheck = false);
+    bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
     bool ImmediateSatisfiable(int badId);
 

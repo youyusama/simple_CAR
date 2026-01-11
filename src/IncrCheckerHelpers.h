@@ -53,13 +53,14 @@ class OverSequenceSet {
         m_blockSolver = make_shared<SATSolver>(model, MCSATSolver::minisat);
         m_invariantLevel = 0;
         m_blockCounter.emplace_back(0);
+        m_insertCounter.emplace_back(0);
     }
 
     void SetInvariantLevel(int lvl) { m_invariantLevel = lvl; }
 
     int GetInvariantLevel() { return m_invariantLevel; }
 
-    bool Insert(const cube &uc, int index, bool implyCheck = false);
+    bool Insert(const cube &uc, int index);
 
     shared_ptr<frame> GetFrame(int lvl);
 
@@ -79,13 +80,17 @@ class OverSequenceSet {
     string FramesDetail();
 
   private:
+    void CleanupImplied(int frameLevel);
+
     bool Imply(const cube &a, const cube &b);
 
     Model &m_model;
     vector<shared_ptr<frame>> m_sequence;
     shared_ptr<SATSolver> m_blockSolver;
     vector<int> m_blockCounter;
+    vector<int> m_insertCounter;
     int m_invariantLevel;
+    static constexpr int kCleanupThreshold = 128;
 };
 
 

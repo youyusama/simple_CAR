@@ -255,10 +255,10 @@ void FCAR::Init(int badId) {
     m_restart.reset(new Restart(m_settings));
 }
 
-bool FCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel, bool implyCheck) {
+bool FCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_AddUC");
     m_restart->UcCountsPlus1();
-    if (!m_overSequence->Insert(uc, frameLevel, implyCheck)) return false;
+    if (!m_overSequence->Insert(uc, frameLevel)) return false;
 
     if (frameLevel >= m_transSolvers.size()) {
         m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
@@ -650,7 +650,7 @@ bool FCAR::Propagate(const cube &c, int lvl) {
     if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
     if (!IsReachable(lvl, assumption, "SAT_R_Prop")) {
         auto uc = GetUnsatCore(lvl, c);
-        AddUnsatisfiableCore(uc, lvl + 1, true);
+        AddUnsatisfiableCore(uc, lvl + 1);
         result = true;
     } else {
         result = false;

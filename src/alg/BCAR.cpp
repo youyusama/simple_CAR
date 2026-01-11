@@ -226,11 +226,11 @@ void BCAR::Init() {
     m_restart.reset(new Restart(m_settings));
 }
 
-bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel, bool implyCheck) {
+bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_AddUC");
     m_restart->UcCountsPlus1();
 
-    if (!m_overSequence->Insert(uc, frameLevel, implyCheck)) return false;
+    if (!m_overSequence->Insert(uc, frameLevel)) return false;
 
     cube puc(uc);
     GetPrimed(puc);
@@ -597,7 +597,7 @@ bool BCAR::Propagate(const cube &c, int lvl) {
     bool result = !IsReachable(lvl, c, "SAT_BC_Prop");
     if (result) {
         auto uc = GetUnsatCore(lvl, c);
-        AddUnsatisfiableCore(uc, lvl + 1, true);
+        AddUnsatisfiableCore(uc, lvl + 1);
     }
     return result;
 }
