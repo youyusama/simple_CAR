@@ -6,7 +6,7 @@ using namespace minicore;
 Solver::Solver() : // Parameters (user settable):
                    //
                    verbosity(0),
-                   random_seed(42), restart_first(100), restart_inc(2)
+                   random_seed(42), clause_decay(0.999), restart_first(100), restart_inc(2)
 
                    // Parameters (the rest):
                    //
@@ -231,7 +231,7 @@ void Solver::analyze(CRef confl, std::vector<Lit> &out_learnt, size_t &out_btlev
             Lit q = c[j];
 
             if (!seen[var(q)] && level(var(q)) > 0) {
-                varBumpActivity(var(q));
+                varBumpActivity(var(q), conflicts);
                 seen[var(q)] = 1;
                 if (level(var(q)) >= decisionLevel())
                     pathC++;
@@ -705,6 +705,8 @@ lbool Solver::search(int nof_conflicts) {
                 claBumpActivity(ca->get_clause(cr));
                 uncheckedEnqueue(learnt_clause[0], cr);
             }
+
+            claDecayActivity();
 
             if (--learntsize_adjust_cnt == 0) {
                 learntsize_adjust_confl *= learntsize_adjust_inc;

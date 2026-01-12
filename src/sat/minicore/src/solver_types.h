@@ -487,129 +487,132 @@ struct ShrinkStackElem {
 
 class DecisionBuckets {
   public:
-    DecisionBuckets() : max_bucket_index_(0), var_inc_(0) {
+    DecisionBuckets() : head_(0) {
         buckets_.resize(32);
     }
     ~DecisionBuckets() {}
 
     void resize(Var s) {
-        var_bucket_.resize(s, -1);
-        var_bucket_pos_.resize(s, -1);
-        var_activity_.resize(s, 0);
+        var_activity_.resize(s, 0.0);
+        heap_pos_.resize(s, -1);
+        in_bucket_.resize(s, false);
     }
 
     void init_var(Var v) {
-        if (var_inc_ > 1e9) rescale();
-
-        var_activity_[v] = ++var_inc_;
-        int bucket_index = getBucketIndex(v);
-        buckets_[bucket_index].push_back(v);
-        var_bucket_[v] = bucket_index;
-        var_bucket_pos_[v] = buckets_[bucket_index].size() - 1;
-
-        max_bucket_index_ = bucket_index;
+        var_activity_[v] = 0.0;
+        heapInsert(v);
+        insert(v);
     }
 
     void insert(Var v) {
+        if (in_bucket_[v]) return;
+        if (heap_pos_[v] == -1) heapInsert(v);
         int bucket_index = getBucketIndex(v);
+        ensureBucket(bucket_index);
 
-        if (var_bucket_[v] == -1) {
-            buckets_[bucket_index].push_back(v);
-            var_bucket_[v] = bucket_index;
-            var_bucket_pos_[v] = buckets_[bucket_index].size() - 1;
-        }
+        buckets_[bucket_index].push_back(v);
+        in_bucket_[v] = true;
 
-        if (bucket_index > max_bucket_index_) {
-            max_bucket_index_ = bucket_index;
+        if (bucket_index < head_) {
+            head_ = bucket_index;
         }
     }
 
-    bool empty() const {
-        for (int i = max_bucket_index_; i >= 0; --i) {
+    bool empty() {
+        for (int i = head_; i < static_cast<int>(buckets_.size()); ++i) {
             if (!buckets_[i].empty()) {
+                head_ = i;
                 return false;
             }
         }
+        head_ = static_cast<int>(buckets_.size());
         return true;
     }
 
     Var get_deci_var() {
-        while (max_bucket_index_ >= 0 && buckets_[max_bucket_index_].empty()) {
-            max_bucket_index_--;
+        while (head_ < static_cast<int>(buckets_.size()) && buckets_[head_].empty()) {
+            head_++;
+        }
+        if (head_ >= static_cast<int>(buckets_.size())) {
+            return var_Undef;
         }
 
-        Var v = buckets_[max_bucket_index_].back();
-        buckets_[max_bucket_index_].pop_back();
+        Var v = buckets_[head_].back();
+        buckets_[head_].pop_back();
 
-        var_bucket_[v] = -1;
+        in_bucket_[v] = false;
 
         return v;
     }
 
-    void update(Var v) {
-        if (var_inc_ > 1e9) rescale();
+    void update(Var v, uint64_t conflict_index) {
+        double score = var_activity_[v];
+        score = (score + static_cast<double>(conflict_index)) * 0.5;
+        var_activity_[v] = score;
 
-        var_activity_[v] = ++var_inc_;
-
-        if (var_bucket_[v] != -1) {
-            remove(v);
-
-            int bucket_index = getBucketIndex(v);
-            buckets_[bucket_index].push_back(v);
-            var_bucket_[v] = bucket_index;
-            var_bucket_pos_[v] = buckets_[bucket_index].size() - 1;
-
-            if (bucket_index > max_bucket_index_) {
-                max_bucket_index_ = bucket_index;
-            }
+        if (heap_pos_[v] == -1) {
+            heapInsert(v);
+        } else {
+            heapUp(heap_pos_[v]);
         }
     }
 
   private:
+    static int bucketIndexFromPos(int pos) {
+        if (pos <= 0) return 0;
+        unsigned int u = static_cast<unsigned int>(pos);
+        int idx = 0;
+        while (u > 0) {
+            idx++;
+            u >>= 1;
+        }
+        return idx;
+    }
+
     int getBucketIndex(Var v) const {
-        uint32_t act = var_activity_[v];
-        if (act == 0) return 0;
-        int bucket_index = 0;
-        while ((1ull << (bucket_index + 1)) <= act && bucket_index < buckets_.size()) {
-            bucket_index++;
+        int pos = heap_pos_[v];
+        if (pos >= 0) {
+            return bucketIndexFromPos(pos);
         }
-        return bucket_index;
+        if (heap_.empty()) {
+            return 0;
+        }
+        return bucketIndexFromPos(static_cast<int>(heap_.size() - 1)) + 1;
     }
 
-    void remove(Var v) {
-        int bucket_index = var_bucket_[v];
-        int bucket_pos = var_bucket_pos_[v];
-
-        auto &bucket = buckets_[bucket_index];
-        std::swap(bucket[bucket_pos], bucket.back());
-        var_bucket_pos_[bucket[bucket_pos]] = bucket_pos;
-        bucket.pop_back();
-        var_bucket_[v] = -1;
+    void ensureBucket(int bucket_index) {
+        if (bucket_index >= static_cast<int>(buckets_.size())) {
+            buckets_.resize(bucket_index + 1);
+        }
     }
 
-    void rescale() {
-        var_inc_ = 0;
+    void heapInsert(Var v) {
+        heap_pos_[v] = static_cast<int>(heap_.size());
+        heap_.push_back(v);
+        heapUp(heap_pos_[v]);
+    }
 
-        std::vector<Var> var_to_insert;
-        for (auto &bucket : buckets_) {
-            for (auto v : bucket) {
-                var_activity_[v] = ++var_inc_;
-                var_bucket_[v] = -1;
-                var_to_insert.push_back(v);
+    void heapUp(int idx) {
+        Var v = heap_[idx];
+        while (idx > 0) {
+            int parent = (idx - 1) >> 1;
+            if (var_activity_[heap_[parent]] >= var_activity_[v]) {
+                break;
             }
-            bucket.clear();
+            heap_[idx] = heap_[parent];
+            heap_pos_[heap_[idx]] = idx;
+            idx = parent;
         }
-        for (auto v : var_to_insert) {
-            insert(v);
-        }
+        heap_[idx] = v;
+        heap_pos_[v] = idx;
     }
 
     std::vector<std::vector<Var>> buckets_;
-    std::vector<int> var_bucket_;
-    std::vector<int> var_bucket_pos_;
-    std::vector<uint32_t> var_activity_;
-    int max_bucket_index_;
-    uint32_t var_inc_;
+    std::vector<double> var_activity_;
+    std::vector<Var> heap_;
+    std::vector<int> heap_pos_;
+    std::vector<char> in_bucket_;
+    int head_;
 };
 
 } // namespace minicore

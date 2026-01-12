@@ -85,6 +85,7 @@ class Solver {
     //
     int verbosity;
     double random_seed;
+    double clause_decay;
 
     int restart_first;        // The initial restart limit.                                                                (default 100)
     double restart_inc;       // The factor with which the restart limit is multiplied in each restart.                    (default 1.5)
@@ -175,8 +176,9 @@ class Solver {
 
     // Maintaining Variable/Clause activity:
     //
-    void varBumpActivity(Var v);     // Increase a variable with the current 'bump' value.
-    void claBumpActivity(Clause &c); // Increase a clause with the current 'bump' value.
+    void varBumpActivity(Var v, uint64_t conflict_index); // Increase a variable with ACIDS update.
+    void claDecayActivity();                              // Decay all clauses with the specified factor.
+    void claBumpActivity(Clause &c);                      // Increase a clause with the current 'bump' value.
 
     // Operations on clauses:
     //
@@ -228,8 +230,12 @@ inline void Solver::insertVarOrder(Var v) {
     order_list.insert(v);
 }
 
-inline void Solver::varBumpActivity(Var v) {
-    order_list.update(v);
+inline void Solver::varBumpActivity(Var v, uint64_t conflict_index) {
+    order_list.update(v, conflict_index);
+}
+
+inline void Solver::claDecayActivity() {
+    cla_inc *= (1.0 / clause_decay);
 }
 
 inline void Solver::claBumpActivity(Clause &c) {
