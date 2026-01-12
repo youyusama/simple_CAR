@@ -440,9 +440,6 @@ class OccLists {
     }
 
     std::vector<Watcher> &on(Lit key) {
-        if (dirty_flags[key.x]) {
-            clean(key);
-        }
         return occs[key.x];
     }
 
@@ -496,6 +493,7 @@ class DecisionBuckets {
         var_activity_.resize(s, 0.0);
         heap_pos_.resize(s, -1);
         in_bucket_.resize(s, false);
+        bucket_pos_.resize(s, -1);
     }
 
     void init_var(Var v) {
@@ -511,6 +509,7 @@ class DecisionBuckets {
         ensureBucket(bucket_index);
 
         buckets_[bucket_index].push_back(v);
+        bucket_pos_[v] = static_cast<int>(buckets_[bucket_index].size() - 1);
         in_bucket_[v] = true;
 
         if (bucket_index < head_) {
@@ -541,11 +540,17 @@ class DecisionBuckets {
         buckets_[head_].pop_back();
 
         in_bucket_[v] = false;
+        bucket_pos_[v] = -1;
 
         return v;
     }
 
     void update(Var v, uint64_t conflict_index) {
+        int old_bucket = -1;
+        bool was_in_bucket = in_bucket_[v];
+        if (was_in_bucket) {
+            old_bucket = getBucketIndex(v);
+        }
         double score = var_activity_[v];
         score = (score + static_cast<double>(conflict_index)) * 0.5;
         var_activity_[v] = score;
@@ -554,6 +559,36 @@ class DecisionBuckets {
             heapInsert(v);
         } else {
             heapUp(heap_pos_[v]);
+        }
+        if (was_in_bucket) {
+            if (old_bucket >= 0 && old_bucket < static_cast<int>(buckets_.size())) {
+                auto &bucket = buckets_[old_bucket];
+                int pos = bucket_pos_[v];
+                if (pos >= 0 && pos < static_cast<int>(bucket.size()) &&
+                    bucket[static_cast<size_t>(pos)] == v) {
+                    Var moved = bucket.back();
+                    bucket[static_cast<size_t>(pos)] = moved;
+                    bucket.pop_back();
+                    if (!bucket.empty() && moved != v) {
+                        bucket_pos_[moved] = pos;
+                    }
+                } else {
+                    for (size_t i = 0; i < bucket.size(); ++i) {
+                        if (bucket[i] == v) {
+                            Var moved = bucket.back();
+                            bucket[i] = moved;
+                            bucket.pop_back();
+                            if (moved != v) {
+                                bucket_pos_[moved] = static_cast<int>(i);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            in_bucket_[v] = false;
+            bucket_pos_[v] = -1;
+            insert(v);
         }
     }
 
@@ -612,6 +647,7 @@ class DecisionBuckets {
     std::vector<Var> heap_;
     std::vector<int> heap_pos_;
     std::vector<char> in_bucket_;
+    std::vector<int> bucket_pos_;
     int head_;
 };
 

@@ -120,25 +120,20 @@ void Solver::attachClause(CRef cr) {
 }
 
 
-void Solver::detachClause(CRef cr, bool lazy) {
+void Solver::detachClause(CRef cr) {
     const Clause &c = ca->get_clause(cr);
     assert(c.size() > 1);
 
-    if (lazy) {
-        // lazy detaching:
-        watches.smudge(~c[0]);
-        watches.smudge(~c[1]);
-    } else {
-        for (int w = 0; w < 2; w++) {
-            Lit watch_lit = c[w];
-            std::vector<Watcher> &ws = watches.on(~watch_lit);
-            for (size_t i = 0; i < ws.size();) {
-                if (ws[i].cref == cr) {
-                    ws[i] = ws.back();
-                    ws.pop_back();
-                } else {
-                    i++;
-                }
+    for (int w = 0; w < 2; w++) {
+        Lit watch_lit = c[w];
+        std::vector<Watcher> &ws = watches[~watch_lit];
+        for (size_t i = 0; i < ws.size();) {
+            if (ws[i].cref == cr) {
+                ws[i] = ws.back();
+                ws.pop_back();
+                break;
+            } else {
+                i++;
             }
         }
     }
@@ -392,7 +387,7 @@ CRef Solver::propagate() {
 
     while (qhead < trail.size()) {
         Lit p = trail[qhead++]; // 'p' is enqueued fact to propagate.
-        std::vector<Watcher> &ws = watches.on(p);
+        std::vector<Watcher> &ws = watches[p];
         std::vector<Watcher>::iterator i = ws.begin(), j = ws.begin();
         num_props++;
 
@@ -427,7 +422,7 @@ CRef Solver::propagate() {
                 if (value(c[k]) != l_False) {
                     c[1] = c[k];
                     c[k] = false_lit;
-                    watches.on(~c[1]).emplace_back(w);
+                    watches[~c[1]].emplace_back(w);
                     goto NextClause;
                 }
 
@@ -568,7 +563,7 @@ void Solver::removeSubsumed(std::vector<CRef> &cs) {
         if (c.size() <= 2) {
             return false;
         }
-        detachClause(cr, false);
+        detachClause(cr);
         for (uint32_t i = 0; i < c.size(); i++) {
             if (c[i] == remove_lit) {
                 c[i] = c[c.size() - 1];

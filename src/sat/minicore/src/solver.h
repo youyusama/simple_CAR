@@ -183,7 +183,7 @@ class Solver {
     // Operations on clauses:
     //
     void attachClause(CRef cr);                            // Attach a clause to watcher lists.
-    void detachClause(CRef cr, bool lazy = true);          // Detach a clause to watcher lists.
+    void detachClause(CRef cr);                            // Detach a clause to watcher lists.
     void removeClause(CRef cr);                            // Detach and free a clause.
     bool isRemoved(CRef cr) const;                         // Test if a clause has been removed.
     bool locked(const Clause &c) const;                    // Returns TRUE if a clause is a reason for some implication in the current state.
