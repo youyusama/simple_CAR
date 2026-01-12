@@ -28,7 +28,7 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1) {
+                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1.0), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), simpDB_clauses(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
 }
@@ -895,12 +895,7 @@ lbool Solver::solve_() {
         ok = false;
 
     cancelUntil(0);
-    if (temp_cls_activated) {
-        temp_cls_activated = false;
-        temporary_domain[temp_cls_act_var] = 0;
-        // remove temperary learnt clause
-        removeTempLearnt();
-    }
+
     // remove temperary learnt unit clause
     if (temp_cls_activated || solve_in_domain) {
         while (trail.size() > traillim_snapshot) {
@@ -911,6 +906,12 @@ lbool Solver::solve_() {
             trail.pop_back();
         }
         qhead = trail.size();
+    }
+    if (temp_cls_activated) {
+        temp_cls_activated = false;
+        temporary_domain[temp_cls_act_var] = 0;
+        // remove temperary learnt clause
+        removeTempLearnt();
     }
     if (solve_in_domain)
         solve_in_domain_runtime_flag = false;

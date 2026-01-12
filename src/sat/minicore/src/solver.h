@@ -128,7 +128,7 @@ class Solver {
     reduceDB_lt reduce_db_lt;
 
     bool ok;                  // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
-    uint32_t cla_inc;         // Amount to bump next clause with.
+    double cla_inc;           // Amount to bump next clause with.
     size_t qhead;             // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
     size_t simpDB_assigns;    // Number of top-level assignments since last execution of 'simplify()'.
     int64_t simpDB_props;     // Remaining number of propagations that must be made before next execution of 'simplify()'.
@@ -306,11 +306,14 @@ inline bool Solver::okay() const { return ok; }
 inline bool Solver::inDomain(Var x) const { return !solve_in_domain_runtime_flag || permanent_domain[x] || temporary_domain[x]; }
 
 inline void Solver::setDomain(const std::vector<Var> dvars) {
-    for (Var x : dvars) permanent_domain[x] = 1;
+    for (Var x : dvars) {
+        if (x < nVars()) permanent_domain[x] = 1;
+    }
 }
 
 inline void Solver::setTempDomain(const std::vector<Var> dvars) {
-    for (Var x : dvars) temporary_domain[x] = 1;
+    for (Var x : dvars)
+        if (x < nVars()) temporary_domain[x] = 1;
 }
 
 inline void Solver::resetTempDomain() {
