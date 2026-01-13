@@ -127,7 +127,7 @@ void Log::PrintCustomStatistics() {
         double per = entry.second.calls == 0 ? 0.0 : total / entry.second.calls;
         cout << "  " << left << setw(18) << entry.first << "called: " << setw(10) << entry.second.calls
              << "takes: " << fixed << setprecision(3) << setw(10) << total
-             << "per: " << fixed << setprecision(5) << per << endl;
+             << "per: " << fixed << setprecision(6) << per << endl;
         totalSum += total;
     }
     if (!sorted.empty()) {

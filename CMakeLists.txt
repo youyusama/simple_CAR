@@ -113,6 +113,12 @@ add_executable(simpleCAR ${SRCS})
 target_include_directories(simpleCAR PUBLIC ${DIRS})
 target_link_libraries(simpleCAR PUBLIC ${LIBS})
 
+add_executable(minicore_bench
+    src/sat/minicore/src/bench.cpp
+    src/sat/minicore/src/solver.cpp
+)
+target_include_directories(minicore_bench PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/minicore/src)
+
 if(APPLE)
     # On macOS, avoid -static (causes missing crt0.o); keep strip and LTO.
     target_link_options(simpleCAR PUBLIC $<$<CONFIG:Release>:-s>)

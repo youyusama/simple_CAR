@@ -1,6 +1,17 @@
 #include "solver.h"
+#include <chrono>
 
 using namespace minicore;
+
+namespace {
+static constexpr uint64_t PROP_SAMPLE_MASK = (1u << 7) - 1; // 1/128 sampling
+
+inline uint64_t nowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+} // namespace
 
 
 Solver::Solver() : // Parameters (user settable):
@@ -33,6 +44,10 @@ Solver::Solver() : // Parameters (user settable):
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
 }
 
+void Solver::resetProfileStats() {
+    profile_stats_ = ProfileStats{};
+}
+
 
 Solver::~Solver() {
 }
@@ -57,7 +72,6 @@ Var Solver::newVar() {
     order_list.init_var(v);
     return v;
 }
-
 
 bool Solver::addClause_(std::vector<Lit> &ps) {
     assert(decisionLevel() == 0);
@@ -177,7 +191,9 @@ void Solver::cancelUntil(size_t level) {
             Var x = var(trail[c]);
             assigns[x] = l_Undef;
             polarity[x] = sign(trail[c]);
-            insertVarOrder(x);
+            if (inDomain(x) && !order_list.inBucket(x)) {
+                insertVarOrder(x);
+            }
         }
         qhead = trail_lim[level];
         trail.resize(trail_lim[level]);
@@ -388,58 +404,63 @@ CRef Solver::propagate() {
     while (qhead < trail.size()) {
         Lit p = trail[qhead++]; // 'p' is enqueued fact to propagate.
         std::vector<Watcher> &ws = watches[p];
-        std::vector<Watcher>::iterator i = ws.begin(), j = ws.begin();
+        Watcher *ws_data = ws.data();
+        size_t ws_len = ws.size();
+        size_t i = 0;
         num_props++;
 
-        while (i != ws.end()) {
+        while (i < ws_len) {
             // Try to avoid inspecting the clause:
-            Lit blocker = i->blocker;
-            if (value(blocker) == l_True || !inDomain(var(blocker))) {
-                *j++ = *i++;
+            Watcher w_cur = ws_data[i];
+            Lit blocker = w_cur.blocker;
+            if (value(blocker).isTrue() || !inDomain(var(blocker))) {
+                i++;
                 continue;
             }
 
             // Make sure the false literal is data[1]:
-            CRef cr = i->cref;
+            CRef cr = w_cur.cref;
             Clause &c = ca->get_clause(cr);
             Lit false_lit = ~p;
             if (c[0] == false_lit)
                 c[0] = c[1], c[1] = false_lit;
             assert(c[1] == false_lit);
-            i++;
 
             // If 0th watch is true, then clause is already satisfied.
             Lit first = c[0];
-            Watcher w = Watcher(cr, first);
-            if (first != blocker &&
-                (value(first) == l_True || !inDomain(var(first)))) {
-                *j++ = w;
+            lbool v_first = value(first);
+            if (first != blocker && (v_first.isTrue() || !inDomain(var(first)))) {
+                ws_data[i].blocker = first;
+                i++;
                 continue;
             }
 
             // Look for new watch:
-            for (size_t k = 2; k < c.size(); k++)
-                if (value(c[k]) != l_False) {
+            for (size_t k = 2; k < c.size(); k++) {
+                if (!value(c[k]).isFalse()) {
                     c[1] = c[k];
                     c[k] = false_lit;
-                    watches[~c[1]].emplace_back(w);
+                    watches[~c[1]].emplace_back(Watcher(cr, first));
+                    ws_data[i] = ws_data[ws_len - 1];
+                    ws_len--;
                     goto NextClause;
                 }
+            }
 
             // Did not find watch -- clause is unit under assignment:
-            *j++ = w;
-            if (value(first) == l_False) {
+            ws_data[i].blocker = first;
+            if (v_first.isFalse()) {
                 confl = cr;
                 qhead = trail.size();
-                // Copy the remaining watches:
-                while (i != ws.end())
-                    *j++ = *i++;
-            } else
+                break;
+            } else {
                 uncheckedEnqueue(first, cr);
+                i++;
+            }
 
         NextClause:;
         }
-        ws.resize(j - ws.begin());
+        ws.resize(ws_len);
     }
     propagations += num_props;
     simpDB_props -= num_props;
@@ -675,18 +696,36 @@ lbool Solver::search(int nof_conflicts) {
     int conflictC = 0;
     std::vector<Lit> learnt_clause;
     starts++;
+    const uint64_t search_start = nowNs();
 
     for (;;) {
+        profile_stats_.prop_calls++;
+        const bool sample_prop = (profile_stats_.prop_calls & PROP_SAMPLE_MASK) == 0;
+        uint64_t prop_start = 0;
+        if (sample_prop) {
+            prop_start = nowNs();
+        }
         CRef confl = propagate();
+        if (sample_prop) {
+            profile_stats_.prop_sample_ns += nowNs() - prop_start;
+            profile_stats_.prop_sample_hits++;
+        }
         if (confl != CRef_Undef) {
             // CONFLICT
             conflicts++;
             conflictC++;
-            if (decisionLevel() == 0) return l_False;
+            if (decisionLevel() == 0) {
+                profile_stats_.search_ns += nowNs() - search_start;
+                return l_False;
+            }
 
             learnt_clause.clear();
+            uint64_t t0 = nowNs();
             analyze(confl, learnt_clause, backtrack_level);
+            profile_stats_.analyze_ns += nowNs() - t0;
+            t0 = nowNs();
             cancelUntil(backtrack_level);
+            profile_stats_.cancel_ns += nowNs() - t0;
 
             if (learnt_clause.size() == 1) {
                 uncheckedEnqueue(learnt_clause[0]);
@@ -731,12 +770,15 @@ lbool Solver::search(int nof_conflicts) {
             if (nof_conflicts >= 0 && conflictC >= nof_conflicts) {
                 // Reached bound on number of conflicts:
                 cancelUntil(0);
+                profile_stats_.search_ns += nowNs() - search_start;
                 return l_Undef;
             }
 
             if (learnts.size() > max_learnts + nAssigns()) {
                 // Reduce the set of learnt clauses:
+                uint64_t t0 = nowNs();
                 reduceDB();
+                profile_stats_.reduce_ns += nowNs() - t0;
             }
 
             Lit next = lit_Undef;
@@ -748,6 +790,7 @@ lbool Solver::search(int nof_conflicts) {
                     newDecisionLevel();
                 } else if (value(p) == l_False) {
                     analyzeFinal(~p, conflict);
+                    profile_stats_.search_ns += nowNs() - search_start;
                     return l_False;
                 } else {
                     next = p;
@@ -758,11 +801,15 @@ lbool Solver::search(int nof_conflicts) {
             if (next == lit_Undef) {
                 // New variable decision:
                 decisions++;
+                uint64_t t0 = nowNs();
                 next = pickBranchLit();
+                profile_stats_.decide_ns += nowNs() - t0;
 
-                if (next == lit_Undef)
+                if (next == lit_Undef) {
                     // Model found:
+                    profile_stats_.search_ns += nowNs() - search_start;
                     return l_True;
+                }
             }
 
             // Increase decision level and enqueue 'next'
@@ -806,6 +853,7 @@ lbool Solver::solve_() {
     conflict.clear();
     if (!ok) return l_False;
 
+    resetProfileStats();
     solves++;
     simpDB_called++;
 

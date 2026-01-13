@@ -100,6 +100,20 @@ class Solver {
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, num_clauses, num_learnts, clauses_literals, learnts_literals, max_literals, tot_literals;
 
+    struct ProfileStats {
+        uint64_t search_ns = 0;
+        uint64_t analyze_ns = 0;
+        uint64_t cancel_ns = 0;
+        uint64_t reduce_ns = 0;
+        uint64_t decide_ns = 0;
+        uint64_t prop_sample_ns = 0;
+        uint64_t prop_sample_hits = 0;
+        uint64_t prop_calls = 0;
+    };
+
+    const ProfileStats &profileStats() const { return profile_stats_; }
+    void resetProfileStats();
+
   protected:
     std::shared_ptr<ClauseAllocator> ca;
 
@@ -141,6 +155,7 @@ class Solver {
     size_t traillim_snapshot; // Snapshot of trail_lim before temp clause/solve in domain is activated.
     int64_t simpDB_called;    // Number of times 'solve()' has been called.
     int64_t simpDB_clauses;   // Number of clauses at last 'simplify()' call.
+    ProfileStats profile_stats_;
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
@@ -173,7 +188,6 @@ class Solver {
     void removeSatisfied(std::vector<CRef> &cs); // Shrink 'cs' to contain only non-satisfied clauses.
     void removeSubsumed(std::vector<CRef> &cs);  // Remove subsumed clauses from 'cs'.
     void removeTempLearnt();                     // Remove the clauses learnt from the temp clause.
-
     // Maintaining Variable/Clause activity:
     //
     void varBumpActivity(Var v, uint64_t conflict_index); // Increase a variable with ACIDS update.

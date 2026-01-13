@@ -77,6 +77,10 @@ class lbool {
     lbool() : value(0) {}
     explicit lbool(bool x) : value(!x) {}
 
+    bool isTrue() const { return value == 0; }
+    bool isFalse() const { return value == 1; }
+    bool isUndef() const { return value == 2; }
+
     bool operator==(lbool b) const { return ((b.value & 2) & (value & 2)) | (!(b.value & 2) & (value == b.value)); }
     bool operator!=(lbool b) const { return !(*this == b); }
     lbool operator^(bool b) const { return lbool((uint8_t)(value ^ (uint8_t)b)); }
@@ -486,6 +490,7 @@ class DecisionBuckets {
   public:
     DecisionBuckets() : head_(0) {
         buckets_.resize(32);
+        bucket_table_.push_back(0);
     }
     ~DecisionBuckets() {}
 
@@ -494,63 +499,55 @@ class DecisionBuckets {
         heap_pos_.resize(s, -1);
         in_bucket_.resize(s, false);
         bucket_pos_.resize(s, -1);
+        bucket_idx_.resize(s, -1);
     }
 
     void init_var(Var v) {
         var_activity_[v] = 0.0;
-        heapInsert(v);
         insert(v);
     }
 
     void insert(Var v) {
         if (in_bucket_[v]) return;
-        if (heap_pos_[v] == -1) heapInsert(v);
-        int bucket_index = getBucketIndex(v);
+        if (heap_pos_[v] == -1) {
+            heapInsert(v);
+        }
+        int bucket_index = bucketIndexFromPosCached(heap_pos_[v]);
         ensureBucket(bucket_index);
-
+        bucket_pos_[v] = static_cast<int>(buckets_[bucket_index].size());
+        bucket_idx_[v] = bucket_index;
         buckets_[bucket_index].push_back(v);
-        bucket_pos_[v] = static_cast<int>(buckets_[bucket_index].size() - 1);
         in_bucket_[v] = true;
-
         if (bucket_index < head_) {
             head_ = bucket_index;
         }
     }
 
     bool empty() {
-        for (int i = head_; i < static_cast<int>(buckets_.size()); ++i) {
-            if (!buckets_[i].empty()) {
-                head_ = i;
-                return false;
-            }
+        while (head_ < static_cast<int>(buckets_.size()) &&
+               buckets_[head_].empty()) {
+            head_++;
         }
-        head_ = static_cast<int>(buckets_.size());
-        return true;
+        return head_ >= static_cast<int>(buckets_.size());
     }
 
     Var get_deci_var() {
-        while (head_ < static_cast<int>(buckets_.size()) && buckets_[head_].empty()) {
+        while (head_ < static_cast<int>(buckets_.size()) &&
+               buckets_[head_].empty()) {
             head_++;
         }
         if (head_ >= static_cast<int>(buckets_.size())) {
             return var_Undef;
         }
-
         Var v = buckets_[head_].back();
         buckets_[head_].pop_back();
-
         in_bucket_[v] = false;
         bucket_pos_[v] = -1;
-
+        bucket_idx_[v] = -1;
         return v;
     }
 
     void update(Var v, uint64_t conflict_index) {
-        int old_bucket = -1;
-        bool was_in_bucket = in_bucket_[v];
-        if (was_in_bucket) {
-            old_bucket = getBucketIndex(v);
-        }
         double score = var_activity_[v];
         score = (score + static_cast<double>(conflict_index)) * 0.5;
         var_activity_[v] = score;
@@ -560,59 +557,42 @@ class DecisionBuckets {
         } else {
             heapUp(heap_pos_[v]);
         }
-        if (was_in_bucket) {
-            if (old_bucket >= 0 && old_bucket < static_cast<int>(buckets_.size())) {
-                auto &bucket = buckets_[old_bucket];
-                int pos = bucket_pos_[v];
-                if (pos >= 0 && pos < static_cast<int>(bucket.size()) &&
-                    bucket[static_cast<size_t>(pos)] == v) {
-                    Var moved = bucket.back();
-                    bucket[static_cast<size_t>(pos)] = moved;
-                    bucket.pop_back();
-                    if (!bucket.empty() && moved != v) {
-                        bucket_pos_[moved] = pos;
-                    }
-                } else {
-                    for (size_t i = 0; i < bucket.size(); ++i) {
-                        if (bucket[i] == v) {
-                            Var moved = bucket.back();
-                            bucket[i] = moved;
-                            bucket.pop_back();
-                            if (moved != v) {
-                                bucket_pos_[moved] = static_cast<int>(i);
-                            }
-                            break;
-                        }
-                    }
-                }
+
+        if (in_bucket_[v]) {
+            int new_bucket = bucketIndexFromPosCached(heap_pos_[v]);
+            int old_bucket = bucket_idx_[v];
+            if (old_bucket < 0 || new_bucket < old_bucket) {
+                removeFromBucket(v);
+                insert(v);
             }
-            in_bucket_[v] = false;
-            bucket_pos_[v] = -1;
-            insert(v);
         }
+    }
+
+    bool inBucket(Var v) const {
+        return v >= 0 && v < static_cast<Var>(in_bucket_.size()) && in_bucket_[v];
     }
 
   private:
     static int bucketIndexFromPos(int pos) {
-        if (pos <= 0) return 0;
+        if (pos < 0) return 0;
+        if (pos == 0) return 0;
         unsigned int u = static_cast<unsigned int>(pos);
         int idx = 0;
-        while (u > 0) {
+        while (u > 1) {
             idx++;
             u >>= 1;
         }
-        return idx;
+        return idx + 1;
     }
 
-    int getBucketIndex(Var v) const {
-        int pos = heap_pos_[v];
-        if (pos >= 0) {
-            return bucketIndexFromPos(pos);
+    int bucketIndexFromPosCached(int pos) {
+        if (pos < 0) return 0;
+        if (pos >= static_cast<int>(bucket_table_.size())) {
+            for (int i = static_cast<int>(bucket_table_.size()); i <= pos; ++i) {
+                bucket_table_.push_back(bucketIndexFromPos(i));
+            }
         }
-        if (heap_.empty()) {
-            return 0;
-        }
-        return bucketIndexFromPos(static_cast<int>(heap_.size() - 1)) + 1;
+        return bucket_table_[pos];
     }
 
     void ensureBucket(int bucket_index) {
@@ -622,8 +602,12 @@ class DecisionBuckets {
     }
 
     void heapInsert(Var v) {
-        heap_pos_[v] = static_cast<int>(heap_.size());
+        int pos = static_cast<int>(heap_.size());
+        heap_pos_[v] = pos;
         heap_.push_back(v);
+        if (pos >= static_cast<int>(bucket_table_.size())) {
+            bucket_table_.push_back(bucketIndexFromPos(pos));
+        }
         heapUp(heap_pos_[v]);
     }
 
@@ -642,12 +626,52 @@ class DecisionBuckets {
         heap_pos_[v] = idx;
     }
 
+    void removeFromBucket(Var v) {
+        int b = bucket_idx_[v];
+        if (b < 0 || b >= static_cast<int>(buckets_.size())) {
+            in_bucket_[v] = false;
+            bucket_pos_[v] = -1;
+            bucket_idx_[v] = -1;
+            return;
+        }
+        auto &bucket = buckets_[b];
+        int pos = bucket_pos_[v];
+        if (pos >= 0 && pos < static_cast<int>(bucket.size()) &&
+            bucket[static_cast<size_t>(pos)] == v) {
+            Var moved = bucket.back();
+            bucket[static_cast<size_t>(pos)] = moved;
+            bucket.pop_back();
+            if (moved != v) {
+                bucket_pos_[moved] = pos;
+                bucket_idx_[moved] = b;
+            }
+        } else {
+            for (size_t i = 0; i < bucket.size(); ++i) {
+                if (bucket[i] == v) {
+                    Var moved = bucket.back();
+                    bucket[i] = moved;
+                    bucket.pop_back();
+                    if (moved != v) {
+                        bucket_pos_[moved] = static_cast<int>(i);
+                        bucket_idx_[moved] = b;
+                    }
+                    break;
+                }
+            }
+        }
+        in_bucket_[v] = false;
+        bucket_pos_[v] = -1;
+        bucket_idx_[v] = -1;
+    }
+
     std::vector<std::vector<Var>> buckets_;
     std::vector<double> var_activity_;
     std::vector<Var> heap_;
     std::vector<int> heap_pos_;
     std::vector<char> in_bucket_;
     std::vector<int> bucket_pos_;
+    std::vector<int> bucket_idx_;
+    std::vector<int> bucket_table_;
     int head_;
 };
 
