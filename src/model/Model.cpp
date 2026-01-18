@@ -252,6 +252,10 @@ void Model::CollectNextValueMapping() {
 
 void Model::CollectClauses() {
     m_clauses.clear();
+    m_clauses.reserve(m_circuitGraph->modelGates.size() * 3 + 1);
+
+    m_clauses.emplace_back(clause{m_equivalenceManager->Find(TrueId())});
+
     for (int g_id : m_circuitGraph->modelGates) {
         auto g = m_circuitGraph->gatesMap[g_id];
         int fanout = g.fanout;
@@ -274,8 +278,6 @@ void Model::CollectClauses() {
             m_clauses.emplace_back(clause{-fanout, fanin0, fanin2});
         }
     }
-    int trueId = m_equivalenceManager->Find(TrueId());
-    m_clauses.emplace_back(clause{trueId});
 }
 
 
@@ -432,7 +434,7 @@ void Model::SimplifyClauses() {
             solver->freeze(GetPrime(i));
         }
     }
-    solver->freeze(TrueId());
+    solver->freeze(m_equivalenceManager->Find(TrueId()));
     solver->freeze(m_bad);
 
     class carClauseIterator : public CaDiCaL::ClauseIterator {
@@ -472,7 +474,7 @@ void Model::SimplifyDAGClauses() {
             simplifier.FreezeVar(GetPrime(i));
         }
     }
-    simplifier.FreezeVar(TrueId());
+    simplifier.FreezeVar(m_equivalenceManager->Find(TrueId()));
     simplifier.FreezeVar(m_bad);
 
     m_clauses = simplifier.Simplify(m_clauses);

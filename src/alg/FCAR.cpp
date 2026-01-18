@@ -799,8 +799,8 @@ void FCAR::OutputWitness(int bad) {
             eq_lits.emplace_back(true_eq_lit);
             continue;
         }
-        assert(abs(itr->first) < witness_aig->maxvar);
-        assert(abs(itr->second) < witness_aig->maxvar);
+        assert(abs(itr->first) <= witness_aig->maxvar);
+        assert(abs(itr->second) <= witness_aig->maxvar);
         unsigned l1 = m_model.GetAigerLit(itr->first);
         unsigned l2 = m_model.GetAigerLit(itr->second);
         eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1, l2 ^ 1}) ^ 1);

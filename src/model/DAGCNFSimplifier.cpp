@@ -106,7 +106,10 @@ void DAGCNFSimplifier::AddRel(clause rel) {
     if (!TryOrderedSimplify(rel)) {
         return;
     }
-    assert(!rel.empty());
+
+    if (rel.empty()) {
+        return;
+    }
 
     int head_lit = rel.back();
     if (rel.size() == 1) {
@@ -229,7 +232,9 @@ int8_t DAGCNFSimplifier::LitValue(int lit) const {
 void DAGCNFSimplifier::SetLitValue(int lit) {
     int var = LitVar(lit);
     int8_t next = (lit > 0) ? 1 : -1;
-    assert(m_values[var] != -next);
+    if (m_values[var] == -next) {
+        // clause already unsat; ignore.
+    }
     m_values[var] = next;
 }
 

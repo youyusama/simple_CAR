@@ -14,8 +14,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(ENABLE_SANITIZERS "Enable Address/UB Sanitizers and extra debug flags" OFF)
 
 # Debug
-set(CMAKE_C_FLAGS_DEBUG "-g -ggdb")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -ggdb -fpermissive")
+set(CMAKE_C_FLAGS_DEBUG "-g -O0 -gdwarf-4 -ggdb")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -gdwarf-4 -ggdb -fpermissive")
 
 if(ENABLE_SANITIZERS)
     message(STATUS "Sanitizers enabled for Debug builds")

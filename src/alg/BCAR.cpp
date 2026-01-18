@@ -668,10 +668,11 @@ void BCAR::OutputWitness(int bad) {
     for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
         if (itr->first == m_model.TrueId()) {
             unsigned true_eq_lit = m_model.GetAigerLit(itr->second);
-            eq_lits.emplace_back(addCubeToANDGates(witness_aig, {true_eq_lit, (unsigned)0}) ^ 1);
-            eq_lits.emplace_back(addCubeToANDGates(witness_aig, {true_eq_lit ^ 1, (unsigned)1}) ^ 1);
+            eq_lits.emplace_back(true_eq_lit);
             continue;
         }
+        assert(abs(itr->first) < witness_aig->maxvar);
+        assert(abs(itr->second) < witness_aig->maxvar);
         unsigned l1 = m_model.GetAigerLit(itr->first);
         unsigned l2 = m_model.GetAigerLit(itr->second);
         eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1, l2 ^ 1}) ^ 1);

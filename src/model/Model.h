@@ -91,7 +91,7 @@ struct SimulationSignatureHash {
     }
 };
 
-constexpr size_t NUM_CHUNKS = 32;
+constexpr size_t NUM_CHUNKS = 16;
 using SignatureN64 = SimulationSignature<NUM_CHUNKS>;
 using VarMapN64 = std::unordered_map<SignatureN64, std::vector<int>, SimulationSignatureHash<NUM_CHUNKS>>;
 
