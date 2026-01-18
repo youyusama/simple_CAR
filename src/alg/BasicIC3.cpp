@@ -174,9 +174,9 @@ bool BasicIC3::BaseCases() {
         cube primeInputs;
         for (int i : m_model.GetPropertyCOIInputs()) {
             int i_p = m_model.GetPrimeK(i, 1);
-            if (step1Solver->GetModel(i_p))
+            if (step1Solver->GetModel(i_p) == t_True)
                 primeInputs.push_back(i);
-            else
+            else if (step1Solver->GetModel(i_p) == t_False)
                 primeInputs.push_back(-i);
         }
         pair<cube, cube> assignment = step1Solver->GetAssignment(false);
@@ -273,10 +273,10 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
         cube badInputs;
         for (int i : m_model.GetPropertyCOIInputs()) {
             int i_p = m_model.GetPrimeK(i, 1);
-            if (m_startSolver->GetModel(i_p)) {
+            if (m_startSolver->GetModel(i_p) == t_True) {
                 primeInputs.push_back(i_p);
                 badInputs.push_back(i);
-            } else {
+            } else if (m_startSolver->GetModel(i_p) == t_False) {
                 primeInputs.push_back(-i_p);
                 badInputs.push_back(-i);
             }

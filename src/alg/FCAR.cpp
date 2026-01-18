@@ -306,9 +306,9 @@ shared_ptr<State> FCAR::EnumerateStartState() {
         cube inputs_prime;
         for (int i : m_model.GetPropertyCOIInputs()) {
             int i_p = m_model.GetPrimeK(i, 1);
-            if (m_startSolver->GetModel(i_p))
+            if (m_startSolver->GetModel(i_p) == t_True)
                 inputs_prime.push_back(i_p);
-            else
+            else if (m_startSolver->GetModel(i_p) == t_False)
                 inputs_prime.push_back(-i_p);
         }
 
@@ -352,9 +352,9 @@ shared_ptr<State> FCAR::EnumerateStartState() {
         cube inputs_bad;
         for (int i : m_model.GetPropertyCOIInputs()) {
             int i_p = m_model.GetPrimeK(i, 1);
-            if (m_startSolver->GetModel(i_p))
+            if (m_startSolver->GetModel(i_p) == t_True)
                 inputs_bad.push_back(i);
-            else
+            else if (m_startSolver->GetModel(i_p) == t_False)
                 inputs_bad.push_back(-i);
         }
         shared_ptr<State> badState(new State(nullptr, inputs_bad, cube(), 0));

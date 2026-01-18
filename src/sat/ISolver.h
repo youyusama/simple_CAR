@@ -1,6 +1,7 @@
 #ifndef ISOLVER_H
 #define ISOLVER_H
 
+#include "TernarySim.h"
 #include <memory>
 #include <unordered_set>
 #include <vector>
@@ -20,7 +21,7 @@ class ISolver {
     virtual int GetNewVar() = 0;
     virtual void AddTempClause(const cube &cls) = 0;
     virtual void ReleaseTempClause() = 0;
-    virtual bool GetModel(int id) = 0;
+    virtual tbool GetModel(int id) = 0;
     virtual void AddAssumption(const cube &assumption) = 0;
     virtual void ClearAssumption() = 0;
     virtual void PushAssumption(int a) = 0;

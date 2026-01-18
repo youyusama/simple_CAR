@@ -24,12 +24,13 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     }
     void AddTempClause(const cube &cls) override;
     void ReleaseTempClause() override;
-    inline bool GetModel(int id) override {
+    inline tbool GetModel(int id) override {
         if (value(id) == minicore::l_True)
-            return true;
-        else {
-            return false;
-        }
+            return t_True;
+        else if (value(id) == minicore::l_False)
+            return t_False;
+        else
+            return t_Undef;
     }
     void ClearAssumption() override;
     void PushAssumption(int a) override;

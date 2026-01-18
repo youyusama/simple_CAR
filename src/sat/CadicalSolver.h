@@ -24,12 +24,12 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     }
     void AddTempClause(const cube &cls) override;
     void ReleaseTempClause() override;
-    inline bool GetModel(int id) override {
+    inline tbool GetModel(int id) override {
         if (val(id) > 0)
-            return true;
+            return t_True;
         else {
             assert(val(id) < 0);
-            return false;
+            return t_False;
         }
     }
     void ClearAssumption() override;

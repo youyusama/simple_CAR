@@ -30,13 +30,13 @@ class KissatSolver : public ISolver {
     void AddTempClause(const cube &cls) override {}
     void ReleaseTempClause() override {}
 
-    inline bool GetModel(int id) override {
+    inline tbool GetModel(int id) override {
         int val = kissat_value(m_solver, id);
         assert(!val);
         if (val < 0)
-            return false;
+            return t_False;
         else
-            return true;
+            return t_True;
     }
     void ClearAssumption() override {}
     void PushAssumption(int a) override {}

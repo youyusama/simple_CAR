@@ -57,7 +57,7 @@ class SATSolver : public ISolver {
         m_slv->ReleaseTempClause();
     }
 
-    bool GetModel(int id) override {
+    tbool GetModel(int id) override {
         return m_slv->GetModel(id);
     }
 
