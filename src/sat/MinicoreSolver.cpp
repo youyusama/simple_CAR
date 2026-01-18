@@ -49,22 +49,22 @@ pair<cube, cube> MinicoreSolver::GetAssignment(bool prime) {
     inputs.reserve(m_model.GetNumInputs());
     latches.reserve(m_model.GetNumLatches());
     for (int i : m_model.GetModelInputs()) {
-        if (model[i] == minicore::l_True) {
+        if (value(i) == minicore::l_True) {
             inputs.emplace_back(i);
-        } else if (model[i] == minicore::l_False) {
+        } else if (value(i) == minicore::l_False) {
             inputs.emplace_back(-i);
         }
     }
     for (int i : m_model.GetModelLatches()) {
         if (!prime) {
-            if (model[i] == minicore::l_True) {
+            if (value(i) == minicore::l_True) {
                 latches.emplace_back(i);
-            } else if (model[i] == minicore::l_False) {
+            } else if (value(i) == minicore::l_False) {
                 latches.emplace_back(-i);
             }
         } else {
             int p = m_model.GetPrime(i);
-            minicore::lbool val = model[abs(p)];
+            minicore::lbool val = value(abs(p));
             if ((val == minicore::l_True && p > 0) || (val == minicore::l_False && p < 0)) {
                 latches.emplace_back(i);
             } else if ((val == minicore::l_True && p < 0) || (val == minicore::l_False && p > 0)) {
@@ -74,14 +74,14 @@ pair<cube, cube> MinicoreSolver::GetAssignment(bool prime) {
     }
     for (int i : m_model.GetInnards()) {
         if (!prime) {
-            if (model[i] == minicore::l_True) {
+            if (value(i) == minicore::l_True) {
                 latches.emplace_back(i);
-            } else if (model[i] == minicore::l_False) {
+            } else if (value(i) == minicore::l_False) {
                 latches.emplace_back(-i);
             }
         } else {
             int p = m_model.GetPrime(i);
-            minicore::lbool val = model[abs(p)];
+            minicore::lbool val = value(abs(p));
             if ((val == minicore::l_True && p > 0) || (val == minicore::l_False && p < 0)) {
                 latches.emplace_back(i);
             } else if ((val == minicore::l_True && p < 0) || (val == minicore::l_False && p > 0)) {

@@ -39,13 +39,54 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1.0), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), simpDB_clauses(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1) {
+                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1.0), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), simpDB_clauses(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1), profile_enabled_(true), state_(SolverState::Ready), last_result_(l_Undef) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
 }
 
 void Solver::resetProfileStats() {
     profile_stats_ = ProfileStats{};
+}
+
+void Solver::reset() {
+    assert(state_ == SolverState::Solved);
+
+    // clean decisions
+    if (decisionLevel() > 0) {
+        while (trail.size() > trail_lim[0]) {
+            Var x = var(trail.back());
+            assigns[x] = l_Undef;
+            polarity[x] = sign(trail.back());
+            trail.pop_back();
+        }
+        qhead = trail.size();
+        trail_lim.resize(0);
+    }
+
+    // clean temprary learnts
+    if (temp_cls_activated) {
+        // unit
+        while (trail.size() > traillim_snapshot) {
+            Var x = var(trail.back());
+            assigns[x] = l_Undef;
+            polarity[x] = sign(trail.back());
+            insertVarOrder(x);
+            trail.pop_back();
+        }
+        qhead = trail.size();
+        // temp clause
+        temp_cls_activated = false;
+        temporary_domain[temp_cls_act_var] = 0;
+        removeTempLearnt();
+    }
+
+    // solve in domain
+    if (solve_in_domain) solve_in_domain_runtime_flag = false;
+
+    assumptions.clear();
+    conflict.clear();
+    last_result_ = l_Undef;
+    state_ = SolverState::Ready;
 }
 
 
@@ -74,6 +115,7 @@ Var Solver::newVar() {
 }
 
 bool Solver::addClause_(std::vector<Lit> &ps) {
+    if (state_ != SolverState::Ready) reset();
     assert(decisionLevel() == 0);
     if (!ok) return false;
 
@@ -104,6 +146,7 @@ bool Solver::addClause_(std::vector<Lit> &ps) {
 
 
 bool Solver::addTempClause(const std::vector<Lit> &cls) {
+    if (state_ != SolverState::Ready) reset();
     assert(decisionLevel() == 0);
     if (!ok) return false;
     temp_cls_activated = true;
@@ -696,17 +739,21 @@ lbool Solver::search(int nof_conflicts) {
     int conflictC = 0;
     std::vector<Lit> learnt_clause;
     starts++;
-    const uint64_t search_start = nowNs();
+    const bool do_profile = profile_enabled_;
+    const uint64_t search_start = do_profile ? nowNs() : 0;
 
     for (;;) {
-        profile_stats_.prop_calls++;
-        const bool sample_prop = (profile_stats_.prop_calls & PROP_SAMPLE_MASK) == 0;
+        bool sample_prop = false;
         uint64_t prop_start = 0;
-        if (sample_prop) {
-            prop_start = nowNs();
+        if (do_profile) {
+            profile_stats_.prop_calls++;
+            sample_prop = (profile_stats_.prop_calls & PROP_SAMPLE_MASK) == 0;
+            if (sample_prop) {
+                prop_start = nowNs();
+            }
         }
         CRef confl = propagate();
-        if (sample_prop) {
+        if (do_profile && sample_prop) {
             profile_stats_.prop_sample_ns += nowNs() - prop_start;
             profile_stats_.prop_sample_hits++;
         }
@@ -715,17 +762,23 @@ lbool Solver::search(int nof_conflicts) {
             conflicts++;
             conflictC++;
             if (decisionLevel() == 0) {
-                profile_stats_.search_ns += nowNs() - search_start;
+                if (do_profile) {
+                    profile_stats_.search_ns += nowNs() - search_start;
+                }
                 return l_False;
             }
 
             learnt_clause.clear();
-            uint64_t t0 = nowNs();
+            uint64_t t0 = do_profile ? nowNs() : 0;
             analyze(confl, learnt_clause, backtrack_level);
-            profile_stats_.analyze_ns += nowNs() - t0;
-            t0 = nowNs();
+            if (do_profile) {
+                profile_stats_.analyze_ns += nowNs() - t0;
+            }
+            t0 = do_profile ? nowNs() : 0;
             cancelUntil(backtrack_level);
-            profile_stats_.cancel_ns += nowNs() - t0;
+            if (do_profile) {
+                profile_stats_.cancel_ns += nowNs() - t0;
+            }
 
             if (learnt_clause.size() == 1) {
                 uncheckedEnqueue(learnt_clause[0]);
@@ -770,15 +823,19 @@ lbool Solver::search(int nof_conflicts) {
             if (nof_conflicts >= 0 && conflictC >= nof_conflicts) {
                 // Reached bound on number of conflicts:
                 cancelUntil(0);
-                profile_stats_.search_ns += nowNs() - search_start;
+                if (do_profile) {
+                    profile_stats_.search_ns += nowNs() - search_start;
+                }
                 return l_Undef;
             }
 
             if (learnts.size() > max_learnts + nAssigns()) {
                 // Reduce the set of learnt clauses:
-                uint64_t t0 = nowNs();
+                uint64_t t0 = do_profile ? nowNs() : 0;
                 reduceDB();
-                profile_stats_.reduce_ns += nowNs() - t0;
+                if (do_profile) {
+                    profile_stats_.reduce_ns += nowNs() - t0;
+                }
             }
 
             Lit next = lit_Undef;
@@ -790,7 +847,9 @@ lbool Solver::search(int nof_conflicts) {
                     newDecisionLevel();
                 } else if (value(p) == l_False) {
                     analyzeFinal(~p, conflict);
-                    profile_stats_.search_ns += nowNs() - search_start;
+                    if (do_profile) {
+                        profile_stats_.search_ns += nowNs() - search_start;
+                    }
                     return l_False;
                 } else {
                     next = p;
@@ -801,13 +860,17 @@ lbool Solver::search(int nof_conflicts) {
             if (next == lit_Undef) {
                 // New variable decision:
                 decisions++;
-                uint64_t t0 = nowNs();
+                uint64_t t0 = do_profile ? nowNs() : 0;
                 next = pickBranchLit();
-                profile_stats_.decide_ns += nowNs() - t0;
+                if (do_profile) {
+                    profile_stats_.decide_ns += nowNs() - t0;
+                }
 
                 if (next == lit_Undef) {
                     // Model found:
-                    profile_stats_.search_ns += nowNs() - search_start;
+                    if (do_profile) {
+                        profile_stats_.search_ns += nowNs() - search_start;
+                    }
                     return l_True;
                 }
             }
@@ -849,13 +912,17 @@ static double luby(double y, int x) {
 
 
 lbool Solver::solve_() {
-    model.clear();
-    conflict.clear();
-    if (!ok) return l_False;
+    assert(state_ == SolverState::Ready);
+    if (!ok) {
+        last_result_ = l_False;
+        state_ = SolverState::Solved;
+        return l_False;
+    }
 
     resetProfileStats();
     solves++;
     simpDB_called++;
+    const bool do_profile = profile_enabled_;
 
     max_learnts = nClauses() * learntsize_factor;
 
@@ -871,26 +938,51 @@ lbool Solver::solve_() {
     }
 
     // Simplify the set of problem clauses before enabling domain-restricted solving.
+    uint64_t pre_start = do_profile ? nowNs() : 0;
     simplify();
 
+    // set runtime flag
     if (solve_in_domain)
         solve_in_domain_runtime_flag = true;
-    for (int i = 0; i < nVars(); i++) {
-        if (inDomain(i)) {
+
+    uint64_t insert_start = do_profile ? nowNs() : 0;
+    if (solve_in_domain) {
+        for (Var v : permanent_domain_list) {
+            insertVarOrder(v);
+        }
+        for (Var v : temporary_domain_list) {
+            insertVarOrder(v);
+        }
+        if (temp_cls_activated && !permanent_domain[temp_cls_act_var] &&
+            !temporary_domain[temp_cls_act_var]) {
+            insertVarOrder(temp_cls_act_var);
+        }
+    } else {
+        for (int i = 0; i < nVars(); i++) {
             insertVarOrder(i);
         }
     }
+    if (do_profile) {
+        profile_stats_.solve_insert_ns += nowNs() - insert_start;
+    }
 
-    if (temp_cls_activated || solve_in_domain) {
+    if (temp_cls_activated) {
         traillim_snapshot = trail.size();
+    }
+    if (do_profile) {
+        profile_stats_.solve_pre_ns += nowNs() - pre_start;
     }
 
     // Search:
     int curr_restarts = 0;
+    uint64_t search_start = do_profile ? nowNs() : 0;
     while (status == l_Undef && restartInLimit(curr_restarts)) {
         double rest_base = luby(restart_inc, curr_restarts);
         status = search(rest_base * restart_first);
         curr_restarts++;
+    }
+    if (do_profile) {
+        profile_stats_.solve_search_ns += nowNs() - search_start;
     }
 
     if (verbosity >= 1) {
@@ -932,35 +1024,10 @@ lbool Solver::solve_() {
         std::cout << std::endl;
     }
 
-
-    if (status == l_True) {
-        model.resize(nVars());
-        for (int i = 0; i < nVars(); i++) model[i] = value(i);
-    } else if (status == l_False && conflict.size() == 0)
+    if (status == l_False && conflict.size() == 0)
         ok = false;
-
-    cancelUntil(0);
-
-    // remove temperary learnt unit clause
-    if (temp_cls_activated || solve_in_domain) {
-        while (trail.size() > traillim_snapshot) {
-            Var x = var(trail.back());
-            assigns[x] = l_Undef;
-            polarity[x] = sign(trail.back());
-            insertVarOrder(x);
-            trail.pop_back();
-        }
-        qhead = trail.size();
-    }
-    if (temp_cls_activated) {
-        temp_cls_activated = false;
-        temporary_domain[temp_cls_act_var] = 0;
-        // remove temperary learnt clause
-        removeTempLearnt();
-    }
-    if (solve_in_domain)
-        solve_in_domain_runtime_flag = false;
-
+    last_result_ = status;
+    state_ = SolverState::Solved;
     // order_list.print();
     return status;
 }

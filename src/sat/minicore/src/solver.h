@@ -23,6 +23,11 @@ inline std::string vec2str(const std::vector<Lit> &lits) {
 
 class Solver {
   public:
+    enum class SolverState {
+        Ready,
+        Solved,
+    };
+
     // Constructor/Destructor:
     //
     Solver();
@@ -49,10 +54,11 @@ class Solver {
     //
     void simplify();                              // Simplify clauses.
     lbool solve(const std::vector<Lit> &assumps); // Search for a model that respects a given set of assumptions.
-    lbool solve(const std::vector<int> &assumps); // Search for a model that respects a given set of assumptions.
     lbool solve();                                // Search without assumptions.
-    lbool solve_main();                           // Search invoked from main.cpp
     bool okay() const;                            // FALSE means solver is in a conflicting state
+    void reset();                                 // Reset solver to ready state after a solve.
+    SolverState state() const { return state_; }
+    lbool lastResult() const { return last_result_; }
 
     void setRestartLimit(int limit); // Set the restart limit.
 
@@ -60,15 +66,13 @@ class Solver {
 
     // Read state:
     //
-    lbool value(Var x) const;      // The current value of a variable.
-    lbool value(Lit p) const;      // The current value of a literal.
-    lbool modelValue(Var x) const; // The value of a variable in the last model. The last call to solve must have been satisfiable.
-    lbool modelValue(Lit p) const; // The value of a literal in the last model. The last call to solve must have been satisfiable.
-    size_t nAssigns() const;       // The current number of assigned literals.
-    int nClauses() const;          // The current number of original clauses.
-    int nLearnts() const;          // The current number of learnt clauses.
-    int nVars() const;             // The current number of variables.
-    void printStats() const;       // Print some current statistics to standard output.
+    lbool value(Var x) const; // The current value of a variable.
+    lbool value(Lit p) const; // The current value of a literal.
+    size_t nAssigns() const;  // The current number of assigned literals.
+    int nClauses() const;     // The current number of original clauses.
+    int nLearnts() const;     // The current number of learnt clauses.
+    int nVars() const;        // The current number of variables.
+    void printStats() const;  // Print some current statistics to standard output.
 
     // Memory managment:
     //
@@ -101,6 +105,12 @@ class Solver {
     uint64_t dec_vars, num_clauses, num_learnts, clauses_literals, learnts_literals, max_literals, tot_literals;
 
     struct ProfileStats {
+        uint64_t solve_pre_ns = 0;
+        uint64_t solve_search_ns = 0;
+        uint64_t solve_post_ns = 0;
+        uint64_t solve_insert_ns = 0;
+        uint64_t solve_cancel_until_ns = 0;
+        uint64_t solve_model_ns = 0;
         uint64_t search_ns = 0;
         uint64_t analyze_ns = 0;
         uint64_t cancel_ns = 0;
@@ -113,6 +123,7 @@ class Solver {
 
     const ProfileStats &profileStats() const { return profile_stats_; }
     void resetProfileStats();
+    void setProfileEnabled(bool enabled) { profile_enabled_ = enabled; }
 
   protected:
     std::shared_ptr<ClauseAllocator> ca;
@@ -134,6 +145,8 @@ class Solver {
     bool solve_in_domain_runtime_flag;  // Decide in domain in runtime.
     std::vector<char> permanent_domain; // A variable is a decision variable in all queries.
     std::vector<char> temporary_domain; // A variable is a decision variable in the next query.
+    std::vector<Var> permanent_domain_list;
+    std::vector<Var> temporary_domain_list;
 
     int restart_limit; // The restart limit.
 
@@ -156,6 +169,9 @@ class Solver {
     int64_t simpDB_called;    // Number of times 'solve()' has been called.
     int64_t simpDB_clauses;   // Number of clauses at last 'simplify()' call.
     ProfileStats profile_stats_;
+    bool profile_enabled_;
+    SolverState state_;
+    lbool last_result_;
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
@@ -279,21 +295,22 @@ inline size_t Solver::decisionLevel() const { return trail_lim.size(); }
 inline uint32_t Solver::abstractLevel(Var x) const { return 1u << (level(x) & 31); }
 inline lbool Solver::value(Var x) const { return assigns[x]; }
 inline lbool Solver::value(Lit p) const { return assigns[var(p)] ^ sign(p); }
-inline lbool Solver::modelValue(Var x) const { return model[x]; }
-inline lbool Solver::modelValue(Lit p) const { return model[var(p)] ^ sign(p); }
 inline size_t Solver::nAssigns() const { return trail.size(); }
 inline int Solver::nClauses() const { return num_clauses; }
 inline int Solver::nLearnts() const { return num_learnts; }
 inline int Solver::nVars() const { return next_var; }
 
 inline lbool Solver::solve() {
+    if (state_ != SolverState::Ready) reset();
     assumptions.clear();
     if (temp_cls_activated) {
         assumptions.emplace_back(mkLit(temp_cls_act_var));
     }
     return solve_();
 }
+
 inline lbool Solver::solve(const std::vector<Lit> &assumps) {
+    if (state_ != SolverState::Ready) reset();
     if (temp_cls_activated) {
         assumptions.clear();
         assumptions.emplace_back(mkLit(temp_cls_act_var));
@@ -304,40 +321,34 @@ inline lbool Solver::solve(const std::vector<Lit> &assumps) {
     return solve_();
 }
 
-inline lbool Solver::solve(const std::vector<int> &assumps) {
-    std::vector<Lit> assump_lits;
-    assump_lits.reserve(assumps.size());
-    for (int l : assumps) {
-        Var v = abs(l);
-        while (v >= nVars()) newVar();
-        assump_lits.push_back(mkLit(v, l < 0));
-    }
-    return solve(assump_lits);
-}
-
 inline void Solver::setRestartLimit(int limit) { restart_limit = limit; }
 
-inline lbool Solver::solve_main() {
-    assumptions.clear();
-    return solve_();
-}
 inline bool Solver::okay() const { return ok; }
 
 inline bool Solver::inDomain(Var x) const { return !solve_in_domain_runtime_flag || permanent_domain[x] || temporary_domain[x]; }
 
 inline void Solver::setDomain(const std::vector<Var> dvars) {
     for (Var x : dvars) {
-        if (x < nVars()) permanent_domain[x] = 1;
+        if (x < nVars() && !permanent_domain[x]) {
+            permanent_domain[x] = 1;
+            permanent_domain_list.push_back(x);
+        }
     }
 }
 
 inline void Solver::setTempDomain(const std::vector<Var> dvars) {
     for (Var x : dvars)
-        if (x < nVars()) temporary_domain[x] = 1;
+        if (x < nVars() && !temporary_domain[x]) {
+            temporary_domain[x] = 1;
+            if (!permanent_domain[x]) {
+                temporary_domain_list.push_back(x);
+            }
+        }
 }
 
 inline void Solver::resetTempDomain() {
     std::fill(temporary_domain.begin(), temporary_domain.end(), 0);
+    temporary_domain_list.clear();
 }
 
 inline bool Solver::restartInLimit(int current_restarts) const { return restart_limit == -1 || current_restarts < restart_limit; }

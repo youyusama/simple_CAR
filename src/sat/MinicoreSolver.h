@@ -25,7 +25,7 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     void AddTempClause(const cube &cls) override;
     void ReleaseTempClause() override;
     inline bool GetModel(int id) override {
-        if (model[id] == minicore::l_True)
+        if (value(id) == minicore::l_True)
             return true;
         else {
             return false;
