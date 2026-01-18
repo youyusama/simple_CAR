@@ -77,10 +77,6 @@ class lbool {
     lbool() : value(0) {}
     explicit lbool(bool x) : value(!x) {}
 
-    bool isTrue() const { return value == 0; }
-    bool isFalse() const { return value == 1; }
-    bool isUndef() const { return value == 2; }
-
     bool operator==(lbool b) const { return ((b.value & 2) & (value & 2)) | (!(b.value & 2) & (value == b.value)); }
     bool operator!=(lbool b) const { return !(*this == b); }
     lbool operator^(bool b) const { return lbool((uint8_t)(value ^ (uint8_t)b)); }

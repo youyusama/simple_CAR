@@ -66,13 +66,16 @@ class Solver {
 
     // Read state:
     //
-    lbool value(Var x) const; // The current value of a variable.
-    lbool value(Lit p) const; // The current value of a literal.
-    size_t nAssigns() const;  // The current number of assigned literals.
-    int nClauses() const;     // The current number of original clauses.
-    int nLearnts() const;     // The current number of learnt clauses.
-    int nVars() const;        // The current number of variables.
-    void printStats() const;  // Print some current statistics to standard output.
+    lbool value(Var x) const;   // The current value of a variable.
+    lbool value(Lit p) const;   // The current value of a literal.
+    size_t nAssigns() const;    // The current number of assigned literals.
+    int nClauses() const;       // The current number of original clauses.
+    int nLearnts() const;       // The current number of learnt clauses.
+    int nVars() const;          // The current number of variables.
+    void printStats() const;    // Print some current statistics to standard output.
+    void printResult() const;   // Print sat result.
+    void printHead() const;     // Print head.
+    void printProgress() const; // Print progress.
 
     // Memory managment:
     //
@@ -103,27 +106,6 @@ class Solver {
     //
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, num_clauses, num_learnts, clauses_literals, learnts_literals, max_literals, tot_literals;
-
-    struct ProfileStats {
-        uint64_t solve_pre_ns = 0;
-        uint64_t solve_search_ns = 0;
-        uint64_t solve_post_ns = 0;
-        uint64_t solve_insert_ns = 0;
-        uint64_t solve_cancel_until_ns = 0;
-        uint64_t solve_model_ns = 0;
-        uint64_t search_ns = 0;
-        uint64_t analyze_ns = 0;
-        uint64_t cancel_ns = 0;
-        uint64_t reduce_ns = 0;
-        uint64_t decide_ns = 0;
-        uint64_t prop_sample_ns = 0;
-        uint64_t prop_sample_hits = 0;
-        uint64_t prop_calls = 0;
-    };
-
-    const ProfileStats &profileStats() const { return profile_stats_; }
-    void resetProfileStats();
-    void setProfileEnabled(bool enabled) { profile_enabled_ = enabled; }
 
   protected:
     std::shared_ptr<ClauseAllocator> ca;
@@ -168,8 +150,6 @@ class Solver {
     size_t traillim_snapshot; // Snapshot of trail_lim before temp clause/solve in domain is activated.
     int64_t simpDB_called;    // Number of times 'solve()' has been called.
     int64_t simpDB_clauses;   // Number of clauses at last 'simplify()' call.
-    ProfileStats profile_stats_;
-    bool profile_enabled_;
     SolverState state_;
     lbool last_result_;
 
