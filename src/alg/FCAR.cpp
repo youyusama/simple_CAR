@@ -339,8 +339,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             }
             assert(!res);
             cube temp_p = GetUnsatAssumption(m_badPredLiftSolver, partial_latch);
-            if (temp_p.size() == partial_latch.size() &&
-                equal(temp_p.begin(), temp_p.end(), partial_latch.begin()))
+            if (temp_p.size() >= partial_latch.size())
                 break;
             else {
                 partial_latch.swap(temp_p);
@@ -460,7 +459,7 @@ void FCAR::GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t) {
         }
         assert(!res);
         cube temp_p = GetUnsatAssumption(m_liftSolver, partial_latch);
-        if (temp_p == partial_latch)
+        if (temp_p.size() >= partial_latch.size())
             break;
         else {
             partial_latch.swap(temp_p);
@@ -614,18 +613,13 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
         for (int i = uc.size() - 1; i >= 0; i--) {
             if (uc.size() < 3) break;
             if (required_lits.find(uc.at(i)) != required_lits.end()) continue;
-            cube temp_uc;
-            temp_uc.reserve(uc.size());
-            for (auto ll : uc)
-                if (ll != uc.at(i)) temp_uc.emplace_back(ll);
             assumption.clear();
-            copy(temp_uc.begin(), temp_uc.end(), back_inserter(assumption));
-            OrderAssumption(assumption);
+            for (auto ll : uc)
+                if (ll != uc.at(i)) assumption.emplace_back(ll);
             bool result = IsReachable(0, assumption, "SAT_R_Init");
             if (!result) {
                 auto new_uc = GetUnsatAssumption(m_transSolvers[0], assumption);
                 uc.swap(new_uc);
-                OrderAssumption(uc);
                 i = uc.size();
             } else {
                 required_lits.emplace(uc.at(i));
@@ -692,15 +686,10 @@ cube FCAR::GetUnsatCore(int lvl, const cube &state) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UCore");
     const unordered_set<int> &conflict = m_transSolvers[lvl]->GetConflict();
     cube res;
-
-    cube prime_state;
     for (auto l : state) {
-        prime_state.emplace_back(m_model.GetPrime(l));
-    }
-
-    for (int i = 0; i < prime_state.size(); i++) {
-        if (conflict.find(prime_state[i]) != conflict.end())
-            res.emplace_back(state[i]);
+        int p = m_model.GetPrime(l);
+        if (conflict.find(p) != conflict.end())
+            res.emplace_back(l);
     }
     return res;
 }
@@ -710,13 +699,10 @@ cube FCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumpti
     [[maybe_unused]] auto scoped = m_log.Section("DS_UAssump");
     const unordered_set<int> &conflict = solver->GetConflict();
     cube res;
-
     for (auto a : assumptions) {
         if (conflict.find(a) != conflict.end())
             res.emplace_back(a);
     }
-
-    sort(res.begin(), res.end(), cmp);
     return res;
 }
 
