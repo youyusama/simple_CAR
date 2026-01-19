@@ -80,7 +80,7 @@ class TernarySimulator {
 
     tbool getVal(int id, int step);
 
-    tbool getVal(int id, unordered_map<int, tbool> &vmap);
+    tbool getVal(int id, const vector<tbool> &vmap);
 
     void simulate(int maxSteps);
 
@@ -88,7 +88,7 @@ class TernarySimulator {
 
     bool isCycleReached() { return m_cycleStart != -1; };
 
-    const vector<unordered_map<int, tbool>> &getValues() { return m_values; };
+    const vector<vector<tbool>> &getValues() { return m_values; };
 
     const vector<vector<int>> &getStates() { return m_states; };
 
@@ -99,7 +99,9 @@ class TernarySimulator {
 
     shared_ptr<CircuitGraph> m_circuitGraph;
 
-    vector<unordered_map<int, tbool>> m_values;
+    vector<vector<tbool>> m_values;
+
+    void initStepValues();
 
     void pushState(int step, vector<int> &state);
 

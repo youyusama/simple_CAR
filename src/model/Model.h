@@ -235,7 +235,7 @@ class Model {
 
     void EncodeStatesToSignatuers(const vector<vector<int>> &states, unordered_map<string, vector<int>> &signatures);
 
-    void EncodeStatesToN64Signatuers(const vector<unordered_map<int, tbool>> &values, const vector<int> &vars, VarMapN64 &signatures);
+    void EncodeStatesToN64Signatuers(const vector<vector<tbool>> &values, const vector<int> &vars, VarMapN64 &signatures);
 
     bool CheckLatchEquivalenceBySAT(int a, int b);
 

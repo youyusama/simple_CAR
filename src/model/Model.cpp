@@ -558,7 +558,7 @@ void Model::SimplifyModelByRandomSimulation() {
 
     m_log.Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
-    vector<unordered_map<int, tbool>> simulation_values;
+    vector<vector<tbool>> simulation_values;
     for (int i = 0; i < NUM_CHUNKS; i++) {
         simulator.simulateRandom(64);
         for (auto &values : simulator.getValues()) {
@@ -671,7 +671,7 @@ void Model::EncodeStatesToSignatuers(const vector<vector<int>> &states, unordere
 }
 
 
-void Model::EncodeStatesToN64Signatuers(const vector<unordered_map<int, tbool>> &values, const vector<int> &vars, VarMapN64 &signatures) {
+void Model::EncodeStatesToN64Signatuers(const vector<vector<tbool>> &values, const vector<int> &vars, VarMapN64 &signatures) {
     assert(values.size() == 64 * NUM_CHUNKS);
 
     for (auto l : vars) {
@@ -680,7 +680,7 @@ void Model::EncodeStatesToN64Signatuers(const vector<unordered_map<int, tbool>> 
             const auto &vmapi = values[i];
             int j = i / 64;
             signature.chunks[j] = signature.chunks[j] << 1;
-            if (vmapi.at(l) == t_True) {
+            if (vmapi[l] == t_True) {
                 signature.chunks[j] |= 1;
             }
         }

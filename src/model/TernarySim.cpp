@@ -66,57 +66,46 @@ TernarySimulator::TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, Log &l
       m_cycleStart(-1),
       m_randomSeed(42) {
     // initialize step 0
-    m_values.emplace_back();
+    initStepValues();
+}
+
+void TernarySimulator::initStepValues() {
+    m_values.emplace_back(static_cast<size_t>(m_circuitGraph->trueId) + 1, t_Undef);
     m_values.back()[m_circuitGraph->trueId] = t_True;
 }
 
 
 bool TernarySimulator::setVal(int id, tbool v, int step) {
-    assert(m_values[step].find(abs(id)) == m_values[step].end());
+    assert(id > 0);
     m_values[step][id] = v;
     return true;
 }
 
 
 tbool TernarySimulator::getVal(int id, int step) {
-    assert(m_values[step].find(abs(id)) != m_values[step].end());
-    if (id > 0)
-        return m_values[step][id];
-    else
-        return !m_values[step][-id];
+    int idx = abs(id);
+    assert(idx <= m_circuitGraph->trueId);
+    tbool v = m_values[step][idx];
+    return (id > 0) ? v : !v;
 }
 
 
-tbool TernarySimulator::getVal(int id, unordered_map<int, tbool> &vmap) {
-    assert(vmap.find(abs(id)) != vmap.end());
-    if (id > 0)
-        return vmap[id];
-    else
-        return !vmap[-id];
+tbool TernarySimulator::getVal(int id, const vector<tbool> &vmap) {
+    int idx = abs(id);
+    assert(idx < static_cast<int>(vmap.size()));
+    tbool v = vmap[idx];
+    return (id > 0) ? v : !v;
 }
 
 
 void TernarySimulator::simulateOneStep() {
     assert(m_step < m_values.size());
 
-    unordered_map<int, tbool> &vmap = m_values[m_step];
-
-    // set inputs undefined
-    for (int input_id : m_circuitGraph->modelInputs) {
-        if (vmap.find(input_id) == vmap.end())
-            vmap[input_id] = t_Undef;
-    }
-
-    // set latches undefined
-    for (int latch_id : m_circuitGraph->modelLatches) {
-        if (vmap.find(latch_id) == vmap.end())
-            vmap[latch_id] = t_Undef;
-    }
+    vector<tbool> &vmap = m_values[m_step];
 
     // compute gates
     for (int i = 0; i < m_circuitGraph->modelGates.size(); i++) {
         int gid = m_circuitGraph->modelGates[i];
-        assert(vmap.find(gid) == vmap.end());
         CircuitGate &g = m_circuitGraph->gatesMap[gid];
 
         switch (g.gateType) {
@@ -138,8 +127,7 @@ void TernarySimulator::simulateOneStep() {
 
 void TernarySimulator::reset() {
     m_values.clear();
-    m_values.emplace_back();
-    m_values.back()[m_circuitGraph->trueId] = t_True;
+    initStepValues();
     m_states.clear();
     m_gateStates.clear();
     m_step = 0;
@@ -164,6 +152,7 @@ void TernarySimulator::simulate(int maxSteps) {
 
     while (m_step < maxSteps) {
         if (m_step > 0) {
+            initStepValues();
             // set latches
             for (int latch_id : m_circuitGraph->modelLatches) {
                 int next_id = m_circuitGraph->latchNextMap[latch_id];
@@ -191,8 +180,6 @@ void TernarySimulator::simulate(int maxSteps) {
             break;
         }
         m_step++;
-        m_values.emplace_back();
-        m_values.back()[m_circuitGraph->trueId] = t_True;
     }
 }
 
@@ -219,8 +206,7 @@ void TernarySimulator::simulateRandom(int maxSteps) {
 
     while (m_step < maxSteps) {
         if (m_step > 0) {
-            m_values.emplace_back();
-            m_values.back()[m_circuitGraph->trueId] = t_True;
+            initStepValues();
             // set latches
             for (int latch_id : m_circuitGraph->modelLatches) {
                 int next_id = m_circuitGraph->latchNextMap[latch_id];
@@ -242,7 +228,7 @@ void TernarySimulator::simulateRandom(int maxSteps) {
 
 
 void TernarySimulator::pushState(int step, vector<int> &state) {
-    unordered_map<int, tbool> &vmap = m_values[step];
+    vector<tbool> &vmap = m_values[step];
 
     for (int latch_id : m_circuitGraph->modelLatches) {
         if (vmap[latch_id] == t_True)
@@ -256,7 +242,7 @@ void TernarySimulator::pushState(int step, vector<int> &state) {
 
 
 void TernarySimulator::pushGateState(int step, vector<int> &gatestate) {
-    unordered_map<int, tbool> &vmap = m_values[step];
+    vector<tbool> &vmap = m_values[step];
 
     for (int gate_id : m_circuitGraph->modelGates) {
         if (vmap[gate_id] == t_True)
@@ -281,7 +267,7 @@ bool TernarySimulator::reachCycle() {
 
 
 string TernarySimulator::stepValuesToString(int step) {
-    unordered_map<int, tbool> &vmap = m_values[step];
+    vector<tbool> &vmap = m_values[step];
     stringstream ss;
     // for (int input_id : m_circuitGraph->inputsCOI) {
     //     ss << toStr(vmap[input_id]);
