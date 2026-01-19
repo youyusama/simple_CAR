@@ -200,7 +200,6 @@ void Model::UpdateDependencyMap() {
         int g = m_circuitGraph->modelGates[i];
         for (int fanin : m_circuitGraph->gatesMap[g].fanins) {
             // dependency
-            assert(abs(fanin) <= g);
             m_dependencyVec[g].emplace_back(abs(fanin));
         }
     }
@@ -254,6 +253,8 @@ void Model::CollectClauses() {
     m_clauses.clear();
     m_clauses.reserve(m_circuitGraph->modelGates.size() * 3 + 1);
 
+    // true id first for the correctness of dag cnf simplifier,
+    // a more rubust way is needed in the future
     m_clauses.emplace_back(clause{m_equivalenceManager->Find(TrueId())});
 
     for (int g_id : m_circuitGraph->modelGates) {

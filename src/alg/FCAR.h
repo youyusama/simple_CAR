@@ -122,12 +122,6 @@ class FCAR : public BaseAlg {
 
     cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
 
-    const cube &TopDomain();
-
-    void GetAndPushDomain(const cube &c);
-
-    void PopDomain();
-
     CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_badId;

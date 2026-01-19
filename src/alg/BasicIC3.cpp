@@ -391,9 +391,9 @@ bool BasicIC3::InductionCheck(const cube &cb, const shared_ptr<SATSolver> &slv) 
     OrderAssumption(assumption);
     GetPrimed(assumption);
     if (m_settings.satSolveInDomain) {
-        slv->ResetTempDomain();
-        slv->SetTempDomainCOI(cb);
-        slv->SetTempDomainCOI(assumption);
+        cube d = assumption;
+        d.insert(d.end(), cb.begin(), cb.end());
+        slv->SetTempDomainCOI(d);
     }
     bool result = !slv->Solve(assumption);
     slv->ReleaseTempClause();
@@ -587,9 +587,7 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
         assumption.insert(assumption.begin(), predecessorState->inputs.begin(), predecessorState->inputs.end());
         // There exist some successors whose predecessors are the entire set. (All latches are determined solely by the inputs.)
         if (m_settings.satSolveInDomain) {
-            m_liftSolver->ResetTempDomain();
-            m_liftSolver->SetTempDomainCOI(primeLatches);
-            m_liftSolver->SetTempDomainCOI(assumption);
+            m_liftSolver->SetTempDomainCOI(succNegationClause);
         }
 
         bool result = m_liftSolver->Solve(assumption);
@@ -656,7 +654,6 @@ bool BasicIC3::UnreachabilityCheck(const cube &cb, const shared_ptr<SATSolver> &
     OrderAssumption(assumption);
     GetPrimed(assumption);
     if (m_settings.satSolveInDomain) {
-        slv->ResetTempDomain();
         slv->SetTempDomainCOI(assumption);
     }
     bool result = !slv->Solve(assumption);

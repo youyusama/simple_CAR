@@ -141,7 +141,7 @@ bool FCAR::Check(int badId) {
                 cube assumption(task.state->latches);
                 OrderAssumption(assumption);
                 GetPrimed(assumption);
-                if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
+                m_transSolvers[task.frameLevel]->SetTempDomainCOI(assumption);
                 bool result = IsReachable(task.frameLevel, assumption, "SAT_R_Main");
                 if (result) {
                     // Solver return SAT, get a new State, then continue
@@ -157,7 +157,6 @@ bool FCAR::Check(int badId) {
                     m_log.L(3, "Get State: ", CubeToStrShort(newState->latches));
                     m_log.L(3, "State Detail: ", CubeToStr(newState->latches));
                     workingStack.emplace(newState, task.frameLevel - 1);
-                    if (m_settings.satSolveInDomain) PopDomain();
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     m_log.L(2, "Result >>> UNSAT <<<");
@@ -171,7 +170,6 @@ bool FCAR::Check(int badId) {
                     if (m_settings.dt) task.state->HasUC();
                     task.frameLevel = PropagateUp(uc, task.frameLevel + 1);
                     m_log.L(3, "Frames: ", m_overSequence->FramesInfo());
-                    if (m_settings.satSolveInDomain) PopDomain();
                 }
             } // end while (!workingStack.empty())
             startState = EnumerateStartState();
@@ -237,8 +235,7 @@ void FCAR::Init(int badId) {
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
     m_liftSolver->AddTrans();
-    if (m_settings.satSolveInDomain)
-        m_liftSolver->SetDomainCOI(m_model.GetConstraints());
+    m_liftSolver->SetDomainCOI(m_model.GetConstraints());
     // s & T & c & P & T' & c' & bad'
     m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
     m_startSolver->AddTrans();
@@ -283,7 +280,7 @@ bool FCAR::ImmediateSatisfiable(int badId) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_ImmSAT");
     cube assumptions(m_initialState->latches);
     assumptions.push_back(badId);
-    if (m_settings.satSolveInDomain) m_transSolvers[0]->SetTempDomainCOI(assumptions);
+    m_transSolvers[0]->SetTempDomainCOI(assumptions);
     bool result;
     {
         [[maybe_unused]] auto satScope = m_log.Section("SAT_Imm");
@@ -441,10 +438,7 @@ void FCAR::GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t) {
     }
     for (auto cons : m_model.GetConstraints()) cls.push_back(-cons);
     m_liftSolver->AddTempClause(cls);
-    if (m_settings.satSolveInDomain) {
-        m_liftSolver->ResetTempDomain();
-        m_liftSolver->SetTempDomain(TopDomain());
-    }
+    m_liftSolver->SetTempDomainCOI(cls);
 
     while (true) {
         cube assumption;
@@ -495,7 +489,7 @@ bool FCAR::Generalize(cube &uc, int frame_lvl, int rec_lvl) {
     if (m_settings.satSolveInDomain) {
         cube puc(uc);
         GetPrimed(puc);
-        GetAndPushDomain(puc);
+        m_transSolvers[frame_lvl]->SetTempDomainCOI(puc);
     }
     setupScope = m_log.Section("FC_Gen_Loop");
     for (int i = uc.size() - 1; i >= 0; i--) {
@@ -515,7 +509,6 @@ bool FCAR::Generalize(cube &uc, int frame_lvl, int rec_lvl) {
         }
     }
     setupScope = m_log.Section("FC_Gen_Post");
-    if (m_settings.satSolveInDomain) PopDomain();
     sort(uc.begin(), uc.end(), cmp);
     if (uc.size() > uc_blocker.size() && frame_lvl != 0) {
         return false;
@@ -544,20 +537,25 @@ bool FCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
         } else if (rec_lvl > m_settings.ctgMaxRecursionDepth) {
             return false;
         } else {
+            [[maybe_unused]] auto ctgScope = m_log.Section("FC_Dn_CTG");
             auto p = GetInputAndState(frame_lvl);
             GeneralizePredecessor(p, p_ucs);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
             if (DownHasFailed(cts->latches, failed_ctses)) return false;
-            // int cts_lvl = GetNewLevel(cts);
+
             int cts_lvl = frame_lvl - 1;
+            if (ctgs >= m_settings.ctgMaxStates || cts_lvl < 0) {
+                failed_ctses.emplace_back(cts->latches);
+                return false;
+            }
+
+            // F_i-1 & T & cts'
+            m_log.L(3, "Try ctg:", CubeToStr(cts->latches));
             cube cts_ass(cts->latches);
             OrderAssumption(cts_ass);
             GetPrimed(cts_ass);
-            if (m_settings.satSolveInDomain) GetAndPushDomain(cts_ass);
-            // F_i-1 & T & cts'
-            m_log.L(3, "Try ctg:", CubeToStr(cts->latches));
-            [[maybe_unused]] auto ctgScope = m_log.Section("FC_Dn_CTG");
-            if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 && !IsReachable(cts_lvl, cts_ass, "SAT_R_CTG")) {
+            m_transSolvers[cts_lvl]->SetTempDomainCOI(cts_ass);
+            if (!IsReachable(cts_lvl, cts_ass, "SAT_R_CTG")) {
                 ctgs++;
                 auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
                 m_log.L(3, "CTG Get UC:", CubeToStr(uc_cts));
@@ -566,10 +564,8 @@ bool FCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
                 m_log.L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
                 AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
                 PropagateUp(uc_cts, cts_lvl + 1);
-                if (m_settings.satSolveInDomain) PopDomain();
             } else {
                 failed_ctses.emplace_back(cts->latches);
-                if (m_settings.satSolveInDomain) PopDomain();
                 return false;
             }
         }
@@ -594,14 +590,13 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
     m_log.L(3, "State Detail: ", CubeToStr(s->latches));
     cube assumption(s->latches);
     OrderAssumption(assumption);
-    if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
+    m_transSolvers[0]->SetTempDomain(assumption);
     bool result = IsReachable(0, assumption, "SAT_R_Init");
     if (result) {
         // Solver return SAT
         m_log.L(2, "Result >>> SAT <<<");
         auto p = m_transSolvers[0]->GetAssignment(false);
         s->latches = p.second;
-        if (m_settings.satSolveInDomain) PopDomain();
         return true;
     } else {
         // Solver return UNSAT, get uc, then continue
@@ -630,7 +625,6 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
         AddUnsatisfiableCore(uc, 0);
         PropagateUp(uc, 0);
         m_log.L(3, "Frames: ", m_overSequence->FramesInfo());
-        if (m_settings.satSolveInDomain) PopDomain();
         return false;
     }
 }
@@ -641,7 +635,7 @@ bool FCAR::Propagate(const cube &c, int lvl) {
     bool result;
     cube assumption(c);
     GetPrimed(assumption);
-    if (m_settings.satSolveInDomain) GetAndPushDomain(assumption);
+    m_transSolvers[lvl]->SetTempDomainCOI(assumption);
     if (!IsReachable(lvl, assumption, "SAT_R_Prop")) {
         auto uc = GetUnsatCore(lvl, c);
         AddUnsatisfiableCore(uc, lvl + 1);
@@ -649,7 +643,6 @@ bool FCAR::Propagate(const cube &c, int lvl) {
     } else {
         result = false;
     }
-    if (m_settings.satSolveInDomain) PopDomain();
     return result;
 }
 
@@ -668,10 +661,6 @@ int FCAR::PropagateUp(const cube &c, int lvl) {
 
 
 bool FCAR::IsReachable(int lvl, const cube &assumption, const string &label) {
-    if (m_settings.satSolveInDomain) {
-        m_transSolvers[lvl]->ResetTempDomain();
-        m_transSolvers[lvl]->SetTempDomain(TopDomain());
-    }
     [[maybe_unused]] auto scoped = m_log.Section(label);
     return m_transSolvers[lvl]->Solve(assumption);
 }
@@ -704,23 +693,6 @@ cube FCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumpti
             res.emplace_back(a);
     }
     return res;
-}
-
-
-const cube &FCAR::TopDomain() {
-    return m_domainStack.back();
-}
-
-
-void FCAR::GetAndPushDomain(const cube &c) {
-    [[maybe_unused]] auto scope = m_log.Section("FC_GetDom");
-    cube domain = m_model.GetCOIDomain(c);
-    m_domainStack.emplace_back(domain);
-}
-
-
-void FCAR::PopDomain() {
-    m_domainStack.pop_back();
 }
 
 
