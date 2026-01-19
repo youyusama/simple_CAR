@@ -736,14 +736,28 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     int a_prime = GetPrime(a);
     int b_prime = GetPrime(b);
 
-    m_equivalenceSolver->resetTempDomain();
+    {
+        std::vector<char> &dom = m_equivalenceSolver->domainSet();
+        std::fill(dom.begin(), dom.end(), 0);
+        m_equivalenceSolver->domainList().clear();
+    }
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a, -b}));
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a, b}));
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a_prime, b_prime}));
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a_prime, -b_prime}));
 
     cube d = GetCOIDomain(cube{abs(a), abs(b), abs(a_prime), abs(b_prime)});
-    m_equivalenceSolver->setTempDomain(d);
+    {
+        std::vector<char> &dom = m_equivalenceSolver->domainSet();
+        std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
+        for (auto v : d) {
+            while (v >= m_equivalenceSolver->nVars()) m_equivalenceSolver->newVar();
+            if (!dom[v]) {
+                dom[v] = 1;
+                list.push_back(v);
+            }
+        }
+    }
 
     minicore::lbool res = m_equivalenceSolver->solve();
     bool unsat = (res == minicore::l_False);
@@ -778,12 +792,26 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
     // !(a <-> b) is unsat
     // ((a & !b) | (b & !a))
     // (a | b) & (!a | !b)
-    m_equivalenceSolver->resetTempDomain();
+    {
+        std::vector<char> &dom = m_equivalenceSolver->domainSet();
+        std::fill(dom.begin(), dom.end(), 0);
+        m_equivalenceSolver->domainList().clear();
+    }
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a, b}));
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a, -b}));
 
     cube d = GetCOIDomain(cube{abs(a), abs(b)});
-    m_equivalenceSolver->setTempDomain(d);
+    {
+        std::vector<char> &dom = m_equivalenceSolver->domainSet();
+        std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
+        for (auto v : d) {
+            while (v >= m_equivalenceSolver->nVars()) m_equivalenceSolver->newVar();
+            if (!dom[v]) {
+                dom[v] = 1;
+                list.push_back(v);
+            }
+        }
+    }
 
     minicore::lbool res = m_equivalenceSolver->solve();
     bool unsat = (res == minicore::l_False);

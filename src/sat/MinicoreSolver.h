@@ -36,11 +36,6 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     void PushAssumption(int a) override;
     int PopAssumption() override;
 
-    inline void SetSolveInDomain() override;
-    inline void SetDomain(const cube &domain) override;
-    inline void SetTempDomain(const cube &domain) override;
-    inline void ResetTempDomain() override;
-
   protected:
     inline int GetLiteralId(const minicore::Lit &l);
     inline minicore::Lit GetLit(int id) {

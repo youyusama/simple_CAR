@@ -37,12 +37,6 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     void PushAssumption(int a) override;
     int PopAssumption() override;
 
-    // not available
-    inline void SetSolveInDomain() override {}
-    inline void SetDomain(const cube &domain) override {}
-    inline void SetTempDomain(const cube &domain) override {}
-    inline void ResetTempDomain() override {}
-
   protected:
     inline int GetLiteralId(const Minisat::Lit &l);
     inline Minisat::Lit GetLit(int id) {

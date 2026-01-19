@@ -42,12 +42,6 @@ class KissatSolver : public ISolver {
     void PushAssumption(int a) override {}
     int PopAssumption() override { return 0; }
 
-    // not available
-    inline void SetSolveInDomain() override {}
-    inline void SetDomain(const cube &domain) override {}
-    inline void SetTempDomain(const cube &domain) override {}
-    inline void ResetTempDomain() override {}
-
   protected:
     /*
       inline int GetLiteralId(const Lit &l);

@@ -42,13 +42,13 @@ class Solver {
 
     bool addTempClause(const std::vector<Lit> &ps); // Add a temp clause that only effects next solve
     bool solve_in_domain;                           // Deciside in domain.
+    void setSolveInDomain(bool in_domain);          // Set decide in domain.
 
     // Incremental modelchecking decision domain:
     //
     bool inDomain(Var x) const;
-    void setDomain(const std::vector<Var> dvars);
-    void setTempDomain(const std::vector<Var> dvars);
-    void resetTempDomain();
+    std::vector<char> &domainSet();
+    std::vector<Var> &domainList();
 
     // Solving:
     //
@@ -124,11 +124,9 @@ class Solver {
     std::vector<VarData> vardata; // Stores reason and level for each variable.
     OccLists watches;             // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
 
-    bool solve_in_domain_runtime_flag;  // Decide in domain in runtime.
-    std::vector<char> permanent_domain; // A variable is a decision variable in all queries.
-    std::vector<char> temporary_domain; // A variable is a decision variable in the next query.
-    std::vector<Var> permanent_domain_list;
-    std::vector<Var> temporary_domain_list;
+    bool solve_in_domain_runtime_flag; // Decide in domain in runtime.
+    std::vector<char> domain_set;
+    std::vector<Var> domain_list;
 
     int restart_limit; // The restart limit.
 
@@ -305,31 +303,13 @@ inline void Solver::setRestartLimit(int limit) { restart_limit = limit; }
 
 inline bool Solver::okay() const { return ok; }
 
-inline bool Solver::inDomain(Var x) const { return !solve_in_domain_runtime_flag || permanent_domain[x] || temporary_domain[x]; }
+inline void Solver::setSolveInDomain(bool in_domain) { solve_in_domain = in_domain; }
 
-inline void Solver::setDomain(const std::vector<Var> dvars) {
-    for (Var x : dvars) {
-        if (x < nVars() && !permanent_domain[x]) {
-            permanent_domain[x] = 1;
-            permanent_domain_list.push_back(x);
-        }
-    }
-}
+inline bool Solver::inDomain(Var x) const { return !solve_in_domain_runtime_flag || domain_set[x]; }
 
-inline void Solver::setTempDomain(const std::vector<Var> dvars) {
-    for (Var x : dvars)
-        if (x < nVars() && !temporary_domain[x]) {
-            temporary_domain[x] = 1;
-            if (!permanent_domain[x]) {
-                temporary_domain_list.push_back(x);
-            }
-        }
-}
+inline std::vector<char> &Solver::domainSet() { return domain_set; }
 
-inline void Solver::resetTempDomain() {
-    std::fill(temporary_domain.begin(), temporary_domain.end(), 0);
-    temporary_domain_list.clear();
-}
+inline std::vector<Var> &Solver::domainList() { return domain_list; }
 
 inline bool Solver::restartInLimit(int current_restarts) const { return restart_limit == -1 || current_restarts < restart_limit; }
 

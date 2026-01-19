@@ -36,12 +36,6 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     void PushAssumption(int a) override;
     int PopAssumption() override;
 
-    // not available
-    inline void SetSolveInDomain() override {}
-    inline void SetDomain(const cube &domain) override {}
-    inline void SetTempDomain(const cube &domain) override {}
-    inline void ResetTempDomain() override {}
-
   protected:
     Model &m_model;
     int m_maxId;

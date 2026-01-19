@@ -138,29 +138,4 @@ int MinicoreSolver::PopAssumption() {
     return GetLiteralId(p);
 }
 
-
-inline void MinicoreSolver::SetSolveInDomain() {
-    solve_in_domain = true;
-}
-
-
-inline void MinicoreSolver::SetDomain(const cube &domain) {
-    std::vector<minicore::Var> d;
-    for (auto v : domain) d.emplace_back(v);
-    setDomain(d);
-}
-
-
-inline void MinicoreSolver::SetTempDomain(const cube &domain) {
-    std::vector<minicore::Var> d;
-    for (auto v : domain) d.emplace_back(v);
-    setTempDomain(d);
-}
-
-
-inline void MinicoreSolver::ResetTempDomain() {
-    resetTempDomain();
-}
-
-
 } // namespace car

@@ -15,104 +15,76 @@
 
 namespace car {
 
-class SATSolver : public ISolver {
+class SATSolver {
   public:
     SATSolver(Model &model, MCSATSolver slv_kind);
     ~SATSolver() {}
 
     // general SAT interface
-    void AddClause(const cube &cls) override {
+    void AddClause(const cube &cls) {
         m_slv->AddClause(cls);
     }
 
-    void AddAssumption(const cube &assumption) override {
+    void AddAssumption(const cube &assumption) {
         m_slv->AddAssumption(assumption);
     }
 
-    bool Solve() override {
+    bool Solve() {
         return m_slv->Solve();
     }
 
-    bool Solve(const cube &assumption) override {
+    bool Solve(const cube &assumption) {
         return m_slv->Solve(assumption);
     }
 
-    pair<cube, cube> GetAssignment(bool prime) override {
+    pair<cube, cube> GetAssignment(bool prime) {
         return m_slv->GetAssignment(prime);
     }
 
-    unordered_set<int> GetConflict() override {
+    unordered_set<int> GetConflict() {
         return m_slv->GetConflict();
     }
 
-    int GetNewVar() override {
+    int GetNewVar() {
         return m_slv->GetNewVar();
     }
 
-    void AddTempClause(const cube &cls) override {
+    void AddTempClause(const cube &cls) {
         m_slv->AddTempClause(cls);
     }
 
-    void ReleaseTempClause() override {
+    void ReleaseTempClause() {
         m_slv->ReleaseTempClause();
     }
 
-    tbool GetModel(int id) override {
+    tbool GetModel(int id) {
         return m_slv->GetModel(id);
     }
 
-    void ClearAssumption() override {
+    void ClearAssumption() {
         m_slv->ClearAssumption();
     }
 
-    void PushAssumption(int a) override {
+    void PushAssumption(int a) {
         m_slv->PushAssumption(a);
     }
 
-    int PopAssumption() override {
+    int PopAssumption() {
         return m_slv->PopAssumption();
     }
 
     // special interface in minicore
-    void SetSolveInDomain() override {
-        m_solveInDomain = true;
-        if (m_slvKind != MCSATSolver::minicore) return;
-        m_slv->SetSolveInDomain();
-    }
+    void SetSolveInDomain();
 
+    void SetDomain(const cube &domain);
 
-    void SetDomain(const cube &domain) override {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        cube d;
-        d.reserve(domain.size());
-        for (int v : domain) d.emplace_back(abs(v));
-        m_slv->SetDomain(d);
-    }
+    void SetTempDomain(const cube &domain);
 
-    void SetTempDomain(const cube &domain) override {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        cube d;
-        d.reserve(domain.size());
-        for (int v : domain) d.emplace_back(abs(v));
-        m_slv->SetTempDomain(d);
-    }
+    void ResetTempDomain();
 
-    void ResetTempDomain() override {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        m_slv->ResetTempDomain();
-    }
+    void SetDomainCOI(const cube &c);
 
-    void SetDomainCOI(const cube &c) {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        cube domain = m_model.GetCOIDomain(c);
-        SetDomain(domain);
-    }
-
-    void SetTempDomainCOI(const cube &c) {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        cube domain = m_model.GetCOIDomain(c);
-        SetTempDomain(domain);
-    }
+    void SetTempDomainCOI(const cube &c);
 
     // SAT interface for IC3/CAR
     void AddTrans();
@@ -155,6 +127,17 @@ class SATSolver : public ISolver {
         }
         return m_frameFlags[lvl];
     }
+
+  private:
+    shared_ptr<MinicoreSolver> GetMinicoreSolver() const;
+    void EnsureCapacity(shared_ptr<MinicoreSolver> solver);
+    void AddPermanentVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi);
+    void AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi);
+    void ResetTemporaryVars(shared_ptr<MinicoreSolver> solver);
+
+    int m_true_id;
+    size_t m_domain_fixed;
+    vector<int> m_domain_pos;
 };
 
 } // namespace car

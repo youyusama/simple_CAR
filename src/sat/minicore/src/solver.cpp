@@ -31,6 +31,8 @@ Solver::Solver() : // Parameters (user settable):
                    solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1.0), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), simpDB_clauses(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1), state_(SolverState::Ready), last_result_(l_Undef) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
+    domain_set[temp_cls_act_var] = 1;
+    domain_list.push_back(temp_cls_act_var);
 }
 
 void Solver::reset() {
@@ -49,19 +51,19 @@ void Solver::reset() {
     }
 
     // clean temprary learnts
-    if (temp_cls_activated) {
+    if (temp_cls_activated || solve_in_domain) {
         // unit
         while (trail.size() > traillim_snapshot) {
             Var x = var(trail.back());
             assigns[x] = l_Undef;
             polarity[x] = sign(trail.back());
-            insertVarOrder(x);
             trail.pop_back();
         }
         qhead = trail.size();
+    }
+    if (temp_cls_activated) {
         // temp clause
         temp_cls_activated = false;
-        temporary_domain[temp_cls_act_var] = 0;
         removeTempLearnt();
     }
 
@@ -91,8 +93,7 @@ Var Solver::newVar() {
         polarity.resize(alloced_var, true);
         order_list.resize(alloced_var);
         trail.reserve(alloced_var);
-        permanent_domain.resize(alloced_var, 0);
-        temporary_domain.resize(alloced_var, 0);
+        domain_set.resize(alloced_var, 0);
     }
     dec_vars++;
     order_list.init_var(v);
@@ -135,7 +136,6 @@ bool Solver::addTempClause(const std::vector<Lit> &cls) {
     assert(decisionLevel() == 0);
     if (!ok) return false;
     temp_cls_activated = true;
-    temporary_domain[temp_cls_act_var] = 1;
 
     std::vector<Lit> temp_cls;
     temp_cls.emplace_back(mkLit(temp_cls_act_var, true));
@@ -864,15 +864,8 @@ lbool Solver::solve_() {
         solve_in_domain_runtime_flag = true;
 
     if (solve_in_domain) {
-        for (Var v : permanent_domain_list) {
+        for (Var v : domain_list) {
             insertVarOrder(v);
-        }
-        for (Var v : temporary_domain_list) {
-            insertVarOrder(v);
-        }
-        if (temp_cls_activated && !permanent_domain[temp_cls_act_var] &&
-            !temporary_domain[temp_cls_act_var]) {
-            insertVarOrder(temp_cls_act_var);
         }
     } else {
         for (int i = 0; i < nVars(); i++) {
@@ -880,7 +873,7 @@ lbool Solver::solve_() {
         }
     }
 
-    if (temp_cls_activated) {
+    if (temp_cls_activated || solve_in_domain) {
         traillim_snapshot = trail.size();
     }
 

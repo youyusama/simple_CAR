@@ -207,6 +207,10 @@ class Model {
 
     cube GetCOIDomain(const cube &c);
 
+    const vector<vector<int>> &GetDependencyVec() const { return m_dependencyVec; }
+
+    int TrueEquivId() { return abs(m_equivalenceManager->Find(TrueId())); }
+
     const unordered_map<int, int> &GetEquivalenceMap() const {
         return m_equivalenceManager->GetEquivalenceMap();
     }

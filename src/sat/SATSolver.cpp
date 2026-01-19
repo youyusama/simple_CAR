@@ -1,4 +1,5 @@
 #include "SATSolver.h"
+#include <algorithm>
 
 namespace car {
 
@@ -28,6 +29,170 @@ SATSolver::SATSolver(Model &model, MCSATSolver slv_kind)
     }
 
     m_solveInDomain = false;
+}
+
+shared_ptr<MinicoreSolver> SATSolver::GetMinicoreSolver() const {
+    if (m_slvKind != MCSATSolver::minicore) return nullptr;
+    return static_pointer_cast<MinicoreSolver>(m_slv);
+}
+
+void SATSolver::SetSolveInDomain() {
+    m_solveInDomain = true;
+    auto slv = GetMinicoreSolver();
+    if (slv == nullptr) return;
+    slv->setSolveInDomain(true);
+    m_true_id = m_model.TrueEquivId();
+    m_domain_fixed = 1;
+}
+
+void SATSolver::EnsureCapacity(shared_ptr<MinicoreSolver> solver) {
+    if (!solver) return;
+    auto size_needed = solver->domainSet().size();
+    if (m_domain_pos.size() < size_needed)
+        m_domain_pos.resize(size_needed, -1);
+}
+
+void SATSolver::AddPermanentVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi) {
+    if (!solver) return;
+    std::vector<char> &domain = solver->domainSet();
+    std::vector<minicore::Var> &list = solver->domainList();
+    auto &dep_map = m_model.GetDependencyVec();
+    EnsureCapacity(solver);
+
+    vector<int> work_stack;
+    work_stack.emplace_back(abs(m_true_id));
+    for (int v : vars) {
+        int a = abs(v);
+        work_stack.emplace_back(abs(v));
+    }
+
+    while (!work_stack.empty()) {
+        int cur = work_stack.back();
+        work_stack.pop_back();
+
+        // cur is already in the domain
+        bool in_dom = domain[cur];
+        bool is_permanent = false;
+
+        if (!in_dom) {
+            domain[cur] = 1;
+            list.push_back(cur);
+            int new_idx = static_cast<int>(list.size() - 1);
+            m_domain_pos[cur] = new_idx;
+            if (m_domain_fixed < list.size() - 1) {
+                int swap_var = list[m_domain_fixed];
+                std::swap(list[m_domain_fixed], list.back());
+                m_domain_pos[cur] = static_cast<int>(m_domain_fixed);
+                m_domain_pos[swap_var] = new_idx;
+            }
+            m_domain_fixed++;
+        } else {
+            int idx = m_domain_pos[cur];
+            if (static_cast<size_t>(idx) >= m_domain_fixed) {
+                int swap_var = list[m_domain_fixed];
+                std::swap(list[m_domain_fixed], list[idx]);
+                m_domain_pos[cur] = static_cast<int>(m_domain_fixed);
+                m_domain_pos[swap_var] = idx;
+                m_domain_fixed++;
+            } else {
+                is_permanent = true;
+            }
+        }
+
+        if (use_coi) {
+            if (in_dom && is_permanent) continue;
+
+            auto &coi_vec = dep_map[cur];
+            for (int d : coi_vec) {
+                work_stack.emplace_back(d);
+            }
+        }
+    }
+}
+
+void SATSolver::AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi) {
+    if (!solver) return;
+    std::vector<char> &domain = solver->domainSet();
+    std::vector<minicore::Var> &list = solver->domainList();
+    auto &dep_map = m_model.GetDependencyVec();
+    EnsureCapacity(solver);
+
+    vector<int> work_stack;
+    work_stack.emplace_back(abs(m_true_id));
+    for (int v : vars) {
+        int a = abs(v);
+        work_stack.emplace_back(abs(v));
+    }
+
+    while (!work_stack.empty()) {
+        int cur = work_stack.back();
+        work_stack.pop_back();
+
+        bool in_dom = domain[cur];
+
+        if (!in_dom) {
+            domain[cur] = 1;
+            list.push_back(cur);
+            m_domain_pos[cur] = static_cast<int>(list.size() - 1);
+        }
+
+        if (use_coi) {
+            if (in_dom) continue;
+
+            auto &coi_vec = dep_map[cur];
+            for (int d : coi_vec) {
+                work_stack.emplace_back(d);
+            }
+        }
+    }
+}
+
+void SATSolver::ResetTemporaryVars(shared_ptr<MinicoreSolver> solver) {
+    if (!solver) return;
+    std::vector<char> &domain = solver->domainSet();
+    std::vector<minicore::Var> &list = solver->domainList();
+
+    for (size_t i = m_domain_fixed; i < list.size(); ++i) {
+        int v = list[i];
+        domain[v] = 0;
+        m_domain_pos[v] = -1;
+    }
+    list.resize(m_domain_fixed);
+}
+
+void SATSolver::SetDomain(const cube &domain) {
+    if (!m_solveInDomain) return;
+    auto slv = GetMinicoreSolver();
+    if (!slv) return;
+    AddPermanentVars(slv, domain, false);
+}
+
+void SATSolver::SetTempDomain(const cube &domain) {
+    if (!m_solveInDomain) return;
+    auto slv = GetMinicoreSolver();
+    if (!slv) return;
+    AddTemporaryVars(slv, domain, false);
+}
+
+void SATSolver::ResetTempDomain() {
+    if (!m_solveInDomain) return;
+    auto slv = GetMinicoreSolver();
+    if (!slv) return;
+    ResetTemporaryVars(slv);
+}
+
+void SATSolver::SetDomainCOI(const cube &c) {
+    if (!m_solveInDomain) return;
+    auto slv = GetMinicoreSolver();
+    if (!slv) return;
+    AddPermanentVars(slv, c, true);
+}
+
+void SATSolver::SetTempDomainCOI(const cube &c) {
+    if (!m_solveInDomain) return;
+    auto slv = GetMinicoreSolver();
+    if (!slv) return;
+    AddTemporaryVars(slv, c, true);
 }
 
 
