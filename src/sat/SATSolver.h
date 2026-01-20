@@ -29,13 +29,8 @@ class SATSolver {
         m_slv->AddAssumption(assumption);
     }
 
-    bool Solve() {
-        return m_slv->Solve();
-    }
-
-    bool Solve(const cube &assumption) {
-        return m_slv->Solve(assumption);
-    }
+    bool Solve();
+    bool Solve(const cube &assumption);
 
     pair<cube, cube> GetAssignment(bool prime) {
         return m_slv->GetAssignment(prime);
@@ -130,14 +125,12 @@ class SATSolver {
 
   private:
     shared_ptr<MinicoreSolver> GetMinicoreSolver() const;
-    void EnsureCapacity(shared_ptr<MinicoreSolver> solver);
     void AddPermanentVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi);
     void AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi);
     void ResetTemporaryVars(shared_ptr<MinicoreSolver> solver);
 
     int m_true_id;
     size_t m_domain_fixed;
-    vector<int> m_domain_pos;
 };
 
 } // namespace car

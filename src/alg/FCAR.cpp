@@ -486,11 +486,6 @@ bool FCAR::Generalize(cube &uc, int frame_lvl, int rec_lvl) {
         for (auto b : uc_blocker) required_lits.emplace(b);
     vector<cube> failed_ctses;
     OrderAssumption(uc);
-    if (m_settings.satSolveInDomain) {
-        cube puc(uc);
-        GetPrimed(puc);
-        m_transSolvers[frame_lvl]->SetTempDomainCOI(puc);
-    }
     setupScope = m_log.Section("FC_Gen_Loop");
     for (int i = uc.size() - 1; i >= 0; i--) {
         if (uc.size() < 2) break;
@@ -527,6 +522,7 @@ bool FCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
     shared_ptr<State> p_ucs(new State(nullptr, cube(), uc, 0));
     downSetup = m_log.Section("FC_Dn_Loop");
     while (true) {
+        m_transSolvers[frame_lvl]->SetTempDomainCOI(assumption);
         // F_i & T & temp_uc'
         if (!IsReachable(frame_lvl, assumption, "SAT_R_Down")) {
             sort(uc.begin(), uc.end(), cmp);

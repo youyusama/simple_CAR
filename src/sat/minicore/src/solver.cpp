@@ -1,7 +1,5 @@
 #include "solver.h"
-
 using namespace minicore;
-
 
 Solver::Solver() : // Parameters (user settable):
                    //
