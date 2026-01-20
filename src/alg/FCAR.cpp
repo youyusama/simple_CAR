@@ -236,18 +236,36 @@ void FCAR::Init(int badId) {
     if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
     m_liftSolver->AddTrans();
     m_liftSolver->SetDomainCOI(m_model.GetConstraints());
-    // s & T & c & P & T' & c' & bad'
-    m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
-    m_startSolver->AddTrans();
-    m_startSolver->AddTransK(1);
-    m_startSolver->AddBadk(1);
-    m_startSolver->AddProperty();
-    m_startSolver->AddConstraints();
-    m_startSolver->AddConstraintsK(1);
-    // bad predecessor lift
-    m_badPredLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
-    m_badPredLiftSolver->AddTrans();
-    m_badPredLiftSolver->AddTransK(1);
+
+    if (m_settings.searchFromBadPred) {
+        // s & T & c & P & T' & c' & bad'
+        m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+        m_startSolver->AddTrans();
+        m_startSolver->AddConstraints();
+        m_startSolver->AddTransK(1);
+        m_startSolver->AddBadk(1);
+        m_startSolver->AddProperty();
+        m_startSolver->AddConstraintsK(1);
+        // bad predecessor lift
+        m_badLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+        m_badLiftSolver->AddTrans();
+        m_badLiftSolver->AddTransK(1);
+    } else {
+        // s & c & bad
+        m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+        if (m_settings.satSolveInDomain) m_startSolver->SetSolveInDomain();
+        m_startSolver->AddTrans();
+        m_startSolver->AddConstraints();
+        m_startSolver->AddBad();
+        m_startSolver->SetDomainCOI(m_model.GetConstraints());
+        m_startSolver->SetDomainCOI({m_model.GetBad()});
+        // bad lift
+        m_badLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+        if (m_settings.satSolveInDomain) m_badLiftSolver->SetSolveInDomain();
+        m_badLiftSolver->AddTrans();
+        m_badLiftSolver->SetDomainCOI(m_model.GetConstraints());
+        m_badLiftSolver->SetDomainCOI({m_model.GetBad()});
+    }
 
     m_restart.reset(new Restart(m_settings));
 }
@@ -300,62 +318,104 @@ shared_ptr<State> FCAR::EnumerateStartState() {
     if (sat) {
         auto p = m_startSolver->GetAssignment(false);
 
-        cube inputs_prime;
-        for (int i : m_model.GetPropertyCOIInputs()) {
-            int i_p = m_model.GetPrimeK(i, 1);
-            if (m_startSolver->GetModel(i_p) == t_True)
-                inputs_prime.push_back(i_p);
-            else if (m_startSolver->GetModel(i_p) == t_False)
-                inputs_prime.push_back(-i_p);
-        }
-
-        // (p) & input & T & input' & T' -> (bad' & c' & c)
-        // (p) & input & T & input' & T' & (!bad' | !c' | !c) is unsat
-        cube partial_latch = p.second;
-
-        // (!bad' | !c' | !c)
-        clause cls;
-        cls.push_back(-m_model.GetPrimeK(m_badId, 1));
-        for (auto cons : m_model.GetConstraints())
-            cls.push_back(-m_model.GetPrimeK(cons, 1));
-        for (auto cons : m_model.GetConstraints())
-            cls.push_back(-cons);
-        m_badPredLiftSolver->AddTempClause(cls);
-
-        while (true) {
-            cube assumption;
-            copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
-            OrderAssumption(assumption);
-            copy(p.first.begin(), p.first.end(), back_inserter(assumption));
-            copy(inputs_prime.begin(), inputs_prime.end(), back_inserter(assumption));
-
-            bool res;
-            {
-                [[maybe_unused]] auto satBadPred = m_log.Section("SAT_BadLift");
-                res = m_badPredLiftSolver->Solve(assumption);
+        if (m_settings.searchFromBadPred) {
+            // start state is the predecessor of a bad state
+            cube inputs_prime;
+            for (int i : m_model.GetPropertyCOIInputs()) {
+                int i_p = m_model.GetPrimeK(i, 1);
+                if (m_startSolver->GetModel(i_p) == t_True)
+                    inputs_prime.push_back(i_p);
+                else if (m_startSolver->GetModel(i_p) == t_False)
+                    inputs_prime.push_back(-i_p);
             }
-            assert(!res);
-            cube temp_p = GetUnsatAssumption(m_badPredLiftSolver, partial_latch);
-            if (temp_p.size() >= partial_latch.size())
-                break;
-            else {
-                partial_latch.swap(temp_p);
-            }
-        }
-        m_badPredLiftSolver->ReleaseTempClause();
-        p.second = partial_latch;
 
-        cube inputs_bad;
-        for (int i : m_model.GetPropertyCOIInputs()) {
-            int i_p = m_model.GetPrimeK(i, 1);
-            if (m_startSolver->GetModel(i_p) == t_True)
-                inputs_bad.push_back(i);
-            else if (m_startSolver->GetModel(i_p) == t_False)
-                inputs_bad.push_back(-i);
+            // (p) & input & T & input' & T' -> (bad' & c' & c)
+            // (p) & input & T & input' & T' & (!bad' | !c' | !c) is unsat
+            cube partial_latch = p.second;
+
+            // (!bad' | !c' | !c)
+            clause cls;
+            cls.push_back(-m_model.GetPrimeK(m_badId, 1));
+            for (auto cons : m_model.GetConstraints())
+                cls.push_back(-m_model.GetPrimeK(cons, 1));
+            for (auto cons : m_model.GetConstraints())
+                cls.push_back(-cons);
+            m_badLiftSolver->AddTempClause(cls);
+
+            while (true) {
+                cube assumption;
+                copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
+                OrderAssumption(assumption);
+                copy(p.first.begin(), p.first.end(), back_inserter(assumption));
+                copy(inputs_prime.begin(), inputs_prime.end(), back_inserter(assumption));
+
+                bool res;
+                {
+                    [[maybe_unused]] auto satBadPred = m_log.Section("SAT_BadLift");
+                    res = m_badLiftSolver->Solve(assumption);
+                }
+                assert(!res);
+                cube temp_p = GetUnsatAssumption(m_badLiftSolver, partial_latch);
+                if (temp_p.size() >= partial_latch.size())
+                    break;
+                else {
+                    partial_latch.swap(temp_p);
+                }
+            }
+            m_badLiftSolver->ReleaseTempClause();
+            p.second = partial_latch;
+
+            cube inputs_bad;
+            for (int i : m_model.GetPropertyCOIInputs()) {
+                int i_p = m_model.GetPrimeK(i, 1);
+                if (m_startSolver->GetModel(i_p) == t_True)
+                    inputs_bad.push_back(i);
+                else if (m_startSolver->GetModel(i_p) == t_False)
+                    inputs_bad.push_back(-i);
+            }
+            shared_ptr<State> badState(new State(nullptr, inputs_bad, cube(), 0));
+            shared_ptr<State> badPredState(new State(badState, p.first, p.second, 0));
+            return badPredState;
+        } else {
+            // start state is a bad state
+            // (p) -> (bad & c)
+            // (p) & (!bad | !c) is unsat
+            cube partial_latch = p.second;
+            m_log.L(3, "Bad State Latches Before Lifting: ", CubeToStr(partial_latch));
+
+            // (!bad | !c)
+            clause cls;
+            cls.push_back(-m_model.GetBad());
+            for (auto cons : m_model.GetConstraints())
+                cls.push_back(-cons);
+            m_badLiftSolver->AddTempClause(cls);
+            m_log.L(3, "lift assume: ", CubeToStr(cls));
+
+            while (true) {
+                cube assumption;
+                copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
+                OrderAssumption(assumption);
+                copy(p.first.begin(), p.first.end(), back_inserter(assumption));
+
+                bool res;
+                {
+                    [[maybe_unused]] auto satBadPred = m_log.Section("SAT_BadLift");
+                    res = m_badLiftSolver->Solve(assumption);
+                }
+                assert(!res);
+                cube temp_p = GetUnsatAssumption(m_badLiftSolver, partial_latch);
+                if (temp_p.size() >= partial_latch.size())
+                    break;
+                else {
+                    partial_latch.swap(temp_p);
+                }
+            }
+            m_badLiftSolver->ReleaseTempClause();
+            p.second = partial_latch;
+
+            shared_ptr<State> badState(new State(nullptr, p.first, p.second, 0));
+            return badState;
         }
-        shared_ptr<State> badState(new State(nullptr, inputs_bad, cube(), 0));
-        shared_ptr<State> badPredState(new State(badState, p.first, p.second, 0));
-        return badPredState;
     } else {
         return nullptr;
     }

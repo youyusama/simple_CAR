@@ -169,6 +169,19 @@ void SATSolver::SetTempDomainCOI(const cube &c) {
     AddTemporaryVars(slv, c, true);
 }
 
+cube SATSolver::GetDomain() {
+    if (!m_solveInDomain) return {};
+    auto slv = GetMinicoreSolver();
+    if (!slv) return {};
+    cube res;
+    std::vector<minicore::Var> &list = slv->domainList();
+    for (size_t i = 0; i < list.size(); ++i) {
+        if (i == m_domain_fixed) res.emplace_back(-1);
+        res.emplace_back(list[i]);
+    }
+    return res;
+}
+
 
 // ================================================================================
 // @brief: add transition relation to solver, & T

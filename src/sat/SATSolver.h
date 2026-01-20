@@ -81,6 +81,8 @@ class SATSolver {
 
     void SetTempDomainCOI(const cube &c);
 
+    cube GetDomain();
+
     // SAT interface for IC3/CAR
     void AddTrans();
 

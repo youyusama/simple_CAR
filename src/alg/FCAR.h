@@ -134,7 +134,7 @@ class FCAR : public BaseAlg {
     shared_ptr<State> m_initialState;
     vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_liftSolver;
-    shared_ptr<SATSolver> m_badPredLiftSolver;
+    shared_ptr<SATSolver> m_badLiftSolver;
     shared_ptr<SATSolver> m_invSolver;
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<Branching> m_branching;

@@ -88,6 +88,9 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("--eq_timeout", settings.eqTimeout, "equivalent variable checking timeout for random simulation (in seconds)")
         ->default_val(600);
 
+    app.add_flag("--bp", settings.searchFromBadPred, "search from bad predecessor")
+        ->default_val(false);
+
     try {
         app.parse(argc, argv);
         return true;

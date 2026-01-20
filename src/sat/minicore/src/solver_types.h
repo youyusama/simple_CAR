@@ -500,7 +500,6 @@ class DecisionBuckets {
 
     void init_var(Var v) {
         var_activity_[v] = 0.0;
-        insert(v);
     }
 
     void insert(Var v) {
