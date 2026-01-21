@@ -181,7 +181,7 @@ bool FCAR::Check(int badId) {
                 {
                     [[maybe_unused]] auto levelScope = m_log.Section("FC_GetNewLevel");
                     while (task.frameLevel < m_k &&
-                           m_overSequence->IsBlockedByFrameLazy(task.state->latches, task.frameLevel + 1)) {
+                           m_overSequence->IsBlockedByFrame(task.state->latches, task.frameLevel + 1)) {
                         task.frameLevel++;
                     }
                 }

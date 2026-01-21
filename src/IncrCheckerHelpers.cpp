@@ -89,12 +89,44 @@ bool OverSequenceSet::Imply(const cube &a, const cube &b) {
     return (includes(b.begin(), b.end(), a.begin(), a.end(), _cmp));
 }
 
+void OverSequenceSet::EnsureTmpLitCapacity(const cube &latches) {
+    int max_abs = 0;
+    for (int lit : latches) {
+        int a = abs(lit);
+        if (a > max_abs) max_abs = a;
+    }
+    if (max_abs <= m_tmpLitOffset) {
+        return;
+    }
+    m_tmpLitOffset = max_abs;
+    m_tmpLitFlags.assign(static_cast<size_t>(m_tmpLitOffset * 2 + 1), 0);
+    m_tmpLitList.clear();
+}
+
+void OverSequenceSet::TmpLitSetInsert(int lit) {
+    size_t idx = static_cast<size_t>(lit + m_tmpLitOffset);
+    if (!m_tmpLitFlags[idx]) {
+        m_tmpLitFlags[idx] = 1;
+        m_tmpLitList.emplace_back(idx);
+    }
+}
+
+bool OverSequenceSet::TmpLitSetHas(int lit) const {
+    size_t idx = static_cast<size_t>(lit + m_tmpLitOffset);
+    return m_tmpLitFlags[idx] != 0;
+}
+
+void OverSequenceSet::ClearTmpLitSet() {
+    for (size_t idx : m_tmpLitList) {
+        m_tmpLitFlags[idx] = 0;
+    }
+    m_tmpLitList.clear();
+}
+
 
 bool OverSequenceSet::Insert(const cube &uc, int index) {
     auto f = GetFrame(index);
     if (f->find(uc) != f->end()) return false;
-
-    m_blockSolver->AddUC(uc, index);
 
     f->emplace(uc);
     int &counter = m_insertCounter[index];
@@ -173,56 +205,57 @@ void OverSequenceSet::CleanupImplied(int frameLevel) {
 
 bool OverSequenceSet::IsBlockedByFrame(const cube &latches, int frameLevel) {
     auto f = GetFrame(frameLevel);
-    // by for checking
+    if (f->empty()) return false;
+
+    EnsureTmpLitCapacity(latches);
+    for (int lit : latches) {
+        TmpLitSetInsert(lit);
+    }
+
+    size_t latches_size = latches.size();
     for (const auto &uc : *f) {
-        if (Imply(uc, latches)) {
+        if (uc.size() > latches_size) continue;
+        bool subsumed = true;
+        for (int lit : uc) {
+            if (!TmpLitSetHas(lit)) {
+                subsumed = false;
+                break;
+            }
+        }
+        if (subsumed) {
+            ClearTmpLitSet();
             return true;
         }
     }
+    ClearTmpLitSet();
     return false;
-}
-
-
-bool OverSequenceSet::IsBlockedByFrameLazy(const cube &latches, int frameLevel) {
-    if (frameLevel >= m_sequence.size()) return false;
-
-    int &counter = m_blockCounter[frameLevel];
-    if (counter == -1) { // by sat
-        bool sat = m_blockSolver->SolveFrame(latches, frameLevel);
-        return !sat;
-    }
-
-    if (m_sequence[frameLevel]->size() > 3000) {
-        counter++;
-    }
-    // whether it's need to change the way of checking
-    if (counter > 1000) {
-        auto start_time = std::chrono::high_resolution_clock::now();
-        m_blockSolver->SolveFrame(latches, frameLevel);
-        auto sat_end = std::chrono::high_resolution_clock::now();
-        bool res = IsBlockedByFrame(latches, frameLevel);
-        auto for_end = std::chrono::high_resolution_clock::now();
-        auto sat_time = std::chrono::duration_cast<std::chrono::microseconds>(sat_end - start_time).count();
-        auto for_time = std::chrono::duration_cast<std::chrono::microseconds>(for_end - sat_end).count();
-        if (sat_time > for_time)
-            counter = 0;
-        else
-            counter = -1;
-        return res;
-    }
-
-    return IsBlockedByFrame(latches, frameLevel);
 }
 
 
 void OverSequenceSet::GetBlockers(const cube &latches, int framelevel, vector<cube> &b) {
     auto f = GetFrame(framelevel);
-    // by imply checking
+    if (f->empty()) return;
+
+    EnsureTmpLitCapacity(latches);
+    for (int lit : latches) {
+        TmpLitSetInsert(lit);
+    }
+
+    size_t latches_size = latches.size();
     for (const auto &uc : *f) {
-        if (Imply(uc, latches)) {
+        if (uc.size() > latches_size) continue;
+        bool subsumed = true;
+        for (int lit : uc) {
+            if (!TmpLitSetHas(lit)) {
+                subsumed = false;
+                break;
+            }
+        }
+        if (subsumed) {
             b.emplace_back(uc);
         }
     }
+    ClearTmpLitSet();
 }
 
 

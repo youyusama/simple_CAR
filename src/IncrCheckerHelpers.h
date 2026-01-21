@@ -7,6 +7,7 @@
 #include "Settings.h"
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <set>
 #include <string>
@@ -50,10 +51,11 @@ using frame = unordered_set<cube, CubeHash>;
 class OverSequenceSet {
   public:
     OverSequenceSet(Model &model) : m_model(model) {
-        m_blockSolver = make_shared<SATSolver>(model, MCSATSolver::minisat);
         m_invariantLevel = 0;
         m_blockCounter.emplace_back(0);
         m_insertCounter.emplace_back(0);
+        m_tmpLitOffset = m_model.NumVar();
+        m_tmpLitFlags.assign(static_cast<size_t>(m_tmpLitOffset * 2 + 1), 0);
     }
 
     void SetInvariantLevel(int lvl) { m_invariantLevel = lvl; }
@@ -65,8 +67,6 @@ class OverSequenceSet {
     shared_ptr<frame> GetFrame(int lvl);
 
     bool IsBlockedByFrame(const cube &latches, int frameLevel);
-
-    bool IsBlockedByFrameLazy(const cube &latches, int frameLevel);
 
     void GetBlockers(const cube &latches, int framelevel, vector<cube> &b);
 
@@ -84,12 +84,19 @@ class OverSequenceSet {
 
     bool Imply(const cube &a, const cube &b);
 
+    void EnsureTmpLitCapacity(const cube &latches);
+    void TmpLitSetInsert(int lit);
+    bool TmpLitSetHas(int lit) const;
+    void ClearTmpLitSet();
+
     Model &m_model;
     vector<shared_ptr<frame>> m_sequence;
-    shared_ptr<SATSolver> m_blockSolver;
     vector<int> m_blockCounter;
     vector<int> m_insertCounter;
     int m_invariantLevel;
+    vector<uint8_t> m_tmpLitFlags;
+    vector<size_t> m_tmpLitList;
+    int m_tmpLitOffset = 0;
     static constexpr int kCleanupThreshold = 128;
 };
 
