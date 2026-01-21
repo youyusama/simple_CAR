@@ -74,12 +74,12 @@ bool BCAR::Check(int badId) {
         if (m_settings.dt) { // Dynamic Traversal
             auto dtseq = m_underSequence.GetSeqDT();
             for (auto state : dtseq) {
-                workingStack.emplace(state, m_k - 1);
+                workingStack.emplace(state, m_k - 1, false);
             }
         } else { // from the shallow and the start
             for (int i = m_underSequence.size() - 1; i >= 0; i--) {
                 for (int j = m_underSequence[i].size() - 1; j >= 0; j--) {
-                    workingStack.emplace(m_underSequence[i][j], m_k - 1);
+                    workingStack.emplace(m_underSequence[i][j], m_k - 1, false);
                 }
             }
         }
@@ -92,7 +92,7 @@ bool BCAR::Check(int badId) {
         while (startState != nullptr) {
             m_log.L(2, "State from StartSolver: ", CubeToStrShort(startState->latches));
             m_log.L(3, "State Detail: ", CubeToStr(startState->latches));
-            workingStack.emplace(startState, m_k - 1);
+            workingStack.emplace(startState, m_k - 1, true);
 
             while (!workingStack.empty()) {
                 [[maybe_unused]] auto taskScope = m_log.Section("FC_Task");
@@ -107,18 +107,17 @@ bool BCAR::Check(int badId) {
                     continue;
                 }
 
-                {
-                    [[maybe_unused]] auto levelScope = m_log.Section("FC_GetNewLevel");
-                    while (task.frameLevel < m_k &&
-                           m_overSequence->IsBlockedByFrameLazy(task.state->latches, task.frameLevel + 1)) {
-                        task.frameLevel++;
-                    }
+                if (!task.isLocated) {
+                    task.frameLevel = GetNewLevel(task.state->latches, task.frameLevel + 1);
+                    m_log.L(3, "State get new Level ", task.frameLevel);
                 }
 
                 if (task.frameLevel >= m_k) {
                     workingStack.pop();
                     continue;
                 }
+
+                task.isLocated = false;
 
                 if (task.frameLevel == -1) {
                     if (CheckBad(task.state))
@@ -140,8 +139,8 @@ bool BCAR::Check(int badId) {
                     m_log.L(3, "Get state: ", CubeToStr(newState->latches));
                     m_underSequence.push(newState);
                     if (m_settings.dt) task.state->HasSucc();
-                    workingStack.emplace(newState, task.frameLevel - 1);
-                    continue;
+                    int newFrameLevel = GetNewLevel(newState->latches);
+                    workingStack.emplace(newState, newFrameLevel, true);
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     m_log.L(2, "Result >>> UNSAT <<<");
@@ -154,7 +153,6 @@ bool BCAR::Check(int badId) {
                     if (m_settings.dt) task.state->HasUC();
                     task.frameLevel = PropagateUp(uc, task.frameLevel + 1);
                     m_log.L(3, m_overSequence->FramesInfo());
-                    continue;
                 }
             }
             startState = EnumerateStartState();
@@ -332,6 +330,19 @@ void BCAR::OverSequenceRefine(int lvl) {
 }
 
 
+int BCAR::GetNewLevel(const cube &states, int start) {
+    [[maybe_unused]] auto scoped = m_log.Section("FC_GetNewLevel");
+
+    for (int i = start; i <= m_k; i++) {
+        if (!m_overSequence->IsBlockedByFrame(states, i)) {
+            return i - 1;
+        }
+    }
+
+    return m_k;
+}
+
+
 bool BCAR::IsInvariant(int frameLevel) {
     [[maybe_unused]] auto invScope = m_log.Section("FC_Invariant");
     shared_ptr<frame> frame_i = m_overSequence->GetFrame(frameLevel);
@@ -453,7 +464,7 @@ bool BCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
             auto p = GetInputAndState(frame_lvl);
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
             if (DownHasFailed(cts->latches, failed_ctses)) return false;
-            int cts_lvl = frame_lvl - 1;
+            int cts_lvl = GetNewLevel(cts->latches);
             cube cts_ass(cts->latches);
             OrderAssumption(cts_ass);
             // F_i-1 & T & cts'

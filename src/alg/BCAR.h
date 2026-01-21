@@ -31,6 +31,8 @@ class BCAR : public BaseAlg {
 
     bool ImmediateSatisfiable(int badId);
 
+    int GetNewLevel(const cube &states, int start = 0);
+
     bool IsInvariant(int frameLevel);
 
     struct LitOrder {

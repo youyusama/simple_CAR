@@ -94,6 +94,8 @@ class FCAR : public BaseAlg {
         }
     }
 
+    int GetNewLevel(const cube &states, int start = 0);
+
     void GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t);
 
     bool Generalize(cube &uc, int frame_lvl, int rec_lvl = 1);

@@ -134,10 +134,13 @@ struct State {
 
 struct Task {
   public:
-    Task(shared_ptr<State> inState, int inFrameLevel) : state(inState),
-                                                        frameLevel(inFrameLevel) {};
+    Task(shared_ptr<State> inState, int inFrameLevel, bool isLocated)
+        : state(inState),
+          frameLevel(inFrameLevel),
+          isLocated(isLocated) {};
     int frameLevel;
     shared_ptr<State> state;
+    bool isLocated;
 };
 
 

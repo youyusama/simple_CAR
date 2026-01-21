@@ -70,7 +70,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->default_val(false);
 
     app.add_option("--ctg_max_rec_lvl", settings.ctgMaxRecursionDepth, "CTG max recursion depth")
-        ->default_val(2);
+        ->default_val(1);
 
     app.add_option("--ctg_max_states", settings.ctgMaxStates, "CTG max states")
         ->default_val(3);
