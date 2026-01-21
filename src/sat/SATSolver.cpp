@@ -1,16 +1,7 @@
 #include "SATSolver.h"
 #include <algorithm>
-#include <chrono>
 
 namespace car {
-namespace {
-inline uint64_t nowNs() {
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(
-               std::chrono::steady_clock::now().time_since_epoch())
-        .count();
-}
-} // namespace
-
 SATSolver::SATSolver(Model &model, MCSATSolver slv_kind)
     : m_model(model), m_slvKind(slv_kind) {
 
@@ -40,101 +31,11 @@ SATSolver::SATSolver(Model &model, MCSATSolver slv_kind)
 }
 
 bool SATSolver::Solve() {
-    uint64_t prop_before = 0;
-    uint64_t domain_len = 0;
-    uint64_t pre_ns = 0;
-    uint64_t search_ns = 0;
-    uint64_t post_ns = 0;
-
-    auto slv = GetMinicoreSolver();
-    if (slv) {
-        prop_before = slv->propagations;
-        if (m_solveInDomain) {
-            domain_len = slv->domainList().size();
-        }
-    }
-
-    uint64_t start_ns = nowNs();
-    bool res = m_slv->Solve();
-    uint64_t elapsed_ns = nowNs() - start_ns;
-
-    uint64_t prop_delta = 0;
-    if (slv) {
-        prop_delta = slv->propagations - prop_before;
-        const auto &prof = slv->profileStats();
-        pre_ns = prof.solve_pre_ns;
-        search_ns = prof.solve_search_ns;
-        post_ns = prof.solve_post_ns;
-    }
-
-    m_lastSolve.domain = domain_len;
-    m_lastSolve.props = prop_delta;
-    m_lastSolve.time_ns = elapsed_ns;
-    m_lastSolve.domain_ns = m_pending_domain_ns;
-    m_lastSolve.pre_ns = pre_ns;
-    m_lastSolve.search_ns = search_ns;
-    m_lastSolve.post_ns = post_ns;
-
-    m_stats.calls++;
-    m_stats.sum_domain += domain_len;
-    m_stats.sum_props += prop_delta;
-    m_stats.sum_time_ns += elapsed_ns;
-    m_stats.sum_domain_ns += m_pending_domain_ns;
-    m_stats.sum_pre_ns += pre_ns;
-    m_stats.sum_search_ns += search_ns;
-    m_stats.sum_post_ns += post_ns;
-    m_pending_domain_ns = 0;
-
-    return res;
+    return m_slv->Solve();
 }
 
 bool SATSolver::Solve(const cube &assumption) {
-    uint64_t prop_before = 0;
-    uint64_t domain_len = 0;
-    uint64_t pre_ns = 0;
-    uint64_t search_ns = 0;
-    uint64_t post_ns = 0;
-
-    auto slv = GetMinicoreSolver();
-    if (slv) {
-        prop_before = slv->propagations;
-        if (m_solveInDomain) {
-            domain_len = slv->domainList().size();
-        }
-    }
-
-    uint64_t start_ns = nowNs();
-    bool res = m_slv->Solve(assumption);
-    uint64_t elapsed_ns = nowNs() - start_ns;
-
-    uint64_t prop_delta = 0;
-    if (slv) {
-        prop_delta = slv->propagations - prop_before;
-        const auto &prof = slv->profileStats();
-        pre_ns = prof.solve_pre_ns;
-        search_ns = prof.solve_search_ns;
-        post_ns = prof.solve_post_ns;
-    }
-
-    m_lastSolve.domain = domain_len;
-    m_lastSolve.props = prop_delta;
-    m_lastSolve.time_ns = elapsed_ns;
-    m_lastSolve.domain_ns = m_pending_domain_ns;
-    m_lastSolve.pre_ns = pre_ns;
-    m_lastSolve.search_ns = search_ns;
-    m_lastSolve.post_ns = post_ns;
-
-    m_stats.calls++;
-    m_stats.sum_domain += domain_len;
-    m_stats.sum_props += prop_delta;
-    m_stats.sum_time_ns += elapsed_ns;
-    m_stats.sum_domain_ns += m_pending_domain_ns;
-    m_stats.sum_pre_ns += pre_ns;
-    m_stats.sum_search_ns += search_ns;
-    m_stats.sum_post_ns += post_ns;
-    m_pending_domain_ns = 0;
-
-    return res;
+    return m_slv->Solve(assumption);
 }
 
 shared_ptr<MinicoreSolver> SATSolver::GetMinicoreSolver() const {
@@ -236,45 +137,35 @@ void SATSolver::SetDomain(const cube &domain) {
     if (!m_solveInDomain) return;
     auto slv = GetMinicoreSolver();
     if (!slv) return;
-    uint64_t start_ns = nowNs();
     AddPermanentVars(slv, domain, false);
-    m_pending_domain_ns += nowNs() - start_ns;
 }
 
 void SATSolver::SetTempDomain(const cube &domain) {
     if (!m_solveInDomain) return;
     auto slv = GetMinicoreSolver();
     if (!slv) return;
-    uint64_t start_ns = nowNs();
     AddTemporaryVars(slv, domain, false);
-    m_pending_domain_ns += nowNs() - start_ns;
 }
 
 void SATSolver::ResetTempDomain() {
     if (!m_solveInDomain) return;
     auto slv = GetMinicoreSolver();
     if (!slv) return;
-    uint64_t start_ns = nowNs();
     ResetTemporaryVars(slv);
-    m_pending_domain_ns += nowNs() - start_ns;
 }
 
 void SATSolver::SetDomainCOI(const cube &c) {
     if (!m_solveInDomain) return;
     auto slv = GetMinicoreSolver();
     if (!slv) return;
-    uint64_t start_ns = nowNs();
     AddPermanentVars(slv, c, true);
-    m_pending_domain_ns += nowNs() - start_ns;
 }
 
 void SATSolver::SetTempDomainCOI(const cube &c) {
     if (!m_solveInDomain) return;
     auto slv = GetMinicoreSolver();
     if (!slv) return;
-    uint64_t start_ns = nowNs();
     AddTemporaryVars(slv, c, true);
-    m_pending_domain_ns += nowNs() - start_ns;
 }
 
 cube SATSolver::GetDomain() {
