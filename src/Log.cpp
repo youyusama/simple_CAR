@@ -134,10 +134,10 @@ void Log::PrintCustomStatistics() {
         cout << "  " << left << setw(18) << "Sum"
              << "called: " << setw(10) << "-"
              << "takes: " << fixed << setprecision(3) << setw(10) << totalSum
-             << "per: " << fixed << setprecision(5) << 0.0 << endl;
+             << "per: " << fixed << setprecision(6) << 0.0 << endl;
     }
 
-    cout << "Total Time     spent: " << fixed << setprecision(5)
+    cout << "Total Time     spent: " << fixed << setprecision(2)
          << GetTimeDouble(chrono::duration_cast<std::chrono::microseconds>(
                 chrono::steady_clock::now() - m_begin))
          << endl;
