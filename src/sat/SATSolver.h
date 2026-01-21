@@ -17,6 +17,30 @@ namespace car {
 
 class SATSolver {
   public:
+    struct SolverStats {
+        uint64_t calls = 0;
+        uint64_t sum_domain = 0;
+        uint64_t sum_props = 0;
+        uint64_t sum_time_ns = 0;
+        uint64_t sum_domain_ns = 0;
+        uint64_t sum_pre_ns = 0;
+        uint64_t sum_search_ns = 0;
+        uint64_t sum_post_ns = 0;
+    };
+
+    struct SolveSnapshot {
+        uint64_t domain = 0;
+        uint64_t props = 0;
+        uint64_t time_ns = 0;
+        uint64_t domain_ns = 0;
+        uint64_t pre_ns = 0;
+        uint64_t search_ns = 0;
+        uint64_t post_ns = 0;
+    };
+
+    const SolverStats &stats() const { return m_stats; }
+    const SolveSnapshot &lastSolveStats() const { return m_lastSolve; }
+
     SATSolver(Model &model, MCSATSolver slv_kind);
     ~SATSolver() {}
 
@@ -115,6 +139,9 @@ class SATSolver {
     MCSATSolver m_slvKind;
     shared_ptr<ISolver> m_slv;
     bool m_solveInDomain;
+    SolverStats m_stats;
+    SolveSnapshot m_lastSolve;
+    uint64_t m_pending_domain_ns = 0;
 
     vector<int> m_frameFlags;
     inline int GetFrameFlag(int lvl) {

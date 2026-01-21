@@ -7,6 +7,7 @@
 #include "SATSolver.h"
 #include "random"
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace car {
@@ -23,12 +24,15 @@ class FCAR : public BaseAlg {
     bool Check(int badId);
 
     void Init(int badId);
+    void PrintSatSolverStats() const;
 
     bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
     bool ImmediateSatisfiable(int badId);
 
     bool IsInvariant(int frameLevel);
+    bool SolveWithStats(const shared_ptr<SATSolver> &solver, const string &label);
+    bool SolveWithStats(const shared_ptr<SATSolver> &solver, const cube &assumption, const string &label);
 
     struct LitOrder {
         shared_ptr<Branching> branching;
@@ -116,6 +120,17 @@ class FCAR : public BaseAlg {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
+    struct SatCallStats {
+        uint64_t calls = 0;
+        uint64_t sum_domain = 0;
+        uint64_t sum_props = 0;
+        uint64_t sum_time_ns = 0;
+        uint64_t sum_domain_ns = 0;
+        uint64_t sum_pre_ns = 0;
+        uint64_t sum_search_ns = 0;
+        uint64_t sum_post_ns = 0;
+    };
+
     pair<cube, cube> GetInputAndState(int lvl);
 
     cube GetUnsatCore(int lvl, const cube &state);
@@ -141,6 +156,7 @@ class FCAR : public BaseAlg {
     shared_ptr<State> m_lastState;
     shared_ptr<Restart> m_restart;
     vector<cube> m_domainStack;
+    std::unordered_map<std::string, SatCallStats> m_satCallStats;
 };
 
 

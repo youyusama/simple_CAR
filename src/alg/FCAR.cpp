@@ -1,4 +1,5 @@
 #include "FCAR.h"
+#include <iomanip>
 #include <stack>
 #include <string>
 namespace car {
@@ -27,8 +28,74 @@ CheckResult FCAR::Run() {
         m_checkResult = CheckResult::Unsafe;
 
     m_log.PrintCustomStatistics();
+    PrintSatSolverStats();
 
     return m_checkResult;
+}
+
+void FCAR::PrintSatSolverStats() const {
+    if (m_satCallStats.empty()) {
+        return;
+    }
+    std::vector<std::pair<std::string, SatCallStats>> entries(m_satCallStats.begin(), m_satCallStats.end());
+    std::sort(entries.begin(), entries.end(), [](const auto &a, const auto &b) {
+        if (a.second.calls != b.second.calls) return a.second.calls > b.second.calls;
+        return a.first < b.first;
+    });
+
+    std::cout << "\nSAT Call Stats (calls/domain/time/domain_ms/pre/search/post/props):\n";
+    SatCallStats total;
+    for (const auto &entry : entries) {
+        const auto &label = entry.first;
+        const auto &s = entry.second;
+        if (s.calls == 0) continue;
+        double avg_domain = static_cast<double>(s.sum_domain) / s.calls;
+        double avg_time_ms = static_cast<double>(s.sum_time_ns) / s.calls / 1e6;
+        double avg_domain_ms = static_cast<double>(s.sum_domain_ns) / s.calls / 1e6;
+        double avg_pre_ms = static_cast<double>(s.sum_pre_ns) / s.calls / 1e6;
+        double avg_search_ms = static_cast<double>(s.sum_search_ns) / s.calls / 1e6;
+        double avg_post_ms = static_cast<double>(s.sum_post_ns) / s.calls / 1e6;
+        double avg_props = static_cast<double>(s.sum_props) / s.calls;
+        std::cout << "  " << std::left << std::setw(12) << label
+                  << "called: " << std::setw(8) << s.calls
+                  << "avg_domain: " << std::setw(10) << std::fixed << std::setprecision(2)
+                  << avg_domain
+                  << "avg_time_ms: " << std::setw(10) << std::setprecision(3) << avg_time_ms
+                  << "avg_domain_ms: " << std::setw(10) << std::setprecision(3) << avg_domain_ms
+                  << "avg_pre_ms: " << std::setw(10) << std::setprecision(3) << avg_pre_ms
+                  << "avg_search_ms: " << std::setw(10) << std::setprecision(3) << avg_search_ms
+                  << "avg_post_ms: " << std::setw(10) << std::setprecision(3) << avg_post_ms
+                  << "avg_props: " << std::setw(10) << std::setprecision(2) << avg_props
+                  << "\n";
+        total.calls += s.calls;
+        total.sum_domain += s.sum_domain;
+        total.sum_props += s.sum_props;
+        total.sum_time_ns += s.sum_time_ns;
+        total.sum_domain_ns += s.sum_domain_ns;
+        total.sum_pre_ns += s.sum_pre_ns;
+        total.sum_search_ns += s.sum_search_ns;
+        total.sum_post_ns += s.sum_post_ns;
+    }
+    if (total.calls > 0) {
+        double avg_domain = static_cast<double>(total.sum_domain) / total.calls;
+        double avg_time_ms = static_cast<double>(total.sum_time_ns) / total.calls / 1e6;
+        double avg_domain_ms = static_cast<double>(total.sum_domain_ns) / total.calls / 1e6;
+        double avg_pre_ms = static_cast<double>(total.sum_pre_ns) / total.calls / 1e6;
+        double avg_search_ms = static_cast<double>(total.sum_search_ns) / total.calls / 1e6;
+        double avg_post_ms = static_cast<double>(total.sum_post_ns) / total.calls / 1e6;
+        double avg_props = static_cast<double>(total.sum_props) / total.calls;
+        std::cout << "  " << std::left << std::setw(12) << "SAT_ALL"
+                  << "called: " << std::setw(8) << total.calls
+                  << "avg_domain: " << std::setw(10) << std::fixed << std::setprecision(2)
+                  << avg_domain
+                  << "avg_time_ms: " << std::setw(10) << std::setprecision(3) << avg_time_ms
+                  << "avg_domain_ms: " << std::setw(10) << std::setprecision(3) << avg_domain_ms
+                  << "avg_pre_ms: " << std::setw(10) << std::setprecision(3) << avg_pre_ms
+                  << "avg_search_ms: " << std::setw(10) << std::setprecision(3) << avg_search_ms
+                  << "avg_post_ms: " << std::setw(10) << std::setprecision(3) << avg_post_ms
+                  << "avg_props: " << std::setw(10) << std::setprecision(2) << avg_props
+                  << "\n";
+    }
 }
 
 void FCAR::Witness() {
@@ -302,7 +369,7 @@ bool FCAR::ImmediateSatisfiable(int badId) {
     bool result;
     {
         [[maybe_unused]] auto satScope = m_log.Section("SAT_Imm");
-        result = m_transSolvers[0]->Solve(assumptions);
+        result = SolveWithStats(m_transSolvers[0], assumptions, "SAT_Imm");
     }
     return result;
 }
@@ -313,7 +380,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
     bool sat = false;
     {
         [[maybe_unused]] auto satScope = m_log.Section("SAT_Start");
-        sat = m_startSolver->Solve();
+        sat = SolveWithStats(m_startSolver, "SAT_Start");
     }
     if (sat) {
         auto p = m_startSolver->GetAssignment(false);
@@ -352,7 +419,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
                 bool res;
                 {
                     [[maybe_unused]] auto satBadPred = m_log.Section("SAT_BadLift");
-                    res = m_badLiftSolver->Solve(assumption);
+                    res = SolveWithStats(m_badLiftSolver, assumption, "SAT_BadLift");
                 }
                 assert(!res);
                 cube temp_p = GetUnsatAssumption(m_badLiftSolver, partial_latch);
@@ -400,7 +467,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
                 bool res;
                 {
                     [[maybe_unused]] auto satBadPred = m_log.Section("SAT_BadLift");
-                    res = m_badLiftSolver->Solve(assumption);
+                    res = SolveWithStats(m_badLiftSolver, assumption, "SAT_BadLift");
                 }
                 assert(!res);
                 cube temp_p = GetUnsatAssumption(m_badLiftSolver, partial_latch);
@@ -435,7 +502,7 @@ bool FCAR::IsInvariant(int frameLevel) {
     bool result;
     {
         [[maybe_unused]] auto satInv = m_log.Section("SAT_Inv");
-        result = !m_invSolver->Solve();
+        result = !SolveWithStats(m_invSolver, "SAT_Inv");
     }
     m_invSolver->FlipLastConstrain();
     AddConstraintOr(frame_i);
@@ -509,7 +576,7 @@ void FCAR::GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t) {
         bool res;
         {
             [[maybe_unused]] auto satLift = m_log.Section("SAT_Lift");
-            res = m_liftSolver->Solve(assumption);
+            res = SolveWithStats(m_liftSolver, assumption, "SAT_Lift");
         }
         assert(!res);
         cube temp_p = GetUnsatAssumption(m_liftSolver, partial_latch);
@@ -718,7 +785,37 @@ int FCAR::PropagateUp(const cube &c, int lvl) {
 
 bool FCAR::IsReachable(int lvl, const cube &assumption, const string &label) {
     [[maybe_unused]] auto scoped = m_log.Section(label);
-    return m_transSolvers[lvl]->Solve(assumption);
+    return SolveWithStats(m_transSolvers[lvl], assumption, label);
+}
+
+bool FCAR::SolveWithStats(const shared_ptr<SATSolver> &solver, const string &label) {
+    bool res = solver->Solve();
+    const auto &snap = solver->lastSolveStats();
+    auto &stat = m_satCallStats[label];
+    stat.calls++;
+    stat.sum_domain += snap.domain;
+    stat.sum_props += snap.props;
+    stat.sum_time_ns += snap.time_ns;
+    stat.sum_domain_ns += snap.domain_ns;
+    stat.sum_pre_ns += snap.pre_ns;
+    stat.sum_search_ns += snap.search_ns;
+    stat.sum_post_ns += snap.post_ns;
+    return res;
+}
+
+bool FCAR::SolveWithStats(const shared_ptr<SATSolver> &solver, const cube &assumption, const string &label) {
+    bool res = solver->Solve(assumption);
+    const auto &snap = solver->lastSolveStats();
+    auto &stat = m_satCallStats[label];
+    stat.calls++;
+    stat.sum_domain += snap.domain;
+    stat.sum_props += snap.props;
+    stat.sum_time_ns += snap.time_ns;
+    stat.sum_domain_ns += snap.domain_ns;
+    stat.sum_pre_ns += snap.pre_ns;
+    stat.sum_search_ns += snap.search_ns;
+    stat.sum_post_ns += snap.post_ns;
+    return res;
 }
 
 

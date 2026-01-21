@@ -108,7 +108,7 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     ApplyEquivalence();
 
     // update dependency map
-    UpdateDependencyMap();
+    // UpdateDependencyMap();
 
     // initial state
     CollectInitialState();
@@ -127,6 +127,7 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // transform to CNF
     CollectClauses();
     SimplifyDAGClauses();
+    UpdateDependencyVecDAGCNF();
     SimplifyClauses();
 
     // cout << "model latches:" << endl;
@@ -202,6 +203,32 @@ void Model::UpdateDependencyMap() {
             // dependency
             m_dependencyVec[g].emplace_back(abs(fanin));
         }
+    }
+
+    m_coiCache.clear();
+    m_coiCacheReady.clear();
+    m_coiVisited.clear();
+    m_coiCacheVisited.clear();
+    m_coiDomain.clear();
+    m_coiCacheTodo.clear();
+
+    m_coiCache.resize(m_maxId + 1);
+    m_coiCacheReady.assign(m_maxId + 1, 0);
+    m_coiVisited.assign(m_maxId + 1, 0);
+    m_coiCacheVisited.assign(m_maxId + 1, 0);
+}
+
+
+void Model::UpdateDependencyVecDAGCNF() {
+    m_dependencyVec.assign(m_maxId + 1, vector<int>());
+    for (auto &c : m_clauses) {
+        for (size_t i = 0; i + 1 < c.size(); ++i) {
+            m_dependencyVec[abs(c.back())].emplace_back(abs(c[i]));
+        }
+    }
+    for (auto &deps : m_dependencyVec) {
+        sort(deps.begin(), deps.end());
+        deps.erase(unique(deps.begin(), deps.end()), deps.end());
     }
 
     m_coiCache.clear();
@@ -478,7 +505,7 @@ void Model::SimplifyDAGClauses() {
     simplifier.FreezeVar(m_equivalenceManager->Find(TrueId()));
     simplifier.FreezeVar(m_bad);
 
-    m_clauses = simplifier.Simplify(m_clauses);
+    m_clauses = simplifier.Simplify(m_clauses, m_equivalenceManager->Find(TrueId()));
 }
 
 
@@ -719,9 +746,11 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
         m_eqSolverUnsats > 1000) {
         m_eqSolverUnsats = 0;
         ApplyEquivalence();
-        UpdateDependencyMap();
+        // UpdateDependencyMap();
         CollectNextValueMapping();
         CollectClauses();
+        SimplifyDAGClauses();
+        UpdateDependencyVecDAGCNF();
 
         m_equivalenceSolver = make_unique<minicore::Solver>();
         for (auto &c : m_clauses) {
@@ -777,9 +806,11 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
         m_eqSolverUnsats > 1000) {
         m_eqSolverUnsats = 0;
         ApplyEquivalence();
-        UpdateDependencyMap();
+        // UpdateDependencyMap();
         CollectNextValueMapping();
         CollectClauses();
+        SimplifyDAGClauses();
+        UpdateDependencyVecDAGCNF();
 
         m_equivalenceSolver = make_unique<minicore::Solver>();
         m_equivalenceSolver->setRestartLimit(1);

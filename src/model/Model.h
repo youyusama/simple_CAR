@@ -220,6 +220,8 @@ class Model {
 
     void UpdateDependencyMap();
 
+    void UpdateDependencyVecDAGCNF();
+
     void CollectInitialState();
 
     void CollectNextValueMapping();

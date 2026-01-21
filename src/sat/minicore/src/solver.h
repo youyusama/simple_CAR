@@ -64,6 +64,26 @@ class Solver {
 
     std::vector<Lit> intVec2LitVec(const std::vector<int> &vec); // Convert a vector of integers to a vector of literals.
 
+    struct ProfileStats {
+        uint64_t solve_pre_ns = 0;
+        uint64_t solve_search_ns = 0;
+        uint64_t solve_post_ns = 0;
+        uint64_t solve_insert_ns = 0;
+        uint64_t solve_cancel_until_ns = 0;
+        uint64_t solve_model_ns = 0;
+        uint64_t search_ns = 0;
+        uint64_t analyze_ns = 0;
+        uint64_t cancel_ns = 0;
+        uint64_t reduce_ns = 0;
+        uint64_t decide_ns = 0;
+        uint64_t prop_sample_ns = 0;
+        uint64_t prop_sample_hits = 0;
+        uint64_t prop_calls = 0;
+    };
+    const ProfileStats &profileStats() const { return profile_stats_; }
+    void resetProfileStats();
+    void setProfileEnabled(bool enabled) { profile_enabled_ = enabled; }
+
     // Read state:
     //
     lbool value(Var x) const;   // The current value of a variable.
@@ -148,6 +168,8 @@ class Solver {
     size_t traillim_snapshot; // Snapshot of trail_lim before temp clause/solve in domain is activated.
     int64_t simpDB_called;    // Number of times 'solve()' has been called.
     int64_t simpDB_clauses;   // Number of clauses at last 'simplify()' call.
+    ProfileStats profile_stats_;
+    bool profile_enabled_;
     SolverState state_;
     lbool last_result_;
 

@@ -15,7 +15,7 @@ class DAGCNFSimplifier {
 
     void FreezeVar(int var);
 
-    std::vector<clause> Simplify(const std::vector<clause> &dag_clauses);
+    std::vector<clause> Simplify(const std::vector<clause> &dag_clauses, int true_id);
 
   private:
     struct ClauseEntry {
@@ -55,8 +55,9 @@ class DAGCNFSimplifier {
 
     static bool LitLess(int a, int b);
     static int LitVar(int lit);
-    static int LitIndex(int lit);
     static int LitNeg(int lit);
+    static int VarPosLit(int var);
+    static int VarNegLit(int var);
 
     bool TryOrderedSimplify(clause &cls) const;
     bool TryOrderedResolvent(const clause &a, const clause &b, int pivot_var, clause &out) const;
