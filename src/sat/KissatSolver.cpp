@@ -5,7 +5,7 @@
 
 namespace car {
 KissatSolver::KissatSolver(Model &m) : m_model(m) {
-    m_maxId = m_model.TrueId() + 1;
+    m_maxId = m_model.NumVar() + 1;
     // m_tempVar = 0;
     m_solver = kissat_init();
     kissat_reserve(m_solver, m_maxId);

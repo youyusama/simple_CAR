@@ -70,8 +70,11 @@ TernarySimulator::TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, Log &l
 }
 
 void TernarySimulator::initStepValues() {
-    m_values.emplace_back(static_cast<size_t>(m_circuitGraph->trueId) + 1, t_Undef);
-    m_values.back()[m_circuitGraph->trueId] = t_True;
+    m_values.emplace_back(static_cast<size_t>(m_circuitGraph->numVar) + 1, t_Undef);
+    if (m_circuitGraph->trueId > 0)
+        m_values.back()[m_circuitGraph->trueId] = t_True;
+    else
+        m_values.back()[-m_circuitGraph->trueId] = t_False;
 }
 
 
@@ -84,7 +87,7 @@ bool TernarySimulator::setVal(int id, tbool v, int step) {
 
 tbool TernarySimulator::getVal(int id, int step) {
     int idx = abs(id);
-    assert(idx <= m_circuitGraph->trueId);
+    assert(idx <= m_circuitGraph->numVar);
     tbool v = m_values[step][idx];
     return (id > 0) ? v : !v;
 }
@@ -269,7 +272,7 @@ bool TernarySimulator::reachCycle() {
 string TernarySimulator::stepValuesToString(int step) {
     vector<tbool> &vmap = m_values[step];
     stringstream ss;
-    // for (int input_id : m_circuitGraph->inputsCOI) {
+    // for (int input_id : m_circuitGraph->modelInputs) {
     //     ss << toStr(vmap[input_id]);
     // }
     // ss << " | ";
@@ -283,7 +286,7 @@ string TernarySimulator::stepValuesToString(int step) {
     //         ss << -latch_id << " ";
     // }
     // ss << " | ";
-    // for (int gate_id : m_circuitGraph->gatesCOI) {
+    // for (int gate_id : m_circuitGraph->modelGates) {
     //     ss << toStr(vmap[gate_id]);
     // }
     return ss.str();

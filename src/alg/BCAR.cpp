@@ -666,7 +666,7 @@ void BCAR::OutputWitness(int bad) {
     auto &eq_map = m_model.GetEquivalenceMap();
     vector<unsigned> eq_lits;
     for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
-        if (itr->first == m_model.TrueId()) {
+        if (itr->first == m_model.TrueId() || itr->second == m_model.TrueId()) {
             unsigned true_eq_lit = m_model.GetAigerLit(itr->second);
             eq_lits.emplace_back(true_eq_lit);
             continue;

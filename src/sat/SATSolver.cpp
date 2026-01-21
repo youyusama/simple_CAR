@@ -147,7 +147,7 @@ void SATSolver::SetSolveInDomain() {
     auto slv = GetMinicoreSolver();
     if (slv == nullptr) return;
     slv->setSolveInDomain(true);
-    m_true_id = m_model.TrueEquivId();
+    m_true_id = m_model.TrueId();
     m_domain_fixed = 1;
 }
 

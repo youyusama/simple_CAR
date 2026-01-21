@@ -91,7 +91,7 @@ struct SimulationSignatureHash {
     }
 };
 
-constexpr size_t NUM_CHUNKS = 16;
+constexpr size_t NUM_CHUNKS = 128;
 using SignatureN64 = SimulationSignature<NUM_CHUNKS>;
 using VarMapN64 = std::unordered_map<SignatureN64, std::vector<int>, SimulationSignatureHash<NUM_CHUNKS>>;
 
@@ -104,12 +104,16 @@ class Model {
         return m_circuitGraph->trueId;
     }
 
+    inline int NumVar() {
+        return m_circuitGraph->numVar;
+    }
+
     inline bool IsTrue(const int id) {
-        return m_equivalenceManager->Find(id) == m_equivalenceManager->Find(TrueId());
+        return m_equivalenceManager->Find(id) == TrueId();
     }
 
     inline bool IsFalse(const int id) {
-        return m_equivalenceManager->Find(id) == -m_equivalenceManager->Find(TrueId());
+        return m_equivalenceManager->Find(id) == -TrueId();
     }
 
     inline bool IsConstant(const int id) {
@@ -208,8 +212,6 @@ class Model {
     cube GetCOIDomain(const cube &c);
 
     const vector<vector<int>> &GetDependencyVec() const { return m_dependencyVec; }
-
-    int TrueEquivId() { return abs(m_equivalenceManager->Find(TrueId())); }
 
     const unordered_map<int, int> &GetEquivalenceMap() const {
         return m_equivalenceManager->GetEquivalenceMap();

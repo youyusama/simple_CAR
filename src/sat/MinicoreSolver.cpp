@@ -3,7 +3,7 @@
 
 namespace car {
 MinicoreSolver::MinicoreSolver(Model &m) : m_model(m) {
-    m_maxId = m_model.TrueId() + 1; // reserve variable numbers for one step reachability check
+    m_maxId = m_model.NumVar() + 1; // reserve variable numbers for one step reachability check
     // verbosity = 1;
 }
 
