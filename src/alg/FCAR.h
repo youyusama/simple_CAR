@@ -26,6 +26,8 @@ class FCAR : public BaseAlg {
     void Init(int badId);
     void PrintSatSolverStats() const;
 
+    void InitializeStartSolver();
+
     bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
     bool ImmediateSatisfiable(int badId);

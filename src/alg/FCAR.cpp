@@ -124,12 +124,11 @@ bool FCAR::Check(int badId) {
     m_log.L(2, "Result >>> UNSAT <<<");
 
     // initialize frame 0
-    m_startSolver->UpdateStartSolverFlag();
     for (int l : m_initialState->latches) {
         auto uc = {-l};
         m_overSequence->Insert(uc, 0);
         m_transSolvers[0]->AddUC(uc);
-        m_startSolver->AddUC(uc, 0);
+        m_startSolver->AddUC(uc);
     }
     if (m_settings.solveInProperty) m_transSolvers[0]->AddProperty();
 
@@ -269,7 +268,7 @@ bool FCAR::Check(int badId) {
 
         m_log.L(1, m_overSequence->FramesInfo());
         m_log.L(3, m_overSequence->FramesDetail());
-        m_startSolver->UpdateStartSolverFlag();
+        InitializeStartSolver();
 
         m_k++;
         m_restart->ResetUcCounts();
@@ -304,28 +303,13 @@ void FCAR::Init(int badId) {
     m_liftSolver->AddTrans();
     m_liftSolver->SetDomainCOI(m_model.GetConstraints());
 
+    InitializeStartSolver();
     if (m_settings.searchFromBadPred) {
-        // s & T & c & P & T' & c' & bad'
-        m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
-        m_startSolver->AddTrans();
-        m_startSolver->AddConstraints();
-        m_startSolver->AddTransK(1);
-        m_startSolver->AddBadk(1);
-        m_startSolver->AddProperty();
-        m_startSolver->AddConstraintsK(1);
         // bad predecessor lift
         m_badLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
         m_badLiftSolver->AddTrans();
         m_badLiftSolver->AddTransK(1);
     } else {
-        // s & c & bad
-        m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-        if (m_settings.satSolveInDomain) m_startSolver->SetSolveInDomain();
-        m_startSolver->AddTrans();
-        m_startSolver->AddConstraints();
-        m_startSolver->AddBad();
-        m_startSolver->SetDomainCOI(m_model.GetConstraints());
-        m_startSolver->SetDomainCOI({m_model.GetBad()});
         // bad lift
         m_badLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
         if (m_settings.satSolveInDomain) m_badLiftSolver->SetSolveInDomain();
@@ -336,6 +320,30 @@ void FCAR::Init(int badId) {
 
     m_restart.reset(new Restart(m_settings));
 }
+
+
+void FCAR::InitializeStartSolver() {
+    if (m_settings.searchFromBadPred) {
+        // s & T & c & P & T' & c' & bad'
+        m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+        m_startSolver->AddTrans();
+        m_startSolver->AddConstraints();
+        m_startSolver->AddTransK(1);
+        m_startSolver->AddBadk(1);
+        m_startSolver->AddProperty();
+        m_startSolver->AddConstraintsK(1);
+    } else {
+        // s & c & bad
+        m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+        if (m_settings.satSolveInDomain) m_startSolver->SetSolveInDomain();
+        m_startSolver->AddTrans();
+        m_startSolver->AddConstraints();
+        m_startSolver->AddBad();
+        m_startSolver->SetDomainCOI(m_model.GetConstraints());
+        m_startSolver->SetDomainCOI({m_model.GetBad()});
+    }
+}
+
 
 bool FCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_AddUC");
@@ -352,7 +360,7 @@ bool FCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     m_transSolvers[frameLevel]->AddUC(uc);
 
     if (frameLevel >= m_k) {
-        m_startSolver->AddUC(uc, frameLevel);
+        m_startSolver->AddUC(uc);
     }
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
