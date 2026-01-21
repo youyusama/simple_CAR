@@ -40,8 +40,9 @@ struct Settings {
     int ctgMaxStates = 3;
     bool satSolveInDomain = false;
     int bmc_step = 1;
-    int eq = 1;
+    int eq = 2;
     int eqTimeout = 600;
+    bool searchFromBadPred = false;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

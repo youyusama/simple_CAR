@@ -9,19 +9,41 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <unordered_map>
+#include <vector>
 
 namespace car {
 
-string CubeToStr(const shared_ptr<vector<int>> c);
+string CubeToStr(const vector<int> &c);
 
-void compress_vector(shared_ptr<vector<int>> res, const shared_ptr<vector<int>> v);
+void compress_vector(vector<int> &res, const vector<int> &v);
 
-string CubeToStrShort(const shared_ptr<vector<int>> c);
+string CubeToStrShort(const vector<int> &c);
 
 void signalHandler(int signum);
 
 class Log {
   public:
+    struct CustomTimeStat {
+        uint64_t calls = 0;
+        chrono::microseconds total{0};
+    };
+
+    class ScopedTimer {
+      public:
+        ScopedTimer() : m_log(nullptr), m_active(false) {}
+        ScopedTimer(Log &log, string name);
+        ~ScopedTimer();
+        ScopedTimer(const ScopedTimer &) = delete;
+        ScopedTimer &operator=(const ScopedTimer &) = delete;
+        ScopedTimer(ScopedTimer &&other) noexcept;
+        ScopedTimer &operator=(ScopedTimer &&other) noexcept;
+
+      private:
+        Log *m_log;
+        bool m_active = false;
+    };
+
     Log(int verb) : m_verbosity(verb) {
         m_begin = chrono::steady_clock::now();
         m_tick = chrono::steady_clock::now();
@@ -38,7 +60,12 @@ class Log {
         }
     }
 
-    void PrintStatistics();
+    void PrintCustomStatistics();
+
+    ScopedTimer Section(const string &name) {
+        if (m_verbosity == 0) return ScopedTimer();
+        return ScopedTimer(*this, name);
+    }
 
     inline void Tick() {
         m_tick = chrono::steady_clock::now();
@@ -107,6 +134,14 @@ class Log {
     }
 
   private:
+    struct ActiveSection {
+        string name;
+        chrono::time_point<chrono::steady_clock> start;
+        chrono::microseconds elapsed{0};
+    };
+
+    friend class ScopedTimer;
+
     template <typename T, typename... Args>
     void logHelper(std::ostringstream &oss, const T &first, const Args &...args) {
         oss << first;
@@ -140,9 +175,16 @@ class Log {
 
     chrono::time_point<chrono::steady_clock> m_tick;
     chrono::time_point<chrono::steady_clock> m_begin;
+
+    unordered_map<string, CustomTimeStat> m_customStats;
+    vector<ActiveSection> m_timerStack;
+
+    void AddCustomTime(const string &name, chrono::microseconds time);
+    void BeginSection(const string &name);
+    void EndSection();
 };
 
-extern shared_ptr<Log> GLOBAL_LOG;
+extern Log *GLOBAL_LOG;
 
 } // namespace car
 

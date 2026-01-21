@@ -2,9 +2,8 @@
 #include <algorithm>
 
 namespace car {
-MinisatSolver::MinisatSolver(shared_ptr<Model> m) {
-    m_model = m;
-    m_maxId = m_model->TrueId() + 1; // reserve variable numbers for one step reachability check
+MinisatSolver::MinisatSolver(Model &m) : m_model(m) {
+    m_maxId = m_model.NumVar() + 1; // reserve variable numbers for one step reachability check
     m_tempVar = 0;
 }
 
@@ -22,17 +21,17 @@ bool MinisatSolver::Solve() {
 }
 
 
-bool MinisatSolver::Solve(const shared_ptr<cube> assumption) {
+bool MinisatSolver::Solve(const cube &assumption) {
     m_assumptions.clear();
-    for (auto it : *assumption) {
+    for (auto it : assumption) {
         m_assumptions.push(GetLit(it));
     }
     return Solve();
 }
 
 
-void MinisatSolver::AddAssumption(const shared_ptr<cube> assumption) {
-    for (auto it : *assumption) {
+void MinisatSolver::AddAssumption(const cube &assumption) {
+    for (auto it : assumption) {
         m_assumptions.push(GetLit(it));
     }
 }
@@ -50,57 +49,57 @@ void MinisatSolver::AddClause(const cube &cls) {
 }
 
 
-pair<shared_ptr<cube>, shared_ptr<cube>> MinisatSolver::GetAssignment(bool prime) {
-    assert(m_model->GetNumInputs() < nVars());
-    shared_ptr<cube> inputs(new cube());
-    shared_ptr<cube> latches(new cube());
-    inputs->reserve(m_model->GetNumInputs());
-    latches->reserve(m_model->GetNumLatches());
-    for (int i : m_model->GetModelInputs()) {
+pair<cube, cube> MinisatSolver::GetAssignment(bool prime) {
+    assert(m_model.GetNumInputs() < nVars());
+    cube inputs;
+    cube latches;
+    inputs.reserve(m_model.GetNumInputs());
+    latches.reserve(m_model.GetNumLatches());
+    for (int i : m_model.GetModelInputs()) {
         if (model[i] == Minisat::l_True) {
-            inputs->emplace_back(i);
+            inputs.emplace_back(i);
         } else {
             assert(model[i] == Minisat::l_False);
-            inputs->emplace_back(-i);
+            inputs.emplace_back(-i);
         }
     }
-    for (int i : m_model->GetModelLatches()) {
+    for (int i : m_model.GetModelLatches()) {
         if (!prime) {
             if (model[i] == Minisat::l_True) {
-                latches->emplace_back(i);
+                latches.emplace_back(i);
             } else {
                 assert(model[i] == Minisat::l_False);
-                latches->emplace_back(-i);
+                latches.emplace_back(-i);
             }
         } else {
-            int p = m_model->GetPrime(i);
+            int p = m_model.GetPrime(i);
             Minisat::lbool val = model[abs(p)];
             if ((val == Minisat::l_True && p > 0) || (val == Minisat::l_False && p < 0)) {
-                latches->emplace_back(i);
+                latches.emplace_back(i);
             } else {
-                latches->emplace_back(-i);
+                latches.emplace_back(-i);
             }
         }
     }
-    for (int i : m_model->GetInnards()) {
+    for (int i : m_model.GetInnards()) {
         if (!prime) {
             if (model[i] == Minisat::l_True) {
-                latches->emplace_back(i);
+                latches.emplace_back(i);
             } else {
                 assert(model[i - 1] == Minisat::l_False);
-                latches->emplace_back(-i);
+                latches.emplace_back(-i);
             }
         } else {
-            int p = m_model->GetPrime(i);
+            int p = m_model.GetPrime(i);
             Minisat::lbool val = model[abs(p)];
             if ((val == Minisat::l_True && p > 0) || (val == Minisat::l_False && p < 0)) {
-                latches->emplace_back(i);
+                latches.emplace_back(i);
             } else {
-                latches->emplace_back(-i);
+                latches.emplace_back(-i);
             }
         }
     }
-    return pair<shared_ptr<cube>, shared_ptr<cube>>(inputs, latches);
+    return pair<cube, cube>(inputs, latches);
 }
 
 unordered_set<int> MinisatSolver::GetConflict() {

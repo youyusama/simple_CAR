@@ -1,35 +1,37 @@
-#ifndef BACKWARDCHECKER_H
-#define BACKWARDCHECKER_H
+#ifndef BCAR_H
+#define BCAR_H
 
-#include "BaseChecker.h"
+#include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
-#include "Restart.h"
 #include "SATSolver.h"
 #include "random"
 #include <algorithm>
 #include <assert.h>
 #include <memory>
+#include <string>
 
 
 namespace car {
 
-class BackwardChecker : public BaseChecker {
+class BCAR : public BaseAlg {
   public:
-    BackwardChecker(Settings settings,
-                    shared_ptr<Model> model,
-                    shared_ptr<Log> log);
-    CheckResult Run();
-    void Witness();
+    BCAR(Settings settings,
+         Model &model,
+         Log &log);
+    CheckResult Run() override;
+    void Witness() override;
 
   private:
     bool Check(int badId);
 
     void Init();
 
-    bool AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck = false);
+    bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
     bool ImmediateSatisfiable(int badId);
+
+    int GetNewLevel(const cube &states, int start = 0);
 
     bool IsInvariant(int frameLevel);
 
@@ -44,12 +46,12 @@ class BackwardChecker : public BaseChecker {
     } litOrder;
 
     struct InnOrder {
-        shared_ptr<Model> m;
+        Model &m;
 
-        InnOrder() {}
+        explicit InnOrder(Model &model) : m(model) {}
 
         bool operator()(const int &inn_1, const int &inn_2) const {
-            return (m->GetInnardslvl(inn_1) > m->GetInnardslvl(inn_2));
+            return (m.GetInnardslvl(inn_1) > m.GetInnardslvl(inn_2));
         }
     } innOrder;
 
@@ -72,33 +74,33 @@ class BackwardChecker : public BaseChecker {
         }
     } blockerOrder;
 
-    void OrderAssumption(shared_ptr<cube> uc) {
+    void OrderAssumption(cube &uc) {
         if (m_settings.randomSeed > 0) {
-            shuffle(uc->begin(), uc->end(), default_random_engine(m_settings.randomSeed));
+            shuffle(uc.begin(), uc.end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        stable_sort(uc->begin(), uc->end(), litOrder);
+        stable_sort(uc.begin(), uc.end(), litOrder);
         if (m_settings.internalSignals) {
-            stable_sort(uc->begin(), uc->end(), innOrder);
+            stable_sort(uc.begin(), uc.end(), innOrder);
         }
     }
 
-    inline void GetPrimed(shared_ptr<cube> p) {
-        for (auto &x : *p) {
-            x = m_model->GetPrime(x);
+    inline void GetPrimed(cube &p) {
+        for (auto &x : p) {
+            x = m_model.GetPrime(x);
         }
     }
 
-    bool Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1);
+    bool Generalize(cube &uc, int frame_lvl, int rec_lvl = 1);
 
-    bool Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses);
+    bool Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses);
 
-    bool DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses);
+    bool DownHasFailed(const cube &s, const vector<cube> &failed_ctses);
 
-    bool Propagate(shared_ptr<cube> c, int lvl);
+    bool Propagate(const cube &c, int lvl);
 
-    int PropagateUp(shared_ptr<cube> c, int lvl);
+    int PropagateUp(const cube &c, int lvl);
 
     void OutputWitness(int bad);
 
@@ -112,13 +114,13 @@ class BackwardChecker : public BaseChecker {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
-    bool IsReachable(int lvl, const shared_ptr<cube> assumption);
+    bool IsReachable(int lvl, const cube &assumption, const string &label);
 
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
+    pair<cube, cube> GetInputAndState(int lvl);
 
-    shared_ptr<cube> GetUnsatCore(int lvl, const shared_ptr<cube> state);
+    cube GetUnsatCore(int lvl, const cube &state);
 
-    shared_ptr<cube> GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions);
+    cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
 
     shared_ptr<State> EnumerateStartState();
 
@@ -131,8 +133,8 @@ class BackwardChecker : public BaseChecker {
     shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
-    shared_ptr<Log> m_log;
-    shared_ptr<Model> m_model;
+    Log &m_log;
+    Model &m_model;
     vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badSolver;

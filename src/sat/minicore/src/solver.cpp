@@ -1,12 +1,10 @@
 #include "solver.h"
-
 using namespace minicore;
-
 
 Solver::Solver() : // Parameters (user settable):
                    //
                    verbosity(0),
-                   random_seed(42), restart_first(100), restart_inc(2)
+                   random_seed(42), clause_decay(0.999), restart_first(100), restart_inc(2)
 
                    // Parameters (the rest):
                    //
@@ -28,9 +26,52 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1), qhead(0), simpDB_assigns(-1), simpDB_props(0), progress_estimate(0), remove_satisfied(true), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1) {
+                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1.0), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), simpDB_clauses(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1), state_(SolverState::Ready), last_result_(l_Undef) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
+    domain_set[temp_cls_act_var] = 1;
+    domain_list.push_back(temp_cls_act_var);
+}
+
+void Solver::reset() {
+    assert(state_ == SolverState::Solved);
+
+    // clean decisions
+    if (decisionLevel() > 0) {
+        while (trail.size() > trail_lim[0]) {
+            Var x = var(trail.back());
+            assigns[x] = l_Undef;
+            polarity[x] = sign(trail.back());
+            trail.pop_back();
+        }
+        qhead = trail.size();
+        trail_lim.resize(0);
+    }
+
+    // clean temprary learnts
+    if (temp_cls_activated || solve_in_domain) {
+        // unit
+        while (trail.size() > traillim_snapshot) {
+            Var x = var(trail.back());
+            assigns[x] = l_Undef;
+            polarity[x] = sign(trail.back());
+            trail.pop_back();
+        }
+        qhead = trail.size();
+    }
+    if (temp_cls_activated) {
+        // temp clause
+        temp_cls_activated = false;
+        removeTempLearnt();
+    }
+
+    // solve in domain
+    if (solve_in_domain) solve_in_domain_runtime_flag = false;
+
+    assumptions.clear();
+    conflict.clear();
+    last_result_ = l_Undef;
+    state_ = SolverState::Ready;
 }
 
 
@@ -50,16 +91,15 @@ Var Solver::newVar() {
         polarity.resize(alloced_var, true);
         order_list.resize(alloced_var);
         trail.reserve(alloced_var);
-        permanent_domain.resize(alloced_var, 0);
-        temporary_domain.resize(alloced_var, 0);
+        domain_set.resize(alloced_var, 0);
     }
     dec_vars++;
     order_list.init_var(v);
     return v;
 }
 
-
 bool Solver::addClause_(std::vector<Lit> &ps) {
+    if (state_ != SolverState::Ready) reset();
     assert(decisionLevel() == 0);
     if (!ok) return false;
 
@@ -90,10 +130,10 @@ bool Solver::addClause_(std::vector<Lit> &ps) {
 
 
 bool Solver::addTempClause(const std::vector<Lit> &cls) {
+    if (state_ != SolverState::Ready) reset();
     assert(decisionLevel() == 0);
     if (!ok) return false;
     temp_cls_activated = true;
-    temporary_domain[temp_cls_act_var] = 1;
 
     std::vector<Lit> temp_cls;
     temp_cls.emplace_back(mkLit(temp_cls_act_var, true));
@@ -124,9 +164,19 @@ void Solver::detachClause(CRef cr) {
     const Clause &c = ca->get_clause(cr);
     assert(c.size() > 1);
 
-    // lazy detaching:
-    watches.smudge(~c[0]);
-    watches.smudge(~c[1]);
+    for (int w = 0; w < 2; w++) {
+        Lit watch_lit = c[w];
+        std::vector<Watcher> &ws = watches[~watch_lit];
+        for (size_t i = 0; i < ws.size();) {
+            if (ws[i].cref == cr) {
+                ws[i] = ws.back();
+                ws.pop_back();
+                break;
+            } else {
+                i++;
+            }
+        }
+    }
 
     if (c.learnt())
         num_learnts--, learnts_literals -= c.size();
@@ -163,11 +213,13 @@ bool Solver::deducedByTemp(const std::vector<Lit> &cls) const {
 
 void Solver::cancelUntil(size_t level) {
     if (decisionLevel() > level) {
-        for (int c = trail.size() - 1; c >= trail_lim[level]; c--) {
+        for (size_t c = trail.size(); c-- > trail_lim[level];) {
             Var x = var(trail[c]);
             assigns[x] = l_Undef;
             polarity[x] = sign(trail[c]);
-            insertVarOrder(x);
+            if (inDomain(x) && !order_list.inBucket(x)) {
+                insertVarOrder(x);
+            }
         }
         qhead = trail_lim[level];
         trail.resize(trail_lim[level]);
@@ -196,14 +248,14 @@ Lit Solver::pickBranchLit() {
 }
 
 
-void Solver::analyze(CRef confl, std::vector<Lit> &out_learnt, int &out_btlevel) {
+void Solver::analyze(CRef confl, std::vector<Lit> &out_learnt, size_t &out_btlevel) {
     int pathC = 0;
     Lit p = lit_Undef;
 
     // Generate conflict clause:
     //
     out_learnt.resize(1);
-    int index = trail.size() - 1;
+    size_t index = trail.size();
 
     do {
         assert(confl != CRef_Undef); // (otherwise should be UIP)
@@ -216,7 +268,7 @@ void Solver::analyze(CRef confl, std::vector<Lit> &out_learnt, int &out_btlevel)
             Lit q = c[j];
 
             if (!seen[var(q)] && level(var(q)) > 0) {
-                varBumpActivity(var(q));
+                varBumpActivity(var(q), conflicts);
                 seen[var(q)] = 1;
                 if (level(var(q)) >= decisionLevel())
                     pathC++;
@@ -226,8 +278,8 @@ void Solver::analyze(CRef confl, std::vector<Lit> &out_learnt, int &out_btlevel)
         }
 
         // Select next clause to look at:
-        while (!seen[var(trail[index--])]);
-        p = trail[index + 1];
+        while (!seen[var(trail[--index])]);
+        p = trail[index];
         confl = reason(var(p));
         seen[var(p)] = 0;
         pathC--;
@@ -341,7 +393,7 @@ void Solver::analyzeFinal(Lit p, std::unordered_set<Lit, LitHash> &out_conflict)
     seen[var(p)] = 1;
     // std::cout << "final conflict var: " << (!sign(p) ? var(p) : -var(p)) << std::endl;
 
-    for (int i = trail.size() - 1; i >= trail_lim[0]; i--) {
+    for (size_t i = trail.size(); i-- > trail_lim[0];) {
         Var x = var(trail[i]);
         if (seen[x]) {
             if (reason(x) == CRef_Undef) {
@@ -377,59 +429,63 @@ CRef Solver::propagate() {
 
     while (qhead < trail.size()) {
         Lit p = trail[qhead++]; // 'p' is enqueued fact to propagate.
-        std::vector<Watcher> &ws = watches.on(p);
-        std::vector<Watcher>::iterator i = ws.begin(), j = ws.begin();
+        std::vector<Watcher> &ws = watches[p];
+        Watcher *ws_data = ws.data();
+        size_t ws_len = ws.size();
+        size_t i = 0;
         num_props++;
 
-        while (i != ws.end()) {
+        while (i < ws_len) {
             // Try to avoid inspecting the clause:
-            Lit blocker = i->blocker;
+            Watcher w_cur = ws_data[i];
+            Lit blocker = w_cur.blocker;
             if (value(blocker) == l_True || !inDomain(var(blocker))) {
-                *j++ = *i++;
+                i++;
                 continue;
             }
 
             // Make sure the false literal is data[1]:
-            CRef cr = i->cref;
+            CRef cr = w_cur.cref;
             Clause &c = ca->get_clause(cr);
             Lit false_lit = ~p;
             if (c[0] == false_lit)
                 c[0] = c[1], c[1] = false_lit;
             assert(c[1] == false_lit);
-            i++;
 
             // If 0th watch is true, then clause is already satisfied.
             Lit first = c[0];
-            Watcher w = Watcher(cr, first);
-            if (first != blocker &&
-                (value(first) == l_True || !inDomain(var(first)))) {
-                *j++ = w;
+            if (first != blocker && (value(first) == l_True || !inDomain(var(first)))) {
+                ws_data[i].blocker = first;
+                i++;
                 continue;
             }
 
             // Look for new watch:
-            for (size_t k = 2; k < c.size(); k++)
+            for (size_t k = 2; k < c.size(); k++) {
                 if (value(c[k]) != l_False) {
                     c[1] = c[k];
                     c[k] = false_lit;
-                    watches.on(~c[1]).emplace_back(w);
+                    watches[~c[1]].emplace_back(Watcher(cr, first));
+                    ws_data[i] = ws_data[ws_len - 1];
+                    ws_len--;
                     goto NextClause;
                 }
+            }
 
             // Did not find watch -- clause is unit under assignment:
-            *j++ = w;
+            ws_data[i].blocker = first;
             if (value(first) == l_False) {
                 confl = cr;
                 qhead = trail.size();
-                // Copy the remaining watches:
-                while (i != ws.end())
-                    *j++ = *i++;
-            } else
+                break;
+            } else {
                 uncheckedEnqueue(first, cr);
+                i++;
+            }
 
         NextClause:;
         }
-        ws.resize(j - ws.begin());
+        ws.resize(ws_len);
     }
     propagations += num_props;
     simpDB_props -= num_props;
@@ -478,6 +534,152 @@ void Solver::removeSatisfied(std::vector<CRef> &cs) {
 }
 
 
+void Solver::removeSubsumed(std::vector<CRef> &cs) {
+    struct ClauseInfo {
+        CRef cref;
+        std::vector<Lit> lits;
+    };
+
+    std::vector<ClauseInfo> infos;
+    infos.reserve(cs.size());
+    for (CRef cr : cs) {
+        if (isRemoved(cr)) {
+            continue;
+        }
+        Clause &c = ca->get_clause(cr);
+        if (c.size() > 128) {
+            continue;
+        }
+        std::vector<Lit> lits;
+        lits.reserve(c.size());
+        for (uint32_t i = 0; i < c.size(); i++) {
+            lits.emplace_back(c[i]);
+        }
+        std::sort(lits.begin(), lits.end(),
+                  [](Lit a, Lit b) { return toInt(a) < toInt(b); });
+        infos.push_back(ClauseInfo{cr, std::move(lits)});
+    }
+
+    if (infos.empty()) return;
+
+    std::sort(infos.begin(), infos.end(),
+              [](const ClauseInfo &a, const ClauseInfo &b) {
+                  return a.lits.size() < b.lits.size();
+              });
+
+    std::vector<std::vector<size_t>> occurs;
+    occurs.resize(nVars());
+    for (size_t i = 0; i < infos.size(); i++) {
+        for (Lit l : infos[i].lits) {
+            occurs[var(l)].push_back(i);
+        }
+    }
+
+    auto subsume_except_one = [](const std::vector<Lit> &a,
+                                 const std::vector<Lit> &b,
+                                 Lit &diff) -> bool {
+        diff = lit_Undef;
+        if (a.size() > b.size()) {
+            return false;
+        }
+        size_t j = 0;
+        for (size_t i = 0; i < a.size(); i++) {
+            Var va = var(a[i]);
+            while (j < b.size() && var(b[j]) < va) {
+                j++;
+            }
+            if (j == b.size() || var(b[j]) != va) {
+                diff = lit_Undef;
+                return false;
+            }
+            if (a[i] != b[j]) {
+                if (diff != lit_Undef) {
+                    diff = lit_Undef;
+                    return false;
+                }
+                diff = a[i];
+            }
+            j++;
+        }
+        return diff == lit_Undef;
+    };
+
+    auto strengthen_clause = [&](CRef cr, Lit remove_lit) -> bool {
+        Clause &c = ca->get_clause(cr);
+        if (c.size() <= 2) {
+            return false;
+        }
+        detachClause(cr);
+        for (uint32_t i = 0; i < c.size(); i++) {
+            if (c[i] == remove_lit) {
+                c[i] = c[c.size() - 1];
+                c.pop();
+                break;
+            }
+        }
+        attachClause(cr);
+        return true;
+    };
+
+    for (size_t i = 0; i < infos.size(); i++) {
+        if (isRemoved(infos[i].cref)) continue;
+
+        Var best_var = var(infos[i].lits[0]);
+        size_t best_occurs = occurs[best_var].size();
+        for (Lit l : infos[i].lits) {
+            size_t occ_size = occurs[var(l)].size();
+            if (occ_size < best_occurs) {
+                best_occurs = occ_size;
+                best_var = var(l);
+            }
+        }
+        for (size_t idx : occurs[best_var]) {
+            if (idx == i || isRemoved(infos[idx].cref)) {
+                continue;
+            }
+            Lit diff = lit_Undef;
+            bool subsumes = subsume_except_one(infos[i].lits, infos[idx].lits, diff);
+            if (subsumes) {
+                removeClause(infos[idx].cref);
+                continue;
+            }
+            if (diff == lit_Undef) {
+                continue;
+            }
+            if (infos[i].lits.size() == infos[idx].lits.size()) {
+                if (infos[i].lits.size() > 2) {
+                    removeClause(infos[idx].cref);
+                    strengthen_clause(infos[i].cref, diff);
+                    auto &lits = infos[i].lits;
+                    auto it = std::find(lits.begin(), lits.end(), diff);
+                    if (it != lits.end()) {
+                        lits.erase(it);
+                    }
+                }
+            } else {
+                if (infos[idx].lits.size() > 2) {
+                    Lit remove_lit = ~diff;
+                    strengthen_clause(infos[idx].cref, remove_lit);
+                    auto &lits = infos[idx].lits;
+                    auto it = std::find(lits.begin(), lits.end(), remove_lit);
+                    if (it != lits.end()) {
+                        lits.erase(it);
+                    }
+                }
+            }
+        }
+    }
+
+    size_t j = 0;
+    for (size_t i = 0; i < cs.size(); i++) {
+        if (!isRemoved(cs[i])) {
+            cs[j++] = cs[i];
+        }
+    }
+    cs.resize(j);
+}
+
+
 void Solver::removeTempLearnt() {
     for (CRef cls : temp_clauses) {
         removeClause(cls);
@@ -486,32 +688,36 @@ void Solver::removeTempLearnt() {
 }
 
 
-bool Solver::simplify() {
+void Solver::simplify() {
     assert(decisionLevel() == 0);
 
-    if (!ok || propagate() != CRef_Undef)
-        return ok = false;
-
-    if (nAssigns() == simpDB_assigns || (simpDB_props > 0))
-        return true;
+    if (simpDB_called <= 128) return;
+    simpDB_called = 0;
 
     // Remove satisfied clauses:
-    removeSatisfied(learnts);
-    if (remove_satisfied) { // Can be turned off.
+    if (nAssigns() > simpDB_assigns) {
+        removeSatisfied(learnts);
         removeSatisfied(clauses);
+        simpDB_assigns = nAssigns();
     }
-    checkGarbage();
 
-    simpDB_assigns = nAssigns();
-    simpDB_props = clauses_literals + learnts_literals; // (shouldn't depend on stats really, but it will do for now)
+    // Remove subsumed clauses:
+    if (nClauses() > simpDB_clauses + 512) {
+        removeSubsumed(clauses);
+        simpDB_clauses = nClauses();
+    }
 
-    return true;
+    // check whether we need to rebuild the clauses db
+    if (simpDB_props <= 0) {
+        checkGarbage();
+        simpDB_props = clauses_literals + learnts_literals;
+    }
 }
 
 
 lbool Solver::search(int nof_conflicts) {
     assert(ok);
-    int backtrack_level;
+    size_t backtrack_level;
     int conflictC = 0;
     std::vector<Lit> learnt_clause;
     starts++;
@@ -522,7 +728,9 @@ lbool Solver::search(int nof_conflicts) {
             // CONFLICT
             conflicts++;
             conflictC++;
-            if (decisionLevel() == 0) return l_False;
+            if (decisionLevel() == 0) {
+                return l_False;
+            }
 
             learnt_clause.clear();
             analyze(confl, learnt_clause, backtrack_level);
@@ -541,27 +749,14 @@ lbool Solver::search(int nof_conflicts) {
                 uncheckedEnqueue(learnt_clause[0], cr);
             }
 
+            claDecayActivity();
+
             if (--learntsize_adjust_cnt == 0) {
                 learntsize_adjust_confl *= learntsize_adjust_inc;
                 learntsize_adjust_cnt = (int)learntsize_adjust_confl;
                 max_learnts *= learntsize_inc;
 
-                if (verbosity >= 1) {
-                    size_t diff = static_cast<size_t>(dec_vars) -
-                                  (trail_lim.size() == 0 ? trail.size() : trail_lim[0]);
-                    double avg_literals = (nLearnts() > 0) ? static_cast<double>(learnts_literals) / nLearnts() : 0.0;
-                    double progress = progressEstimate() * 100;
-                    std::cout << "| "
-                              << std::setw(9) << static_cast<int>(conflicts) << " | "
-                              << std::setw(7) << diff << " "
-                              << std::setw(8) << nClauses() << " "
-                              << std::setw(8) << static_cast<int>(clauses_literals) << " | "
-                              << std::setw(8) << static_cast<int>(max_learnts) << " "
-                              << std::setw(8) << nLearnts() << " "
-                              << std::setw(6) << std::fixed << std::setprecision(0) << avg_literals << " | "
-                              << std::setw(6) << std::fixed << std::setprecision(3) << progress << " % |"
-                              << std::endl;
-                }
+                if (verbosity >= 1) printProgress();
             }
 
         } else {
@@ -571,10 +766,6 @@ lbool Solver::search(int nof_conflicts) {
                 cancelUntil(0);
                 return l_Undef;
             }
-
-            // // Simplify the set of problem clauses:
-            // if (decisionLevel() == 0 && !simplify())
-            //     return l_False;
 
             if (learnts.size() > max_learnts + nAssigns()) {
                 // Reduce the set of learnt clauses:
@@ -602,9 +793,10 @@ lbool Solver::search(int nof_conflicts) {
                 decisions++;
                 next = pickBranchLit();
 
-                if (next == lit_Undef)
+                if (next == lit_Undef) {
                     // Model found:
                     return l_True;
+                }
             }
 
             // Increase decision level and enqueue 'next'
@@ -644,11 +836,15 @@ static double luby(double y, int x) {
 
 
 lbool Solver::solve_() {
-    model.clear();
-    conflict.clear();
-    if (!ok) return l_False;
+    assert(state_ == SolverState::Ready);
+    if (!ok) {
+        last_result_ = l_False;
+        state_ = SolverState::Solved;
+        return l_False;
+    }
 
     solves++;
+    simpDB_called++;
 
     max_learnts = nClauses() * learntsize_factor;
 
@@ -656,21 +852,24 @@ lbool Solver::solve_() {
     learntsize_adjust_cnt = (int)learntsize_adjust_confl;
     lbool status = l_Undef;
 
-    if (verbosity >= 1) {
-        std::cout << "============================[ Search Statistics ]==============================\n";
-        std::cout << "| Conflicts |          ORIGINAL         |          LEARNT          | Progress |\n";
-        std::cout << "|           |    Vars  Clauses Literals |    Limit  Clauses Lit/Cl |          |\n";
-        std::cout << "===============================================================================\n";
-    }
+    if (verbosity >= 1) printHead();
 
+    // Simplify the set of problem clauses before enabling domain-restricted solving.
+    simplify();
+
+    // set runtime flag
     if (solve_in_domain)
         solve_in_domain_runtime_flag = true;
-    for (int i = 0; i < nVars(); i++) {
-        if (inDomain(i)) {
+
+    if (solve_in_domain) {
+        for (Var v : domain_list) {
+            insertVarOrder(v);
+        }
+    } else {
+        for (int i = 0; i < nVars(); i++) {
             insertVarOrder(i);
         }
     }
-
     if (temp_cls_activated || solve_in_domain) {
         traillim_snapshot = trail.size();
     }
@@ -683,74 +882,16 @@ lbool Solver::solve_() {
         curr_restarts++;
     }
 
-    if (verbosity >= 1) {
-        std::cout << "===============================================================================\n";
-        printStats();
-        if (status == l_True)
-            std::cout << "sat";
-        else if (status == l_False)
-            std::cout << "unsat";
-        else
-            std::cout << "unknow";
-        std::cout << std::endl;
-
-        if (status == l_False) {
-            std::cout << "unsat core: ";
-            for (auto i : conflict) {
-                std::cout << (i.x % 2 == 0 ? i.x >> 1 : -(i.x >> 1)) << " ";
-            }
-            std::cout << std::endl;
-        }
-
-        for (int i = 0; i < nVars(); i++) {
-            if (inDomain(i)) {
-                if (value(i) == l_True)
-                    std::cout << "[" << i << "] ";
-                else if (value(i) == l_False)
-                    std::cout << "[" << -i << "] ";
-                else
-                    std::cout << "[" << "u" << i << "] ";
-            } else {
-                if (value(i) == l_True)
-                    std::cout << i << " ";
-                else if (value(i) == l_False)
-                    std::cout << -i << " ";
-                else
-                    std::cout << "u" << i << " ";
-            }
-        }
-        std::cout << std::endl;
-    }
-
-
-    if (status == l_True) {
-        model.resize(nVars());
-        for (int i = 0; i < nVars(); i++) model[i] = value(i);
-    } else if (status == l_False && conflict.size() == 0)
+    if (status == l_False && conflict.size() == 0)
         ok = false;
+    last_result_ = status;
+    state_ = SolverState::Solved;
 
-    cancelUntil(0);
-    if (temp_cls_activated) {
-        temp_cls_activated = false;
-        temporary_domain[temp_cls_act_var] = 0;
-        // remove temperary learnt clause
-        removeTempLearnt();
+    if (verbosity >= 1) {
+        printStats();
+        printResult();
     }
-    // remove temperary learnt unit clause
-    if (temp_cls_activated || solve_in_domain) {
-        while (trail.size() > traillim_snapshot) {
-            Var x = var(trail.back());
-            assigns[x] = l_Undef;
-            polarity[x] = sign(trail.back());
-            insertVarOrder(x);
-            trail.pop_back();
-        }
-        qhead = trail.size();
-    }
-    if (solve_in_domain)
-        solve_in_domain_runtime_flag = false;
 
-    // order_list.print();
     return status;
 }
 
@@ -820,6 +961,7 @@ void Solver::garbageCollect() {
 
 
 void Solver::printStats() const {
+    std::cout << "===============================================================================\n";
     double cpu_time = cpuTime();
     double mem_used = memUsedPeak();
     std::cout << "restarts              : " << starts << "\n";
@@ -852,4 +994,39 @@ void Solver::printStats() const {
 
     std::cout << "CPU time              : ";
     std::cout << std::setprecision(3) << cpu_time << " s\n";
+}
+
+
+void Solver::printResult() const {
+    if (last_result_ == l_True)
+        std::cout << "sat";
+    else if (last_result_ == l_False)
+        std::cout << "unsat";
+    else
+        std::cout << "unknow";
+    std::cout << std::endl;
+}
+
+void Solver::printHead() const {
+    std::cout << "============================[ Search Statistics ]==============================\n";
+    std::cout << "| Conflicts |          ORIGINAL         |          LEARNT          | Progress |\n";
+    std::cout << "|           |    Vars  Clauses Literals |    Limit  Clauses Lit/Cl |          |\n";
+    std::cout << "===============================================================================\n";
+}
+
+void Solver::printProgress() const {
+    size_t diff = static_cast<size_t>(dec_vars) -
+                  (trail_lim.size() == 0 ? trail.size() : trail_lim[0]);
+    double avg_literals = (nLearnts() > 0) ? static_cast<double>(learnts_literals) / nLearnts() : 0.0;
+    double progress = progressEstimate() * 100;
+    std::cout << "| "
+              << std::setw(9) << static_cast<int>(conflicts) << " | "
+              << std::setw(7) << diff << " "
+              << std::setw(8) << nClauses() << " "
+              << std::setw(8) << static_cast<int>(clauses_literals) << " | "
+              << std::setw(8) << static_cast<int>(max_learnts) << " "
+              << std::setw(8) << nLearnts() << " "
+              << std::setw(6) << std::fixed << std::setprecision(0) << avg_literals << " | "
+              << std::setw(6) << std::fixed << std::setprecision(3) << progress << " % |"
+              << std::endl;
 }

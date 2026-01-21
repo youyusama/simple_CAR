@@ -70,7 +70,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->default_val(false);
 
     app.add_option("--ctg_max_rec_lvl", settings.ctgMaxRecursionDepth, "CTG max recursion depth")
-        ->default_val(2);
+        ->default_val(1);
 
     app.add_option("--ctg_max_states", settings.ctgMaxStates, "CTG max states")
         ->default_val(3);
@@ -80,13 +80,16 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->excludes("--is");
 
     app.add_option("--eq", settings.eq, "equivalent variable checking ( 0: none,\n\
-                                                                                1: combination,\n\
+                                                                                1: combination of 2 and 3,\n\
                                                                                 2: ternary simulation,\n\
                                                                                 3: random simulation)")
-        ->default_val(1);
+        ->default_val(2);
 
     app.add_option("--eq_timeout", settings.eqTimeout, "equivalent variable checking timeout for random simulation (in seconds)")
         ->default_val(600);
+
+    app.add_flag("--bp", settings.searchFromBadPred, "search from bad predecessor")
+        ->default_val(false);
 
     try {
         app.parse(argc, argv);

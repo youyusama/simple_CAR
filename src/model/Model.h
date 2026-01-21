@@ -14,6 +14,7 @@ extern "C" {
 #include <algorithm>
 #include <assert.h>
 #include <chrono>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <math.h>
@@ -90,25 +91,29 @@ struct SimulationSignatureHash {
     }
 };
 
-constexpr size_t NUM_CHUNKS = 32;
+constexpr size_t NUM_CHUNKS = 128;
 using SignatureN64 = SimulationSignature<NUM_CHUNKS>;
 using VarMapN64 = std::unordered_map<SignatureN64, std::vector<int>, SimulationSignatureHash<NUM_CHUNKS>>;
 
 
 class Model {
   public:
-    Model(Settings settings, shared_ptr<Log> log);
+    Model(Settings settings, Log &log);
 
     inline int TrueId() {
         return m_circuitGraph->trueId;
     }
 
+    inline int NumVar() {
+        return m_circuitGraph->numVar;
+    }
+
     inline bool IsTrue(const int id) {
-        return m_equivalenceManager->Find(id) == m_equivalenceManager->Find(TrueId());
+        return m_equivalenceManager->Find(id) == TrueId();
     }
 
     inline bool IsFalse(const int id) {
-        return m_equivalenceManager->Find(id) == -m_equivalenceManager->Find(TrueId());
+        return m_equivalenceManager->Find(id) == -TrueId();
     }
 
     inline bool IsConstant(const int id) {
@@ -204,7 +209,9 @@ class Model {
 
     vector<int> &GetPropertyCOIInputs() { return m_circuitGraph->propertyCOIInputs; };
 
-    shared_ptr<cube> GetCOIDomain(const shared_ptr<cube> c);
+    cube GetCOIDomain(const cube &c);
+
+    const vector<vector<int>> &GetDependencyVec() const { return m_dependencyVec; }
 
     const unordered_map<int, int> &GetEquivalenceMap() const {
         return m_equivalenceManager->GetEquivalenceMap();
@@ -214,6 +221,8 @@ class Model {
     void ApplyEquivalence();
 
     void UpdateDependencyMap();
+
+    void UpdateDependencyVecDAGCNF();
 
     void CollectInitialState();
 
@@ -226,23 +235,26 @@ class Model {
     void CollectInnards();
 
     void SimplifyClauses();
+    void SimplifyDAGClauses();
 
     bool SimplifyModelByTernarySimulation();
 
     void SimplifyModelByRandomSimulation();
 
-    void EncodeStatesToSignatuers(const vector<shared_ptr<vector<int>>> &states, unordered_map<string, vector<int>> &signatures);
+    void EncodeStatesToSignatuers(const vector<vector<int>> &states, unordered_map<string, vector<int>> &signatures);
 
-    void EncodeStatesToN64Signatuers(const vector<shared_ptr<unordered_map<int, tbool>>> &values, const vector<int> &vars, VarMapN64 &signatures);
+    void EncodeStatesToN64Signatuers(const vector<vector<tbool>> &values, const vector<int> &vars, VarMapN64 &signatures);
 
     bool CheckLatchEquivalenceBySAT(int a, int b);
 
     bool CheckGateEquivalenceBySAT(int a, int b);
 
+    void EnsureCOICache(int v);
+
     inline int GetNewId() { return ++m_maxId; };
 
     Settings m_settings;
-    shared_ptr<Log> m_log;
+    Log &m_log;
     shared_ptr<aiger> m_aiger;
     shared_ptr<CircuitGraph> m_circuitGraph;
 
@@ -256,7 +268,14 @@ class Model {
     vector<unordered_map<int, int>> m_primeMaps;
     unordered_map<int, vector<int>> m_preValueOfLatchMap;
 
-    unordered_map<int, unordered_set<int>> m_dependencyMap;
+    vector<vector<int>> m_dependencyVec;
+
+    vector<vector<int>> m_coiCache;
+    vector<uint8_t> m_coiCacheReady;
+    vector<uint8_t> m_coiVisited;
+    vector<uint8_t> m_coiCacheVisited;
+    vector<int> m_coiDomain;
+    vector<int> m_coiCacheTodo;
 
     shared_ptr<EquivalenceManager> m_equivalenceManager;
 

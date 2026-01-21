@@ -10,35 +10,31 @@ namespace car {
 
 class MinicoreSolver : public ISolver, public minicore::Solver {
   public:
-    MinicoreSolver(shared_ptr<Model> m);
+    MinicoreSolver(Model &m);
     ~MinicoreSolver();
 
     void AddClause(const cube &cls) override;
-    void AddAssumption(const shared_ptr<cube> assumption) override;
+    void AddAssumption(const cube &assumption) override;
     bool Solve() override;
-    bool Solve(const shared_ptr<cube> assumption) override;
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override;
+    bool Solve(const cube &assumption) override;
+    pair<cube, cube> GetAssignment(bool prime) override;
     unordered_set<int> GetConflict() override;
-    inline int GetNewVar() {
+    inline int GetNewVar() override {
         return ++m_maxId;
     }
     void AddTempClause(const cube &cls) override;
     void ReleaseTempClause() override;
-    inline bool GetModel(int id) {
-        if (model[id] == minicore::l_True)
-            return true;
-        else {
-            return false;
-        }
+    inline tbool GetModel(int id) override {
+        if (value(id) == minicore::l_True)
+            return t_True;
+        else if (value(id) == minicore::l_False)
+            return t_False;
+        else
+            return t_Undef;
     }
-    void ClearAssumption();
-    void PushAssumption(int a);
-    int PopAssumption();
-
-    inline void SetSolveInDomain() override;
-    inline void SetDomain(const shared_ptr<cube> domain) override;
-    inline void SetTempDomain(const shared_ptr<cube> domain) override;
-    inline void ResetTempDomain() override;
+    void ClearAssumption() override;
+    void PushAssumption(int a) override;
+    int PopAssumption() override;
 
   protected:
     inline int GetLiteralId(const minicore::Lit &l);
@@ -48,7 +44,7 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
         return ((id > 0) ? minicore::mkLit(var) : ~minicore::mkLit(var));
     };
 
-    shared_ptr<Model> m_model;
+    Model &m_model;
     int m_maxId;
     vector<minicore::Lit> m_assumptions;
     vector<minicore::Lit> m_tempClause;

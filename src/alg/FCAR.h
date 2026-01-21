@@ -1,31 +1,33 @@
-#ifndef FORWARDCHECKER_H
-#define FORWARDCHECKER_H
+#ifndef FCAR_H
+#define FCAR_H
 
-#include "BaseChecker.h"
+#include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
-#include "Restart.h"
 #include "SATSolver.h"
 #include "random"
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace car {
 
-class ForwardChecker : public BaseChecker {
+class FCAR : public BaseAlg {
   public:
-    ForwardChecker(Settings settings,
-                   shared_ptr<Model> model,
-                   shared_ptr<Log> log);
-    CheckResult Run();
-    void Witness();
+    FCAR(Settings settings,
+         Model &model,
+         Log &log);
+    CheckResult Run() override;
+    void Witness() override;
 
   private:
     bool Check(int badId);
 
     void Init(int badId);
 
-    bool AddUnsatisfiableCore(shared_ptr<cube> uc, int frameLevel, bool implyCheck = false);
+    void InitializeStartSolver();
+
+    bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
     bool ImmediateSatisfiable(int badId);
 
@@ -42,12 +44,12 @@ class ForwardChecker : public BaseChecker {
     } litOrder;
 
     struct InnOrder {
-        shared_ptr<Model> m;
+        Model &m;
 
-        InnOrder() {}
+        explicit InnOrder(Model &model) : m(model) {}
 
         bool operator()(const int &inn_1, const int &inn_2) const {
-            return (m->GetInnardslvl(inn_1) > m->GetInnardslvl(inn_2));
+            return (m.GetInnardslvl(inn_1) > m.GetInnardslvl(inn_2));
         }
     } innOrder;
 
@@ -70,35 +72,40 @@ class ForwardChecker : public BaseChecker {
         }
     } blockerOrder;
 
-    void OrderAssumption(shared_ptr<cube> c) {
+    void OrderAssumption(cube &c) {
+        [[maybe_unused]] auto scoped = m_log.Section("DS_OrdAsm");
         if (m_settings.randomSeed > 0) {
-            shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
+            shuffle(c.begin(), c.end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        stable_sort(c->begin(), c->end(), litOrder);
+        stable_sort(c.begin(), c.end(), litOrder);
         if (m_settings.internalSignals) {
-            stable_sort(c->begin(), c->end(), innOrder);
+            stable_sort(c.begin(), c.end(), innOrder);
         }
     }
 
-    inline void GetPrimed(shared_ptr<cube> p) {
-        for (auto &x : *p) {
-            x = m_model->GetPrime(x);
+    inline void GetPrimed(cube &p) {
+        for (auto &x : p) {
+            x = m_model.GetPrime(x);
         }
     }
 
-    void GeneralizePredecessor(pair<shared_ptr<cube>, shared_ptr<cube>> &s, shared_ptr<State> t);
+    int GetNewLevel(const cube &states, int start = 0);
 
-    bool Generalize(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl = 1);
+    void GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t);
 
-    bool Down(shared_ptr<cube> &uc, int frame_lvl, int rec_lvl, shared_ptr<vector<cube>> failed_ctses);
+    bool Generalize(cube &uc, int frame_lvl, int rec_lvl = 1);
 
-    bool DownHasFailed(const shared_ptr<cube> s, const shared_ptr<vector<cube>> failed_ctses);
+    bool Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses);
 
-    bool Propagate(shared_ptr<cube> c, int lvl);
+    bool DownHasFailed(const cube &s, const vector<cube> &failed_ctses);
 
-    int PropagateUp(shared_ptr<cube> c, int lvl);
+    bool Propagate(const cube &c, int lvl);
+
+    int PropagateUp(const cube &c, int lvl);
+
+    bool IsReachable(int lvl, const cube &assumption, const string &label);
 
     shared_ptr<State> EnumerateStartState();
 
@@ -114,19 +121,11 @@ class ForwardChecker : public BaseChecker {
 
     void AddConstraintAnd(const shared_ptr<frame> f);
 
-    bool IsReachable(int lvl, const shared_ptr<cube> assumption);
+    pair<cube, cube> GetInputAndState(int lvl);
 
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetInputAndState(int lvl);
+    cube GetUnsatCore(int lvl, const cube &state);
 
-    shared_ptr<cube> GetUnsatCore(int lvl, const shared_ptr<cube> state);
-
-    shared_ptr<cube> GetUnsatAssumption(shared_ptr<SATSolver> solver, const shared_ptr<cube> assumptions);
-
-    shared_ptr<cube> TopDomain();
-
-    shared_ptr<cube> GetAndPushDomain(shared_ptr<cube> c);
-
-    void PopDomain();
+    cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
 
     CheckResult m_checkResult;
     int m_minUpdateLevel;
@@ -135,18 +134,18 @@ class ForwardChecker : public BaseChecker {
     shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
-    shared_ptr<Log> m_log;
-    shared_ptr<Model> m_model;
+    Log &m_log;
+    Model &m_model;
     shared_ptr<State> m_initialState;
     vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_liftSolver;
-    shared_ptr<SATSolver> m_badPredLiftSolver;
+    shared_ptr<SATSolver> m_badLiftSolver;
     shared_ptr<SATSolver> m_invSolver;
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<Branching> m_branching;
     shared_ptr<State> m_lastState;
     shared_ptr<Restart> m_restart;
-    shared_ptr<vector<shared_ptr<cube>>> m_domainStack;
+    vector<cube> m_domainStack;
 };
 
 

@@ -1,28 +1,28 @@
 #ifndef BMC_H
 #define BMC_H
 
-#include "BaseChecker.h"
+#include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
 
 namespace car {
 
-class BMC : public BaseChecker {
+class BMC : public BaseAlg {
   public:
     BMC(Settings settings,
-        shared_ptr<Model> model,
-        shared_ptr<Log> log);
+        Model &model,
+        Log &log);
 
-    CheckResult Run();
-    void Witness();
+    CheckResult Run() override;
+    void Witness() override;
 
   private:
     bool Check(int badId);
     bool Check_nonincremental(int badId);
     Settings m_settings;
-    shared_ptr<Log> m_log;
-    shared_ptr<Model> m_model;
+    Log &m_log;
+    Model &m_model;
     int m_k;
     int m_maxK;
     int m_step;
@@ -31,12 +31,12 @@ class BMC : public BaseChecker {
     shared_ptr<SATSolver> m_Solver;
 
     // for kissat to store clauses from previous unrolling
-    shared_ptr<vector<clause>> m_clauses;
+    vector<clause> m_clauses;
 
     CheckResult m_checkResult;
     void Init(int badId);
     void OutputCounterExample(int bad);
-    void GetClausesK(int m_k, shared_ptr<vector<clause>> clauses);
+    void GetClausesK(int m_k, vector<clause> &clauses);
     int GetBadK(int m_k);
     vector<int> GetConstraintsK(int m_k);
 };

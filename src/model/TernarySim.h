@@ -73,14 +73,14 @@ void testTruthTables();
 
 class TernarySimulator {
   public:
-    TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, shared_ptr<Log> log);
+    TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, Log &log);
     ~TernarySimulator() {};
 
     bool setVal(int id, tbool v, int step);
 
     tbool getVal(int id, int step);
 
-    tbool getVal(int id, unordered_map<int, tbool> &vmap);
+    tbool getVal(int id, const vector<tbool> &vmap);
 
     void simulate(int maxSteps);
 
@@ -88,26 +88,28 @@ class TernarySimulator {
 
     bool isCycleReached() { return m_cycleStart != -1; };
 
-    const vector<shared_ptr<unordered_map<int, tbool>>> &getValues() { return m_values; };
+    const vector<vector<tbool>> &getValues() { return m_values; };
 
-    const vector<shared_ptr<vector<int>>> &getStates() { return m_states; };
+    const vector<vector<int>> &getStates() { return m_states; };
 
-    const vector<shared_ptr<vector<int>>> &getGateStates() { return m_gateStates; };
+    const vector<vector<int>> &getGateStates() { return m_gateStates; };
 
   private:
-    shared_ptr<Log> m_log;
+    Log &m_log;
 
     shared_ptr<CircuitGraph> m_circuitGraph;
 
-    vector<shared_ptr<unordered_map<int, tbool>>> m_values;
+    vector<vector<tbool>> m_values;
 
-    void pushState(int step, shared_ptr<vector<int>> &state);
+    void initStepValues();
 
-    vector<shared_ptr<vector<int>>> m_states;
+    void pushState(int step, vector<int> &state);
 
-    void pushGateState(int step, shared_ptr<vector<int>> &gatestate);
+    vector<vector<int>> m_states;
 
-    vector<shared_ptr<vector<int>>> m_gateStates;
+    void pushGateState(int step, vector<int> &gatestate);
+
+    vector<vector<int>> m_gateStates;
 
     int m_randomSeed;
 

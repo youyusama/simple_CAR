@@ -1,7 +1,7 @@
 #ifndef BASICIC3_H
 #define BASICIC3_H
 
-#include "BaseChecker.h"
+#include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
@@ -29,18 +29,31 @@ struct Obligation {
 struct IC3Frame {
     int k;
     shared_ptr<SATSolver> solver;
-    set<shared_ptr<cube>, cubePtrComp> borderCubes;
+    struct CubeComp {
+        bool operator()(const cube &a, const cube &b) const {
+            if (a.size() != b.size()) return a.size() < b.size();
+            for (size_t i = 0; i < a.size(); ++i) {
+                int v1 = a[i], v2 = b[i];
+                if (abs(v1) != abs(v2))
+                    return abs(v1) < abs(v2);
+                else if (v1 != v2)
+                    return v1 > v2;
+            }
+            return false;
+        }
+    };
+    set<cube, CubeComp> borderCubes;
 };
 
-class BasicIC3 : public BaseChecker {
+class BasicIC3 : public BaseAlg {
   public:
     BasicIC3(Settings settings,
-             shared_ptr<Model> model,
-             shared_ptr<Log> log);
+             Model &model,
+             Log &log);
     ~BasicIC3();
 
-    CheckResult Run();
-    void Witness();
+    CheckResult Run() override;
+    void Witness() override;
 
   private:
     bool Check(int badId);
@@ -48,23 +61,23 @@ class BasicIC3 : public BaseChecker {
     bool BaseCases();
     void AddNewFrame();
     void AddNewFrames();
-    void AddBlockingCube(const shared_ptr<cube> &blockingCube, int frameLevel, bool toAll);
+    void AddBlockingCube(const cube &blockingCube, int frameLevel, bool toAll);
 
     bool Strengthen();
     bool HandleObligations(set<Obligation> &obligations);
-    size_t Generalize(const shared_ptr<cube> &cb, int frameLvl);
-    bool MIC(const shared_ptr<cube> &cb, int frameLvl, int recLvl);
-    bool Down(const shared_ptr<cube> &c, int frameLvl, int recLvl, const set<int> &triedLits);
+    size_t Generalize(cube &cb, int frameLvl);
+    bool MIC(cube &cb, int frameLvl, int recLvl);
+    bool Down(cube &c, int frameLvl, int recLvl, const set<int> &triedLits);
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 
 
-    inline void GetPrimed(shared_ptr<cube> p) {
-        for (auto &x : *p) {
-            x = m_model->GetPrimeK(x, 1);
+    inline void GetPrimed(cube &p) {
+        for (auto &x : p) {
+            x = m_model.GetPrimeK(x, 1);
         }
     }
     string FramesInfo() const;
-    int PushLemmaForward(const shared_ptr<cube> &cb, int startLevel);
+    int PushLemmaForward(const cube &cb, int startLevel);
 
     struct LitOrder {
         shared_ptr<Branching> branching;
@@ -81,23 +94,23 @@ class BasicIC3 : public BaseChecker {
 
         BlockerOrder() {}
 
-        bool operator()(const shared_ptr<cube> &a, const shared_ptr<cube> &b) const {
+        bool operator()(const cube &a, const cube &b) const {
             float score_a = 0, score_b = 0;
-            for (int i = 0; i < a->size(); i++) {
-                score_a += branching->PriorityOf(a->at(i));
-                score_b += branching->PriorityOf(b->at(i));
+            for (int i = 0; i < a.size(); i++) {
+                score_a += branching->PriorityOf(a[i]);
+                score_b += branching->PriorityOf(b[i]);
             }
             return score_a > score_b;
         }
     } blockerOrder;
 
-    void OrderAssumption(const shared_ptr<cube> &c) {
+    void OrderAssumption(cube &c) {
         if (m_settings.randomSeed > 0) {
-            shuffle(c->begin(), c->end(), default_random_engine(m_settings.randomSeed));
+            shuffle(c.begin(), c.end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        sort(c->begin(), c->end(), litOrder);
+        sort(c.begin(), c.end(), litOrder);
     }
 
     void Extend();
@@ -111,14 +124,14 @@ class BasicIC3 : public BaseChecker {
     void OutputCounterExample();
 
 
-    std::shared_ptr<cube> GetCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube, bool prime);
-    bool UnreachabilityCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv);
-    bool InductionCheck(const shared_ptr<cube> &cb, const shared_ptr<SATSolver> &slv);
-    shared_ptr<cube> GetAndValidateCore(const shared_ptr<SATSolver> &solver, const shared_ptr<cube> &fallbackCube);
-    void InitiationAugmentation(const shared_ptr<cube> &failureCube, const shared_ptr<cube> &fallbackCube);
-    bool InitiationCheck(const shared_ptr<cube> &cb);
+    cube GetCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube, bool prime);
+    bool UnreachabilityCheck(const cube &cb, const shared_ptr<SATSolver> &slv);
+    bool InductionCheck(const cube &cb, const shared_ptr<SATSolver> &slv);
+    cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube);
+    void InitiationAugmentation(const cube &failureCube, const cube &fallbackCube);
+    bool InitiationCheck(const cube &cb);
 
-    void GetBlockers(const shared_ptr<cube> &c, int framelevel, vector<shared_ptr<cube>> &blockers);
+    void GetBlockers(const cube &c, int framelevel, vector<cube> &blockers);
 
     CheckResult m_checkResult;
 
@@ -126,8 +139,8 @@ class BasicIC3 : public BaseChecker {
     int m_k;
 
     Settings m_settings;
-    shared_ptr<Log> m_log;
-    shared_ptr<Model> m_model;
+    Log &m_log;
+    Model &m_model;
     vector<IC3Frame> m_frames;
     shared_ptr<SATSolver> m_liftSolver;
     shared_ptr<SATSolver> m_startSolver;

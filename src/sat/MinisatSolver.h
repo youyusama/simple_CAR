@@ -10,37 +10,32 @@ namespace car {
 
 class MinisatSolver : public ISolver, public Minisat::Solver {
   public:
-    MinisatSolver(shared_ptr<Model> m);
+    MinisatSolver(Model &m);
     ~MinisatSolver();
 
     void AddClause(const cube &cls) override;
-    void AddAssumption(const shared_ptr<cube> assumption) override;
+    void AddAssumption(const cube &assumption) override;
     bool Solve() override;
-    bool Solve(const shared_ptr<cube> assumption) override;
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) override;
+    bool Solve(const cube &assumption) override;
+    pair<cube, cube> GetAssignment(bool prime) override;
     unordered_set<int> GetConflict() override;
-    inline int GetNewVar() {
+    inline int GetNewVar() override {
         return ++m_maxId;
     }
     void AddTempClause(const cube &cls) override;
     void ReleaseTempClause() override;
-    inline bool GetModel(int id) {
+    inline tbool GetModel(int id) override {
         if (model[id] == Minisat::l_True)
-            return true;
-        else {
-            assert(model[id] == Minisat::l_False);
-            return false;
+            return t_True;
+        else if (model[id] == Minisat::l_False) {
+            return t_False;
+        } else {
+            return t_Undef;
         }
     }
-    void ClearAssumption();
-    void PushAssumption(int a);
-    int PopAssumption();
-
-    // not available
-    inline void SetSolveInDomain() {}
-    inline void SetDomain(const shared_ptr<cube> domain) {}
-    inline void SetTempDomain(const shared_ptr<cube> domain) {}
-    inline void ResetTempDomain() {}
+    void ClearAssumption() override;
+    void PushAssumption(int a) override;
+    int PopAssumption() override;
 
   protected:
     inline int GetLiteralId(const Minisat::Lit &l);
@@ -50,7 +45,7 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
         return ((id > 0) ? Minisat::mkLit(var) : ~Minisat::mkLit(var));
     };
 
-    shared_ptr<Model> m_model;
+    Model &m_model;
     int m_maxId;
     Minisat::vec<Minisat::Lit> m_assumptions;
     int m_tempVar;

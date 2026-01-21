@@ -15,9 +15,9 @@
 
 namespace car {
 
-class SATSolver : public ISolver {
+class SATSolver {
   public:
-    SATSolver(shared_ptr<Model> model, MCSATSolver slv_kind);
+    SATSolver(Model &model, MCSATSolver slv_kind);
     ~SATSolver() {}
 
     // general SAT interface
@@ -25,19 +25,14 @@ class SATSolver : public ISolver {
         m_slv->AddClause(cls);
     }
 
-    void AddAssumption(const shared_ptr<cube> assumption) {
+    void AddAssumption(const cube &assumption) {
         m_slv->AddAssumption(assumption);
     }
 
-    bool Solve() {
-        return m_slv->Solve();
-    }
+    bool Solve();
+    bool Solve(const cube &assumption);
 
-    bool Solve(const shared_ptr<cube> assumption) {
-        return m_slv->Solve(assumption);
-    }
-
-    pair<shared_ptr<cube>, shared_ptr<cube>> GetAssignment(bool prime) {
+    pair<cube, cube> GetAssignment(bool prime) {
         return m_slv->GetAssignment(prime);
     }
 
@@ -57,7 +52,7 @@ class SATSolver : public ISolver {
         m_slv->ReleaseTempClause();
     }
 
-    bool GetModel(int id) {
+    tbool GetModel(int id) {
         return m_slv->GetModel(id);
     }
 
@@ -74,43 +69,19 @@ class SATSolver : public ISolver {
     }
 
     // special interface in minicore
-    void SetSolveInDomain() {
-        m_solveInDomain = true;
-        if (m_slvKind != MCSATSolver::minicore) return;
-        m_slv->SetSolveInDomain();
-    }
+    void SetSolveInDomain();
 
+    void SetDomain(const cube &domain);
 
-    void SetDomain(const shared_ptr<cube> domain) {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        shared_ptr<cube> d = make_shared<cube>();
-        for (int v : *domain) d->emplace_back(abs(v));
-        m_slv->SetDomain(d);
-    }
+    void SetTempDomain(const cube &domain);
 
-    void SetTempDomain(const shared_ptr<cube> domain) {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        shared_ptr<cube> d = make_shared<cube>();
-        for (int v : *domain) d->emplace_back(abs(v));
-        m_slv->SetTempDomain(d);
-    }
+    void ResetTempDomain();
 
-    void ResetTempDomain() {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        m_slv->ResetTempDomain();
-    }
+    void SetDomainCOI(const cube &c);
 
-    void SetDomainCOI(const shared_ptr<cube> c) {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        shared_ptr<cube> domain = m_model->GetCOIDomain(c);
-        SetDomain(domain);
-    }
+    void SetTempDomainCOI(const cube &c);
 
-    void SetTempDomainCOI(const shared_ptr<cube> c) {
-        if (m_slvKind != MCSATSolver::minicore) return;
-        shared_ptr<cube> domain = m_model->GetCOIDomain(c);
-        SetTempDomain(domain);
-    }
+    cube GetDomain();
 
     // SAT interface for IC3/CAR
     void AddTrans();
@@ -127,13 +98,11 @@ class SATSolver : public ISolver {
 
     void AddInitialClauses();
 
-    bool SolveFrame(const shared_ptr<cube> assumption, int lvl);
-
-    void AddUC(const shared_ptr<cube> uc, int lvl);
+    bool SolveFrame(const cube &assumption, int lvl);
 
     void AddUC(const cube &uc, int lvl);
 
-    void AddUC(const shared_ptr<cube> uc);
+    void AddUC(const cube &uc);
 
     void AddProperty();
 
@@ -142,7 +111,7 @@ class SATSolver : public ISolver {
     void UpdateStartSolverFlag();
 
   protected:
-    shared_ptr<Model> m_model;
+    Model &m_model;
     MCSATSolver m_slvKind;
     shared_ptr<ISolver> m_slv;
     bool m_solveInDomain;
@@ -155,6 +124,15 @@ class SATSolver : public ISolver {
         }
         return m_frameFlags[lvl];
     }
+
+  private:
+    shared_ptr<MinicoreSolver> GetMinicoreSolver() const;
+    void AddPermanentVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi);
+    void AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi);
+    void ResetTemporaryVars(shared_ptr<MinicoreSolver> solver);
+
+    int m_true_id;
+    size_t m_domain_fixed;
 };
 
 } // namespace car
