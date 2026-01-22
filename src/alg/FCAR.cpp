@@ -619,7 +619,7 @@ bool FCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
             shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
             if (DownHasFailed(cts->latches, failed_ctses)) return false;
 
-            int cts_lvl = GetNewLevel(cts->latches);
+            int cts_lvl = frame_lvl - 1;
             if (ctgs >= m_settings.ctgMaxStates || cts_lvl < 0) {
                 failed_ctses.emplace_back(cts->latches);
                 return false;
