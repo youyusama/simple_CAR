@@ -1,16 +1,20 @@
-#ifndef AIGERBASEMODEL_H
-#define AIGERBASEMODEL_H
+#ifndef MODEL_H
+#define MODEL_H
 
 extern "C" {
 #include "aiger.h"
 }
 
-// #include "minisat/core/Solver.h"
-// #include "minisat/simp/SimpSolver.h"
-
+#include "CircuitGraph.h"
+#include "Log.h"
 #include "Settings.h"
+#include "TernarySim.h"
+#include "cadical/src/cadical.hpp"
+#include "minicore/src/solver.h"
 #include <algorithm>
 #include <assert.h>
+#include <chrono>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <math.h>
@@ -29,93 +33,150 @@ typedef vector<int> clause;
 
 namespace car {
 
-inline bool cmp(int a, int b) {
-    if (abs(a) != abs(b))
-        return abs(a) < abs(b);
-    else
-        return a < b;
-}
+class EquivalenceManager {
+  public:
+    EquivalenceManager() {}
+    ~EquivalenceManager() {}
+
+    int Find(int a); // update and get the equivalence of a
+
+    void AddEquivalence(int a, int b);
+
+    inline bool IsEquivalent(int a, int b) { return Find(a) == Find(b); }
+
+    inline bool HasEquivalence(int a) { return m_equivalenceMap.count(abs(a)) > 0; }
+
+    inline int Size() { return m_equivalenceMap.size(); }
+
+    const unordered_map<int, int> &GetEquivalenceMap() const { return m_equivalenceMap; }
+
+  private:
+    unordered_map<int, int> m_equivalenceMap;
+
+    pair<int, int> FindRootRecursive(int key);
+};
+
+
+template <int N>
+struct SimulationSignature {
+    std::array<uint64_t, N> chunks;
+
+    SimulationSignature() {
+        chunks.fill(0);
+    }
+
+    bool operator==(const SimulationSignature<N> &other) const {
+        return chunks == other.chunks;
+    }
+
+    SimulationSignature<N> operator~() const {
+        SimulationSignature<N> result;
+        for (int i = 0; i < N; i++) {
+            result.chunks[i] = ~chunks[i];
+        }
+        return result;
+    }
+};
+
+
+template <int N>
+struct SimulationSignatureHash {
+    std::size_t operator()(const SimulationSignature<N> &s) const {
+        std::size_t h = 0;
+        std::hash<uint64_t> hasher;
+        for (const auto &chunk : s.chunks) {
+            h ^= hasher(chunk) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        return h;
+    }
+};
+
+constexpr size_t NUM_CHUNKS = 128;
+using SignatureN64 = SimulationSignature<NUM_CHUNKS>;
+using VarMapN64 = std::unordered_map<SignatureN64, std::vector<int>, SimulationSignatureHash<NUM_CHUNKS>>;
+
 
 class Model {
   public:
-    Model(Settings settings);
+    Model(Settings settings, Log &log);
 
-    inline bool IsTrue(const unsigned lit) {
-        return (lit == 1) || (m_trues.find(lit) != m_trues.end());
+    inline int TrueId() {
+        return m_circuitGraph->trueId;
     }
 
-    inline bool IsFalse(const unsigned lit) {
-        return (lit == 0) || (m_trues.find(aiger_not(lit)) != m_trues.end());
+    inline int NumVar() {
+        return m_circuitGraph->numVar;
+    }
+
+    inline bool IsTrue(const int id) {
+        return m_equivalenceManager->Find(id) == TrueId();
+    }
+
+    inline bool IsFalse(const int id) {
+        return m_equivalenceManager->Find(id) == -TrueId();
     }
 
     inline bool IsConstant(const int id) {
-        unsigned lit = id > 0 ? id * 2 : -id * 2 + 1;
-        if (IsTrue(lit) || IsFalse(lit))
+        if (IsTrue(id) || IsFalse(id))
             return true;
         else
             return false;
     }
 
     inline bool IsLatch(int id) {
-        if (abs(id) > m_aig->num_inputs && abs(id) < m_andGateStartId)
+        if (m_circuitGraph->latchesSet.find(abs(id)) != m_circuitGraph->latchesSet.end())
             return true;
         else
             return false;
     }
 
     inline bool IsInput(int id) {
-        if (abs(id) > 0 && abs(id) <= m_aig->num_inputs)
+        if (m_circuitGraph->inputsSet.find(abs(id)) != m_circuitGraph->inputsSet.end())
             return true;
         else
             return false;
     }
+
 
     inline bool IsAnd(int id) {
-        if (abs(id) >= m_andGateStartId && abs(id) < m_trueId)
+        if (m_circuitGraph->andsSet.find(abs(id)) != m_circuitGraph->andsSet.end())
             return true;
         else
             return false;
     }
 
-    inline bool IsInnard(int id) {
-        if (m_innards->find(abs(id)) != m_innards->end()) {
-            return true;
-        } else {
-            return false;
-        }
-    }
 
     inline int GetCarId(const unsigned lit) {
         if (lit == 0)
-            return m_falseId;
+            return -TrueId();
         else if (lit == 1)
-            return m_trueId;
+            return TrueId();
         return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
     }
 
-    inline aiger *GetAig() { return m_aig; }
-
-    inline int GetNumInputs() { return m_aig->num_inputs; }
-    inline int GetNumLatches() { return m_aig->num_latches; }
-    inline int GetNumBad() { return m_aig->num_outputs + m_aig->num_bad; }
-    inline int GetMaxId() { return m_maxId; }
-    inline int GetTrueId() { return m_trueId; }
-    inline int GetFalseId() { return m_falseId; }
-    inline cube &GetInitialState() { return m_initialState; }
-    inline int &GetBad() { return m_bad; }
-    inline int GetProperty() { return -m_bad; }
-
-    inline vector<int> GetPrevious(int id) {
-        if (m_preValueOfLatchMap.count(abs(id)) > 0) {
-            return m_preValueOfLatchMap[abs(id)];
-        } else {
-            return vector<int>();
-        }
+    inline unsigned GetAigerLit(const int car_id) {
+        if (car_id > 0)
+            return car_id << 1;
+        else
+            return (-car_id << 1) + 1;
     }
+
+    inline shared_ptr<aiger> GetAiger() { return m_aiger; }
+
+    inline int GetNumInputs() { return m_circuitGraph->numInputs; }
+    inline int GetNumLatches() { return m_circuitGraph->numLatches; }
+    inline vector<int> &GetInitialState() { return m_initialState; }
+
+    inline vector<int> &GetModelInputs() { return m_circuitGraph->modelInputs; }
+    inline vector<int> &GetModelLatches() { return m_circuitGraph->modelLatches; }
+    inline vector<int> &GetModelGates() { return m_circuitGraph->modelGates; }
+
+    inline int GetBad() { return m_bad; }
+    inline int GetProperty() { return -m_bad; }
 
     inline int GetPrime(const int id) {
         unordered_map<int, int>::iterator it = m_primeMaps[0].find(abs(id));
-        assert(it != m_primeMaps[0].end());
+        if (it == m_primeMaps[0].end()) return 0;
         return id > 0 ? it->second : -(it->second);
     }
 
@@ -123,13 +184,22 @@ class Model {
 
     vector<clause> &GetClauses() { return m_clauses; }
 
-    // shared_ptr<Minisat::SimpSolver> GetSimpSolver();
+    vector<clause> &GetSimpClauses() { return m_simpClauses; }
 
-    void GetPreValueOfLatchMap(unordered_map<int, vector<int>> &map);
+    vector<clause> &GetInitialClauses() { return m_initialClauses; }
 
-    vector<int> GetConstraints() { return m_constraints; };
+    vector<int> GetConstraints() { return m_circuitGraph->constraints; };
 
-    shared_ptr<set<int>> GetInnards() { return m_innards; };
+    inline bool IsInnard(int id) {
+        if (m_settings.internalSignals &&
+            m_innards.find(abs(id)) != m_innards.end()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    vector<int> &GetInnards() { return m_innardsVec; };
 
     int GetInnardslvl(int id) {
         unordered_map<int, int>::iterator it = m_innards_lvl.find(abs(id));
@@ -137,18 +207,22 @@ class Model {
         return it->second;
     }
 
-    shared_ptr<vector<int>> GetCOIInputs() { return m_COIInputs; };
+    vector<int> &GetPropertyCOIInputs() { return m_circuitGraph->propertyCOIInputs; };
 
-    shared_ptr<cube> GetCOIDomain(const shared_ptr<cube> c);
+    cube GetCOIDomain(const cube &c);
+
+    const vector<vector<int>> &GetDependencyVec() const { return m_dependencyVec; }
+
+    const unordered_map<int, int> &GetEquivalenceMap() const {
+        return m_equivalenceManager->GetEquivalenceMap();
+    }
 
   private:
-    void Init();
+    void ApplyEquivalence();
 
-    void CollectConstants();
+    void UpdateDependencyMap();
 
-    void CollectConstraints();
-
-    void CollectBad();
+    void UpdateDependencyVecDAGCNF();
 
     void CollectInitialState();
 
@@ -156,41 +230,61 @@ class Model {
 
     void CollectClauses();
 
-    void AddAndGateToClause(const aiger_and *aa);
-
-    inline void InsertIntoPreValueMapping(const int key, const int value);
-
-    int InnardsLogiclvlDFS(unsigned aig_id);
+    int InnardsLogiclvlDFS(int id);
 
     void CollectInnards();
 
-    void CollectInnardsClauses();
+    void SimplifyClauses();
+    void SimplifyDAGClauses();
 
-    void CollectCOIInputs();
+    bool SimplifyModelByTernarySimulation();
+
+    void SimplifyModelByRandomSimulation();
+
+    void EncodeStatesToSignatuers(const vector<vector<int>> &states, unordered_map<string, vector<int>> &signatures);
+
+    void EncodeStatesToN64Signatuers(const vector<vector<tbool>> &values, const vector<int> &vars, VarMapN64 &signatures);
+
+    bool CheckLatchEquivalenceBySAT(int a, int b);
+
+    bool CheckGateEquivalenceBySAT(int a, int b);
+
+    void EnsureCOICache(int v);
+
+    inline int GetNewId() { return ++m_maxId; };
 
     Settings m_settings;
-    aiger *m_aig;
-    int m_maxId;
-    int m_trueId;
-    int m_falseId;
-    int m_andGateStartId;
+    Log &m_log;
+    shared_ptr<aiger> m_aiger;
+    shared_ptr<CircuitGraph> m_circuitGraph;
 
+    int m_maxId;
     cube m_initialState;
     int m_bad;
-    vector<int> m_constraints;
-    vector<clause> m_clauses;   // CNF, e.g. (a|b|c) * (-a|c)
-    unordered_set<int> m_trues; // variables that are always true
+    vector<clause> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
+    vector<clause> m_simpClauses;
+    vector<clause> m_initialClauses;
 
     vector<unordered_map<int, int>> m_primeMaps;
     unordered_map<int, vector<int>> m_preValueOfLatchMap;
 
-    shared_ptr<set<int>> m_innards;
+    vector<vector<int>> m_dependencyVec;
+
+    vector<vector<int>> m_coiCache;
+    vector<uint8_t> m_coiCacheReady;
+    vector<uint8_t> m_coiVisited;
+    vector<uint8_t> m_coiCacheVisited;
+    vector<int> m_coiDomain;
+    vector<int> m_coiCacheTodo;
+
+    shared_ptr<EquivalenceManager> m_equivalenceManager;
+
+    unique_ptr<minicore::Solver> m_equivalenceSolver;
+    int m_eqSolverUnsats{0};
+
+    unordered_set<int> m_innards;
+    vector<int> m_innardsVec;
     unordered_map<int, int> m_innards_lvl;
-
-    // void CreateSimpSolver();
-    // shared_ptr<Minisat::SimpSolver> m_simpSolver;
-
-    shared_ptr<vector<int>> m_COIInputs;
 };
 } // namespace car
 

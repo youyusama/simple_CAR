@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
         exit(20);
     }
 
-    lbool ret = S.solve_main();
+    lbool ret = S.solve();
     if (S.verbosity > 0) {
         S.printStats();
         std::cout << std::endl;

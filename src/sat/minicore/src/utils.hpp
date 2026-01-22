@@ -50,12 +50,16 @@ inline double memUsedPeak() {
         fclose(file);
     }
 #elif defined(__APPLE__)
-    struct task_basic_info t_info;
-    mach_msg_type_number_t t_info_count = TASK_BASIC_INFO_COUNT;
+    // Use mach_task_basic_info which exposes the current resident size.
+    // Some macOS SDKs don't provide `resident_size_max` in the reported
+    // `task_basic_info` type; using `mach_task_basic_info` and
+    // `MACH_TASK_BASIC_INFO` is more portable across macOS versions.
+    struct mach_task_basic_info info;
+    mach_msg_type_number_t info_count = MACH_TASK_BASIC_INFO_COUNT;
 
-    if (task_info(mach_task_self(), TASK_BASIC_INFO,
-                  (task_info_t)&t_info, &t_info_count) == KERN_SUCCESS) {
-        peakMemoryMB = static_cast<double>(t_info.resident_size_max) / (1024.0 * 1024.0);
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
+                  (task_info_t)&info, &info_count) == KERN_SUCCESS) {
+        peakMemoryMB = static_cast<double>(info.resident_size) / (1024.0 * 1024.0);
     }
 #endif
 

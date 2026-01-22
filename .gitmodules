@@ -1,3 +1,6 @@
 [submodule "src/sat/cadical"]
 	path = src/sat/cadical
 	url = https://github.com/arminbiere/cadical.git
+[submodule "src/sat/kissat"]
+	path = src/sat/kissat
+	url = https://github.com/arminbiere/kissat.git
