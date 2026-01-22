@@ -4,6 +4,7 @@
 #include "BMC.h"
 #include "BasicIC3.h"
 #include "FCAR.h"
+#include "L2S.h"
 #include "Log.h"
 #include "Model.h"
 #include <iostream>
@@ -24,6 +25,8 @@ static std::unique_ptr<BaseAlg> CreateChecker(
         return std::make_unique<BMC>(settings, aigerModel, log);
     case MCAlgorithm::IC3:
         return std::make_unique<BasicIC3>(settings, aigerModel, log);
+    case MCAlgorithm::L2S:
+        return std::make_unique<L2S>(settings, aigerModel, log);
     default:
         return nullptr;
     }

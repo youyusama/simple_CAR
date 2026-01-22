@@ -74,6 +74,7 @@ set(SRCS
     src/alg/FCAR.cpp
     src/alg/BMC.cpp
     src/alg/BasicIC3.cpp
+    src/alg/L2S.cpp
     src/sat/SATSolver.cpp
     src/IncrCheckerHelpers.cpp
     src/SimpleCAR.cpp

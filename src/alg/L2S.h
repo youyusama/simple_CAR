@@ -1,0 +1,43 @@
+#ifndef L2S_H
+#define L2S_H
+
+#include "BaseAlg.h"
+#include "Log.h"
+#include "Model.h"
+#include "Settings.h"
+#include <memory>
+#include <vector>
+#include <unordered_set>
+
+namespace car {
+
+class L2S : public BaseAlg {
+  public:
+    L2S(Settings settings,
+        Model &model,
+        Log &log);
+
+    CheckResult Run() override;
+    void Witness() override;
+    Trace CounterexampleTrace() override;
+
+  private:
+    bool Translate();
+    std::unique_ptr<BaseAlg> CreateSafetyChecker();
+
+    Settings m_settings;
+    Model &m_model;
+    Log &m_log;
+    std::unique_ptr<BaseAlg> m_checker;
+    bool m_translated;
+    int m_save;
+    std::vector<int> m_statecopy;
+    std::vector<int> m_origInputs;
+    std::vector<int> m_origLatches;
+    std::unordered_set<int> m_origInputSet;
+    std::unordered_set<int> m_origLatchSet;
+};
+
+} // namespace car
+
+#endif

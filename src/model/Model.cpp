@@ -123,9 +123,11 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // property to check
     if (num_bad == 1) {
         m_bad = m_circuitGraph->bad[0];
+        m_propKind = PropKind::Safety;
     } else if (num_justice == 1) {
         // liveness extraction
         m_bad = BuildLiveness();
+        m_propKind = PropKind::Liveness;
     }
 
     // prime variable mapping
@@ -334,6 +336,41 @@ void Model::CollectClauses() {
             m_clauses.emplace_back(clause{-fanout, fanin0, fanin2});
         }
     }
+}
+
+int Model::GetLatchReset(int latch) const {
+    int key = abs(latch);
+    auto it = m_circuitGraph->latchResetMap.find(key);
+    assert(it != m_circuitGraph->latchResetMap.end());
+    int val = it->second;
+    return latch > 0 ? val : -val;
+}
+
+int Model::GetLatchNext(int latch) const {
+    int key = abs(latch);
+    auto it = m_circuitGraph->latchNextMap.find(key);
+    assert(it != m_circuitGraph->latchNextMap.end());
+    int val = it->second;
+    return latch > 0 ? val : -val;
+}
+
+void Model::SetBad(int bad) {
+    m_bad = bad;
+    m_circuitGraph->bad.clear();
+    m_circuitGraph->bad.emplace_back(bad);
+}
+
+void Model::Rebuild() {
+    m_initialState.clear();
+    m_initialClauses.clear();
+    CollectInitialState();
+    CollectNextValueMapping();
+    CollectClauses();
+    SimplifyDAGClauses();
+    UpdateDependencyVecDAGCNF();
+    SimplifyClauses();
+    m_equivalenceSolver.reset();
+    m_eqSolverUnsats = 0;
 }
 
 int Model::BuildSingleFairness(const vector<int> &conds) {

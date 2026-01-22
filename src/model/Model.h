@@ -98,6 +98,11 @@ using VarMapN64 = std::unordered_map<SignatureN64, std::vector<int>, SimulationS
 
 class Model {
   public:
+    enum class PropKind {
+        Safety,
+        Liveness
+    };
+
     Model(Settings settings, Log &log);
 
     inline int TrueId() {
@@ -163,6 +168,9 @@ class Model {
 
     inline shared_ptr<aiger> GetAiger() { return m_aiger; }
 
+    inline CircuitGraph *GetCircuitGraph() { return m_circuitGraph.get(); }
+    inline const CircuitGraph *GetCircuitGraph() const { return m_circuitGraph.get(); }
+
     inline int GetNumInputs() { return m_circuitGraph->numInputs; }
     inline int GetNumLatches() { return m_circuitGraph->numLatches; }
     inline vector<int> &GetInitialState() { return m_initialState; }
@@ -173,6 +181,9 @@ class Model {
 
     inline int GetBad() { return m_bad; }
     inline int GetProperty() { return -m_bad; }
+
+    inline PropKind GetPropKind() const { return m_propKind; }
+    inline void SetPropKind(PropKind k) { m_propKind = k; }
 
     inline int GetPrime(const int id) {
         unordered_map<int, int>::iterator it = m_primeMaps[0].find(abs(id));
@@ -216,6 +227,11 @@ class Model {
     const unordered_map<int, int> &GetEquivalenceMap() const {
         return m_equivalenceManager->GetEquivalenceMap();
     }
+
+    int GetLatchReset(int latch) const;
+    int GetLatchNext(int latch) const;
+    void SetBad(int bad);
+    void Rebuild();
 
   private:
     void ApplyEquivalence();
@@ -266,6 +282,7 @@ class Model {
     int m_maxId;
     cube m_initialState;
     int m_bad;
+    PropKind m_propKind{PropKind::Safety};
     vector<clause> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
     vector<clause> m_simpClauses;
     vector<clause> m_initialClauses;

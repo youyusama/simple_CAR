@@ -21,6 +21,16 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"fcar", MCAlgorithm::FCAR},
                 {"bcar", MCAlgorithm::BCAR},
                 {"bmc", MCAlgorithm::BMC},
+                {"ic3", MCAlgorithm::IC3},
+                {"l2s", MCAlgorithm::L2S}}))
+        ->default_val("fcar");
+
+    app.add_option("--safety_base_alg,--safetybasealg", settings.safetyBaseAlg, "Safety base algorithm")
+        ->transform(CLI::CheckedTransformer(
+            std::map<std::string, MCAlgorithm>{
+                {"fcar", MCAlgorithm::FCAR},
+                {"bcar", MCAlgorithm::BCAR},
+                {"bmc", MCAlgorithm::BMC},
                 {"ic3", MCAlgorithm::IC3}}))
         ->default_val("fcar");
 

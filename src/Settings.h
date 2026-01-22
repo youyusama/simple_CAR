@@ -11,7 +11,8 @@ namespace car {
 enum class MCAlgorithm { FCAR,
                          BCAR,
                          BMC,
-                         IC3 };
+                         IC3,
+                         L2S };
 
 enum class MCSATSolver { minisat,
                          cadical,
@@ -25,6 +26,7 @@ struct Settings {
 
     MCSATSolver solver = MCSATSolver::minisat;
     MCAlgorithm alg = MCAlgorithm::FCAR;
+    MCAlgorithm safetyBaseAlg = MCAlgorithm::FCAR;
     int bmcK = -1;
     bool dt = true;
     int branching = 1;
