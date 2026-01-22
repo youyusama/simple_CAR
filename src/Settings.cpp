@@ -75,6 +75,9 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("--ctg_max_states", settings.ctgMaxStates, "CTG max states")
         ->default_val(3);
 
+    app.add_option("--ctg_max_blocks", settings.ctgMaxBlocks, "CTG max blocks")
+        ->default_val(1);
+
     app.add_flag("--sd", settings.satSolveInDomain, "solve SAT in domain")
         ->default_val(false)
         ->excludes("--is");

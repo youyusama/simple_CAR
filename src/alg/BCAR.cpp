@@ -432,7 +432,6 @@ bool BCAR::Generalize(cube &uc, int frame_lvl, int rec_lvl) {
             if (ll != uc[i]) temp_uc.emplace_back(ll);
         if (Down(temp_uc, frame_lvl, rec_lvl, failed_ctses)) {
             uc.swap(temp_uc);
-            OrderAssumption(uc);
             i = uc.size();
         } else {
             required_lits.emplace(uc[i]);
@@ -454,30 +453,55 @@ bool BCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
         // F_i & T & temp_uc'
         bool reachable = IsReachable(frame_lvl, assumption, "SAT_BC_Down");
         if (!reachable) {
-            auto uc_ctg = GetUnsatCore(frame_lvl, uc);
-            if (uc.size() < uc_ctg.size()) return false; // there are cases that uc_ctg longer than uc
-            uc.swap(uc_ctg);
+            uc = GetUnsatCore(frame_lvl, uc);
             return true;
-        } else if (rec_lvl > m_settings.ctgMaxRecursionDepth) {
+        }
+
+        if (rec_lvl >= m_settings.ctgMaxRecursionDepth ||
+            ctgs >= m_settings.ctgMaxStates ||
+            frame_lvl < 1) {
             return false;
+        }
+
+        auto p = GetInputAndState(frame_lvl);
+        shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
+        if (DownHasFailed(cts->latches, failed_ctses)) return false;
+
+        if (CTSBlock(cts, frame_lvl - 1, rec_lvl, failed_ctses)) {
+            ctgs++;
+        } else {
+            failed_ctses.emplace_back(cts->latches);
+            return false;
+        }
+    }
+}
+
+
+bool BCAR::CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses, int cts_count) {
+    if (cts_count >= m_settings.ctgMaxBlocks) return false;
+
+    m_log.L(3, "Try cts:", CubeToStr(cts->latches));
+    cube cts_ass(cts->latches);
+    OrderAssumption(cts_ass);
+
+    while (true) {
+        if (!IsReachable(frame_lvl, cts_ass, "SAT_R_CTS_B")) {
+            auto uc_cts = GetUnsatCore(frame_lvl, cts->latches);
+            m_log.L(3, "CTG Get UC:", CubeToStr(uc_cts));
+            if (Generalize(uc_cts, frame_lvl, rec_lvl + 1)) m_branching->Update(uc_cts);
+            m_log.L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
+            AddUnsatisfiableCore(uc_cts, frame_lvl + 1);
+            PropagateUp(uc_cts, frame_lvl + 1);
+            return true;
         } else {
             auto p = GetInputAndState(frame_lvl);
-            shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
-            if (DownHasFailed(cts->latches, failed_ctses)) return false;
-            int cts_lvl = frame_lvl - 1;
-            cube cts_ass(cts->latches);
-            OrderAssumption(cts_ass);
-            // F_i-1 & T & cts'
-            if (ctgs < m_settings.ctgMaxStates && cts_lvl >= 0 &&
-                !IsReachable(cts_lvl, cts_ass, "SAT_BC_CTG")) {
-                ctgs++;
-                auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
-                m_log.L(3, "CTG Get UC:", CubeToStr(uc_cts));
-                if (Generalize(uc_cts, cts_lvl, rec_lvl + 1)) m_branching->Update(uc_cts);
-                m_log.L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
-                AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
-                PropagateUp(uc_cts, cts_lvl + 1);
-            } else {
+            shared_ptr<State> post_cts(new State(nullptr, p.first, p.second, 0));
+            if (DownHasFailed(post_cts->latches, failed_ctses)) return false;
+
+            int pre_cts_lvl = frame_lvl - 1;
+            if (pre_cts_lvl < 0 ||
+                !CTSBlock(post_cts, pre_cts_lvl, rec_lvl, failed_ctses, cts_count + 1)) {
+
                 failed_ctses.emplace_back(cts->latches);
                 return false;
             }

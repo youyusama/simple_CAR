@@ -92,9 +92,11 @@ class BCAR : public BaseAlg {
         }
     }
 
-    bool Generalize(cube &uc, int frame_lvl, int rec_lvl = 1);
+    bool Generalize(cube &uc, int frame_lvl, int rec_lvl = 0);
 
     bool Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses);
+
+    bool CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses, int cts_count = 0);
 
     bool DownHasFailed(const cube &s, const vector<cube> &failed_ctses);
 

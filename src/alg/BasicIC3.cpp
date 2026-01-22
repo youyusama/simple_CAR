@@ -462,7 +462,7 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
             ctgs = 0;
             cube joinCube;
             for (int i = downCube.size() - 1; i >= 0; i--) {
-                if (binary_search(ctgCube.begin(), ctgCube.end(), downCube[i])) {
+                if (binary_search(ctgCube.begin(), ctgCube.end(), downCube[i], cmp)) {
                     joinCube.push_back(downCube[i]);
                 } else if (triedLits.count(downCube[i])) {
                     return false;

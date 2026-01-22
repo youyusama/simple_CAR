@@ -355,12 +355,13 @@ shared_ptr<State> FCAR::EnumerateStartState() {
                 cube assumption;
                 copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
                 OrderAssumption(assumption);
-                copy(p.first.begin(), p.first.end(), back_inserter(assumption));
-                copy(inputs_prime.begin(), inputs_prime.end(), back_inserter(assumption));
 
                 if (gen_tried == 1) reverse(assumption.begin(), assumption.end());
                 if (gen_tried > 1) random_shuffle(assumption.begin(), assumption.end());
                 gen_tried++;
+
+                copy(p.first.begin(), p.first.end(), back_inserter(assumption));
+                copy(inputs_prime.begin(), inputs_prime.end(), back_inserter(assumption));
 
                 bool res;
                 {
@@ -410,11 +411,12 @@ shared_ptr<State> FCAR::EnumerateStartState() {
                 cube assumption;
                 copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
                 OrderAssumption(assumption);
-                copy(p.first.begin(), p.first.end(), back_inserter(assumption));
 
                 if (gen_tried == 1) reverse(assumption.begin(), assumption.end());
                 if (gen_tried > 1) random_shuffle(assumption.begin(), assumption.end());
                 gen_tried++;
+
+                copy(p.first.begin(), p.first.end(), back_inserter(assumption));
 
                 bool res;
                 {
@@ -537,11 +539,12 @@ void FCAR::GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t) {
         cube assumption;
         copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
         OrderAssumption(assumption);
-        copy(s.first.begin(), s.first.end(), back_inserter(assumption));
 
         if (gen_tried == 1) reverse(assumption.begin(), assumption.end());
         if (gen_tried > 1) random_shuffle(assumption.begin(), assumption.end());
         gen_tried++;
+
+        copy(s.first.begin(), s.first.end(), back_inserter(assumption));
 
         bool res;
         {
@@ -594,7 +597,6 @@ bool FCAR::Generalize(cube &uc, int frame_lvl, int rec_lvl) {
             if (ll != uc.at(i)) temp_uc.emplace_back(ll);
         if (Down(temp_uc, frame_lvl, rec_lvl, failed_ctses)) {
             uc.swap(temp_uc);
-            OrderAssumption(uc);
             i = uc.size();
         } else {
             required_lits.emplace(uc.at(i));
@@ -622,42 +624,62 @@ bool FCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
         m_transSolvers[frame_lvl]->SetTempDomainCOI(assumption);
         // F_i & T & temp_uc'
         if (!IsReachable(frame_lvl, assumption, "SAT_R_Down")) {
-            sort(uc.begin(), uc.end(), cmp);
-            auto uc_ctg = GetUnsatCore(frame_lvl, uc);
-            if (uc.size() < uc_ctg.size()) return false; // there are cases that uc_ctg longer than uc
-            uc.swap(uc_ctg);
+            uc = GetUnsatCore(frame_lvl, uc);
             return true;
-        } else if (rec_lvl > m_settings.ctgMaxRecursionDepth) {
+        }
+
+        if (rec_lvl >= m_settings.ctgMaxRecursionDepth ||
+            ctgs >= m_settings.ctgMaxStates ||
+            frame_lvl < 1) {
             return false;
+        }
+
+        [[maybe_unused]] auto ctgScope = m_log.Section("FC_Dn_CTG");
+        auto p = GetInputAndState(frame_lvl);
+        GeneralizePredecessor(p, p_ucs);
+        shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
+        if (DownHasFailed(cts->latches, failed_ctses)) return false;
+
+        if (CTSBlock(cts, frame_lvl - 1, rec_lvl, failed_ctses)) {
+            ctgs++;
         } else {
-            [[maybe_unused]] auto ctgScope = m_log.Section("FC_Dn_CTG");
+            failed_ctses.emplace_back(cts->latches);
+            return false;
+        }
+    }
+}
+
+
+bool FCAR::CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses, int cts_count) {
+    if (cts_count >= m_settings.ctgMaxBlocks) return false;
+
+    // F_i & T & cts'
+    m_log.L(3, "Try cts:", CubeToStr(cts->latches));
+    cube cts_ass(cts->latches);
+    OrderAssumption(cts_ass);
+    GetPrimed(cts_ass);
+
+    while (true) {
+        m_transSolvers[frame_lvl]->SetTempDomainCOI(cts_ass);
+        if (!IsReachable(frame_lvl, cts_ass, "SAT_R_CTS_B")) {
+            auto uc_cts = GetUnsatCore(frame_lvl, cts->latches);
+            m_log.L(3, "CTG Get UC:", CubeToStr(uc_cts));
+            if (Generalize(uc_cts, frame_lvl, rec_lvl + 1))
+                m_branching->Update(uc_cts);
+            m_log.L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
+            AddUnsatisfiableCore(uc_cts, frame_lvl + 1);
+            PropagateUp(uc_cts, frame_lvl + 1);
+            return true;
+        } else {
             auto p = GetInputAndState(frame_lvl);
-            GeneralizePredecessor(p, p_ucs);
-            shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
-            if (DownHasFailed(cts->latches, failed_ctses)) return false;
+            GeneralizePredecessor(p, cts);
+            shared_ptr<State> pre_cts(new State(nullptr, p.first, p.second, 0));
+            if (DownHasFailed(pre_cts->latches, failed_ctses)) return false;
 
-            int cts_lvl = frame_lvl - 1;
-            if (ctgs >= m_settings.ctgMaxStates || cts_lvl < 0) {
-                failed_ctses.emplace_back(cts->latches);
-                return false;
-            }
+            int pre_cts_lvl = frame_lvl - 1;
+            if (pre_cts_lvl < 0 ||
+                !CTSBlock(pre_cts, pre_cts_lvl, rec_lvl, failed_ctses, cts_count + 1)) {
 
-            // F_i-1 & T & cts'
-            m_log.L(3, "Try ctg:", CubeToStr(cts->latches));
-            cube cts_ass(cts->latches);
-            OrderAssumption(cts_ass);
-            GetPrimed(cts_ass);
-            m_transSolvers[cts_lvl]->SetTempDomainCOI(cts_ass);
-            if (!IsReachable(cts_lvl, cts_ass, "SAT_R_CTG")) {
-                ctgs++;
-                auto uc_cts = GetUnsatCore(cts_lvl, cts->latches);
-                m_log.L(3, "CTG Get UC:", CubeToStr(uc_cts));
-                if (Generalize(uc_cts, cts_lvl, rec_lvl + 1))
-                    m_branching->Update(uc_cts);
-                m_log.L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
-                AddUnsatisfiableCore(uc_cts, cts_lvl + 1);
-                PropagateUp(uc_cts, cts_lvl + 1);
-            } else {
                 failed_ctses.emplace_back(cts->latches);
                 return false;
             }
