@@ -349,12 +349,18 @@ shared_ptr<State> FCAR::EnumerateStartState() {
                 cls.push_back(-cons);
             m_badLiftSolver->AddTempClause(cls);
 
+            int gen_tried = 0;
+
             while (true) {
                 cube assumption;
                 copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
                 OrderAssumption(assumption);
                 copy(p.first.begin(), p.first.end(), back_inserter(assumption));
                 copy(inputs_prime.begin(), inputs_prime.end(), back_inserter(assumption));
+
+                if (gen_tried == 1) reverse(assumption.begin(), assumption.end());
+                if (gen_tried > 1) random_shuffle(assumption.begin(), assumption.end());
+                gen_tried++;
 
                 bool res;
                 {
@@ -398,11 +404,17 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             m_badLiftSolver->AddTempClause(cls);
             m_log.L(3, "lift assume: ", CubeToStr(cls));
 
+            int gen_tried = 0;
+
             while (true) {
                 cube assumption;
                 copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
                 OrderAssumption(assumption);
                 copy(p.first.begin(), p.first.end(), back_inserter(assumption));
+
+                if (gen_tried == 1) reverse(assumption.begin(), assumption.end());
+                if (gen_tried > 1) random_shuffle(assumption.begin(), assumption.end());
+                gen_tried++;
 
                 bool res;
                 {
@@ -519,12 +531,17 @@ void FCAR::GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t) {
     for (auto cons : m_model.GetConstraints()) cls.push_back(-cons);
     m_liftSolver->AddTempClause(cls);
     m_liftSolver->SetTempDomainCOI(cls);
+    int gen_tried = 0;
 
     while (true) {
         cube assumption;
         copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
         OrderAssumption(assumption);
         copy(s.first.begin(), s.first.end(), back_inserter(assumption));
+
+        if (gen_tried == 1) reverse(assumption.begin(), assumption.end());
+        if (gen_tried > 1) random_shuffle(assumption.begin(), assumption.end());
+        gen_tried++;
 
         bool res;
         {
