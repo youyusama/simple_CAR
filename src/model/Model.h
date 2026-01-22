@@ -235,7 +235,12 @@ class Model {
     void CollectInnards();
 
     void SimplifyClauses();
+
     void SimplifyDAGClauses();
+
+    int BuildLiveness();
+
+    int BuildSingleFairness(const vector<int> &conds);
 
     bool SimplifyModelByTernarySimulation();
 

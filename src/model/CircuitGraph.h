@@ -74,7 +74,7 @@ class CircuitGraph {
     vector<int> ands;
     vector<int> bad;
     vector<int> constraints;
-    vector<int> justice;
+    vector<vector<int>> justice;
     vector<int> fairness;
 
     // variables for query
@@ -91,6 +91,20 @@ class CircuitGraph {
 
     // refine the COI of property & constraints, get new model inputs, latches, and gates
     void COIRefine();
+
+    int NewModelVar();
+
+    int AddInputVar();
+
+    int AddLatchVar();
+
+    void SetLatchResetNext(int latch, int reset, int next);
+
+    int AddAndGate(int a, int b);
+
+    int MakeAnd(int a, int b);
+
+    int MakeOr(int a, int b);
 
     // variables really matter
     vector<int> modelInputs;

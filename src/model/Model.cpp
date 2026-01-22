@@ -76,11 +76,21 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
 
     // multiple bad to check
     int num_bad = m_circuitGraph->bad.size();
+    int num_justice = m_circuitGraph->justice.size();
+    if (num_bad > 0 && num_justice > 0) {
+        m_log.L(0, "aiger has both safety and justice properties.");
+        exit(0);
+    }
+    if (num_bad == 0 && num_justice == 0) {
+        m_log.L(0, "aiger has no property to check.");
+        exit(0);
+    }
     if (num_bad > 1) {
         m_log.L(0, "aiger has more than one safety property to check.");
         exit(0);
-    } else if (num_bad == 0) {
-        m_log.L(0, "aiger has no safety property to check.");
+    }
+    if (num_justice > 1) {
+        m_log.L(0, "aiger has more than one justice property to check.");
         exit(0);
     }
 
@@ -107,14 +117,16 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // apply the equivalences to the circuit graph
     ApplyEquivalence();
 
-    // update dependency map
-    // UpdateDependencyMap();
-
     // initial state
     CollectInitialState();
 
-    // bad property
-    m_bad = m_circuitGraph->bad[0];
+    // property to check
+    if (num_bad == 1) {
+        m_bad = m_circuitGraph->bad[0];
+    } else if (num_justice == 1) {
+        // liveness extraction
+        m_bad = BuildLiveness();
+    }
 
     // prime variable mapping
     CollectNextValueMapping();
@@ -126,8 +138,14 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
 
     // transform to CNF
     CollectClauses();
+
+    // DAG CNF simplification
     SimplifyDAGClauses();
+
+    // update dependency by DAG CNF
     UpdateDependencyVecDAGCNF();
+
+    // further clause simplification
     SimplifyClauses();
 
     // cout << "model latches:" << endl;
@@ -189,6 +207,14 @@ void Model::ApplyEquivalence() {
 
     for (int i = 0; i < m_circuitGraph->constraints.size(); i++) {
         m_circuitGraph->constraints[i] = m_equivalenceManager->Find(m_circuitGraph->constraints[i]);
+    }
+    for (size_t i = 0; i < m_circuitGraph->fairness.size(); i++) {
+        m_circuitGraph->fairness[i] = m_equivalenceManager->Find(m_circuitGraph->fairness[i]);
+    }
+    for (size_t i = 0; i < m_circuitGraph->justice.size(); i++) {
+        for (size_t j = 0; j < m_circuitGraph->justice[i].size(); j++) {
+            m_circuitGraph->justice[i][j] = m_equivalenceManager->Find(m_circuitGraph->justice[i][j]);
+        }
     }
 
     m_circuitGraph->trueId = m_equivalenceManager->Find(m_circuitGraph->trueId);
@@ -310,6 +336,45 @@ void Model::CollectClauses() {
     }
 }
 
+int Model::BuildSingleFairness(const vector<int> &conds) {
+    if (conds.size() == 1) return conds[0];
+
+    vector<int> monitors;
+    monitors.reserve(conds.size());
+    for (size_t i = 0; i < conds.size(); i++) {
+        monitors.emplace_back(m_circuitGraph->AddLatchVar());
+    }
+
+    vector<int> triggers;
+    triggers.reserve(conds.size());
+    int accept = TrueId();
+    for (size_t i = 0; i < conds.size(); i++) {
+        int trigger = m_circuitGraph->MakeOr(conds[i], monitors[i]);
+        triggers.emplace_back(trigger);
+        accept = m_circuitGraph->MakeAnd(accept, trigger);
+    }
+
+    int inp = m_circuitGraph->AddInputVar();
+    int reset = m_circuitGraph->MakeOr(inp, accept);
+
+    for (size_t i = 0; i < conds.size(); i++) {
+        int next = m_circuitGraph->MakeAnd(-reset, triggers[i]);
+        m_circuitGraph->SetLatchResetNext(monitors[i], -TrueId(), next);
+    }
+
+    return accept;
+}
+
+int Model::BuildLiveness() {
+    assert(m_circuitGraph->justice.size() == 1);
+
+    vector<int> conds = m_circuitGraph->fairness;
+    const vector<int> &just = m_circuitGraph->justice[0];
+    conds.insert(conds.end(), just.begin(), just.end());
+
+    int accept = BuildSingleFairness(conds);
+    return accept;
+}
 
 cube Model::GetCOIDomain(const cube &c) {
     m_coiDomain.clear();
