@@ -4,7 +4,9 @@
 #include "BMC.h"
 #include "BasicIC3.h"
 #include "FCAR.h"
+#include "KFAIR.h"
 #include "L2S.h"
+#include "rlive.h"
 #include "Log.h"
 #include "Model.h"
 #include <iostream>
@@ -27,6 +29,12 @@ static std::unique_ptr<BaseAlg> CreateChecker(
         return std::make_unique<BasicIC3>(settings, aigerModel, log);
     case MCAlgorithm::L2S:
         return std::make_unique<L2S>(settings, aigerModel, log);
+    case MCAlgorithm::KLIVE:
+    case MCAlgorithm::FAIR:
+    case MCAlgorithm::KFAIR:
+        return std::make_unique<KFAIR>(settings, aigerModel, log);
+    case MCAlgorithm::RLIVE:
+        return std::make_unique<rlive>(settings, aigerModel, log);
     default:
         return nullptr;
     }

@@ -16,6 +16,7 @@ FCAR::FCAR(Settings settings,
     m_checkResult = CheckResult::Unknown;
 
     m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
+    m_shoalUnroll = m_settings.shoalUnroll >= 1 ? m_settings.shoalUnroll : 1;
 }
 
 CheckResult FCAR::Run() {
@@ -38,10 +39,24 @@ void FCAR::Witness() {
     }
 }
 
+
 bool FCAR::Check(int badId) {
     [[maybe_unused]] auto checkScope = m_log.Section("FC_Check");
     Init(badId);
     m_log.L(2, "Initialized");
+
+    if ((m_searchFromInitSucc || m_loopRefuting) && !m_customInit.empty()) {
+        m_stateImplyBad = IsStateImplyBad();
+    }
+    if (m_loopRefuting && m_walls && !m_walls->empty()) {
+        if (IsLivenessWallDuplicated()) {
+            m_hasDuplicatedWall = true;
+            return true;
+        }
+    }
+    if (m_settings.rlivePruneDead && m_dead && PruneDead()) {
+        return true;
+    }
 
     m_log.L(2, "Initial States Check");
     if (ImmediateSatisfiable(badId)) {
@@ -175,6 +190,7 @@ bool FCAR::Check(int badId) {
 
         // inv
         m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+        ApplyExternalCubes(m_invSolver);
         IsInvariant(0);
         for (int i = 0; i < m_k; ++i) {
             // propagation
@@ -213,6 +229,9 @@ void FCAR::Init(int badId) {
     [[maybe_unused]] auto initScope = m_log.Section("FC_Init");
     cube inputs(State::numInputs, 0);
     cube latches(m_model.GetInitialState());
+    if (!m_customInit.empty()) {
+        latches = m_customInit;
+    }
     m_initialState.reset(new State(nullptr, inputs, latches, 0));
 
     m_badId = badId;
@@ -222,18 +241,31 @@ void FCAR::Init(int badId) {
     litOrder.branching = m_branching;
     blockerOrder.branching = m_branching;
     m_domainStack.clear();
+    m_transSolvers.clear();
+    m_lastState = nullptr;
+    m_reachedTarget.clear();
+    m_newDead.clear();
 
     // O_i & T & c & s'
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
     if (m_settings.satSolveInDomain) m_transSolvers[0]->SetSolveInDomain();
     m_transSolvers[0]->AddTrans();
     m_transSolvers[0]->AddConstraints();
-    m_transSolvers[0]->AddInitialClauses();
+    if (!m_customInit.empty() && !m_searchFromInitSucc) {
+        for (int lit : m_customInit) {
+            m_transSolvers[0]->AddClause(cube{lit});
+            m_transSolvers[0]->SetDomainCOI(cube{lit});
+        }
+    } else {
+        m_transSolvers[0]->AddInitialClauses();
+    }
+    ApplyExternalCubes(m_transSolvers[0]);
     // lift
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
     m_liftSolver->AddTrans();
     m_liftSolver->SetDomainCOI(m_model.GetConstraints());
+    ApplyExternalCubes(m_liftSolver);
 
     InitializeStartSolver();
     if (m_settings.searchFromBadPred) {
@@ -241,6 +273,7 @@ void FCAR::Init(int badId) {
         m_badLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
         m_badLiftSolver->AddTrans();
         m_badLiftSolver->AddTransK(1);
+        ApplyExternalCubes(m_badLiftSolver);
     } else {
         // bad lift
         m_badLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
@@ -248,6 +281,7 @@ void FCAR::Init(int badId) {
         m_badLiftSolver->AddTrans();
         m_badLiftSolver->SetDomainCOI(m_model.GetConstraints());
         m_badLiftSolver->SetDomainCOI({m_model.GetBad()});
+        ApplyExternalCubes(m_badLiftSolver);
     }
 
     m_restart.reset(new Restart(m_settings));
@@ -274,6 +308,7 @@ void FCAR::InitializeStartSolver() {
         m_startSolver->SetDomainCOI(m_model.GetConstraints());
         m_startSolver->SetDomainCOI({m_model.GetBad()});
     }
+    ApplyExternalCubes(m_startSolver);
 }
 
 
@@ -288,6 +323,7 @@ bool FCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
         m_transSolvers.back()->AddTrans();
         m_transSolvers.back()->AddConstraints();
         if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
+        ApplyExternalCubes(m_transSolvers.back());
     }
     m_transSolvers[frameLevel]->AddUC(uc);
 
@@ -303,13 +339,23 @@ bool FCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
 
 bool FCAR::ImmediateSatisfiable(int badId) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_ImmSAT");
+    if (m_searchFromInitSucc && !m_customInit.empty()) {
+        return false;
+    }
     cube assumptions(m_initialState->latches);
+    if (!m_customInit.empty()) {
+        assumptions = m_customInit;
+    }
     assumptions.push_back(badId);
     m_transSolvers[0]->SetTempDomainCOI(assumptions);
     bool result;
     {
         [[maybe_unused]] auto satScope = m_log.Section("SAT_Imm");
         result = m_transSolvers[0]->Solve(assumptions);
+    }
+    if (result) {
+        auto p = m_transSolvers[0]->GetAssignment(false);
+        m_reachedTarget = p.second;
     }
     return result;
 }
@@ -378,6 +424,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             }
             m_badLiftSolver->ReleaseTempClause();
             p.second = partial_latch;
+            m_reachedTarget = p.second;
 
             cube inputs_bad;
             for (int i : m_model.GetPropertyCOIInputs()) {
@@ -433,6 +480,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             }
             m_badLiftSolver->ReleaseTempClause();
             p.second = partial_latch;
+            m_reachedTarget = p.second;
 
             shared_ptr<State> badState(new State(nullptr, p.first, p.second, 0));
             return badState;
@@ -704,6 +752,12 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
     m_log.L(2, "From State: ", CubeToStrShort(s->latches));
     m_log.L(3, "State Detail: ", CubeToStr(s->latches));
     cube assumption(s->latches);
+    if (!m_customInit.empty() && m_searchFromInitSucc) {
+        for (int lit : m_customInit) {
+            int p = m_model.GetPrime(lit);
+            if (p != 0) assumption.emplace_back(p);
+        }
+    }
     OrderAssumption(assumption);
     m_transSolvers[0]->SetTempDomain(assumption);
     bool result = IsReachable(0, assumption, "SAT_R_Init");
@@ -808,6 +862,205 @@ cube FCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumpti
             res.emplace_back(a);
     }
     return res;
+}
+
+
+void FCAR::SetInit(const cube &c) {
+    m_customInit = c;
+}
+
+
+void FCAR::SetSearchFromInitSucc(bool b) {
+    m_searchFromInitSucc = b;
+}
+
+
+void FCAR::SetLoopRefuting(bool b) {
+    m_loopRefuting = b;
+}
+
+void FCAR::SetDead(const std::vector<cube> &dead) {
+    m_dead = &dead;
+}
+
+
+void FCAR::SetShoals(const std::vector<FrameList> &shoals) {
+    m_shoals = &shoals;
+}
+
+
+void FCAR::SetWalls(const std::vector<FrameList> &walls) {
+    m_walls = &walls;
+}
+
+
+cube FCAR::GetReachedTarget() {
+    return m_reachedTarget;
+}
+
+
+std::vector<std::pair<cube, cube>> FCAR::GetCexTrace() {
+    std::vector<std::pair<cube, cube>> trace;
+    if (!m_lastState) return trace;
+
+    vector<shared_ptr<State>> path;
+    for (auto cur = m_lastState; cur != nullptr; cur = cur->preState) {
+        path.emplace_back(cur);
+    }
+    reverse(path.begin(), path.end());
+
+    trace.reserve(path.size());
+    for (size_t i = 0; i < path.size(); ++i) {
+        cube inputs;
+        if (i > 0) {
+            inputs = path[i]->inputs;
+        }
+        trace.emplace_back(path[i]->latches, std::move(inputs));
+    }
+    return trace;
+}
+
+
+FrameList FCAR::GetInv() {
+    FrameList inv;
+    if (m_hasDuplicatedWall) return inv;
+    if (!m_overSequence) return inv;
+    int lvl = m_overSequence->GetInvariantLevel();
+    if (lvl < 0) return inv;
+    for (int i = 0; i <= lvl; ++i) {
+        inv.emplace_back(*m_overSequence->GetFrame(i));
+    }
+    return inv;
+}
+
+
+void FCAR::KLiveIncr() {
+    auto &klive = m_model.GetKLiveCounter();
+    klive.Increment(&m_model);
+    m_model.SetBad(klive.cur);
+    m_model.Rebuild();
+}
+
+
+int FCAR::GetDepth() {
+    return m_k;
+}
+
+
+void FCAR::ApplyExternalCubes(const shared_ptr<SATSolver> &solver) {
+    if (!solver) return;
+    if (m_walls && !m_walls->empty()) {
+        AddWallConstraints(solver.get());
+    }
+    if ((m_shoals && !m_shoals->empty()) || (m_dead && !m_dead->empty()) || !m_newDead.empty()) {
+        AddShoalConstraints(solver.get());
+    }
+}
+
+
+bool FCAR::IsStateImplyBad() {
+    if (m_customInit.empty()) return false;
+    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
+    slv->AddTrans();
+    slv->AddConstraints();
+    cube assumptions = m_customInit;
+    assumptions.push_back(m_model.GetBad());
+    bool sat = slv->Solve(assumptions);
+    return !sat;
+}
+
+
+bool FCAR::IsLivenessWallDuplicated() {
+    if (!m_walls || m_walls->empty()) return false;
+    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
+    slv->AddTrans();
+    slv->AddConstraints();
+    AddWallConstraints(slv.get());
+
+    cube assumptions = m_customInit;
+    if (!m_stateImplyBad) {
+        assumptions.push_back(-m_model.GetBad());
+    }
+    bool sat = slv->Solve(assumptions);
+    return !sat;
+}
+
+
+void FCAR::AddWallConstraints(SATSolver *solver) {
+    if (!solver || !m_walls) return;
+    for (const auto &inv : *m_walls) {
+        int p = AddInvAsLabelK(solver, inv, m_model, 0);
+        int pp = AddInvAsLabelK(solver, inv, m_model, 1);
+        solver->AddClause(clause{-p, pp});
+        solver->AddClause(clause{-pp, p});
+    }
+}
+
+
+void FCAR::AddShoalConstraints(SATSolver *solver) {
+    if (!solver) return;
+    for (int u = 0; u <= m_shoalUnroll; ++u) {
+        if (m_shoals) {
+            for (const auto &inv : *m_shoals) {
+                AddInvAsClauseK(solver, inv, true, m_model, u);
+            }
+        }
+        if (m_settings.rlivePruneDead) {
+            if (m_dead) {
+                for (const auto &d : *m_dead) {
+                    AddCubeAsClauseK(solver, d, true, m_model, u);
+                }
+            }
+            for (const auto &d : m_newDead) {
+                AddCubeAsClauseK(solver, d, true, m_model, u);
+            }
+        }
+    }
+}
+
+
+bool FCAR::GetInit(cube &out) {
+    out.clear();
+    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
+    slv->AddTrans();
+    slv->AddConstraints();
+    if (!m_customInit.empty()) {
+        for (int lit : m_customInit) slv->AddClause(clause{lit});
+    } else {
+        for (int lit : m_model.GetInitialState()) slv->AddClause(clause{lit});
+        slv->AddInitialClauses();
+    }
+    AddShoalConstraints(slv.get());
+    bool sat = slv->Solve();
+    if (!sat) return false;
+    auto p = slv->GetAssignment(m_searchFromInitSucc);
+    out = p.second;
+    return true;
+}
+
+
+bool FCAR::PruneDead() {
+    cube init;
+    while (GetInit(init)) {
+        if (!IsDeadState(init)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+bool FCAR::IsDeadState(const cube &c) {
+    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
+    slv->AddTrans();
+    slv->AddConstraints();
+    cube assumption = c;
+    bool sat = slv->Solve(assumption);
+    if (sat) return false;
+    cube dead = GetUnsatAssumption(slv, assumption);
+    if (dead.empty()) dead = assumption;
+    m_newDead.emplace_back(dead);
+    return true;
 }
 
 

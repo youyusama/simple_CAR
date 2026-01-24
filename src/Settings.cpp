@@ -22,10 +22,14 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"bcar", MCAlgorithm::BCAR},
                 {"bmc", MCAlgorithm::BMC},
                 {"ic3", MCAlgorithm::IC3},
-                {"l2s", MCAlgorithm::L2S}}))
+                {"l2s", MCAlgorithm::L2S},
+                {"klive", MCAlgorithm::KLIVE},
+                {"fair", MCAlgorithm::FAIR},
+                {"kfair", MCAlgorithm::KFAIR},
+                {"rlive", MCAlgorithm::RLIVE}}))
         ->default_val("fcar");
 
-    app.add_option("--safety_base_alg,--safetybasealg", settings.safetyBaseAlg, "Safety base algorithm")
+    app.add_option("--sa", settings.safetyBaseAlg, "Safety base algorithm")
         ->transform(CLI::CheckedTransformer(
             std::map<std::string, MCAlgorithm>{
                 {"fcar", MCAlgorithm::FCAR},
@@ -33,6 +37,12 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"bmc", MCAlgorithm::BMC},
                 {"ic3", MCAlgorithm::IC3}}))
         ->default_val("fcar");
+
+    app.add_option("--su,--shoal-unroll", settings.shoalUnroll, "unroll shoals for K cycles in rlive")
+        ->default_val(1);
+
+    app.add_flag("--pd,--rlive-prune-dead", settings.rlivePruneDead, "prune dead states in rlive")
+        ->default_val(false);
 
     app.add_option("-s", settings.solver, "Main SAT Solver")
         ->transform(CLI::CheckedTransformer(

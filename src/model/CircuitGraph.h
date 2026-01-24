@@ -94,17 +94,13 @@ class CircuitGraph {
 
     int NewModelVar();
 
-    int AddInputVar();
+    int NewInputVar();
 
-    int AddLatchVar();
+    int NewLatchVar();
 
     void SetLatchResetNext(int latch, int reset, int next);
 
-    int AddAndGate(int a, int b);
-
-    int MakeAnd(int a, int b);
-
-    int MakeOr(int a, int b);
+    int NewAndGate(int a, int b);
 
     // variables really matter
     vector<int> modelInputs;

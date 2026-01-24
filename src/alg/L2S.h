@@ -6,8 +6,8 @@
 #include "Model.h"
 #include "Settings.h"
 #include <memory>
-#include <vector>
 #include <unordered_set>
+#include <vector>
 
 namespace car {
 
@@ -22,14 +22,13 @@ class L2S : public BaseAlg {
     Trace CounterexampleTrace() override;
 
   private:
-    bool Translate();
+    void Translate();
     std::unique_ptr<BaseAlg> CreateSafetyChecker();
 
     Settings m_settings;
     Model &m_model;
     Log &m_log;
     std::unique_ptr<BaseAlg> m_checker;
-    bool m_translated;
     int m_save;
     std::vector<int> m_statecopy;
     std::vector<int> m_origInputs;

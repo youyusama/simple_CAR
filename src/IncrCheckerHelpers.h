@@ -47,6 +47,7 @@ struct CubeHash {
 };
 
 using frame = unordered_set<cube, CubeHash>;
+using FrameList = std::vector<frame>;
 
 class OverSequenceSet {
   public:
@@ -245,6 +246,16 @@ struct Luby {
     std::vector<int> m_luby;
     int m_index;
 };
+
+bool IsStateInInv(const cube &s, const FrameList &inv);
+
+int AddInvAsLabelK(SATSolver *slv, const FrameList &inv, Model &model, int k);
+
+int AddCubeAsLabelK(SATSolver *slv, const cube &c, Model &model, int k);
+
+void AddInvAsClauseK(SATSolver *slv, const FrameList &inv, bool neg, Model &model, int k);
+
+void AddCubeAsClauseK(SATSolver *slv, const cube &c, bool neg, Model &model, int k);
 
 
 class Restart {

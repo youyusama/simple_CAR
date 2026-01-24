@@ -117,9 +117,6 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // apply the equivalences to the circuit graph
     ApplyEquivalence();
 
-    // initial state
-    CollectInitialState();
-
     // property to check
     if (num_bad == 1) {
         m_bad = m_circuitGraph->bad[0];
@@ -129,6 +126,11 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
         m_bad = BuildLiveness();
         m_propKind = PropKind::Liveness;
     }
+
+    // initial state
+    CollectInitialState();
+
+    m_kliveCounter.Init(this, m_bad);
 
     // prime variable mapping
     CollectNextValueMapping();
@@ -276,6 +278,9 @@ void Model::UpdateDependencyVecDAGCNF() {
 
 
 void Model::CollectInitialState() {
+    m_initialState.clear();
+    m_initialClauses.clear();
+
     for (auto l : m_circuitGraph->modelLatches) {
         int reset = m_circuitGraph->latchResetMap[l];
 
@@ -338,6 +343,7 @@ void Model::CollectClauses() {
     }
 }
 
+
 int Model::GetLatchReset(int latch) const {
     int key = abs(latch);
     auto it = m_circuitGraph->latchResetMap.find(key);
@@ -345,6 +351,7 @@ int Model::GetLatchReset(int latch) const {
     int val = it->second;
     return latch > 0 ? val : -val;
 }
+
 
 int Model::GetLatchNext(int latch) const {
     int key = abs(latch);
@@ -354,24 +361,89 @@ int Model::GetLatchNext(int latch) const {
     return latch > 0 ? val : -val;
 }
 
-void Model::SetBad(int bad) {
-    m_bad = bad;
-    m_circuitGraph->bad.clear();
-    m_circuitGraph->bad.emplace_back(bad);
+
+void Model::SetLatchReset(int latch, int reset) {
+    int key = abs(latch);
+    int val = latch > 0 ? reset : -reset;
+    m_circuitGraph->latchResetMap[key] = val;
 }
 
+
+void Model::SetLatchNext(int latch, int next) {
+    int key = abs(latch);
+    int val = latch > 0 ? next : -next;
+    m_circuitGraph->latchNextMap[key] = val;
+}
+
+
+void Model::SetBad(int bad) {
+    m_bad = bad;
+}
+
+
+int Model::NewInputVar() {
+    return m_circuitGraph->NewInputVar();
+}
+
+
+int Model::NewLatchVar() {
+    return m_circuitGraph->NewLatchVar();
+}
+
+
+int Model::MakeAnd(int a, int b) {
+    if (a == TrueId()) return b;
+    if (b == TrueId()) return a;
+    if (a == -TrueId() || b == -TrueId()) return -TrueId();
+    if (a == b) return a;
+    if (a == -b) return -TrueId();
+    return m_circuitGraph->NewAndGate(a, b);
+}
+
+
+int Model::MakeOr(int a, int b) {
+    return -MakeAnd(-a, -b);
+}
+
+
+int Model::MakeXor(int a, int b) {
+    int t1 = MakeAnd(a, -b);
+    int t2 = MakeAnd(-a, b);
+    return MakeOr(t1, t2);
+}
+
+
+int Model::MakeXnor(int a, int b) {
+    return -MakeXor(a, b);
+}
+
+
+int Model::MakeIte(int i, int t, int e) {
+    int t1 = MakeAnd(i, t);
+    int t2 = MakeAnd(-i, e);
+    return MakeOr(t1, t2);
+}
+
+
+KLivenessCounter &Model::GetKLiveCounter() {
+    return m_kliveCounter;
+}
+
+
+const KLivenessCounter &Model::GetKLiveCounter() const {
+    return m_kliveCounter;
+}
+
+
 void Model::Rebuild() {
-    m_initialState.clear();
-    m_initialClauses.clear();
     CollectInitialState();
     CollectNextValueMapping();
     CollectClauses();
     SimplifyDAGClauses();
     UpdateDependencyVecDAGCNF();
     SimplifyClauses();
-    m_equivalenceSolver.reset();
-    m_eqSolverUnsats = 0;
 }
+
 
 int Model::BuildSingleFairness(const vector<int> &conds) {
     if (conds.size() == 1) return conds[0];
@@ -379,28 +451,34 @@ int Model::BuildSingleFairness(const vector<int> &conds) {
     vector<int> monitors;
     monitors.reserve(conds.size());
     for (size_t i = 0; i < conds.size(); i++) {
-        monitors.emplace_back(m_circuitGraph->AddLatchVar());
+        monitors.emplace_back(NewLatchVar());
     }
 
+    // trigger_i = cond_i || monitor_i
+    // accept = trigger_0 && trigger_1 && ... && trigger_n
     vector<int> triggers;
     triggers.reserve(conds.size());
     int accept = TrueId();
     for (size_t i = 0; i < conds.size(); i++) {
-        int trigger = m_circuitGraph->MakeOr(conds[i], monitors[i]);
+        int trigger = MakeOr(conds[i], monitors[i]);
         triggers.emplace_back(trigger);
-        accept = m_circuitGraph->MakeAnd(accept, trigger);
+        accept = MakeAnd(accept, trigger);
     }
 
-    int inp = m_circuitGraph->AddInputVar();
-    int reset = m_circuitGraph->MakeOr(inp, accept);
+    int inp = NewInputVar();
+    int reset = MakeOr(inp, accept);
 
+    // Init(monitor_i) = false
+    // Next(monitor_i) = if (reset) then false else trigger_i
     for (size_t i = 0; i < conds.size(); i++) {
-        int next = m_circuitGraph->MakeAnd(-reset, triggers[i]);
-        m_circuitGraph->SetLatchResetNext(monitors[i], -TrueId(), next);
+        int next = MakeAnd(-reset, triggers[i]);
+        SetLatchReset(monitors[i], -TrueId());
+        SetLatchNext(monitors[i], next);
     }
 
     return accept;
 }
+
 
 int Model::BuildLiveness() {
     assert(m_circuitGraph->justice.size() == 1);
@@ -412,6 +490,7 @@ int Model::BuildLiveness() {
     int accept = BuildSingleFairness(conds);
     return accept;
 }
+
 
 cube Model::GetCOIDomain(const cube &c) {
     m_coiDomain.clear();
@@ -432,6 +511,7 @@ cube Model::GetCOIDomain(const cube &c) {
     domain.emplace_back(abs(TrueId()));
     return domain;
 }
+
 
 void Model::EnsureCOICache(int v) {
     if (m_coiCacheReady[v]) return;
@@ -992,6 +1072,43 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
         m_eqSolverUnsats++;
     }
     return unsat;
+}
+
+void KLivenessCounter::Init(Model *model, int prop) {
+    k = 0;
+    cur = prop;
+    latches.clear();
+}
+
+int KLivenessCounter::Increment(Model *model) {
+    if (!model) return 0;
+    ++k;
+    int latch = model->NewLatchVar();
+    latches.push_back(latch);
+
+    int init = model->TrueId();
+    int next = model->MakeAnd(cur, latch);
+    model->SetLatchReset(latch, init);
+    model->SetLatchNext(latch, next);
+
+    cur = model->MakeOr(cur, latch);
+    return latch;
+}
+
+unordered_map<int, int> KLivenessCounter::GetSubst(Model *model, unsigned int val) const {
+    unordered_map<int, int> ret;
+    if (!model) return ret;
+
+    int f = -model->TrueId();
+    int t = model->TrueId();
+    size_t i = 0;
+    for (; i < std::min<size_t>(val, latches.size()); ++i) {
+        ret[latches[i]] = f;
+    }
+    for (; i < latches.size(); ++i) {
+        ret[latches[i]] = t;
+    }
+    return ret;
 }
 
 } // namespace car

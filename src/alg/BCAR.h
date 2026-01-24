@@ -1,7 +1,7 @@
 #ifndef BCAR_H
 #define BCAR_H
 
-#include "BaseAlg.h"
+#include "IncrAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
@@ -14,7 +14,7 @@
 
 namespace car {
 
-class BCAR : public BaseAlg {
+class BCAR : public IncrAlg {
   public:
     BCAR(Settings settings,
          Model &model,
@@ -22,10 +22,32 @@ class BCAR : public BaseAlg {
     CheckResult Run() override;
     void Witness() override;
 
+    void SetInit(const cube &c) override;
+    void SetSearchFromInitSucc(bool b) override;
+    void SetLoopRefuting(bool b) override;
+    void SetDead(const std::vector<cube> &dead) override;
+    void SetShoals(const std::vector<FrameList> &shoals) override;
+    void SetWalls(const std::vector<FrameList> &walls) override;
+
+    cube GetReachedTarget() override;
+    std::vector<std::pair<cube, cube>> GetCexTrace() override;
+    FrameList GetInv() override;
+
+    void KLiveIncr() override;
+    int GetDepth() override;
+
   private:
     bool Check(int badId);
 
     void Init();
+    void ApplyExternalCubes(const shared_ptr<SATSolver> &solver);
+    bool IsStateImplyBad();
+    bool IsLivenessWallDuplicated();
+    void AddWallConstraints(SATSolver *solver);
+    void AddShoalConstraints(SATSolver *solver);
+    bool GetInit(cube &out);
+    bool PruneDead();
+    bool IsDeadState(const cube &c);
 
     bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
@@ -144,6 +166,18 @@ class BCAR : public BaseAlg {
     vector<shared_ptr<vector<int>>> m_rotation;
     shared_ptr<State> m_lastState;
     std::shared_ptr<Restart> m_restart;
+
+    cube m_customInit;
+    cube m_reachedTarget;
+    bool m_searchFromInitSucc = false;
+    bool m_loopRefuting = false;
+    const std::vector<cube> *m_dead = nullptr;
+    const std::vector<FrameList> *m_shoals = nullptr;
+    const std::vector<FrameList> *m_walls = nullptr;
+    bool m_stateImplyBad = false;
+    bool m_hasDuplicatedWall = false;
+    int m_shoalUnroll = 1;
+    std::vector<cube> m_newDead;
 };
 
 } // namespace car

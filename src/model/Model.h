@@ -95,6 +95,17 @@ constexpr size_t NUM_CHUNKS = 128;
 using SignatureN64 = SimulationSignature<NUM_CHUNKS>;
 using VarMapN64 = std::unordered_map<SignatureN64, std::vector<int>, SimulationSignatureHash<NUM_CHUNKS>>;
 
+class Model;
+
+struct KLivenessCounter {
+    unsigned int k = 0;
+    int cur = 0;
+    vector<int> latches;
+
+    void Init(Model *model, int prop);
+    int Increment(Model *model);
+    unordered_map<int, int> GetSubst(Model *model, unsigned int val) const;
+};
 
 class Model {
   public:
@@ -181,9 +192,10 @@ class Model {
 
     inline int GetBad() { return m_bad; }
     inline int GetProperty() { return -m_bad; }
+    KLivenessCounter &GetKLiveCounter();
+    const KLivenessCounter &GetKLiveCounter() const;
 
     inline PropKind GetPropKind() const { return m_propKind; }
-    inline void SetPropKind(PropKind k) { m_propKind = k; }
 
     inline int GetPrime(const int id) {
         unordered_map<int, int>::iterator it = m_primeMaps[0].find(abs(id));
@@ -230,8 +242,17 @@ class Model {
 
     int GetLatchReset(int latch) const;
     int GetLatchNext(int latch) const;
+    void SetLatchReset(int latch, int reset);
+    void SetLatchNext(int latch, int next);
     void SetBad(int bad);
     void Rebuild();
+    int NewInputVar();
+    int NewLatchVar();
+    int MakeAnd(int a, int b);
+    int MakeOr(int a, int b);
+    int MakeXor(int a, int b);
+    int MakeXnor(int a, int b);
+    int MakeIte(int i, int t, int e);
 
   private:
     void ApplyEquivalence();
@@ -282,6 +303,7 @@ class Model {
     int m_maxId;
     cube m_initialState;
     int m_bad;
+    KLivenessCounter m_kliveCounter;
     PropKind m_propKind{PropKind::Safety};
     vector<clause> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
     vector<clause> m_simpClauses;

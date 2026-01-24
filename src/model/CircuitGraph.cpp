@@ -212,7 +212,7 @@ int CircuitGraph::NewModelVar() {
     return id;
 }
 
-int CircuitGraph::AddInputVar() {
+int CircuitGraph::NewInputVar() {
     int id = NewModelVar();
     inputs.emplace_back(id);
     inputsSet.emplace(id);
@@ -221,7 +221,7 @@ int CircuitGraph::AddInputVar() {
     return id;
 }
 
-int CircuitGraph::AddLatchVar() {
+int CircuitGraph::NewLatchVar() {
     int id = NewModelVar();
     latches.emplace_back(id);
     latchesSet.emplace(id);
@@ -235,7 +235,7 @@ void CircuitGraph::SetLatchResetNext(int latch, int reset, int next) {
     latchNextMap[latch] = next;
 }
 
-int CircuitGraph::AddAndGate(int a, int b) {
+int CircuitGraph::NewAndGate(int a, int b) {
     int id = NewModelVar();
     ands.emplace_back(id);
     andsSet.emplace(id);
@@ -243,24 +243,6 @@ int CircuitGraph::AddAndGate(int a, int b) {
     gatesMap[id] = CircuitGate(CircuitGate::GateType::AND, id, {a, b});
     numAnds++;
     return id;
-}
-
-int CircuitGraph::MakeAnd(int a, int b) {
-    if (a == trueId) return b;
-    if (b == trueId) return a;
-    if (a == -trueId || b == -trueId) return -trueId;
-    if (a == b) return a;
-    if (a == -b) return -trueId;
-    return AddAndGate(a, b);
-}
-
-int CircuitGraph::MakeOr(int a, int b) {
-    if (a == trueId || b == trueId) return trueId;
-    if (a == -trueId) return b;
-    if (b == -trueId) return a;
-    if (a == b) return a;
-    if (a == -b) return trueId;
-    return -MakeAnd(-a, -b);
 }
 
 bool CircuitGraph::TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits) {
