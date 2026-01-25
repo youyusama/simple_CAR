@@ -17,6 +17,9 @@ namespace car {
 
 class SATSolver {
   public:
+    using frame = std::vector<cube>;
+    using FrameList = std::vector<frame>;
+
     SATSolver(Model &model, MCSATSolver slv_kind);
     ~SATSolver() {}
 
@@ -95,6 +98,22 @@ class SATSolver {
     void AddBad();
 
     void AddBadk(int k);
+
+    cube GetKUnrolled(const cube &c, int k);
+
+    int AddInvAsLabelK(const FrameList &inv, int k);
+
+    int AddCubeAsLabelK(const cube &c, int k);
+
+    void AddInvAsClauseK(const FrameList &inv, bool neg, int k);
+
+    void AddCubeAsClauseK(const cube &c, bool neg, int k);
+
+    void AddWallConstraints(const std::vector<FrameList> &walls);
+
+    void AddShoalConstraints(const std::vector<FrameList> &shoals,
+                             const std::vector<cube> &dead,
+                             int shoal_unroll = 1);
 
     void AddInitialClauses();
 

@@ -257,6 +257,125 @@ void SATSolver::AddBadk(int k) {
     AddClause(clause{bad_k});
 }
 
+cube SATSolver::GetKUnrolled(const cube &c, int k) {
+    if (k == 0) return c;
+    cube out;
+    out.reserve(c.size());
+    for (int lit : c) {
+        out.emplace_back(m_model.GetPrimeK(lit, k));
+    }
+    return out;
+}
+
+int SATSolver::AddInvAsLabelK(const FrameList &inv, int k) {
+    if (k > 0) {
+        AddTransK(k);
+        AddConstraintsK(k);
+    }
+
+    int sl = GetNewVar();
+
+    vector<int> o_labels;
+    o_labels.reserve(inv.size());
+    for (const auto &f : inv) {
+        int ol = GetNewVar();
+        for (const auto &fc : f) {
+            cube fc_k = GetKUnrolled(fc, k);
+            clause cls;
+            cls.reserve(fc_k.size() + 1);
+            for (int lit : fc_k) cls.emplace_back(-lit);
+            cls.emplace_back(-ol);
+            AddClause(cls);
+        }
+        o_labels.emplace_back(ol);
+    }
+    clause sl_clause;
+    sl_clause.reserve(o_labels.size() + 1);
+    for (int ol : o_labels) sl_clause.emplace_back(ol);
+    sl_clause.emplace_back(-sl);
+    AddClause(sl_clause);
+
+    for (const auto &f : inv) {
+        clause tmp;
+        tmp.reserve(f.size() + 1);
+        for (const auto &fc : f) {
+            int cl = GetNewVar();
+            tmp.emplace_back(cl);
+            cube fc_k = GetKUnrolled(fc, k);
+            for (int lit : fc_k) {
+                AddClause(clause{-cl, lit});
+            }
+        }
+        tmp.emplace_back(sl);
+        AddClause(tmp);
+    }
+
+    return sl;
+}
+
+int SATSolver::AddCubeAsLabelK(const cube &c, int k) {
+    if (k > 0) {
+        AddTransK(k);
+        AddConstraintsK(k);
+    }
+
+    int sl = GetNewVar();
+    cube c_k = GetKUnrolled(c, k);
+
+    clause c_to_sl;
+    c_to_sl.reserve(c_k.size() + 1);
+    for (int lit : c_k) c_to_sl.emplace_back(-lit);
+    c_to_sl.emplace_back(sl);
+    AddClause(c_to_sl);
+    for (int lit : c_k) {
+        AddClause(clause{-sl, lit});
+    }
+
+    return sl;
+}
+
+void SATSolver::AddInvAsClauseK(const FrameList &inv, bool neg, int k) {
+    int l_inv = AddInvAsLabelK(inv, k);
+    if (neg)
+        AddClause(clause{-l_inv});
+    else
+        AddClause(clause{l_inv});
+}
+
+void SATSolver::AddCubeAsClauseK(const cube &c, bool neg, int k) {
+    int l_cube = AddCubeAsLabelK(c, k);
+    if (neg)
+        AddClause(clause{-l_cube});
+    else
+        AddClause(clause{l_cube});
+}
+
+void SATSolver::AddWallConstraints(const std::vector<FrameList> &walls) {
+    if (walls.empty()) return;
+    for (const auto &inv : walls) {
+        int p = AddInvAsLabelK(inv, 0);
+        int pp = AddInvAsLabelK(inv, 1);
+        AddClause(clause{-p, pp});
+        AddClause(clause{-pp, p});
+    }
+}
+
+void SATSolver::AddShoalConstraints(const std::vector<FrameList> &shoals,
+                                    const std::vector<cube> &dead,
+                                    int shoal_unroll) {
+    int unroll = shoal_unroll >= 1 ? shoal_unroll : 1;
+    for (int u = 0; u <= unroll; ++u) {
+        if (!shoals.empty()) {
+            for (const auto &inv : shoals) {
+                AddInvAsClauseK(inv, true, u);
+            }
+        }
+        for (const auto &d : dead) {
+            AddCubeAsClauseK(d, true, u);
+        }
+    }
+}
+
 
 // ================================================================================
 // @brief: add initial constraints on gate intialized latches

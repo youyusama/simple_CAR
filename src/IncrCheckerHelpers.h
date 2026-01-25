@@ -3,7 +3,6 @@
 
 #include "Log.h"
 #include "Model.h"
-#include "SATSolver.h"
 #include "Settings.h"
 #include <algorithm>
 #include <chrono>
@@ -46,11 +45,13 @@ struct CubeHash {
     }
 };
 
-using frame = unordered_set<cube, CubeHash>;
+using frame = std::vector<cube>;
 using FrameList = std::vector<frame>;
 
 class OverSequenceSet {
   public:
+    using FrameSet = unordered_set<cube, CubeHash>;
+
     OverSequenceSet(Model &model) : m_model(model) {
         m_invariantLevel = 0;
         m_blockCounter.emplace_back(0);
@@ -65,7 +66,7 @@ class OverSequenceSet {
 
     bool Insert(const cube &uc, int index);
 
-    shared_ptr<frame> GetFrame(int lvl);
+    shared_ptr<FrameSet> GetFrame(int lvl);
 
     bool IsBlockedByFrame(const cube &latches, int frameLevel);
 
@@ -91,7 +92,7 @@ class OverSequenceSet {
     void ClearTmpLitSet();
 
     Model &m_model;
-    vector<shared_ptr<frame>> m_sequence;
+    vector<shared_ptr<FrameSet>> m_sequence;
     vector<int> m_blockCounter;
     vector<int> m_insertCounter;
     int m_invariantLevel;
@@ -162,6 +163,8 @@ class UnderSequence {
     }
 
     int size() { return m_sequence.size(); }
+
+    void clear() { m_sequence.clear(); }
 
     static bool state_ptr_cmp(shared_ptr<State> s1, shared_ptr<State> s2) {
         return s1->dtScore > s2->dtScore;
@@ -248,14 +251,6 @@ struct Luby {
 };
 
 bool IsStateInInv(const cube &s, const FrameList &inv);
-
-int AddInvAsLabelK(SATSolver *slv, const FrameList &inv, Model &model, int k);
-
-int AddCubeAsLabelK(SATSolver *slv, const cube &c, Model &model, int k);
-
-void AddInvAsClauseK(SATSolver *slv, const FrameList &inv, bool neg, Model &model, int k);
-
-void AddCubeAsClauseK(SATSolver *slv, const cube &c, bool neg, Model &model, int k);
 
 
 class Restart {

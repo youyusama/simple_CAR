@@ -442,6 +442,10 @@ void Model::Rebuild() {
     SimplifyDAGClauses();
     UpdateDependencyVecDAGCNF();
     SimplifyClauses();
+
+    m_log.L(1, "Model rebuilt: ",
+            m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
+    m_log.L(1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
 }
 
 

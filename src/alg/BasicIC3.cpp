@@ -77,36 +77,6 @@ CheckResult BasicIC3::Run() {
     return m_checkResult;
 }
 
-void BasicIC3::SetInit(const cube &c) {
-    m_customInit = c;
-    m_initialStateSet.clear();
-    if (m_customInit.empty()) {
-        m_initialStateSet.insert(m_defaultInit.begin(), m_defaultInit.end());
-    } else {
-        m_initialStateSet.insert(m_customInit.begin(), m_customInit.end());
-    }
-}
-
-void BasicIC3::SetSearchFromInitSucc(bool b) {
-    m_searchFromInitSucc = b;
-}
-
-void BasicIC3::SetLoopRefuting(bool b) {
-    m_loopRefuting = b;
-}
-
-void BasicIC3::SetDead(const std::vector<cube> &dead) {
-    m_dead = &dead;
-}
-
-void BasicIC3::SetShoals(const std::vector<FrameList> &shoals) {
-    m_shoals = &shoals;
-}
-
-void BasicIC3::SetWalls(const std::vector<FrameList> &walls) {
-    m_walls = &walls;
-}
-
 cube BasicIC3::GetReachedTarget() {
     return m_reachedTarget;
 }
@@ -139,7 +109,7 @@ FrameList BasicIC3::GetInv() {
     for (int i = 0; i < m_invariantLevel && i < static_cast<int>(m_frames.size()); ++i) {
         frame f;
         for (const auto &cb : m_frames[i].borderCubes) {
-            f.emplace(cb);
+            f.emplace_back(cb);
         }
         inv.emplace_back(std::move(f));
     }
@@ -160,17 +130,13 @@ void BasicIC3::KLiveIncr() {
     }
 }
 
-int BasicIC3::GetDepth() {
-    return m_k;
-}
-
 void BasicIC3::ApplyExternalCubes(const shared_ptr<SATSolver> &solver) {
     if (!solver) return;
-    if (m_walls && !m_walls->empty()) {
-        AddWallConstraints(solver.get());
+    if (!m_walls.empty()) {
+        solver->AddWallConstraints(m_walls);
     }
-    if ((m_shoals && !m_shoals->empty()) || (m_dead && !m_dead->empty()) || !m_newDead.empty()) {
-        AddShoalConstraints(solver.get());
+    if (!m_shoals.empty() || !m_dead.empty()) {
+        solver->AddShoalConstraints(m_shoals, m_dead, m_shoalUnroll);
     }
 }
 
@@ -186,11 +152,11 @@ bool BasicIC3::IsStateImplyBad() {
 }
 
 bool BasicIC3::IsLivenessWallDuplicated() {
-    if (!m_walls || m_walls->empty()) return false;
+    if (m_walls.empty()) return false;
     auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
     slv->AddTrans();
     slv->AddConstraints();
-    AddWallConstraints(slv.get());
+    slv->AddWallConstraints(m_walls);
 
     cube assumptions = m_customInit;
     if (!m_stateImplyBad) {
@@ -198,37 +164,6 @@ bool BasicIC3::IsLivenessWallDuplicated() {
     }
     bool sat = slv->Solve(assumptions);
     return !sat;
-}
-
-void BasicIC3::AddWallConstraints(SATSolver *solver) {
-    if (!solver || !m_walls) return;
-    for (const auto &inv : *m_walls) {
-        int p = AddInvAsLabelK(solver, inv, m_model, 0);
-        int pp = AddInvAsLabelK(solver, inv, m_model, 1);
-        solver->AddClause(clause{-p, pp});
-        solver->AddClause(clause{-pp, p});
-    }
-}
-
-void BasicIC3::AddShoalConstraints(SATSolver *solver) {
-    if (!solver) return;
-    for (int u = 0; u <= m_shoalUnroll; ++u) {
-        if (m_shoals) {
-            for (const auto &inv : *m_shoals) {
-                AddInvAsClauseK(solver, inv, true, m_model, u);
-            }
-        }
-        if (m_settings.rlivePruneDead) {
-            if (m_dead) {
-                for (const auto &d : *m_dead) {
-                    AddCubeAsClauseK(solver, d, true, m_model, u);
-                }
-            }
-            for (const auto &d : m_newDead) {
-                AddCubeAsClauseK(solver, d, true, m_model, u);
-            }
-        }
-    }
 }
 
 bool BasicIC3::GetInit(cube &out) {
@@ -242,7 +177,7 @@ bool BasicIC3::GetInit(cube &out) {
         for (int lit : m_model.GetInitialState()) slv->AddClause(clause{lit});
         slv->AddInitialClauses();
     }
-    AddShoalConstraints(slv.get());
+    slv->AddShoalConstraints(m_shoals, m_dead, m_shoalUnroll);
     bool sat = slv->Solve();
     if (!sat) return false;
     auto p = slv->GetAssignment(m_searchFromInitSucc);
@@ -301,13 +236,13 @@ bool BasicIC3::Check(int badId) {
     if ((m_searchFromInitSucc || m_loopRefuting) && !m_customInit.empty()) {
         m_stateImplyBad = IsStateImplyBad();
     }
-    if (m_loopRefuting && m_walls && !m_walls->empty()) {
+    if (m_loopRefuting && !m_walls.empty()) {
         if (IsLivenessWallDuplicated()) {
             m_hasDuplicatedWall = true;
             return true;
         }
     }
-    if (m_settings.rlivePruneDead && m_dead && PruneDead()) {
+    if (m_settings.rlivePruneDead && !m_dead.empty() && PruneDead()) {
         return true;
     }
 

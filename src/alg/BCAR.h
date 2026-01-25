@@ -22,19 +22,18 @@ class BCAR : public IncrAlg {
     CheckResult Run() override;
     void Witness() override;
 
-    void SetInit(const cube &c) override;
-    void SetSearchFromInitSucc(bool b) override;
-    void SetLoopRefuting(bool b) override;
-    void SetDead(const std::vector<cube> &dead) override;
-    void SetShoals(const std::vector<FrameList> &shoals) override;
-    void SetWalls(const std::vector<FrameList> &walls) override;
+    void SetInit(const cube &c) override { m_customInit = c; }
+    void SetSearchFromInitSucc(bool b) override { m_searchFromInitSucc = b; }
+    void SetLoopRefuting(bool b) override { m_loopRefuting = b; }
+    void SetDead(const std::vector<cube> &dead) override { m_dead = dead; }
+    void SetShoals(const std::vector<FrameList> &shoals) override { m_shoals = shoals; }
+    void SetWalls(const std::vector<FrameList> &walls) override { m_walls = walls; }
 
     cube GetReachedTarget() override;
     std::vector<std::pair<cube, cube>> GetCexTrace() override;
     FrameList GetInv() override;
 
     void KLiveIncr() override;
-    int GetDepth() override;
 
   private:
     bool Check(int badId);
@@ -43,8 +42,6 @@ class BCAR : public IncrAlg {
     void ApplyExternalCubes(const shared_ptr<SATSolver> &solver);
     bool IsStateImplyBad();
     bool IsLivenessWallDuplicated();
-    void AddWallConstraints(SATSolver *solver);
-    void AddShoalConstraints(SATSolver *solver);
     bool GetInit(cube &out);
     bool PruneDead();
     bool IsDeadState(const cube &c);
@@ -134,9 +131,9 @@ class BCAR : public IncrAlg {
 
     bool CheckBad(shared_ptr<State> s);
 
-    void AddConstraintOr(const shared_ptr<frame> f);
+    void AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f);
 
-    void AddConstraintAnd(const shared_ptr<frame> f);
+    void AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f);
 
     bool IsReachable(int lvl, const cube &assumption, const string &label);
 
@@ -171,9 +168,9 @@ class BCAR : public IncrAlg {
     cube m_reachedTarget;
     bool m_searchFromInitSucc = false;
     bool m_loopRefuting = false;
-    const std::vector<cube> *m_dead = nullptr;
-    const std::vector<FrameList> *m_shoals = nullptr;
-    const std::vector<FrameList> *m_walls = nullptr;
+    std::vector<cube> m_dead;
+    std::vector<FrameList> m_shoals;
+    std::vector<FrameList> m_walls;
     bool m_stateImplyBad = false;
     bool m_hasDuplicatedWall = false;
     int m_shoalUnroll = 1;

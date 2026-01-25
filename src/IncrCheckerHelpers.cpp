@@ -78,19 +78,6 @@ static bool _cmp(int a, int b) {
 }
 
 
-static void GetKUnrolled(const cube &c, cube &out, Model &model, int k) {
-    out.clear();
-    if (k == 0) {
-        out = c;
-        return;
-    }
-    out.reserve(c.size());
-    for (int lit : c) {
-        out.emplace_back(model.GetPrimeK(lit, k));
-    }
-}
-
-
 static bool CubeImplies(const cube &a, const cube &b) {
     if (a.size() > b.size()) return false;
     unordered_set<int> bset;
@@ -181,99 +168,9 @@ bool IsStateInInv(const cube &s, const FrameList &inv) {
 }
 
 
-int AddInvAsLabelK(SATSolver *slv, const FrameList &inv, Model &model, int k) {
-    if (k > 0) {
-        slv->AddTransK(k);
-        slv->AddConstraintsK(k);
-    }
-
-    int sl = slv->GetNewVar();
-
-    vector<int> o_labels;
-    o_labels.reserve(inv.size());
-    for (const auto &f : inv) {
-        int ol = slv->GetNewVar();
-        for (const auto &fc : f) {
-            cube fc_k;
-            GetKUnrolled(fc, fc_k, model, k);
-            clause cls;
-            cls.reserve(fc_k.size() + 1);
-            for (int lit : fc_k) cls.emplace_back(-lit);
-            cls.emplace_back(-ol);
-            slv->AddClause(cls);
-        }
-        o_labels.emplace_back(ol);
-    }
-    clause sl_clause;
-    sl_clause.reserve(o_labels.size() + 1);
-    for (int ol : o_labels) sl_clause.emplace_back(ol);
-    sl_clause.emplace_back(-sl);
-    slv->AddClause(sl_clause);
-
-    for (const auto &f : inv) {
-        clause tmp;
-        tmp.reserve(f.size() + 1);
-        for (const auto &fc : f) {
-            int cl = slv->GetNewVar();
-            tmp.emplace_back(cl);
-            cube fc_k;
-            GetKUnrolled(fc, fc_k, model, k);
-            for (int lit : fc_k) {
-                slv->AddClause(clause{-cl, lit});
-            }
-        }
-        tmp.emplace_back(sl);
-        slv->AddClause(tmp);
-    }
-
-    return sl;
-}
-
-
-int AddCubeAsLabelK(SATSolver *slv, const cube &c, Model &model, int k) {
-    if (k > 0) {
-        slv->AddTransK(k);
-        slv->AddConstraintsK(k);
-    }
-
-    int sl = slv->GetNewVar();
-    cube c_k;
-    GetKUnrolled(c, c_k, model, k);
-
-    clause c_to_sl;
-    c_to_sl.reserve(c_k.size() + 1);
-    for (int lit : c_k) c_to_sl.emplace_back(-lit);
-    c_to_sl.emplace_back(sl);
-    slv->AddClause(c_to_sl);
-    for (int lit : c_k) {
-        slv->AddClause(clause{-sl, lit});
-    }
-
-    return sl;
-}
-
-
-void AddInvAsClauseK(SATSolver *slv, const FrameList &inv, bool neg, Model &model, int k) {
-    int l_inv = AddInvAsLabelK(slv, inv, model, k);
-    if (neg)
-        slv->AddClause(clause{-l_inv});
-    else
-        slv->AddClause(clause{l_inv});
-}
-
-
-void AddCubeAsClauseK(SATSolver *slv, const cube &c, bool neg, Model &model, int k) {
-    int l_cube = AddCubeAsLabelK(slv, c, model, k);
-    if (neg)
-        slv->AddClause(clause{-l_cube});
-    else
-        slv->AddClause(clause{l_cube});
-}
-
-
-shared_ptr<frame> OverSequenceSet::GetFrame(int lvl) {
+shared_ptr<OverSequenceSet::FrameSet> OverSequenceSet::GetFrame(int lvl) {
     while (lvl >= m_sequence.size()) {
-        m_sequence.emplace_back(make_shared<frame>());
+        m_sequence.emplace_back(make_shared<FrameSet>());
         m_blockCounter.emplace_back(0);
         m_insertCounter.emplace_back(0);
     }

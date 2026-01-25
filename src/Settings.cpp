@@ -38,8 +38,8 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"ic3", MCAlgorithm::IC3}}))
         ->default_val("fcar");
 
-    app.add_option("--su,--shoal-unroll", settings.shoalUnroll, "unroll shoals for K cycles in rlive")
-        ->default_val(1);
+    // app.add_option("--su,--shoal-unroll", settings.shoalUnroll, "unroll shoals for K cycles in rlive")
+    //     ->default_val(1);
 
     app.add_flag("--pd,--rlive-prune-dead", settings.rlivePruneDead, "prune dead states in rlive")
         ->default_val(false);

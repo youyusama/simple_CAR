@@ -20,7 +20,6 @@ class IncrAlg : public BaseAlg {
     virtual std::vector<std::pair<cube, cube>> GetCexTrace() = 0;
     virtual FrameList GetInv() = 0;
     virtual void KLiveIncr() = 0;
-    virtual int GetDepth() = 0;
 
     virtual ~IncrAlg() = default;
 };
