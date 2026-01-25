@@ -611,6 +611,7 @@ void FCAR::GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t) {
         }
         assert(!res);
         cube temp_p = GetUnsatAssumption(m_liftSolver, partial_latch);
+        if (temp_p.size() == 0) break; // happens when t->latches' are all inputs
         if (temp_p.size() >= partial_latch.size())
             break;
         else {
