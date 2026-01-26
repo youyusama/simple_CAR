@@ -26,6 +26,7 @@ FCAR::FCAR(Settings settings,
     GLOBAL_LOG = &m_log;
     m_checkResult = CheckResult::Unknown;
 
+    m_initialized = false;
     m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
     m_shoalUnroll = m_settings.shoalUnroll >= 1 ? m_settings.shoalUnroll : 1;
 }

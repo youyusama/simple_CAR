@@ -142,14 +142,6 @@ void CircuitGraph::COIRefine() {
             todo_stack.emplace_back(abs(id));
         }
     }
-    if (numJustice > 0 || numFairness > 0) {
-        // also include latches' next state
-        for (int id : modelLatches) {
-            int next = latchNextMap[id];
-            coi_ids.emplace(abs(next));
-            todo_stack.emplace_back(abs(next));
-        }
-    }
 
     while (!todo_stack.empty()) {
         int id = todo_stack.back();
