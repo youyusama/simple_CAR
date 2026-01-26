@@ -67,6 +67,7 @@ class OverSequenceSet {
     bool Insert(const cube &uc, int index);
 
     shared_ptr<FrameSet> GetFrame(int lvl);
+    frame FrameSetToFrame(const FrameSet &fset) const;
 
     bool IsBlockedByFrame(const cube &latches, int frameLevel);
 

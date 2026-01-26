@@ -3,17 +3,6 @@
 #include <string>
 
 namespace car {
-namespace {
-frame FrameSetToFrame(const OverSequenceSet::FrameSet &fset) {
-    frame out;
-    out.reserve(fset.size());
-    for (const auto &fc : fset) {
-        out.emplace_back(fc);
-    }
-    return out;
-}
-} // namespace
-
 FCAR::FCAR(Settings settings,
            Model &model,
            Log &log) : m_settings(settings),
@@ -901,7 +890,7 @@ FrameList FCAR::GetInv() {
     int lvl = m_overSequence->GetInvariantLevel();
     if (lvl < 0) return inv;
     for (int i = 0; i <= lvl; ++i) {
-        inv.emplace_back(FrameSetToFrame(*m_overSequence->GetFrame(i)));
+        inv.emplace_back(m_overSequence->FrameSetToFrame(*m_overSequence->GetFrame(i)));
     }
     return inv;
 }

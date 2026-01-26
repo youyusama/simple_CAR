@@ -177,6 +177,15 @@ shared_ptr<OverSequenceSet::FrameSet> OverSequenceSet::GetFrame(int lvl) {
     return m_sequence[lvl];
 }
 
+frame OverSequenceSet::FrameSetToFrame(const FrameSet &fset) const {
+    frame out;
+    out.reserve(fset.size());
+    for (const auto &fc : fset) {
+        out.emplace_back(fc);
+    }
+    return out;
+}
+
 
 void OverSequenceSet::CleanupImplied(int frameLevel) {
     auto f = GetFrame(frameLevel);
