@@ -30,7 +30,7 @@ BCAR::BCAR(Settings settings,
 CheckResult BCAR::Run() {
     signal(SIGINT, signalHandler);
 
-    if (Check(m_model.GetBad()))
+    if (Check())
         m_checkResult = CheckResult::Safe;
     else
         m_checkResult = CheckResult::Unsafe;
@@ -42,9 +42,9 @@ CheckResult BCAR::Run() {
 
 void BCAR::Witness() {
     if (m_checkResult == CheckResult::Safe) {
-        OutputWitness(m_model.GetBad());
+        OutputWitness();
     } else if (m_checkResult == CheckResult::Unsafe) {
-        OutputCounterExample(m_model.GetBad());
+        OutputCounterExample();
     }
 }
 
@@ -92,7 +92,7 @@ void BCAR::KLiveIncr() {
     m_model.Rebuild();
 }
 
-bool BCAR::Check(int badId) {
+bool BCAR::Check() {
     [[maybe_unused]] auto checkScope = m_log.Section("FC_Check");
     Init();
     m_log.L(2, "Initialized");
@@ -111,7 +111,7 @@ bool BCAR::Check(int badId) {
     }
 
     m_log.L(2, "Initial States Check");
-    if (ImmediateSatisfiable(badId)) {
+    if (ImmediateSatisfiable()) {
         m_log.L(2, "Result >>> SAT <<<");
         auto p = m_startSolver->GetAssignment(false);
         m_log.L(3, "Get Assignment:", CubeToStr(p.second));
@@ -121,7 +121,7 @@ bool BCAR::Check(int badId) {
         return false;
     }
     m_log.L(2, "Result >>> UNSAT <<<");
-    cube bad_assumption({badId});
+    cube bad_assumption({m_model.GetBad()});
     bool startBadSat = false;
     {
         [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_InitBad");
@@ -411,13 +411,13 @@ bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     return true;
 }
 
-bool BCAR::ImmediateSatisfiable(int badId) {
+bool BCAR::ImmediateSatisfiable() {
     [[maybe_unused]] auto immScope = m_log.Section("FC_ImmSAT");
     if (m_searchFromInitSucc && !m_customInit.empty()) {
         return false;
     }
     cube assumptions;
-    assumptions.push_back(badId);
+    assumptions.push_back(m_model.GetBad());
     bool result = false;
     {
         [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_Imm");
@@ -824,7 +824,7 @@ int BCAR::PropagateUp(const cube &c, int lvl) {
 }
 
 
-void BCAR::OutputWitness(int bad) {
+void BCAR::OutputWitness() {
     [[maybe_unused]] auto witScope = m_log.Section("FC_Witness");
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/");
@@ -895,7 +895,7 @@ void BCAR::OutputWitness(int bad) {
 
     // prove on lvl 0
     if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
-        unsigned bad_lit = m_model.GetAigerLit(bad);
+        unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
         if (eq_lits.size() > 0) {
@@ -936,7 +936,7 @@ void BCAR::OutputWitness(int bad) {
         inv_lits.push_back(O_i ^ 1);
     }
     unsigned inv = addCubeToANDGates(witness_aig, inv_lits);
-    unsigned bad_lit = m_model.GetAigerLit(bad);
+    unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
 
@@ -957,7 +957,7 @@ void BCAR::OutputWitness(int bad) {
 }
 
 
-void BCAR::OutputCounterExample(int bad) {
+void BCAR::OutputCounterExample() {
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
     if (startIndex == string::npos) {

@@ -21,11 +21,11 @@ BMC::BMC(Settings settings,
 CheckResult BMC::Run() {
     signal(SIGINT, signalHandler);
     if (m_settings.solver == MCSATSolver::kissat) {
-        if (Check_nonincremental(m_model.GetBad())) {
+        if (Check_nonincremental()) {
             m_checkResult = CheckResult::Unsafe;
         }
     } else {
-        if (Check(m_model.GetBad()))
+        if (Check())
             m_checkResult = CheckResult::Unsafe;
     }
 
@@ -36,14 +36,13 @@ CheckResult BMC::Run() {
 
 void BMC::Witness() {
     if (m_checkResult == CheckResult::Unsafe) {
-        OutputCounterExample(m_model.GetBad());
+        OutputCounterExample();
     }
 }
 
-
-bool BMC::Check(int badId) {
+bool BMC::Check() {
     [[maybe_unused]] auto checkScope = m_log.Section("BMC_Check");
-    Init(badId);
+    Init();
 
     while (true) {
         m_log.L(1, "BMC Bound: ", m_k);
@@ -93,7 +92,7 @@ bool BMC::Check(int badId) {
     }
 }
 
-bool BMC::Check_nonincremental(int badId) {
+bool BMC::Check_nonincremental() {
     [[maybe_unused]] auto checkScope = m_log.Section("BMC_CheckNonInc");
     // before clause^k ConstraintsK(k) bad^k
 
@@ -102,7 +101,7 @@ bool BMC::Check_nonincremental(int badId) {
     badClause.reserve(m_step);
     // Pre-allocate m_step memory
     while (true) {
-        Init(badId);
+        Init();
         // add clauses before K unrollings to the Kissat solver
         {
             [[maybe_unused]] auto clauseScope = m_log.Section("Add_Init_Cls");
@@ -169,9 +168,8 @@ bool BMC::Check_nonincremental(int badId) {
 }
 
 
-void BMC::Init(int badId) {
+void BMC::Init() {
     [[maybe_unused]] auto initScope = m_log.Section("BMC_Init");
-    m_badId = badId;
     m_Solver = make_shared<SATSolver>(m_model, m_settings.solver);
 
     // send initial state
@@ -196,7 +194,7 @@ void BMC::GetClausesK(int m_k, vector<clause> &clauses) {
 
 
 int BMC::GetBadK(int m_k) {
-    return m_model.GetPrimeK(m_badId, m_k);
+    return m_model.GetPrimeK(m_model.GetBad(), m_k);
 }
 
 
@@ -209,7 +207,7 @@ vector<int> BMC::GetConstraintsK(int m_k) {
 }
 
 
-void BMC::OutputCounterExample(int bad) {
+void BMC::OutputCounterExample() {
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
     if (startIndex == string::npos) {

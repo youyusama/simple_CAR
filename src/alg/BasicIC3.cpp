@@ -67,7 +67,7 @@ CheckResult BasicIC3::Run() {
     ApplyExternalCubes(m_liftSolver);
     ApplyExternalCubes(m_badPredLiftSolver);
 
-    if (Check(m_model.GetBad()))
+    if (Check())
         m_checkResult = CheckResult::Safe;
     else
         m_checkResult = CheckResult::Unsafe;
@@ -231,7 +231,7 @@ void BasicIC3::Extend() {
     }
 }
 
-bool BasicIC3::Check(int badId) {
+bool BasicIC3::Check() {
     m_newDead.clear();
     if ((m_searchFromInitSucc || m_loopRefuting) && !m_customInit.empty()) {
         m_stateImplyBad = IsStateImplyBad();
@@ -246,7 +246,7 @@ bool BasicIC3::Check(int badId) {
         return true;
     }
 
-    if (m_model.TrueId() == -badId) {
+    if (m_model.TrueId() == -m_model.GetBad()) {
         m_log.L(1, "SAFE: Constant bad.");
         return true;
     }
@@ -945,7 +945,7 @@ unsigned BasicIC3::addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
     return res;
 }
 
-void BasicIC3::OutputWitness(int bad) {
+void BasicIC3::OutputWitness() {
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/");
     if (startIndex == string::npos) {
@@ -1023,6 +1023,7 @@ void BasicIC3::OutputWitness(int bad) {
     }
     unsigned inv = addCubeToANDGates(witness_aig, invLits);
 
+    int bad = m_model.GetBad();
     int bad_lit_int = bad > 0 ? (2 * bad) : (2 * -bad) + 1;
     unsigned bad_lit = bad_lit_int;
     unsigned p = aiger_not(bad_lit);
@@ -1047,7 +1048,7 @@ void BasicIC3::Witness() {
         OutputCounterExample();
     } else if (m_checkResult == CheckResult::Safe) {
         m_log.L(1, "Generating proof.");
-        OutputWitness(m_model.GetBad());
+        OutputWitness();
     } else {
         m_log.L(1, "Unknown check result.");
     }

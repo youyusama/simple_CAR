@@ -36,7 +36,7 @@ class BCAR : public IncrAlg {
     void KLiveIncr() override;
 
   private:
-    bool Check(int badId);
+    bool Check();
 
     void Init();
     void ApplyExternalCubes(const shared_ptr<SATSolver> &solver);
@@ -48,7 +48,7 @@ class BCAR : public IncrAlg {
 
     bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
-    bool ImmediateSatisfiable(int badId);
+    bool ImmediateSatisfiable();
 
     int GetNewLevel(const cube &states, int start = 0);
 
@@ -123,9 +123,9 @@ class BCAR : public IncrAlg {
 
     int PropagateUp(const cube &c, int lvl);
 
-    void OutputWitness(int bad);
+    void OutputWitness();
 
-    void OutputCounterExample(int bad);
+    void OutputCounterExample();
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
 

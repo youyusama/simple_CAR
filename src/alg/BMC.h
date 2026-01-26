@@ -18,8 +18,8 @@ class BMC : public BaseAlg {
     void Witness() override;
 
   private:
-    bool Check(int badId);
-    bool Check_nonincremental(int badId);
+    bool Check();
+    bool Check_nonincremental();
     Settings m_settings;
     Log &m_log;
     Model &m_model;
@@ -27,15 +27,14 @@ class BMC : public BaseAlg {
     int m_maxK;
     int m_step;
     shared_ptr<State> m_initialState;
-    int m_badId;
     shared_ptr<SATSolver> m_Solver;
 
     // for kissat to store clauses from previous unrolling
     vector<clause> m_clauses;
 
     CheckResult m_checkResult;
-    void Init(int badId);
-    void OutputCounterExample(int bad);
+    void Init();
+    void OutputCounterExample();
     void GetClausesK(int m_k, vector<clause> &clauses);
     int GetBadK(int m_k);
     vector<int> GetConstraintsK(int m_k);

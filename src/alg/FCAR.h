@@ -33,13 +33,13 @@ class FCAR : public IncrAlg {
     void KLiveIncr() override;
 
   private:
-    bool Check(int badId);
+    bool Check();
 
-    void Init(int badId);
+    void Init();
 
     void Reset();
 
-    bool IsStateImplyBad();
+    bool IsInitStateImplyBad();
 
     bool GetInit(cube &out);
 
@@ -47,7 +47,7 @@ class FCAR : public IncrAlg {
 
     bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
-    bool ImmediateSatisfiable(int badId);
+    bool ImmediateSatisfiable();
 
     bool IsInvariant(int frameLevel);
 
@@ -129,9 +129,9 @@ class FCAR : public IncrAlg {
 
     shared_ptr<State> EnumerateStartState();
 
-    void OutputWitness(int bad);
+    void OutputWitness();
 
-    void OutputCounterExample(int bad);
+    void OutputCounterExample();
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
 
@@ -149,7 +149,6 @@ class FCAR : public IncrAlg {
 
     CheckResult m_checkResult;
     int m_minUpdateLevel;
-    int m_badId;
     int m_k;
     shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
@@ -167,16 +166,15 @@ class FCAR : public IncrAlg {
     shared_ptr<Restart> m_restart;
 
     // liveness
-    bool m_initialized;
+    bool m_initialized{false};
     cube m_customInit;
     cube m_reachedTarget;
-    bool m_searchFromInitSucc = false;
-    bool m_loopRefuting = false;
+    bool m_searchFromInitSucc{false};
+    bool m_loopRefuting{false};
     std::vector<cube> m_dead;
     std::vector<FrameList> m_shoals;
     std::vector<FrameList> m_walls;
-    bool m_stateImplyBad = false;
-    int m_shoalUnroll = 1;
+    bool m_initStateImplyBad{false};
 };
 
 

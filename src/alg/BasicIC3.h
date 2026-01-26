@@ -68,7 +68,7 @@ class BasicIC3 : public IncrAlg {
     void KLiveIncr() override;
 
   private:
-    bool Check(int badId);
+    bool Check();
     void ApplyExternalCubes(const shared_ptr<SATSolver> &solver);
     bool IsStateImplyBad();
     bool IsLivenessWallDuplicated();
@@ -138,7 +138,7 @@ class BasicIC3 : public IncrAlg {
     shared_ptr<State> EnumerateStartState();
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
-    void OutputWitness(int bad);
+    void OutputWitness();
     void OutputCounterExample();
 
 
@@ -153,7 +153,6 @@ class BasicIC3 : public IncrAlg {
 
     CheckResult m_checkResult;
 
-    int m_badId;
     int m_k;
 
     Settings m_settings;

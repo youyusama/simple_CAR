@@ -26,15 +26,13 @@ FCAR::FCAR(Settings settings,
     GLOBAL_LOG = &m_log;
     m_checkResult = CheckResult::Unknown;
 
-    m_initialized = false;
     m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
-    m_shoalUnroll = m_settings.shoalUnroll >= 1 ? m_settings.shoalUnroll : 1;
 }
 
 CheckResult FCAR::Run() {
     signal(SIGINT, signalHandler);
 
-    if (Check(m_model.GetBad()))
+    if (Check())
         m_checkResult = CheckResult::Safe;
     else
         m_checkResult = CheckResult::Unsafe;
@@ -45,24 +43,23 @@ CheckResult FCAR::Run() {
 
 void FCAR::Witness() {
     if (m_checkResult == CheckResult::Safe) {
-        OutputWitness(m_model.GetBad());
+        OutputWitness();
     } else if (m_checkResult == CheckResult::Unsafe) {
-        OutputCounterExample(m_model.GetBad());
+        OutputCounterExample();
     }
 }
 
-
-bool FCAR::Check(int badId) {
+bool FCAR::Check() {
     [[maybe_unused]] auto checkScope = m_log.Section("FC_Check");
     if (!m_initialized)
-        Init(badId);
+        Init();
     else
         Reset();
 
     m_log.L(2, "Initialized");
 
     m_log.L(2, "Initial States Check");
-    if (ImmediateSatisfiable(badId)) {
+    if (ImmediateSatisfiable()) {
         m_log.L(2, "Result >>> SAT <<<");
         auto p = m_transSolvers[0]->GetAssignment(false);
         m_log.L(3, "Get Assignment:", CubeToStr(p.second));
@@ -227,10 +224,10 @@ bool FCAR::Check(int badId) {
 }
 
 
-void FCAR::Init(int badId) {
+void FCAR::Init() {
     [[maybe_unused]] auto initScope = m_log.Section("FC_Init");
 
-    if (m_searchFromInitSucc) m_stateImplyBad = IsStateImplyBad();
+    if (m_searchFromInitSucc) m_initStateImplyBad = IsInitStateImplyBad();
 
     // initial states
     cube init_latches;
@@ -240,7 +237,6 @@ void FCAR::Init(int badId) {
         init_latches = m_customInit;
     m_initialState = make_shared<State>(nullptr, cube{}, init_latches, 0);
 
-    m_badId = badId;
     m_overSequence = make_shared<OverSequenceSet>(m_model);
     m_underSequence = UnderSequence();
     m_branching = make_shared<Branching>(m_settings.branching);
@@ -348,7 +344,7 @@ bool FCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     return true;
 }
 
-bool FCAR::ImmediateSatisfiable(int badId) {
+bool FCAR::ImmediateSatisfiable() {
     [[maybe_unused]] auto scoped = m_log.Section("FC_ImmSAT");
     if (m_searchFromInitSucc && !m_customInit.empty()) {
         return false;
@@ -357,7 +353,7 @@ bool FCAR::ImmediateSatisfiable(int badId) {
     if (!m_customInit.empty()) {
         assumptions = m_customInit;
     }
-    assumptions.push_back(badId);
+    assumptions.push_back(m_model.GetBad());
     m_transSolvers[0]->SetTempDomainCOI(assumptions);
     bool result;
     {
@@ -399,7 +395,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
 
             // (!bad' | !c' | !c)
             clause cls;
-            cls.push_back(-m_model.GetPrimeK(m_badId, 1));
+            cls.push_back(-m_model.GetPrimeK(m_model.GetBad(), 1));
             for (auto cons : m_model.GetConstraints())
                 cls.push_back(-m_model.GetPrimeK(cons, 1));
             for (auto cons : m_model.GetConstraints())
@@ -924,7 +920,7 @@ void FCAR::KLiveIncr() {
 }
 
 
-bool FCAR::IsStateImplyBad() {
+bool FCAR::IsInitStateImplyBad() {
     // init -> bad
     if (m_customInit.empty()) return false;
     auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
@@ -947,7 +943,7 @@ bool FCAR::GetInit(cube &out) {
         for (int lit : m_model.GetInitialState()) slv->AddClause(clause{lit});
         slv->AddInitialClauses();
     }
-    slv->AddShoalConstraints(m_shoals, m_dead, m_shoalUnroll);
+    slv->AddShoalConstraints(m_shoals, m_dead);
     bool sat = slv->Solve();
     if (!sat) return false;
     auto p = slv->GetAssignment(m_searchFromInitSucc);
@@ -975,7 +971,7 @@ unsigned FCAR::addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
 }
 
 
-void FCAR::OutputWitness(int bad) {
+void FCAR::OutputWitness() {
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/");
     if (startIndex == string::npos) {
@@ -1046,7 +1042,7 @@ void FCAR::OutputWitness(int bad) {
 
     // prove on lvl 0
     if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
-        unsigned bad_lit = m_model.GetAigerLit(bad);
+        unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
         if (eq_lits.size() > 0) {
@@ -1087,7 +1083,7 @@ void FCAR::OutputWitness(int bad) {
         inv_lits.push_back(O_i ^ 1);
     }
     unsigned inv = addCubeToANDGates(witness_aig, inv_lits) ^ 1;
-    unsigned bad_lit = m_model.GetAigerLit(bad);
+    unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
 
@@ -1108,7 +1104,7 @@ void FCAR::OutputWitness(int bad) {
 }
 
 
-void FCAR::OutputCounterExample(int bad) {
+void FCAR::OutputCounterExample() {
     // get outputfile
     auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
     if (startIndex == string::npos) {
