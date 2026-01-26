@@ -138,8 +138,8 @@ void TernarySimulator::reset() {
 }
 
 
-void TernarySimulator::simulate(int maxSteps) {
-    m_log.L(2, "Simulating circuit for ", maxSteps, " steps");
+void TernarySimulator::simulate(int maxPreciseDepth) {
+    m_log.L(2, "Simulating circuit with max precise depth ", maxPreciseDepth);
 
     reset();
     // set initial values // TODO: gate reset not supported
@@ -153,7 +153,7 @@ void TernarySimulator::simulate(int maxSteps) {
             setVal(latch_id, t_Undef, 0);
     }
 
-    while (m_step < maxSteps) {
+    while (true) {
         if (m_step > 0) {
             initStepValues();
             // set latches
@@ -162,6 +162,10 @@ void TernarySimulator::simulate(int maxSteps) {
                 tbool next_val = getVal(next_id, m_step - 1);
                 setVal(latch_id, next_val, m_step);
             }
+        }
+
+        if (maxPreciseDepth > 0 && m_step > maxPreciseDepth && m_step % 10 == 0) {
+            abstractCurrentState(m_step);
         }
 
         simulateOneStep();
@@ -290,6 +294,24 @@ string TernarySimulator::stepValuesToString(int step) {
     //     ss << toStr(vmap[gate_id]);
     // }
     return ss.str();
+}
+
+int TernarySimulator::abstractCurrentState(int step) {
+    if (step <= 0) {
+        return 0;
+    }
+
+    int count = 0;
+    vector<tbool> &cur = m_values[step];
+    vector<tbool> &prev = m_values[step - 1];
+
+    for (int latch_id : m_circuitGraph->modelLatches) {
+        if (cur[latch_id].raw() != prev[latch_id].raw()) {
+            cur[latch_id] = t_Undef;
+            ++count;
+        }
+    }
+    return count;
 }
 
 

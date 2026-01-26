@@ -47,6 +47,8 @@ class tbool {
         return tbool(v);
     }
 
+    uint8_t raw() const { return value; }
+
     friend const char *toStr(tbool l);
 };
 
@@ -82,7 +84,7 @@ class TernarySimulator {
 
     tbool getVal(int id, const vector<tbool> &vmap);
 
-    void simulate(int maxSteps);
+    void simulate(int maxPreciseDepth);
 
     void simulateRandom(int maxSteps);
 
@@ -124,6 +126,8 @@ class TernarySimulator {
     int m_cycleStart;
 
     string stepValuesToString(int step);
+
+    int abstractCurrentState(int step);
 };
 
 } // namespace car
