@@ -48,10 +48,6 @@ void BCAR::Witness() {
     }
 }
 
-cube BCAR::GetReachedTarget() {
-    return m_reachedTarget;
-}
-
 std::vector<std::pair<cube, cube>> BCAR::GetCexTrace() {
     std::vector<std::pair<cube, cube>> trace;
     if (!m_lastState) return trace;

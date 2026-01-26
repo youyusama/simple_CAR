@@ -16,8 +16,6 @@ class IncrAlg : public BaseAlg {
     virtual void SetShoals(const std::vector<FrameList> &shoals) = 0;
     virtual void SetWalls(const std::vector<FrameList> &walls) = 0;
 
-    virtual cube GetReachedTarget() = 0;
-    virtual std::vector<std::pair<cube, cube>> GetCexTrace() = 0;
     virtual FrameList GetInv() = 0;
     virtual void KLiveIncr() = 0;
 

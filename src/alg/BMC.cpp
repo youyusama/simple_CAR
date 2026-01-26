@@ -40,6 +40,30 @@ void BMC::Witness() {
     }
 }
 
+
+std::vector<std::pair<cube, cube>> BMC::GetCexTrace() {
+    assert(m_checkResult == CheckResult::Unsafe);
+    std::vector<std::pair<cube, cube>> trace;
+
+    trace.reserve(m_k + 1);
+    for (int k = 0; k <= m_k; k++) {
+        cube inputs;
+        for (auto i : m_model.GetModelInputs()) {
+            auto ip = m_model.GetPrimeK(i, k);
+            inputs.emplace_back(m_Solver->GetModel(ip));
+        }
+        cube latches;
+        for (auto l : m_model.GetModelLatches()) {
+            auto lp = m_model.GetPrimeK(l, k);
+            latches.emplace_back(m_Solver->GetModel(lp));
+        }
+        trace.emplace_back(pair<cube, cube>(inputs, latches));
+    }
+
+    return trace;
+}
+
+
 bool BMC::Check() {
     [[maybe_unused]] auto checkScope = m_log.Section("BMC_Check");
     Init();

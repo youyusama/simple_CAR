@@ -27,7 +27,6 @@ class FCAR : public IncrAlg {
     void SetShoals(const std::vector<FrameList> &shoals) override { m_shoals = shoals; }
     void SetWalls(const std::vector<FrameList> &walls) override { m_walls = walls; }
 
-    cube GetReachedTarget() override;
     std::vector<std::pair<cube, cube>> GetCexTrace() override;
     FrameList GetInv() override;
     void KLiveIncr() override;
@@ -147,6 +146,8 @@ class FCAR : public IncrAlg {
 
     cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
 
+    void BuildCEXTrace();
+
     CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_k;
@@ -175,6 +176,7 @@ class FCAR : public IncrAlg {
     std::vector<FrameList> m_shoals;
     std::vector<FrameList> m_walls;
     bool m_initStateImplyBad{false};
+    std::vector<std::pair<cube, cube>> m_cexTrace;
 };
 
 

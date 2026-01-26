@@ -14,10 +14,9 @@ enum class CheckResult { Safe,
 
 class BaseAlg {
   public:
-    using Trace = std::vector<std::pair<std::vector<int>, std::vector<int>>>;
     virtual CheckResult Run() = 0;
     virtual void Witness() = 0;
-    virtual Trace CounterexampleTrace() { return {}; }
+    virtual std::vector<std::pair<cube, cube>> GetCexTrace() = 0;
     virtual ~BaseAlg() = default;
 };
 

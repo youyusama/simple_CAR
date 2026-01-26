@@ -46,7 +46,12 @@ CheckResult KFAIR::Run() {
 
         if (enable_fair) {
             m_log.L(1, "===== Search for a loop by fair =====");
-            cube t = prefix->GetReachedTarget();
+            auto trace = prefix->GetCexTrace();
+            if (trace.empty()) {
+                m_log.L(0, "Empty counterexample trace for unsafe prefix.");
+                return CheckResult::Unknown;
+            }
+            cube t = trace.back().first;
             m_log.L(2, "start from bad state ", CubeToStr(t));
             auto loop = MakeSafeChecker();
             loop->SetInit(t);
@@ -68,6 +73,10 @@ CheckResult KFAIR::Run() {
 
 void KFAIR::Witness() {
     m_log.L(1, "KFAIR witness generation is not implemented.");
+}
+
+std::vector<std::pair<cube, cube>> KFAIR::GetCexTrace() {
+    return {};
 }
 
 std::unique_ptr<IncrAlg> KFAIR::MakeSafeChecker() {

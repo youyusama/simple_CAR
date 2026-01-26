@@ -17,6 +17,7 @@ class KFAIR : public BaseAlg {
           Log &log);
     CheckResult Run() override;
     void Witness() override;
+    std::vector<std::pair<cube, cube>> GetCexTrace() override;
 
   private:
     std::unique_ptr<IncrAlg> MakeSafeChecker();

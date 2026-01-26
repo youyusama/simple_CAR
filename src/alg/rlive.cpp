@@ -20,13 +20,23 @@ CheckResult rlive::Run() {
     }
 
     while (CheckReachable(cube{})) {
-        cube t = m_safeChecker->GetReachedTarget();
+        auto trace = m_safeChecker->GetCexTrace();
+        if (trace.empty()) {
+            m_log.L(0, "Empty counterexample trace for unsafe reachability.");
+            return CheckResult::Unknown;
+        }
+        cube t = trace.back().first;
         m_badStack.emplace_back(t);
 
         while (!m_badStack.empty()) {
             cube s = m_badStack.back();
             if (CheckReachable(s)) {
-                cube new_t = m_safeChecker->GetReachedTarget();
+                auto new_trace = m_safeChecker->GetCexTrace();
+                if (new_trace.empty()) {
+                    m_log.L(0, "Empty counterexample trace for unsafe reachability.");
+                    return CheckResult::Unknown;
+                }
+                cube new_t = new_trace.back().first;
                 bool looped = false;
                 for (const auto &b : m_badStack) {
                     if (Implies(b, new_t)) {
@@ -52,6 +62,10 @@ CheckResult rlive::Run() {
 
 void rlive::Witness() {
     m_log.L(1, "rlive witness generation is not implemented.");
+}
+
+std::vector<std::pair<cube, cube>> rlive::GetCexTrace() {
+    return {};
 }
 
 std::unique_ptr<IncrAlg> rlive::MakeSafeChecker() {

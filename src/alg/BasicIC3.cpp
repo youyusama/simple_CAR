@@ -77,10 +77,6 @@ CheckResult BasicIC3::Run() {
     return m_checkResult;
 }
 
-cube BasicIC3::GetReachedTarget() {
-    return m_reachedTarget;
-}
-
 std::vector<std::pair<cube, cube>> BasicIC3::GetCexTrace() {
     std::vector<std::pair<cube, cube>> trace;
     if (!m_cexStart) return trace;

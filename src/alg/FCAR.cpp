@@ -51,33 +51,14 @@ void FCAR::Witness() {
 
 bool FCAR::Check() {
     [[maybe_unused]] auto checkScope = m_log.Section("FC_Check");
-    if (!m_initialized)
+
+    if (!m_initialized) {
         Init();
-    else
+        m_log.L(2, "Initialized");
+    } else {
         Reset();
-
-    m_log.L(2, "Initialized");
-
-    m_log.L(2, "Initial States Check");
-    if (ImmediateSatisfiable()) {
-        m_log.L(2, "Result >>> SAT <<<");
-        auto p = m_transSolvers[0]->GetAssignment(false);
-        m_log.L(3, "Get Assignment:", CubeToStr(p.second));
-        m_initialState->inputs = p.first;
-        m_initialState->latches = p.second;
-        m_lastState = m_initialState;
-        return false;
+        m_log.L(2, "Reset");
     }
-    m_log.L(2, "Result >>> UNSAT <<<");
-
-    // initialize frame 0
-    for (int l : m_initialState->latches) {
-        auto uc = {-l};
-        m_overSequence->Insert(uc, 0);
-        m_transSolvers[0]->AddUC(uc);
-        m_startSolver->AddUC(uc);
-    }
-    if (m_settings.solveInProperty) m_transSolvers[0]->AddProperty();
 
     // main stage
     m_k = 0;
@@ -277,6 +258,16 @@ void FCAR::Init() {
     }
 
     m_restart.reset(new Restart(m_settings));
+
+    // initialize frame 0
+    if (!m_searchFromInitSucc) {
+        for (int l : m_initialState->latches) {
+            auto uc = {-l};
+            m_overSequence->Insert(uc, 0);
+            m_transSolvers[0]->AddUC(uc);
+            m_startSolver->AddUC(uc);
+        }
+    }
 
     m_initialized = true;
 }
@@ -760,13 +751,10 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
     m_log.L(2, "From State: ", CubeToStrShort(s->latches));
     m_log.L(3, "State Detail: ", CubeToStr(s->latches));
     cube assumption(s->latches);
-    if (!m_customInit.empty() && m_searchFromInitSucc) {
-        for (int lit : m_customInit) {
-            int p = m_model.GetPrime(lit);
-            if (p != 0) assumption.emplace_back(p);
-        }
-    }
     OrderAssumption(assumption);
+    if (m_searchFromInitSucc) {
+        GetPrimed(assumption);
+    }
     m_transSolvers[0]->SetTempDomain(assumption);
     bool result = IsReachable(0, assumption, "SAT_R_Init");
     if (result) {
@@ -776,10 +764,16 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
         s->latches = p.second;
         return true;
     } else {
-        // Solver return UNSAT, get uc, then continue
+        // Solver return UNSAT, get uc, refine frame 0
         m_log.L(2, "Result >>> UNSAT <<<");
-        auto uc = GetUnsatAssumption(m_transSolvers[0], assumption);
+        cube uc;
+        if (m_searchFromInitSucc)
+            uc = GetUnsatCore(0, s->latches);
+        else
+            uc = GetUnsatAssumption(m_transSolvers[0], assumption);
         assert(uc.size() > 0);
+        OrderAssumption(uc);
+
         // Generalization
         unordered_set<int> required_lits;
         for (int i = uc.size() - 1; i >= 0; i--) {
@@ -788,9 +782,16 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
             assumption.clear();
             for (auto ll : uc)
                 if (ll != uc.at(i)) assumption.emplace_back(ll);
+            if (m_searchFromInitSucc) {
+                GetPrimed(assumption);
+            }
             bool result = IsReachable(0, assumption, "SAT_R_Init");
             if (!result) {
-                auto new_uc = GetUnsatAssumption(m_transSolvers[0], assumption);
+                cube new_uc;
+                if (m_searchFromInitSucc)
+                    new_uc = GetUnsatCore(0, uc);
+                else
+                    new_uc = GetUnsatAssumption(m_transSolvers[0], assumption);
                 uc.swap(new_uc);
                 i = uc.size();
             } else {
@@ -873,30 +874,24 @@ cube FCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumpti
 }
 
 
-cube FCAR::GetReachedTarget() {
-    return m_reachedTarget;
+void FCAR::BuildCEXTrace() {
+    assert(m_checkResult == CheckResult::Unsafe);
+    assert(m_lastState != nullptr);
+    m_cexTrace.clear();
+
+    auto state = m_lastState;
+    while (state->preState != nullptr) {
+        m_cexTrace.emplace_back(pair<cube, cube>(state->inputs, state->latches));
+        state = state->preState;
+    }
 }
 
 
 std::vector<std::pair<cube, cube>> FCAR::GetCexTrace() {
-    std::vector<std::pair<cube, cube>> trace;
-    if (!m_lastState) return trace;
+    assert(m_checkResult == CheckResult::Unsafe);
+    if (m_cexTrace.empty()) BuildCEXTrace();
 
-    vector<shared_ptr<State>> path;
-    for (auto cur = m_lastState; cur != nullptr; cur = cur->preState) {
-        path.emplace_back(cur);
-    }
-    reverse(path.begin(), path.end());
-
-    trace.reserve(path.size());
-    for (size_t i = 0; i < path.size(); ++i) {
-        cube inputs;
-        if (i > 0) {
-            inputs = path[i]->inputs;
-        }
-        trace.emplace_back(path[i]->latches, std::move(inputs));
-    }
-    return trace;
+    return m_cexTrace;
 }
 
 

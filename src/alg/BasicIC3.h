@@ -62,7 +62,6 @@ class BasicIC3 : public IncrAlg {
     void SetShoals(const std::vector<FrameList> &shoals) override { m_shoals = shoals; }
     void SetWalls(const std::vector<FrameList> &walls) override { m_walls = walls; }
 
-    cube GetReachedTarget() override;
     std::vector<std::pair<cube, cube>> GetCexTrace() override;
     FrameList GetInv() override;
     void KLiveIncr() override;

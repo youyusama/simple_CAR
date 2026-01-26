@@ -16,6 +16,7 @@ class BMC : public BaseAlg {
 
     CheckResult Run() override;
     void Witness() override;
+    std::vector<std::pair<cube, cube>> GetCexTrace() override;
 
   private:
     bool Check();
