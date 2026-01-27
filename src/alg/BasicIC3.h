@@ -72,8 +72,6 @@ class BasicIC3 : public IncrAlg {
     bool IsStateImplyBad();
     bool IsLivenessWallDuplicated();
     bool GetInit(cube &out);
-    bool PruneDead();
-    bool IsDeadState(const cube &c);
 
     bool BaseCases();
     void AddNewFrame();
@@ -180,7 +178,6 @@ class BasicIC3 : public IncrAlg {
     bool m_stateImplyBad = false;
     bool m_hasDuplicatedWall = false;
     int m_shoalUnroll = 1;
-    std::vector<cube> m_newDead;
 };
 
 } // namespace car

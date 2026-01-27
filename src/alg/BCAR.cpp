@@ -109,10 +109,6 @@ bool BCAR::Check() {
             return true;
         }
     }
-    if (m_settings.rlivePruneDead && !m_dead.empty() && PruneDead()) {
-        return true;
-    }
-
     m_log.L(2, "Initial States Check");
     if (ImmediateSatisfiable()) {
         m_log.L(2, "Result >>> SAT <<<");
@@ -277,8 +273,6 @@ void BCAR::Init() {
     m_transSolvers.clear();
     m_lastState = nullptr;
     m_reachedTarget.clear();
-    m_newDead.clear();
-
     // s & T & c & O_i'
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
     m_transSolvers[0]->AddTrans();
@@ -361,29 +355,6 @@ bool BCAR::GetInit(cube &out) {
     if (!sat) return false;
     auto p = slv->GetAssignment(m_searchFromInitSucc);
     out = p.second;
-    return true;
-}
-
-bool BCAR::PruneDead() {
-    cube init;
-    while (GetInit(init)) {
-        if (!IsDeadState(init)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool BCAR::IsDeadState(const cube &c) {
-    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
-    slv->AddTrans();
-    slv->AddConstraints();
-    cube assumption = c;
-    bool sat = slv->Solve(assumption);
-    if (sat) return false;
-    cube dead = GetUnsatAssumption(slv, assumption);
-    if (dead.empty()) dead = assumption;
-    m_newDead.emplace_back(dead);
     return true;
 }
 

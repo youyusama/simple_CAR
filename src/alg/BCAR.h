@@ -42,8 +42,6 @@ class BCAR : public IncrAlg {
     bool IsStateImplyBad();
     bool IsLivenessWallDuplicated();
     bool GetInit(cube &out);
-    bool PruneDead();
-    bool IsDeadState(const cube &c);
 
     bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
@@ -173,7 +171,6 @@ class BCAR : public IncrAlg {
     bool m_stateImplyBad = false;
     bool m_hasDuplicatedWall = false;
     int m_shoalUnroll = 1;
-    std::vector<cube> m_newDead;
 };
 
 } // namespace car

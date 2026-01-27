@@ -193,29 +193,6 @@ bool BasicIC3::GetInit(cube &out) {
     return true;
 }
 
-bool BasicIC3::PruneDead() {
-    cube init;
-    while (GetInit(init)) {
-        if (!IsDeadState(init)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool BasicIC3::IsDeadState(const cube &c) {
-    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
-    slv->AddTrans();
-    slv->AddConstraints();
-    cube assumption = c;
-    bool sat = slv->Solve(assumption);
-    if (sat) return false;
-    cube dead = GetCore(slv, assumption, false);
-    if (dead.empty()) dead = assumption;
-    m_newDead.emplace_back(dead);
-    return true;
-}
-
 void BasicIC3::Extend() {
     AddNewFrames(); // Ensures frames up to F_{k+1} exist.
 
@@ -240,7 +217,6 @@ void BasicIC3::Extend() {
 }
 
 bool BasicIC3::Check() {
-    m_newDead.clear();
     if ((m_searchFromInitSucc || m_loopRefuting) && !m_customInit.empty()) {
         m_stateImplyBad = IsStateImplyBad();
     }
@@ -249,9 +225,6 @@ bool BasicIC3::Check() {
             m_hasDuplicatedWall = true;
             return true;
         }
-    }
-    if (m_settings.rlivePruneDead && !m_dead.empty() && PruneDead()) {
-        return true;
     }
 
     if (m_model.TrueId() == -m_model.GetBad()) {
