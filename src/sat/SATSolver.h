@@ -111,9 +111,15 @@ class SATSolver {
 
     void AddWallConstraints(const std::vector<FrameList> &walls);
 
+    cube AddWallConstraintsAsLabels(const std::vector<FrameList> &walls);
+
     void AddShoalConstraints(const std::vector<FrameList> &shoals,
                              const std::vector<cube> &dead,
                              int shoal_unroll = 1);
+
+    cube AddShoalConstraintsAsLabels(const std::vector<FrameList> &shoals,
+                                     const std::vector<cube> &dead,
+                                     int shoal_unroll = 1);
 
     void AddInitialClauses();
 

@@ -115,6 +115,9 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_flag("--bp", settings.searchFromBadPred, "search from bad predecessor")
         ->default_val(false);
 
+    app.add_flag("-t", settings.detailedTimers, "detailed timers")
+        ->default_val(false);
+
     try {
         app.parse(argc, argv);
         return true;

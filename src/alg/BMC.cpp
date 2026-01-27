@@ -50,12 +50,12 @@ std::vector<std::pair<cube, cube>> BMC::GetCexTrace() {
         cube inputs;
         for (auto i : m_model.GetModelInputs()) {
             auto ip = m_model.GetPrimeK(i, k);
-            inputs.emplace_back(m_Solver->GetModel(ip));
+            inputs.emplace_back(m_Solver->GetModel(ip) == t_True ? i : -i);
         }
         cube latches;
         for (auto l : m_model.GetModelLatches()) {
             auto lp = m_model.GetPrimeK(l, k);
-            latches.emplace_back(m_Solver->GetModel(lp));
+            latches.emplace_back(m_Solver->GetModel(lp) == t_True ? l : -l);
         }
         trace.emplace_back(pair<cube, cube>(inputs, latches));
     }

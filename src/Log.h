@@ -44,7 +44,8 @@ class Log {
         bool m_active = false;
     };
 
-    Log(int verb) : m_verbosity(verb) {
+    Log(int verb, bool detailedTimers) : m_verbosity(verb),
+                                         m_detailedTimers(detailedTimers) {
         m_begin = chrono::steady_clock::now();
         m_tick = chrono::steady_clock::now();
     }
@@ -63,7 +64,7 @@ class Log {
     void PrintCustomStatistics();
 
     ScopedTimer Section(const string &name) {
-        if (m_verbosity == 0) return ScopedTimer();
+        if (!m_detailedTimers) return ScopedTimer();
         return ScopedTimer(*this, name);
     }
 
@@ -133,6 +134,8 @@ class Log {
         return chrono::duration_cast<chrono::duration<double>>(time).count();
     }
 
+    void SetVerbosity(int verb) { m_verbosity = verb; }
+
   private:
     struct ActiveSection {
         string name;
@@ -154,6 +157,7 @@ class Log {
     }
 
     int m_verbosity;
+    bool m_detailedTimers;
 
     uint32_t m_mainSolverCalls = 0;
     chrono::microseconds m_mainSolverTime{0};

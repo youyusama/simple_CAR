@@ -6,9 +6,9 @@
 #include "FCAR.h"
 #include "KFAIR.h"
 #include "L2S.h"
-#include "rlive.h"
 #include "Log.h"
 #include "Model.h"
+#include "rlive.h"
 #include <iostream>
 #include <memory>
 
@@ -47,7 +47,7 @@ SimpleCAR::~SimpleCAR() {
 }
 
 bool SimpleCAR::LoadModel() {
-    m_log = std::make_unique<Log>(m_settings.verbosity);
+    m_log = std::make_unique<Log>(m_settings.verbosity, m_settings.detailedTimers);
     [[maybe_unused]] auto initScope = m_log->Section("Model_Init");
     m_model = std::make_unique<Model>(m_settings, *m_log);
     m_checker = CreateChecker(m_settings, *m_model, *m_log);

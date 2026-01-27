@@ -110,7 +110,7 @@ void Log::EndSection() {
 
 
 void Log::PrintCustomStatistics() {
-    if (m_verbosity == 0) return;
+    if (!m_detailedTimers) return;
 
     vector<pair<string, CustomTimeStat>> sorted(m_customStats.begin(), m_customStats.end());
     sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) {

@@ -34,46 +34,15 @@ CheckResult L2S::Run() {
 
 
 void L2S::Witness() {
-    auto trace = CounterexampleTrace();
-    if (trace.empty()) {
-        m_log.L(0, "L2S witness unavailable without safety trace.");
-        return;
-    }
+
 
     m_log.L(0, "L2S witness output is not implemented yet.");
 }
 
 
-BaseAlg::Trace L2S::CounterexampleTrace() {
-    if (!m_checker) return {};
+std::vector<std::pair<cube, cube>> L2S::GetCexTrace() {
 
-    Trace raw = m_checker->CounterexampleTrace();
-    if (raw.empty()) return raw;
-
-    Trace filtered;
-    filtered.reserve(raw.size());
-
-    for (auto &step : raw) {
-        std::vector<int> inputs;
-        inputs.reserve(step.first.size());
-        for (int v : step.first) {
-            if (m_origInputSet.find(abs(v)) != m_origInputSet.end()) {
-                inputs.emplace_back(v);
-            }
-        }
-
-        std::vector<int> latches;
-        latches.reserve(step.second.size());
-        for (int v : step.second) {
-            if (m_origLatchSet.find(abs(v)) != m_origLatchSet.end()) {
-                latches.emplace_back(v);
-            }
-        }
-
-        filtered.emplace_back(std::move(inputs), std::move(latches));
-    }
-
-    return filtered;
+    return {};
 }
 
 std::unique_ptr<BaseAlg> L2S::CreateSafetyChecker() {

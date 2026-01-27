@@ -177,6 +177,8 @@ class FCAR : public IncrAlg {
     std::vector<FrameList> m_walls;
     bool m_initStateImplyBad{false};
     std::vector<std::pair<cube, cube>> m_cexTrace;
+    cube m_shoalsLabels;
+    cube m_wallsLabels;
 };
 
 

@@ -268,11 +268,6 @@ cube SATSolver::GetKUnrolled(const cube &c, int k) {
 }
 
 int SATSolver::AddInvAsLabelK(const FrameList &inv, int k) {
-    if (k > 0) {
-        AddTransK(k);
-        AddConstraintsK(k);
-    }
-
     int sl = GetNewVar();
 
     vector<int> o_labels;
@@ -314,11 +309,6 @@ int SATSolver::AddInvAsLabelK(const FrameList &inv, int k) {
 }
 
 int SATSolver::AddCubeAsLabelK(const cube &c, int k) {
-    if (k > 0) {
-        AddTransK(k);
-        AddConstraintsK(k);
-    }
-
     int sl = GetNewVar();
     cube c_k = GetKUnrolled(c, k);
 
@@ -360,20 +350,49 @@ void SATSolver::AddWallConstraints(const std::vector<FrameList> &walls) {
     }
 }
 
+cube SATSolver::AddWallConstraintsAsLabels(const std::vector<FrameList> &walls) {
+    cube labels;
+    for (const auto &inv : walls) {
+        int p = AddInvAsLabelK(inv, 0);
+        int pp = AddInvAsLabelK(inv, 1);
+        int l = GetNewVar();
+        AddClause(clause{-l, -p, pp});
+        AddClause(clause{-l, p, -pp});
+        AddClause(clause{l, p, pp});
+        AddClause(clause{l, -p, -pp});
+        labels.emplace_back(l);
+    }
+    return labels;
+}
+
 void SATSolver::AddShoalConstraints(const std::vector<FrameList> &shoals,
                                     const std::vector<cube> &dead,
                                     int shoal_unroll) {
     int unroll = shoal_unroll >= 1 ? shoal_unroll : 1;
     for (int u = 0; u <= unroll; ++u) {
-        if (!shoals.empty()) {
-            for (const auto &inv : shoals) {
-                AddInvAsClauseK(inv, true, u);
-            }
+        for (const auto &inv : shoals) {
+            AddInvAsClauseK(inv, true, u);
         }
         for (const auto &d : dead) {
             AddCubeAsClauseK(d, true, u);
         }
     }
+}
+
+cube SATSolver::AddShoalConstraintsAsLabels(const std::vector<FrameList> &shoals,
+                                            const std::vector<cube> &dead,
+                                            int shoal_unroll) {
+    cube labels;
+    int unroll = shoal_unroll >= 1 ? shoal_unroll : 1;
+    for (int u = 0; u <= unroll; ++u) {
+        for (const auto &inv : shoals) {
+            labels.emplace_back(-AddInvAsLabelK(inv, u));
+        }
+        for (const auto &d : dead) {
+            labels.emplace_back(-AddCubeAsLabelK(d, u));
+        }
+    }
+    return labels;
 }
 
 

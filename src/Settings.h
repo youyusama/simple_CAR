@@ -52,6 +52,7 @@ struct Settings {
     int eq = 2;
     int eqTimeout = 600;
     bool searchFromBadPred = false;
+    bool detailedTimers = false;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);

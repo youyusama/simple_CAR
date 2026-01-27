@@ -50,7 +50,6 @@ bool FCAR::Check() {
     }
 
     // main stage
-    m_k = 0;
     stack<Task> workingStack;
     while (true) {
         [[maybe_unused]] auto frameScope = m_log.Section("FC_Frame");
@@ -107,12 +106,8 @@ bool FCAR::Check() {
 
                 task.isLocated = false;
 
-                if (task.frameLevel == -1) {
+                if (task.frameLevel == (m_searchFromInitSucc ? 0 : -1)) {
                     if (CheckInit(task.state)) {
-                        m_initialState->preState = task.state->preState;
-                        m_initialState->inputs = task.state->inputs;
-                        m_initialState->latches = task.state->latches;
-                        m_lastState = m_initialState;
                         return false;
                     } else
                         continue;
@@ -160,7 +155,7 @@ bool FCAR::Check() {
 
         // inv
         m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
-        IsInvariant(0);
+        if (!m_searchFromInitSucc) IsInvariant(0);
         for (int i = 0; i < m_k; ++i) {
             // propagation
             if (i >= m_minUpdateLevel) {
@@ -197,7 +192,13 @@ bool FCAR::Check() {
 void FCAR::Init() {
     [[maybe_unused]] auto initScope = m_log.Section("FC_Init");
 
-    if (m_searchFromInitSucc) m_initStateImplyBad = IsInitStateImplyBad();
+    m_k = m_searchFromInitSucc ? 1 : 0;
+
+    if (m_searchFromInitSucc) {
+        m_initStateImplyBad = IsInitStateImplyBad();
+        if (!m_initStateImplyBad)
+            m_log.L(1, "Initial state does not imply bad");
+    }
 
     // initial states
     cube init_latches;
@@ -244,18 +245,24 @@ void FCAR::Init() {
         m_badLiftSolver->AddTrans();
         m_badLiftSolver->SetDomainCOI(m_model.GetConstraints());
         m_badLiftSolver->SetDomainCOI({m_model.GetBad()});
+        m_shoalsLabels = m_badLiftSolver->AddShoalConstraintsAsLabels(m_shoals, m_dead);
+        m_wallsLabels = m_badLiftSolver->AddWallConstraintsAsLabels(m_walls);
     }
 
     m_restart.reset(new Restart(m_settings));
 
     // initialize frame 0
-    if (!m_searchFromInitSucc) {
-        for (int l : m_initialState->latches) {
-            auto uc = {-l};
-            m_overSequence->Insert(uc, 0);
-            m_transSolvers[0]->AddUC(uc);
+    for (int l : m_initialState->latches) {
+        auto uc = {-l};
+        m_transSolvers[0]->AddUC(uc);
+        m_overSequence->Insert(uc, 0);
+
+        if (!m_searchFromInitSucc) {
             m_startSolver->AddUC(uc);
         }
+
+        if (m_searchFromInitSucc && !m_initStateImplyBad)
+            m_transSolvers[0]->AddBad();
     }
 
     m_initialized = true;
@@ -436,6 +443,8 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             cls.push_back(-m_model.GetBad());
             for (auto cons : m_model.GetConstraints())
                 cls.push_back(-cons);
+            for (auto l : m_shoalsLabels) cls.push_back(-l);
+            for (auto l : m_wallsLabels) cls.push_back(-l);
             m_badLiftSolver->AddTempClause(cls);
             m_log.L(3, "lift assume: ", CubeToStr(cls));
 
@@ -480,6 +489,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
 
 int FCAR::GetNewLevel(const cube &states, int start) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_GetNewLevel");
+    if (m_searchFromInitSucc) start = (start == 0) ? 1 : start;
 
     for (int i = start; i <= m_k; i++) {
         if (!m_overSequence->IsBlockedByFrame(states, i)) {
@@ -750,7 +760,18 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
         // Solver return SAT
         m_log.L(2, "Result >>> SAT <<<");
         auto p = m_transSolvers[0]->GetAssignment(false);
-        s->latches = p.second;
+
+        if (m_searchFromInitSucc) {
+            m_initialState->inputs = p.first;
+            m_initialState->latches = p.second;
+            m_initialState->preState = s;
+        } else {
+            s->latches = p.second;
+            m_initialState->preState = s->preState;
+            m_initialState->inputs = s->inputs;
+            m_initialState->latches = s->latches;
+        }
+        m_lastState = m_initialState;
         return true;
     } else {
         // Solver return UNSAT, get uc, refine frame 0
@@ -789,8 +810,13 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
         }
         sort(uc.begin(), uc.end(), cmp);
         m_log.L(2, "Get UC: ", CubeToStr(uc));
-        AddUnsatisfiableCore(uc, 0);
-        PropagateUp(uc, 0);
+        if (m_searchFromInitSucc) {
+            AddUnsatisfiableCore(uc, 1);
+            PropagateUp(uc, 1);
+        } else {
+            AddUnsatisfiableCore(uc, 0);
+            PropagateUp(uc, 0);
+        }
         m_log.L(3, "Frames: ", m_overSequence->FramesInfo());
         return false;
     }
@@ -841,6 +867,8 @@ pair<cube, cube> FCAR::GetInputAndState(int lvl) {
 cube FCAR::GetUnsatCore(int lvl, const cube &state) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UCore");
     const unordered_set<int> &conflict = m_transSolvers[lvl]->GetConflict();
+    cube temp(conflict.begin(), conflict.end());
+    m_log.L(3, "Conflict: ", CubeToStr(temp));
     cube res;
     for (auto l : state) {
         int p = m_model.GetPrime(l);
@@ -873,6 +901,31 @@ void FCAR::BuildCEXTrace() {
         m_cexTrace.emplace_back(pair<cube, cube>(state->inputs, state->latches));
         state = state->preState;
     }
+    m_cexTrace.emplace_back(pair<cube, cube>(state->inputs, state->latches));
+
+    // simulate the concrete execution
+    auto slv = make_shared<SATSolver>(m_model, MCSATSolver::minicore);
+    slv->AddTrans();
+    slv->AddConstraints();
+    for (int i = 0; i < m_cexTrace.size() - 1; i++) {
+        cube assumption = m_cexTrace[i].first;
+        assumption.insert(assumption.end(),
+                          m_cexTrace[i].second.begin(), m_cexTrace[i].second.end());
+        bool sat = slv->Solve(assumption);
+        assert(sat);
+        auto p = slv->GetAssignment(true);
+        bool included = includes(p.second.begin(), p.second.end(),
+                                 m_cexTrace[i + 1].second.begin(),
+                                 m_cexTrace[i + 1].second.end(), cmp);
+        assert(included);
+        m_cexTrace[i + 1].second = p.second;
+    }
+
+    m_log.L(3, "Build CEX Trace:");
+    for (auto s : m_cexTrace) {
+        m_log.L(3, "Inputs: ", CubeToStr(s.first));
+        m_log.L(3, "Latches: ", CubeToStr(s.second));
+    }
 }
 
 
@@ -889,9 +942,10 @@ FrameList FCAR::GetInv() {
     if (!m_overSequence) return inv;
     int lvl = m_overSequence->GetInvariantLevel();
     if (lvl < 0) return inv;
-    for (int i = 0; i <= lvl; ++i) {
+    for (int i = m_searchFromInitSucc ? 1 : 0; i <= lvl; ++i) {
         inv.emplace_back(m_overSequence->FrameSetToFrame(*m_overSequence->GetFrame(i)));
     }
+    // m_log.L(1, m_overSequence->FramesDetail());
     return inv;
 }
 
