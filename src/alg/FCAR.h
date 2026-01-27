@@ -40,8 +40,6 @@ class FCAR : public IncrAlg {
 
     bool IsInitStateImplyBad();
 
-    bool GetInit(cube &out);
-
     void InitializeStartSolver();
 
     bool AddUnsatisfiableCore(const cube &uc, int frameLevel);

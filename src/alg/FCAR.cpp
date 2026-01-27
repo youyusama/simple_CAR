@@ -988,25 +988,6 @@ bool FCAR::IsInitStateImplyBad() {
     return !sat;
 }
 
-bool FCAR::GetInit(cube &out) {
-    out.clear();
-    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
-    slv->AddTrans();
-    slv->AddConstraints();
-    if (!m_customInit.empty()) {
-        for (int lit : m_customInit) slv->AddClause(clause{lit});
-    } else {
-        for (int lit : m_model.GetInitialState()) slv->AddClause(clause{lit});
-        slv->AddInitialClauses();
-    }
-    slv->AddShoalConstraints(m_shoals, m_dead);
-    bool sat = slv->Solve();
-    if (!sat) return false;
-    auto p = slv->GetAssignment(m_searchFromInitSucc);
-    out = p.second;
-    return true;
-}
-
 
 // ================================================================================
 // @brief: add the cube as and gates to the aiger model

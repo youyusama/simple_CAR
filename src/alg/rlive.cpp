@@ -55,7 +55,7 @@ CheckResult rlive::Run() {
                 FrameList new_shoal = m_safeChecker->GetInv();
                 if (!new_shoal.empty()) {
                     m_globalShoals.emplace_back(new_shoal);
-                    m_pdSolver->AddShoalConstraints({new_shoal}, {}, 1);
+                    m_pdSolver->AddInvAsClauseK(new_shoal, true, 1);
                 }
 
                 m_badStack.pop_back();
