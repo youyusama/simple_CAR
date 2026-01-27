@@ -19,6 +19,8 @@ rlive::rlive(Settings settings,
 }
 
 CheckResult rlive::Run() {
+    signal(SIGINT, signalHandler);
+
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
         m_log.L(0, "rlive only supports liveness properties.");
         return CheckResult::Unknown;
@@ -43,7 +45,7 @@ CheckResult rlive::Run() {
                 m_log.L(2, "get new bad state ", CubeToStr(new_t));
                 bool looped = false;
                 for (const auto &b : m_badStack) {
-                    if (Implies(b, new_t)) {
+                    if (b == new_t) {
                         looped = true;
                         break;
                     }
@@ -166,12 +168,6 @@ cube rlive::GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumpt
             res.emplace_back(a);
     }
     return res;
-}
-
-
-bool rlive::Implies(const cube &a, const cube &b) {
-    if (a.size() > b.size()) return false;
-    return std::includes(b.begin(), b.end(), a.begin(), a.end(), cmp);
 }
 
 } // namespace car

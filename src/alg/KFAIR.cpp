@@ -15,6 +15,8 @@ KFAIR::KFAIR(Settings settings,
                          m_log(log) {}
 
 CheckResult KFAIR::Run() {
+    signal(SIGINT, signalHandler);
+
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
         m_log.L(0, "KFAIR only supports liveness properties.");
         return CheckResult::Unknown;
