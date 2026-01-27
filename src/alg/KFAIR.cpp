@@ -40,10 +40,16 @@ CheckResult KFAIR::Run() {
         m_log.L(1, "===== Search for a prefix =====");
         prefix->SetWalls(m_globalWalls);
         CheckResult res = prefix->Run();
-        if (res == CheckResult::Safe) return CheckResult::Safe;
+        if (res == CheckResult::Safe){
+            m_log.L(1, "===== No unsafe prefix =====");
+            return CheckResult::Safe;
+        }
 
         if (enable_klive) {
-            if (DetectKLiveCex(*prefix)) return CheckResult::Unsafe;
+            if (DetectKLiveCex(*prefix)) {
+                m_log.L(1, "===== CEX found in trace =====");
+                return CheckResult::Unsafe;
+            }
         }
 
         if (enable_fair) {
@@ -66,6 +72,7 @@ CheckResult KFAIR::Run() {
         }
 
         if (enable_klive) {
+            m_log.L(1, "===== k-Liveness increase =====");
             prefix->KLiveIncr();
         }
     }

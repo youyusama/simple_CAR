@@ -109,6 +109,15 @@ void Log::EndSection() {
 }
 
 
+void Log::PrintTotalTime() {
+    if (m_verbosity == 0) return;
+    cout << "Time spent: " << fixed << setprecision(2)
+         << GetTimeDouble(chrono::duration_cast<std::chrono::microseconds>(
+                chrono::steady_clock::now() - m_begin))
+         << endl;
+}
+
+
 void Log::PrintCustomStatistics() {
     if (!m_detailedTimers) return;
 

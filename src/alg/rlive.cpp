@@ -98,7 +98,6 @@ bool rlive::CheckReachable(const cube &s) {
         m_log.L(2, "start from initial state");
     } else {
         m_log.L(2, "start from bad state ", CubeToStr(s));
-        m_log.L(1, "reach bad set size: ", m_badStack.size());
         if (m_settings.verbosity > 2) {
             for (const auto &r : m_badStack) {
                 m_log.L(3, CubeToStr(r));
@@ -122,7 +121,6 @@ bool rlive::CheckReachable(const cube &s) {
 
 
 bool rlive::PruneDead(const cube &s) {
-    m_log.L(1, "===== RLIVE PRUNE DEAD =====");
     m_log.L(3, "bad state ", CubeToStr(s));
 
     // s & T & !C' & !q
@@ -138,7 +136,7 @@ bool rlive::PruneDead(const cube &s) {
         m_log.L(2, "get succ", CubeToStr(assumption));
         bool is_not_dead = m_pdSolver->Solve(assumption);
         if (is_not_dead) {
-            m_log.L(1, "not dead");
+            m_log.L(2, "not dead");
             return false;
         } else {
             auto new_dead = GetUnsatAssumption(m_pdSolver, assumption);
@@ -152,7 +150,8 @@ bool rlive::PruneDead(const cube &s) {
     }
     m_pdSolver->ReleaseTempClause();
 
-    m_log.L(1, "global dead size: ", m_globalDead.size());
+    m_log.L(1, "===== RLIVE PRUNE DEAD =====");
+    m_log.L(2, "global dead size: ", m_globalDead.size());
     for (const auto &d : m_globalDead) {
         m_log.L(3, CubeToStr(d));
     }

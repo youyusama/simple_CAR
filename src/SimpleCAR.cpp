@@ -62,6 +62,7 @@ CheckResult SimpleCAR::Prove() {
     if (!m_settings.witnessOutputDir.empty())
         m_checker->Witness();
 
+    m_log->PrintTotalTime();
     switch (res) {
     case CheckResult::Safe:
         std::cout << "Safe" << std::endl;

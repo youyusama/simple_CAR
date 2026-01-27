@@ -61,6 +61,8 @@ class Log {
         }
     }
 
+    void PrintTotalTime();
+
     void PrintCustomStatistics();
 
     ScopedTimer Section(const string &name) {
