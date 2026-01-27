@@ -147,7 +147,7 @@ bool FCAR::Check() {
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     if (m_settings.dt) task.state->HasUC();
                     task.frameLevel = PropagateUp(uc, task.frameLevel + 1);
-                    m_log.L(3, "Frames: ", m_overSequence->FramesInfo());
+                    m_log.L(3, m_overSequence->FramesInfo());
                 }
             } // end while (!workingStack.empty())
             startState = EnumerateStartState();
@@ -876,8 +876,6 @@ pair<cube, cube> FCAR::GetInputAndState(int lvl) {
 cube FCAR::GetUnsatCore(int lvl, const cube &state) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UCore");
     const unordered_set<int> &conflict = m_transSolvers[lvl]->GetConflict();
-    cube temp(conflict.begin(), conflict.end());
-    m_log.L(3, "Conflict: ", CubeToStr(temp));
     cube res;
     for (auto l : state) {
         int p = m_model.GetPrime(l);

@@ -23,7 +23,7 @@ class BCAR : public IncrAlg {
     void Witness() override;
 
     void SetInit(const cube &c) override { m_customInit = c; }
-    void SetSearchFromInitSucc(bool b) override { m_searchFromInitSucc = b; }
+    void SetSearchFromInitSucc(bool b) override { /*bcar originally search from init succ*/ }
     void SetLoopRefuting(bool b) override { m_loopRefuting = b; }
     void SetDead(const std::vector<cube> &dead) override { m_dead = dead; }
     void SetShoals(const std::vector<FrameList> &shoals) override { m_shoals = shoals; }
@@ -38,10 +38,12 @@ class BCAR : public IncrAlg {
     bool Check();
 
     void Init();
-    void ApplyExternalCubes(const shared_ptr<SATSolver> &solver);
-    bool IsStateImplyBad();
-    bool IsLivenessWallDuplicated();
-    bool GetInit(cube &out);
+
+    void Reset();
+
+    bool IsInitStateImplyBad();
+
+    void InitializeStartSolver();
 
     bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
@@ -134,15 +136,13 @@ class BCAR : public IncrAlg {
 
     bool IsReachable(int lvl, const cube &assumption, const string &label);
 
-    pair<cube, cube> GetInputAndState(int lvl);
-
-    cube GetUnsatCore(int lvl, const cube &state);
-
     cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
 
     shared_ptr<State> EnumerateStartState();
 
     void OverSequenceRefine(int lvl);
+
+    void BuildCEXTrace();
 
     CheckResult m_checkResult;
     int m_minUpdateLevel;
@@ -161,16 +161,15 @@ class BCAR : public IncrAlg {
     shared_ptr<State> m_lastState;
     std::shared_ptr<Restart> m_restart;
 
+    // liveness
+    bool m_initialized{false};
     cube m_customInit;
-    cube m_reachedTarget;
-    bool m_searchFromInitSucc = false;
-    bool m_loopRefuting = false;
+    bool m_loopRefuting{false};
     std::vector<cube> m_dead;
     std::vector<FrameList> m_shoals;
     std::vector<FrameList> m_walls;
-    bool m_stateImplyBad = false;
-    bool m_hasDuplicatedWall = false;
-    int m_shoalUnroll = 1;
+    bool m_initStateImplyBad{false};
+    std::vector<std::pair<cube, cube>> m_cexTrace;
 };
 
 } // namespace car

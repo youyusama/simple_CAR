@@ -13,7 +13,6 @@ BCAR::BCAR(Settings settings,
     State::numLatches = model.GetNumLatches();
     m_lastState = nullptr;
     GLOBAL_LOG = &m_log;
-    m_shoalUnroll = m_settings.shoalUnroll >= 1 ? m_settings.shoalUnroll : 1;
 }
 
 CheckResult BCAR::Run() {
@@ -37,30 +36,35 @@ void BCAR::Witness() {
     }
 }
 
+
 std::vector<std::pair<cube, cube>> BCAR::GetCexTrace() {
-    std::vector<std::pair<cube, cube>> trace;
-    if (!m_lastState) return trace;
+    assert(m_checkResult == CheckResult::Unsafe);
+    if (m_cexTrace.empty()) BuildCEXTrace();
 
-    vector<shared_ptr<State>> path;
-    for (auto cur = m_lastState; cur != nullptr; cur = cur->preState) {
-        path.emplace_back(cur);
-    }
-    reverse(path.begin(), path.end());
-
-    trace.reserve(path.size());
-    for (size_t i = 0; i < path.size(); ++i) {
-        cube inputs;
-        if (i > 0) {
-            inputs = path[i]->inputs;
-        }
-        trace.emplace_back(path[i]->latches, std::move(inputs));
-    }
-    return trace;
+    return m_cexTrace;
 }
+
+
+void BCAR::BuildCEXTrace() {
+    assert(m_checkResult == CheckResult::Unsafe);
+    assert(m_lastState != nullptr);
+    m_cexTrace.clear();
+
+    vector<shared_ptr<State>> trace;
+    shared_ptr<State> state = m_lastState;
+    while (state != nullptr) {
+        trace.push_back(state);
+        state = state->preState;
+    }
+    reverse(trace.begin(), trace.end());
+    for (int i = 0; i < trace.size() - 1; ++i) {
+        m_cexTrace.emplace_back(pair<cube, cube>(trace[i + 1]->inputs, trace[i]->latches));
+    }
+}
+
 
 FrameList BCAR::GetInv() {
     FrameList inv;
-    if (m_hasDuplicatedWall) return inv;
     if (!m_overSequence) return inv;
     int lvl = m_overSequence->GetInvariantLevel();
     if (lvl < 0) return inv;
@@ -97,43 +101,27 @@ void BCAR::KLiveIncr() {
 
 bool BCAR::Check() {
     [[maybe_unused]] auto checkScope = m_log.Section("FC_Check");
-    Init();
-    m_log.L(2, "Initialized");
 
-    if ((m_searchFromInitSucc || m_loopRefuting) && !m_customInit.empty()) {
-        m_stateImplyBad = IsStateImplyBad();
+    if (!m_initialized) {
+        Init();
+        m_log.L(2, "Initialized");
+    } else {
+        Reset();
+        m_log.L(2, "Reset");
     }
-    if (m_loopRefuting && !m_walls.empty()) {
-        if (IsLivenessWallDuplicated()) {
-            m_hasDuplicatedWall = true;
-            return true;
-        }
-    }
-    m_log.L(2, "Initial States Check");
-    if (ImmediateSatisfiable()) {
-        m_log.L(2, "Result >>> SAT <<<");
-        auto p = m_startSolver->GetAssignment(false);
-        m_log.L(3, "Get Assignment:", CubeToStr(p.second));
 
-        shared_ptr<State> newState(new State(nullptr, p.first, p.second, 1));
-        m_lastState = newState;
-        return false;
-    }
-    m_log.L(2, "Result >>> UNSAT <<<");
-    cube bad_assumption({m_model.GetBad()});
-    bool startBadSat = false;
-    {
-        [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_InitBad");
-        startBadSat = m_transSolvers[0]->Solve(bad_assumption);
-    }
-    if (!startBadSat) {
+    if (!CheckBad(make_shared<State>(nullptr, cube{}, cube{}, 0))) {
+        m_log.L(1, "Bad State not reachable");
         m_overSequence->SetInvariantLevel(-1);
         return true;
     }
-    m_startSolver->UpdateStartSolverFlag();
+
+    if (ImmediateSatisfiable()) {
+        m_log.L(1, "Immediate Satisfiable");
+        return false;
+    }
 
     // main stage
-    m_k = 0;
     stack<Task> workingStack;
     while (true) {
         [[maybe_unused]] auto frameScope = m_log.Section("FC_Frame");
@@ -195,14 +183,15 @@ bool BCAR::Check() {
 
                 cube assumption(task.state->latches);
                 OrderAssumption(assumption);
-                m_log.L(2, "\nSAT Check on frame: ", task.frameLevel);
+                m_log.L(2, "SAT Check on frame: ", task.frameLevel);
                 m_log.L(3, "From state: ", CubeToStr(task.state->latches));
                 bool result = IsReachable(task.frameLevel, assumption, "SAT_BC_Main");
                 if (result) {
                     // Solver return SAT, get a new State, then continue
                     m_log.L(2, "Result >>> SAT <<<");
-                    auto p = GetInputAndState(task.frameLevel);
-                    shared_ptr<State> newState(new State(task.state, p.first, p.second, task.state->depth + 1));
+                    auto p = m_transSolvers[task.frameLevel]->GetAssignment(true);
+                    auto newState =
+                        make_shared<State>(task.state, p.first, p.second, task.state->depth + 1);
                     m_log.L(3, "Get state: ", CubeToStr(newState->latches));
                     m_underSequence.push(newState);
                     if (m_settings.dt) task.state->HasSucc();
@@ -211,7 +200,7 @@ bool BCAR::Check() {
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     m_log.L(2, "Result >>> UNSAT <<<");
-                    auto uc = GetUnsatCore(task.frameLevel, task.state->latches);
+                    auto uc = GetUnsatAssumption(m_transSolvers[task.frameLevel], task.state->latches);
                     m_log.L(3, "Get UC:", CubeToStr(uc));
                     if (Generalize(uc, task.frameLevel))
                         m_branching->Update(uc);
@@ -227,7 +216,6 @@ bool BCAR::Check() {
 
         // inv
         m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
-        ApplyExternalCubes(m_invSolver);
         IsInvariant(0);
         for (int i = 0; i < m_k; ++i) {
             // propagation
@@ -254,7 +242,7 @@ bool BCAR::Check() {
 
         m_log.L(1, m_overSequence->FramesInfo());
         m_log.L(3, m_overSequence->FramesDetail());
-        m_startSolver->UpdateStartSolverFlag();
+        InitializeStartSolver();
 
         m_k++;
         m_restart->ResetUcCounts();
@@ -265,6 +253,13 @@ bool BCAR::Check() {
 
 void BCAR::Init() {
     [[maybe_unused]] auto initScope = m_log.Section("FC_Init");
+
+    m_k = 0;
+
+    m_initStateImplyBad = IsInitStateImplyBad();
+    if (!m_initStateImplyBad)
+        m_log.L(1, "Initial state does not imply bad");
+
     m_overSequence = make_shared<OverSequenceSet>(m_model);
     m_underSequence = UnderSequence();
     m_branching = make_shared<Branching>(m_settings.branching);
@@ -272,12 +267,39 @@ void BCAR::Init() {
     blockerOrder.branching = m_branching;
     m_transSolvers.clear();
     m_lastState = nullptr;
-    m_reachedTarget.clear();
+
     // s & T & c & O_i'
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
     m_transSolvers[0]->AddTrans();
     m_transSolvers[0]->AddConstraints();
-    ApplyExternalCubes(m_transSolvers[0]);
+    // liveness: T = T & (W <-> W')
+    //           T = T & C'
+    //           T = T & !d'
+    m_transSolvers[0]->AddWallConstraints(m_walls);
+    for (auto inv : m_shoals) m_transSolvers[0]->AddInvAsClauseK(inv, false, 1);
+    for (auto d : m_dead) m_transSolvers[0]->AddCubeAsClauseK(d, true, 1);
+
+    InitializeStartSolver();
+
+    // bad & T & c
+    m_badSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_badSolver->AddTrans();
+    m_badSolver->AddConstraints();
+    m_badSolver->AddBad();
+    // liveness: T = T & (W <-> W')
+    //           T = T & C'
+    //           T = T & !d'
+    m_badSolver->AddWallConstraints(m_walls);
+    for (auto inv : m_shoals) m_badSolver->AddInvAsClauseK(inv, false, 1);
+    for (auto d : m_dead) m_badSolver->AddCubeAsClauseK(d, true, 1);
+
+    m_restart.reset(new Restart(m_settings));
+
+    m_initialized = true;
+}
+
+
+void BCAR::InitializeStartSolver() {
     // I & T & c
     m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_startSolver->AddTrans();
@@ -286,34 +308,34 @@ void BCAR::Init() {
         for (int lit : m_customInit) {
             m_startSolver->AddClause({lit});
         }
+        if (!m_initStateImplyBad) m_startSolver->AddBad();
     } else {
         for (auto l : m_model.GetInitialState()) {
             m_startSolver->AddClause({l});
         }
         m_startSolver->AddInitialClauses();
     }
-    ApplyExternalCubes(m_startSolver);
-    // bad & T & c
-    m_badSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-    m_badSolver->AddTrans();
-    m_badSolver->AddConstraints();
-    m_badSolver->AddBad();
-    ApplyExternalCubes(m_badSolver);
-
-    m_restart.reset(new Restart(m_settings));
+    // liveness: T = T & (W <-> W')
+    //           T = T & C'
+    //           T = T & !d'
+    m_startSolver->AddWallConstraints(m_walls);
+    for (auto inv : m_shoals) m_startSolver->AddInvAsClauseK(inv, false, 1);
+    for (auto d : m_dead) m_startSolver->AddCubeAsClauseK(d, true, 1);
 }
 
-void BCAR::ApplyExternalCubes(const shared_ptr<SATSolver> &solver) {
-    if (!solver) return;
-    if (!m_walls.empty()) {
-        solver->AddWallConstraints(m_walls);
-    }
-    if (!m_shoals.empty() || !m_dead.empty()) {
-        solver->AddShoalConstraints(m_shoals, m_dead, m_shoalUnroll);
-    }
+
+void BCAR::Reset() {
+    m_underSequence.clear();
+    m_lastState = nullptr;
+    m_cexTrace.clear();
+
+    // add exist lemma
+    auto frame_i = m_overSequence->GetFrame(m_k);
+    for (auto l : *frame_i) m_startSolver->AddUC(l);
 }
 
-bool BCAR::IsStateImplyBad() {
+
+bool BCAR::IsInitStateImplyBad() {
     if (m_customInit.empty()) return false;
     auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
     slv->AddTrans();
@@ -324,39 +346,6 @@ bool BCAR::IsStateImplyBad() {
     return !sat;
 }
 
-bool BCAR::IsLivenessWallDuplicated() {
-    if (m_walls.empty()) return false;
-    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
-    slv->AddTrans();
-    slv->AddConstraints();
-    slv->AddWallConstraints(m_walls);
-
-    cube assumptions = m_customInit;
-    if (!m_stateImplyBad) {
-        assumptions.push_back(-m_model.GetBad());
-    }
-    bool sat = slv->Solve(assumptions);
-    return !sat;
-}
-
-bool BCAR::GetInit(cube &out) {
-    out.clear();
-    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
-    slv->AddTrans();
-    slv->AddConstraints();
-    if (!m_customInit.empty()) {
-        for (int lit : m_customInit) slv->AddClause(clause{lit});
-    } else {
-        for (int lit : m_model.GetInitialState()) slv->AddClause(clause{lit});
-        slv->AddInitialClauses();
-    }
-    slv->AddShoalConstraints(m_shoals, m_dead, m_shoalUnroll);
-    bool sat = slv->Solve();
-    if (!sat) return false;
-    auto p = slv->GetAssignment(m_searchFromInitSucc);
-    out = p.second;
-    return true;
-}
 
 bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_AddUC");
@@ -371,12 +360,17 @@ bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
         m_transSolvers.back()->AddTrans();
         m_transSolvers.back()->AddConstraints();
         if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
-        ApplyExternalCubes(m_transSolvers.back());
+        // liveness: T = T & (W <-> W')
+        //           T = T & C'
+        //           T = T & !d'
+        m_transSolvers.back()->AddWallConstraints(m_walls);
+        for (auto inv : m_shoals) m_transSolvers.back()->AddInvAsClauseK(inv, false, 1);
+        for (auto d : m_dead) m_transSolvers.back()->AddCubeAsClauseK(d, true, 1);
     }
     m_transSolvers[frameLevel]->AddUC(puc);
 
     if (frameLevel >= m_k) {
-        m_startSolver->AddUC(puc, frameLevel);
+        m_startSolver->AddUC(puc);
     }
     if (frameLevel < m_minUpdateLevel) {
         m_minUpdateLevel = frameLevel;
@@ -385,11 +379,13 @@ bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     return true;
 }
 
+
 bool BCAR::ImmediateSatisfiable() {
     [[maybe_unused]] auto immScope = m_log.Section("FC_ImmSAT");
-    if (m_searchFromInitSucc && !m_customInit.empty()) {
+    if (!m_customInit.empty()) {
         return false;
     }
+
     cube assumptions;
     assumptions.push_back(m_model.GetBad());
     bool result = false;
@@ -398,8 +394,13 @@ bool BCAR::ImmediateSatisfiable() {
         result = m_startSolver->Solve(assumptions);
     }
     if (result) {
-        auto p = m_startSolver->GetAssignment(false);
-        m_reachedTarget = p.second;
+        // initial state
+        auto init = m_startSolver->GetAssignment(false);
+        auto initState = make_shared<State>(nullptr, cube{}, init.second, 0);
+        // start state is a successor of initial state
+        auto p = m_startSolver->GetAssignment(true);
+        auto startState = make_shared<State>(initState, p.first, p.second, 1);
+        m_lastState = startState;
     }
     m_startSolver->ClearAssumption();
     return result;
@@ -412,8 +413,13 @@ shared_ptr<State> BCAR::EnumerateStartState() {
         [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_Start");
         if (!m_startSolver->Solve()) return nullptr;
     }
+
+    // initial state
+    auto init = m_startSolver->GetAssignment(false);
+    auto initState = make_shared<State>(nullptr, cube{}, init.second, 0);
+    // start state is a successor of initial state
     auto p = m_startSolver->GetAssignment(true);
-    shared_ptr<State> startState(new State(nullptr, p.first, p.second, 0));
+    auto startState = make_shared<State>(initState, p.first, p.second, 1);
     return startState;
 }
 
@@ -437,22 +443,7 @@ void BCAR::OverSequenceRefine(int lvl) {
         for (auto l : m_model.GetInitialState()) refine_solver->AddClause({l});
         refine_solver->AddInitialClauses();
     }
-    ApplyExternalCubes(refine_solver);
-    clause inv;
-    for (int i = 0; i <= lvl; i++) {
-        shared_ptr<OverSequenceSet::FrameSet> frame_i = m_overSequence->GetFrame(i);
-        int f = refine_solver->GetNewVar();
-        for (const cube &uc : *frame_i) {
-            clause cls;
-            for (int i = 0; i < uc.size(); i++) {
-                cls.emplace_back(-uc[i]);
-            }
-            cls.emplace_back(-f);
-            refine_solver->AddClause(cls);
-        }
-        inv.emplace_back(f);
-    }
-    refine_solver->AddClause(inv);
+    refine_solver->AddInvAsClauseK(GetInv(), false, 0);
 
     // if I & c & (O_0 | O_1 | ... | O_i) is SAT, get model s
     while (true) {
@@ -467,7 +458,7 @@ void BCAR::OverSequenceRefine(int lvl) {
 
         bool sat = IsReachable(lvl + 1, s.second, "SAT_BC_RefineReach");
         assert(!sat);
-        auto uc = GetUnsatCore(lvl + 1, s.second);
+        auto uc = GetUnsatAssumption(m_transSolvers[lvl + 1], s.second);
         for (int i = 0; i <= lvl; i++)
             AddUnsatisfiableCore(uc, i);
         clause cls;
@@ -600,7 +591,7 @@ bool BCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
         // F_i & T & temp_uc'
         bool reachable = IsReachable(frame_lvl, assumption, "SAT_BC_Down");
         if (!reachable) {
-            uc = GetUnsatCore(frame_lvl, uc);
+            uc = GetUnsatAssumption(m_transSolvers[frame_lvl], uc);
             return true;
         }
 
@@ -610,7 +601,7 @@ bool BCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses
             return false;
         }
 
-        auto p = GetInputAndState(frame_lvl);
+        auto p = m_transSolvers[frame_lvl]->GetAssignment(false);
         shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
         if (DownHasFailed(cts->latches, failed_ctses)) return false;
 
@@ -633,7 +624,7 @@ bool BCAR::CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cu
 
     while (true) {
         if (!IsReachable(frame_lvl, cts_ass, "SAT_R_CTS_B")) {
-            auto uc_cts = GetUnsatCore(frame_lvl, cts->latches);
+            auto uc_cts = GetUnsatAssumption(m_transSolvers[frame_lvl], cts->latches);
             m_log.L(3, "CTG Get UC:", CubeToStr(uc_cts));
             if (Generalize(uc_cts, frame_lvl, rec_lvl + 1)) m_branching->Update(uc_cts);
             m_log.L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
@@ -641,7 +632,7 @@ bool BCAR::CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cu
             PropagateUp(uc_cts, frame_lvl + 1);
             return true;
         } else {
-            auto p = GetInputAndState(frame_lvl);
+            auto p = m_transSolvers[frame_lvl]->GetAssignment(false);
             shared_ptr<State> post_cts(new State(nullptr, p.first, p.second, 0));
             if (DownHasFailed(post_cts->latches, failed_ctses)) return false;
 
@@ -669,6 +660,7 @@ bool BCAR::DownHasFailed(const cube &s, const vector<cube> &failed_ctses) {
 
 bool BCAR::CheckBad(shared_ptr<State> s) {
     [[maybe_unused]] auto checkScope = m_log.Section("FC_CheckBad");
+
     m_log.L(2, "\nSAT CHECK on bad");
     m_log.L(3, "From state: ", CubeToStr(s->latches));
     cube assumption(s->latches);
@@ -684,7 +676,6 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
         m_log.L(3, "Get Assignment:", CubeToStr(p.second));
         shared_ptr<State> newState(new State(s, p.first, p.second, s->depth + 1));
         m_lastState = newState;
-        m_reachedTarget = p.second;
         m_log.L(3, m_overSequence->FramesInfo());
         return true;
     } else {
@@ -732,15 +723,6 @@ bool BCAR::IsReachable(int lvl, const cube &assumption, const string &label) {
     return m_transSolvers[lvl]->Solve(assumption);
 }
 
-pair<cube, cube> BCAR::GetInputAndState(int lvl) {
-    return m_transSolvers[lvl]->GetAssignment(true);
-}
-
-
-cube BCAR::GetUnsatCore(int lvl, const cube &state) {
-    return GetUnsatAssumption(m_transSolvers[lvl], state);
-}
-
 
 cube BCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions) {
     const unordered_set<int> &conflict = solver->GetConflict();
@@ -779,7 +761,7 @@ bool BCAR::Propagate(const cube &c, int lvl) {
     [[maybe_unused]] auto propScope = m_log.Section("FC_Prop");
     bool result = !IsReachable(lvl, c, "SAT_BC_Prop");
     if (result) {
-        auto uc = GetUnsatCore(lvl, c);
+        auto uc = GetUnsatAssumption(m_transSolvers[lvl], c);
         AddUnsatisfiableCore(uc, lvl + 1);
     }
     return result;
@@ -951,38 +933,17 @@ void BCAR::OutputCounterExample() {
     cexFile << "1" << endl
             << "b0" << endl;
 
-    stack<shared_ptr<State>> trace;
+    vector<shared_ptr<State>> trace;
     shared_ptr<State> state = m_lastState;
     while (state != nullptr) {
-        trace.push(state);
+        trace.push_back(state);
         state = state->preState;
     }
+    reverse(trace.begin(), trace.end());
+    cexFile << trace[0]->GetLatchesString() << endl;
 
-    // get determined initial state
-    if (trace.size() > 1) {
-        cube assumption;
-        cube succ(trace.top()->latches);
-        cube input(trace.top()->inputs);
-        GetPrimed(succ);
-        assumption.insert(assumption.end(), succ.begin(), succ.end());
-        assumption.insert(assumption.end(), input.begin(), input.end());
-        m_startSolver->UpdateStartSolverFlag();
-        bool sat = false;
-        {
-            [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_CEX");
-            sat = m_startSolver->Solve(assumption);
-        }
-        assert(sat);
-        auto p = m_startSolver->GetAssignment(false);
-        shared_ptr<State> initState(new State(nullptr, p.first, p.second, 0));
-        cexFile << initState->GetLatchesString() << endl;
-    } else {
-        cexFile << trace.top()->GetLatchesString() << endl;
-    }
-
-    while (!trace.empty()) {
-        cexFile << trace.top()->GetInputsString() << endl;
-        trace.pop();
+    for (int i = 1; i < trace.size(); i++) {
+        cexFile << trace[i]->GetInputsString() << endl;
     }
     cexFile << "." << endl;
     cexFile.close();
