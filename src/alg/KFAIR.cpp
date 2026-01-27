@@ -97,16 +97,20 @@ bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
     auto trace = checker.GetCexTrace();
     states.reserve(trace.size());
     for (auto &step : trace) {
-        states.emplace_back(step.first);
+        states.emplace_back(step.second);
     }
 
-    const auto &live = m_model.GetKLiveCounter();
-    if (states.size() <= 1 || live.k < 1 || live.latches.empty()) return false;
+    // Need at least one k-liveness latch and a non-trivial trace.
+    int klive_step = m_model.GetKLiveStep();
+    if (states.size() <= 1 || klive_step < 1) return false;
 
+    // Build a set of k-liveness latch variables for quick filtering.
     std::unordered_set<int> live_set;
-    live_set.reserve(live.latches.size() * 2);
-    for (int l : live.latches) live_set.emplace(abs(l));
+    for (int i = 1; i <= klive_step; i++)
+        live_set.emplace(abs(m_model.GetKLiveSignal(i)));
 
+    // Track indices where the k-counter value changes and store the trimmed trace
+    // (state without k-liveness latch literals).
     std::vector<int> bad_indices;
     std::vector<cube> trace_to_bad;
     trace_to_bad.reserve(states.size());
@@ -124,6 +128,7 @@ bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
             }
         }
 
+        // Record the end of a segment when the k-counter value changes.
         if (k_counter_last != -1 && k_counter != k_counter_last) {
             bad_indices.push_back(static_cast<int>(i) - 1);
         }
@@ -132,6 +137,7 @@ bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
     }
     bad_indices.push_back(static_cast<int>(states.size()) - 1);
 
+    // Look for a loop in the trimmed trace that crosses a k-counter boundary.
     for (size_t i = 0; i < trace_to_bad.size(); i++) {
         for (size_t j = trace_to_bad.size(); j-- > i + 1;) {
             if (trace_to_bad[i] == trace_to_bad[j]) {

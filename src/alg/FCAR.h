@@ -169,7 +169,6 @@ class FCAR : public IncrAlg {
     // liveness
     bool m_initialized{false};
     cube m_customInit;
-    cube m_reachedTarget;
     bool m_searchFromInitSucc{false};
     bool m_loopRefuting{false};
     std::vector<cube> m_dead;

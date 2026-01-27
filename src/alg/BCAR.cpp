@@ -71,10 +71,28 @@ FrameList BCAR::GetInv() {
 }
 
 void BCAR::KLiveIncr() {
-    auto &klive = m_model.GetKLiveCounter();
-    klive.Increment(&m_model);
-    m_model.SetBad(klive.cur);
-    m_model.Rebuild();
+    int k_step = m_model.KLivenessIncrement();
+    vector<clause> k_clauses = m_model.GetKLiveClauses(k_step);
+
+    for (auto &slv : m_transSolvers) {
+        for (auto &cls : k_clauses) slv->AddClause(cls);
+    }
+    if (m_startSolver) {
+        for (auto &cls : k_clauses) m_startSolver->AddClause(cls);
+    }
+    if (m_badSolver) {
+        for (auto &cls : k_clauses) m_badSolver->AddClause(cls);
+    }
+    if (m_invSolver) {
+        for (auto &cls : k_clauses) m_invSolver->AddClause(cls);
+    }
+
+    if (!m_transSolvers.empty()) {
+        m_transSolvers[0]->AddClause({-m_model.GetKLiveSignal(k_step)});
+    }
+    if (m_startSolver) {
+        m_startSolver->AddClause({-m_model.GetKLiveSignal(k_step)});
+    }
 }
 
 bool BCAR::Check() {

@@ -189,6 +189,7 @@ class Model {
     inline int GetBad() { return m_bad; }
     inline int GetProperty() { return -m_bad; }
 
+    int GetKLiveStep() { return m_kliveStep; }
     int KLivenessIncrement();
     int GetKLiveSignal(int k) { return m_kliveSignals[k]; }
     vector<clause> GetKLiveClauses(int k) { return m_kliveTransClauses[k]; }

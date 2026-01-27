@@ -1099,6 +1099,11 @@ int Model::KLivenessIncrement() {
     k_clauses.emplace_back(clause{-next, q, latch});
     m_kliveTransClauses[m_kliveStep] = k_clauses;
 
+    // rebuild manually
+    m_initialState.emplace_back(-latch);
+    m_primeMaps[0][latch] = next;
+    m_clauses.insert(m_clauses.end(), k_clauses.begin(), k_clauses.end());
+    m_simpClauses.insert(m_simpClauses.end(), k_clauses.begin(), k_clauses.end());
     return m_kliveStep;
 }
 

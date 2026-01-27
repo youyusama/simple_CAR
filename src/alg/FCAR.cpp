@@ -215,7 +215,6 @@ void FCAR::Init() {
     blockerOrder.branching = m_branching;
     m_transSolvers.clear();
     m_lastState = nullptr;
-    m_reachedTarget.clear();
 
     // O_i & T & c & s'
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
@@ -272,9 +271,12 @@ void FCAR::Init() {
 void FCAR::Reset() {
     m_underSequence.clear();
     m_lastState = nullptr;
-    m_reachedTarget.clear();
+    m_cexTrace.clear();
 
     InitializeStartSolver();
+    // add exist lemma
+    auto frame_i = m_overSequence->GetFrame(m_k);
+    for (auto l : *frame_i) m_startSolver->AddUC(l);
     m_wallsLabels = m_badLiftSolver->AddWallConstraintsAsLabels(m_walls);
 }
 
@@ -354,7 +356,6 @@ bool FCAR::ImmediateSatisfiable() {
     }
     if (result) {
         auto p = m_transSolvers[0]->GetAssignment(false);
-        m_reachedTarget = p.second;
     }
     return result;
 }
@@ -428,7 +429,6 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             }
             m_badLiftSolver->ReleaseTempClause();
             p.second = partial_latch;
-            m_reachedTarget = p.second;
 
             cube inputs_bad;
             for (int i : m_model.GetPropertyCOIInputs()) {
@@ -486,7 +486,6 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             }
             m_badLiftSolver->ReleaseTempClause();
             p.second = partial_latch;
-            m_reachedTarget = p.second;
 
             shared_ptr<State> badState(new State(nullptr, p.first, p.second, 0));
             return badState;
@@ -913,11 +912,14 @@ void FCAR::BuildCEXTrace() {
     }
     m_cexTrace.emplace_back(pair<cube, cube>(state->inputs, state->latches));
 
+    m_log.L(3, "Build CEX Trace:");
     // simulate the concrete execution
     auto slv = make_shared<SATSolver>(m_model, MCSATSolver::minicore);
     slv->AddTrans();
     slv->AddConstraints();
     for (int i = 0; i < m_cexTrace.size() - 1; i++) {
+        m_log.L(3, "Inputs: ", CubeToStr(m_cexTrace[i].first));
+        m_log.L(3, "Latches: ", CubeToStr(m_cexTrace[i].second));
         cube assumption = m_cexTrace[i].first;
         assumption.insert(assumption.end(),
                           m_cexTrace[i].second.begin(), m_cexTrace[i].second.end());
@@ -930,12 +932,8 @@ void FCAR::BuildCEXTrace() {
         assert(included);
         m_cexTrace[i + 1].second = p.second;
     }
-
-    m_log.L(3, "Build CEX Trace:");
-    for (auto s : m_cexTrace) {
-        m_log.L(3, "Inputs: ", CubeToStr(s.first));
-        m_log.L(3, "Latches: ", CubeToStr(s.second));
-    }
+    m_log.L(3, "Inputs: ", CubeToStr(m_cexTrace.back().first));
+    m_log.L(3, "Latches: ", CubeToStr(m_cexTrace.back().second));
 }
 
 

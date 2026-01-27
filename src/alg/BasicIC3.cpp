@@ -113,16 +113,28 @@ FrameList BasicIC3::GetInv() {
 }
 
 void BasicIC3::KLiveIncr() {
-    auto &klive = m_model.GetKLiveCounter();
-    klive.Increment(&m_model);
-    m_model.SetBad(klive.cur);
-    m_model.Rebuild();
-    m_defaultInit = m_model.GetInitialState();
-    m_initialStateSet.clear();
-    if (m_customInit.empty()) {
-        m_initialStateSet.insert(m_defaultInit.begin(), m_defaultInit.end());
-    } else {
-        m_initialStateSet.insert(m_customInit.begin(), m_customInit.end());
+    int k_step = m_model.KLivenessIncrement();
+    vector<clause> k_clauses = m_model.GetKLiveClauses(k_step);
+
+    if (m_liftSolver) {
+        for (auto &cls : k_clauses) m_liftSolver->AddClause(cls);
+    }
+    if (m_startSolver) {
+        for (auto &cls : k_clauses) m_startSolver->AddClause(cls);
+    }
+    if (m_badPredLiftSolver) {
+        for (auto &cls : k_clauses) m_badPredLiftSolver->AddClause(cls);
+    }
+    for (auto &frame : m_frames) {
+        if (!frame.solver) continue;
+        for (auto &cls : k_clauses) frame.solver->AddClause(cls);
+    }
+
+    if (!m_frames.empty() && m_frames[0].solver) {
+        m_frames[0].solver->AddClause({-m_model.GetKLiveSignal(k_step)});
+    }
+    if (m_startSolver) {
+        m_startSolver->AddClause({-m_model.GetKLiveSignal(k_step)});
     }
 }
 
