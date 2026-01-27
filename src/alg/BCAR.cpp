@@ -78,26 +78,37 @@ void BCAR::KLiveIncr() {
     int k_step = m_model.KLivenessIncrement();
     vector<clause> k_clauses = m_model.GetKLiveClauses(k_step);
 
-    for (auto &slv : m_transSolvers) {
-        for (auto &cls : k_clauses) slv->AddClause(cls);
-    }
-    if (m_startSolver) {
-        for (auto &cls : k_clauses) m_startSolver->AddClause(cls);
-    }
-    if (m_badSolver) {
-        for (auto &cls : k_clauses) m_badSolver->AddClause(cls);
-    }
-    if (m_invSolver) {
-        for (auto &cls : k_clauses) m_invSolver->AddClause(cls);
+    // add trans
+    for (auto slv : m_transSolvers) {
+        for (auto cls : k_clauses) slv->AddClause(cls);
     }
 
-    if (!m_transSolvers.empty()) {
-        m_transSolvers[0]->AddClause({-m_model.GetKLiveSignal(k_step)});
-    }
-    if (m_startSolver) {
-        m_startSolver->AddClause({-m_model.GetKLiveSignal(k_step)});
-    }
+    ResetBadSolver();
+    // start solver will be reset
 }
+
+
+void BCAR::ResetBadSolver() {
+    // reset bad solver
+
+    // bad & T & c
+    m_badSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_badSolver->AddTrans();
+    m_badSolver->AddConstraints();
+    if (m_loopRefuting) {
+        for (auto l : m_customInit)
+            m_badSolver->AddClause({l});
+    } else {
+        m_badSolver->AddBad();
+    }
+    // liveness: T = T & (W <-> W')
+    //           T = T & C'
+    //           T = T & !d'
+    m_badSolver->AddWallConstraints(m_walls);
+    for (auto inv : m_shoals) m_badSolver->AddInvAsClauseK(inv, false, 1);
+    for (auto d : m_dead) m_badSolver->AddCubeAsClauseK(d, true, 1);
+}
+
 
 bool BCAR::Check() {
     [[maybe_unused]] auto checkScope = m_log.Section("FC_Check");
@@ -275,23 +286,12 @@ void BCAR::Init() {
     // liveness: T = T & (W <-> W')
     //           T = T & C'
     //           T = T & !d'
-    m_transSolvers[0]->AddWallConstraints(m_walls);
+    if (m_loopRefuting) m_transSolvers[0]->AddWallConstraints(m_walls);
     for (auto inv : m_shoals) m_transSolvers[0]->AddInvAsClauseK(inv, false, 1);
     for (auto d : m_dead) m_transSolvers[0]->AddCubeAsClauseK(d, true, 1);
 
     InitializeStartSolver();
-
-    // bad & T & c
-    m_badSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-    m_badSolver->AddTrans();
-    m_badSolver->AddConstraints();
-    m_badSolver->AddBad();
-    // liveness: T = T & (W <-> W')
-    //           T = T & C'
-    //           T = T & !d'
-    m_badSolver->AddWallConstraints(m_walls);
-    for (auto inv : m_shoals) m_badSolver->AddInvAsClauseK(inv, false, 1);
-    for (auto d : m_dead) m_badSolver->AddCubeAsClauseK(d, true, 1);
+    ResetBadSolver();
 
     m_restart.reset(new Restart(m_settings));
 
@@ -318,7 +318,7 @@ void BCAR::InitializeStartSolver() {
     // liveness: T = T & (W <-> W')
     //           T = T & C'
     //           T = T & !d'
-    m_startSolver->AddWallConstraints(m_walls);
+    if (m_loopRefuting) m_startSolver->AddWallConstraints(m_walls);
     for (auto inv : m_shoals) m_startSolver->AddInvAsClauseK(inv, false, 1);
     for (auto d : m_dead) m_startSolver->AddCubeAsClauseK(d, true, 1);
 }
@@ -329,9 +329,16 @@ void BCAR::Reset() {
     m_lastState = nullptr;
     m_cexTrace.clear();
 
+    InitializeStartSolver();
     // add exist lemma
     auto frame_i = m_overSequence->GetFrame(m_k);
-    for (auto l : *frame_i) m_startSolver->AddUC(l);
+    for (auto l : *frame_i) {
+        cube pl(l);
+        GetPrimed(pl);
+        m_startSolver->AddUC(pl);
+    }
+
+    ResetBadSolver();
 }
 
 
@@ -363,7 +370,7 @@ bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
         // liveness: T = T & (W <-> W')
         //           T = T & C'
         //           T = T & !d'
-        m_transSolvers.back()->AddWallConstraints(m_walls);
+        if (m_loopRefuting) m_transSolvers.back()->AddWallConstraints(m_walls);
         for (auto inv : m_shoals) m_transSolvers.back()->AddInvAsClauseK(inv, false, 1);
         for (auto d : m_dead) m_transSolvers.back()->AddCubeAsClauseK(d, true, 1);
     }
@@ -433,6 +440,8 @@ void BCAR::OverSequenceRefine(int lvl) {
     // get model s of I & c & (O_0 | O_1 | ... | O_i),
     // assert( s & T & c & (O_0 | O_1 | ... | O_i+1)' is UNSAT)
     // add uc to O_0 ... O_i
+
+    if (m_loopRefuting) return;
 
     // solver: I & c & (O_0 | O_1 | ... | O_i)
     shared_ptr<SATSolver> refine_solver = make_shared<SATSolver>(m_model, m_settings.solver);
@@ -690,19 +699,15 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
             temp_uc.reserve(uc.size());
             for (auto ll : uc)
                 if (ll != uc[i]) temp_uc.emplace_back(ll);
-            assumption.clear();
-            copy(temp_uc.begin(), temp_uc.end(), back_inserter(assumption));
-            OrderAssumption(assumption);
-            assumption.push_back(m_model.GetBad());
+
             bool result = false;
             {
                 [[maybe_unused]] auto satGenScope = m_log.Section("SAT_BC_BadGen");
-                result = m_badSolver->Solve(assumption);
+                result = m_badSolver->Solve(temp_uc);
             }
             if (!result) {
-                auto new_uc = GetUnsatAssumption(m_badSolver, assumption);
+                auto new_uc = GetUnsatAssumption(m_badSolver, temp_uc);
                 uc.swap(new_uc);
-                OrderAssumption(uc);
                 i = uc.size();
             } else {
                 required_lits.emplace(uc[i]);

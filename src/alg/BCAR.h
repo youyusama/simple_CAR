@@ -49,6 +49,8 @@ class BCAR : public IncrAlg {
 
     bool ImmediateSatisfiable();
 
+    void ResetBadSolver();
+
     int GetNewLevel(const cube &states, int start = 0);
 
     bool IsInvariant(int frameLevel);
