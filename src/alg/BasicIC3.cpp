@@ -14,8 +14,6 @@ BasicIC3::BasicIC3(Settings settings,
     State::numInputs = model.GetNumInputs();
     State::numLatches = model.GetNumLatches();
     m_cexStart = nullptr;
-    m_defaultInit = m_model.GetInitialState();
-    m_shoalUnroll = m_settings.shoalUnroll >= 1 ? m_settings.shoalUnroll : 1;
 
     // Initialize the dedicated solver for predecessor generalization (lifting).
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
@@ -24,7 +22,6 @@ BasicIC3::BasicIC3(Settings settings,
     // set permanent domain
     if (m_settings.satSolveInDomain)
         m_liftSolver->SetDomainCOI(m_model.GetConstraints());
-    ApplyExternalCubes(m_liftSolver);
 
     // no need to set domain for bad
     m_badPredLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
@@ -39,11 +36,9 @@ BasicIC3::BasicIC3(Settings settings,
         cls.push_back(-cons);
     }
     m_badPredLiftSolver->AddClause(cls);
-    ApplyExternalCubes(m_badPredLiftSolver);
 
     // Store the initial state literals in a set for efficient lookups.
-    const auto &initState = m_defaultInit;
-    m_initialStateSet.insert(initState.begin(), initState.end());
+    m_initialStateSet.insert(m_model.GetInitialState().begin(), m_model.GetInitialState().end());
     m_log.L(1, "BasicIC3 checker initialized.");
 
     GLOBAL_LOG = &m_log;
@@ -64,8 +59,6 @@ BasicIC3::~BasicIC3() {
 
 CheckResult BasicIC3::Run() {
     signal(SIGINT, signalHandler);
-    ApplyExternalCubes(m_liftSolver);
-    ApplyExternalCubes(m_badPredLiftSolver);
 
     if (Check())
         m_checkResult = CheckResult::Safe;
@@ -100,7 +93,6 @@ std::vector<std::pair<cube, cube>> BasicIC3::GetCexTrace() {
 
 FrameList BasicIC3::GetInv() {
     FrameList inv;
-    if (m_hasDuplicatedWall) return inv;
     if (m_invariantLevel <= 0) return inv;
     for (int i = 0; i < m_invariantLevel && i < static_cast<int>(m_frames.size()); ++i) {
         frame f;
@@ -138,15 +130,6 @@ void BasicIC3::KLiveIncr() {
     }
 }
 
-void BasicIC3::ApplyExternalCubes(const shared_ptr<SATSolver> &solver) {
-    if (!solver) return;
-    if (!m_walls.empty()) {
-        solver->AddWallConstraints(m_walls);
-    }
-    if (!m_shoals.empty() || !m_dead.empty()) {
-        solver->AddShoalConstraints(m_shoals, m_dead, m_shoalUnroll);
-    }
-}
 
 bool BasicIC3::IsStateImplyBad() {
     if (m_customInit.empty()) return false;
@@ -159,39 +142,6 @@ bool BasicIC3::IsStateImplyBad() {
     return !sat;
 }
 
-bool BasicIC3::IsLivenessWallDuplicated() {
-    if (m_walls.empty()) return false;
-    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
-    slv->AddTrans();
-    slv->AddConstraints();
-    slv->AddWallConstraints(m_walls);
-
-    cube assumptions = m_customInit;
-    if (!m_stateImplyBad) {
-        assumptions.push_back(-m_model.GetBad());
-    }
-    bool sat = slv->Solve(assumptions);
-    return !sat;
-}
-
-bool BasicIC3::GetInit(cube &out) {
-    out.clear();
-    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
-    slv->AddTrans();
-    slv->AddConstraints();
-    if (!m_customInit.empty()) {
-        for (int lit : m_customInit) slv->AddClause(clause{lit});
-    } else {
-        for (int lit : m_model.GetInitialState()) slv->AddClause(clause{lit});
-        slv->AddInitialClauses();
-    }
-    slv->AddShoalConstraints(m_shoals, m_dead, m_shoalUnroll);
-    bool sat = slv->Solve();
-    if (!sat) return false;
-    auto p = slv->GetAssignment(m_searchFromInitSucc);
-    out = p.second;
-    return true;
-}
 
 void BasicIC3::Extend() {
     AddNewFrames(); // Ensures frames up to F_{k+1} exist.
@@ -203,7 +153,6 @@ void BasicIC3::Extend() {
     m_startSolver->AddProperty();
     m_startSolver->AddConstraints();
     m_startSolver->AddConstraintsK(1);
-    ApplyExternalCubes(m_startSolver);
 
     auto blockingCubes = m_frames[m_k].borderCubes;
     for (const auto &blockingCube : blockingCubes) {
@@ -218,13 +167,7 @@ void BasicIC3::Extend() {
 
 bool BasicIC3::Check() {
     if ((m_searchFromInitSucc || m_loopRefuting) && !m_customInit.empty()) {
-        m_stateImplyBad = IsStateImplyBad();
-    }
-    if (m_loopRefuting && !m_walls.empty()) {
-        if (IsLivenessWallDuplicated()) {
-            m_hasDuplicatedWall = true;
-            return true;
-        }
+        m_initStateImplyBad = IsStateImplyBad();
     }
 
     if (m_model.TrueId() == -m_model.GetBad()) {
@@ -280,7 +223,6 @@ bool BasicIC3::BaseCases() {
     baseSolver->AddTrans(); // Also load transition relation for combinational logic
     baseSolver->AddConstraints();
     baseSolver->AddBad();
-    ApplyExternalCubes(baseSolver);
     cube assumption;
     assumption.insert(assumption.end(), m_initialStateSet.begin(), m_initialStateSet.end());
 
@@ -293,7 +235,6 @@ bool BasicIC3::BaseCases() {
                 assignment.first,
                 assignment.second,
                 0);
-            m_reachedTarget = assignment.second;
             return false;
         }
     }
@@ -307,7 +248,6 @@ bool BasicIC3::BaseCases() {
     step1Solver->AddProperty();
     step1Solver->AddConstraints();
     step1Solver->AddConstraintsK(1);
-    ApplyExternalCubes(step1Solver);
 
     if (step1Solver->Solve(assumption)) {
         m_log.L(1, "UNSAFE: Property fails at step 1.");
@@ -327,7 +267,6 @@ bool BasicIC3::BaseCases() {
             assignment.second,
             1 // depth
         );
-        m_reachedTarget = step1Solver->GetAssignment(true).second;
         return false;
     }
     return true;
@@ -349,7 +288,6 @@ void BasicIC3::AddNewFrame() {
     newFrame.solver->AddTrans();
     newFrame.solver->AddConstraints();
     newFrame.solver->AddProperty();
-    ApplyExternalCubes(newFrame.solver);
     m_frames.push_back(newFrame);
 }
 
@@ -426,7 +364,6 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
 
         pair<cube, cube> assignment = m_startSolver->GetAssignment(false);
         cube partialLatch = assignment.second;
-        m_reachedTarget = m_startSolver->GetAssignment(true).second;
 
         while (true) {
             cube assumps;
@@ -511,7 +448,6 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
             if (ob.level == 0) {
                 m_log.L(1, "UNSAFE: Found a path from the initial state.");
                 m_cexStart = predecessorState;
-                m_reachedTarget = ob.state->latches;
                 return false;
             }
 

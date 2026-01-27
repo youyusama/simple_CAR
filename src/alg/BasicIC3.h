@@ -68,23 +68,28 @@ class BasicIC3 : public IncrAlg {
 
   private:
     bool Check();
-    void ApplyExternalCubes(const shared_ptr<SATSolver> &solver);
+
     bool IsStateImplyBad();
-    bool IsLivenessWallDuplicated();
-    bool GetInit(cube &out);
 
     bool BaseCases();
+
     void AddNewFrame();
+
     void AddNewFrames();
+
     void AddBlockingCube(const cube &blockingCube, int frameLevel, bool toAll);
 
     bool Strengthen();
-    bool HandleObligations(set<Obligation> &obligations);
-    size_t Generalize(cube &cb, int frameLvl);
-    bool MIC(cube &cb, int frameLvl, int recLvl);
-    bool Down(cube &c, int frameLvl, int recLvl, const set<int> &triedLits);
-    void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 
+    bool HandleObligations(set<Obligation> &obligations);
+
+    size_t Generalize(cube &cb, int frameLvl);
+
+    bool MIC(cube &cb, int frameLvl, int recLvl);
+
+    bool Down(cube &c, int frameLvl, int recLvl, const set<int> &triedLits);
+
+    void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 
     inline void GetPrimed(cube &p) {
         for (auto &x : p) {
@@ -129,8 +134,8 @@ class BasicIC3 : public IncrAlg {
     }
 
     void Extend();
-    bool Propagate();
 
+    bool Propagate();
 
     shared_ptr<State> EnumerateStartState();
 
@@ -167,17 +172,18 @@ class BasicIC3 : public IncrAlg {
     int m_invariantLevel;
     shared_ptr<Branching> m_branching;
 
-    vector<int> m_defaultInit;
+    // liveness
+    bool m_initialized{false};
     cube m_customInit;
-    cube m_reachedTarget;
-    bool m_searchFromInitSucc = false;
-    bool m_loopRefuting = false;
+    bool m_searchFromInitSucc{false};
+    bool m_loopRefuting{false};
     std::vector<cube> m_dead;
     std::vector<FrameList> m_shoals;
     std::vector<FrameList> m_walls;
-    bool m_stateImplyBad = false;
-    bool m_hasDuplicatedWall = false;
-    int m_shoalUnroll = 1;
+    bool m_initStateImplyBad{false};
+    std::vector<std::pair<cube, cube>> m_cexTrace;
+    cube m_shoalsLabels;
+    cube m_wallsLabels;
 };
 
 } // namespace car
