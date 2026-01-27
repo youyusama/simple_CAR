@@ -275,6 +275,7 @@ void FCAR::Reset() {
     m_reachedTarget.clear();
 
     InitializeStartSolver();
+    m_wallsLabels = m_badLiftSolver->AddWallConstraintsAsLabels(m_walls);
 }
 
 
@@ -294,10 +295,14 @@ void FCAR::InitializeStartSolver() {
         if (m_settings.satSolveInDomain) m_startSolver->SetSolveInDomain();
         m_startSolver->AddTrans();
         m_startSolver->AddConstraints();
-        m_startSolver->AddBad();
+        if (m_loopRefuting) {
+            for (auto lit : m_initialState->latches) m_startSolver->AddClause({lit});
+        } else {
+            m_startSolver->AddBad();
+        }
         m_startSolver->SetDomainCOI(m_model.GetConstraints());
         m_startSolver->SetDomainCOI({m_model.GetBad()});
-        // liveness: T = T & !C & !C'
+        // liveness: T = T & !C'
         //           T = T & ( W <-> W' )
         m_startSolver->AddShoalConstraints(m_shoals, m_dead);
         m_startSolver->AddWallConstraints(m_walls);
@@ -363,6 +368,11 @@ shared_ptr<State> FCAR::EnumerateStartState() {
         sat = m_startSolver->Solve();
     }
     if (sat) {
+        if (m_loopRefuting) {
+            shared_ptr<State> badState(new State(nullptr, {}, m_customInit, 0));
+            return badState;
+        }
+
         auto p = m_startSolver->GetAssignment(false);
 
         if (m_settings.searchFromBadPred) {
@@ -951,10 +961,20 @@ FrameList FCAR::GetInv() {
 
 
 void FCAR::KLiveIncr() {
-    auto &klive = m_model.GetKLiveCounter();
-    klive.Increment(&m_model);
-    m_model.SetBad(klive.cur);
-    m_model.Rebuild();
+    int k_step = m_model.KLivenessIncrement();
+    vector<clause> k_clauses = m_model.GetKLiveClauses(k_step);
+
+    // add trans
+    for (auto slv : m_transSolvers) {
+        for (auto cls : k_clauses) slv->AddClause(cls);
+    }
+    for (auto cls : k_clauses) m_liftSolver->AddClause(cls);
+    for (auto cls : k_clauses) m_badLiftSolver->AddClause(cls);
+
+    // add init
+    m_transSolvers[0]->AddClause({-m_model.GetKLiveSignal(k_step)});
+
+    // start solver will be reset
 }
 
 

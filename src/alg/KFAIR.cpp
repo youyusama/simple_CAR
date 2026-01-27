@@ -47,11 +47,7 @@ CheckResult KFAIR::Run() {
         if (enable_fair) {
             m_log.L(1, "===== Search for a loop by fair =====");
             auto trace = prefix->GetCexTrace();
-            if (trace.empty()) {
-                m_log.L(0, "Empty counterexample trace for unsafe prefix.");
-                return CheckResult::Unknown;
-            }
-            cube t = trace.back().first;
+            cube t = trace.back().second;
             m_log.L(2, "start from bad state ", CubeToStr(t));
             auto loop = MakeSafeChecker();
             loop->SetInit(t);
@@ -59,10 +55,12 @@ CheckResult KFAIR::Run() {
             loop->SetLoopRefuting(true);
             loop->SetWalls(m_globalWalls);
             CheckResult loopRes = loop->Run();
-            if (loopRes == CheckResult::Unsafe) return CheckResult::Unsafe;
-
-            FrameList newWall = loop->GetInv();
-            m_globalWalls.emplace_back(std::move(newWall));
+            if (loopRes == CheckResult::Unsafe) {
+                return CheckResult::Unsafe;
+            } else {
+                FrameList newWall = loop->GetInv();
+                m_globalWalls.emplace_back(std::move(newWall));
+            }
         }
 
         if (enable_klive) {

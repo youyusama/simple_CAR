@@ -130,8 +130,6 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // initial state
     CollectInitialState();
 
-    m_kliveCounter.Init(this, m_bad);
-
     // prime variable mapping
     CollectNextValueMapping();
 
@@ -422,16 +420,6 @@ int Model::MakeIte(int i, int t, int e) {
     int t1 = MakeAnd(i, t);
     int t2 = MakeAnd(-i, e);
     return MakeOr(t1, t2);
-}
-
-
-KLivenessCounter &Model::GetKLiveCounter() {
-    return m_kliveCounter;
-}
-
-
-const KLivenessCounter &Model::GetKLiveCounter() const {
-    return m_kliveCounter;
 }
 
 
@@ -1078,41 +1066,40 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
     return unsat;
 }
 
-void KLivenessCounter::Init(Model *model, int prop) {
-    k = 0;
-    cur = prop;
-    latches.clear();
-}
 
-int KLivenessCounter::Increment(Model *model) {
-    if (!model) return 0;
-    ++k;
-    int latch = model->NewLatchVar();
-    latches.push_back(latch);
+int Model::KLivenessIncrement() {
+    int latch = NewLatchVar();
+    int q = m_bad;
+    // Init(k) = false
+    // Next(k) = q ? true : k
+    int init = -TrueId();
+    int next = MakeIte(q, TrueId(), latch);
+    SetLatchReset(latch, init);
+    SetLatchNext(latch, next);
+    // q_k = q & k
+    m_bad = MakeAnd(q, latch);
 
-    int init = model->TrueId();
-    int next = model->MakeAnd(cur, latch);
-    model->SetLatchReset(latch, init);
-    model->SetLatchNext(latch, next);
+    m_kliveStep++;
 
-    cur = model->MakeOr(cur, latch);
-    return latch;
-}
+    // store signals
+    m_kliveSignals.resize(m_kliveStep + 1);
+    m_kliveSignals[m_kliveStep] = latch;
 
-unordered_map<int, int> KLivenessCounter::GetSubst(Model *model, unsigned int val) const {
-    unordered_map<int, int> ret;
-    if (!model) return ret;
+    // get clauses
+    m_kliveTransClauses.resize(m_kliveStep + 1);
+    vector<clause> k_clauses;
+    // and gate
+    k_clauses.emplace_back(clause{m_bad, -q, -latch});
+    k_clauses.emplace_back(clause{-m_bad, q});
+    k_clauses.emplace_back(clause{-m_bad, latch});
+    // ite gate
+    k_clauses.emplace_back(clause{next, -q, -TrueId()});
+    k_clauses.emplace_back(clause{next, q, -latch});
+    k_clauses.emplace_back(clause{-next, -q, TrueId()});
+    k_clauses.emplace_back(clause{-next, q, latch});
+    m_kliveTransClauses[m_kliveStep] = k_clauses;
 
-    int f = -model->TrueId();
-    int t = model->TrueId();
-    size_t i = 0;
-    for (; i < std::min<size_t>(val, latches.size()); ++i) {
-        ret[latches[i]] = f;
-    }
-    for (; i < latches.size(); ++i) {
-        ret[latches[i]] = t;
-    }
-    return ret;
+    return m_kliveStep;
 }
 
 } // namespace car

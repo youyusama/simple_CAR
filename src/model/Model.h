@@ -101,10 +101,6 @@ struct KLivenessCounter {
     unsigned int k = 0;
     int cur = 0;
     vector<int> latches;
-
-    void Init(Model *model, int prop);
-    int Increment(Model *model);
-    unordered_map<int, int> GetSubst(Model *model, unsigned int val) const;
 };
 
 class Model {
@@ -192,8 +188,10 @@ class Model {
 
     inline int GetBad() { return m_bad; }
     inline int GetProperty() { return -m_bad; }
-    KLivenessCounter &GetKLiveCounter();
-    const KLivenessCounter &GetKLiveCounter() const;
+
+    int KLivenessIncrement();
+    int GetKLiveSignal(int k) { return m_kliveSignals[k]; }
+    vector<clause> GetKLiveClauses(int k) { return m_kliveTransClauses[k]; }
 
     inline PropKind GetPropKind() const { return m_propKind; }
 
@@ -329,6 +327,10 @@ class Model {
     unordered_set<int> m_innards;
     vector<int> m_innardsVec;
     unordered_map<int, int> m_innards_lvl;
+
+    int m_kliveStep{0};
+    vector<int> m_kliveSignals;
+    vector<vector<clause>> m_kliveTransClauses;
 };
 } // namespace car
 

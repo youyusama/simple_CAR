@@ -370,7 +370,7 @@ void SATSolver::AddShoalConstraints(const std::vector<FrameList> &shoals,
                                     const std::vector<cube> &dead,
                                     int shoal_unroll) {
     int unroll = shoal_unroll >= 1 ? shoal_unroll : 1;
-    for (int u = 0; u <= unroll; ++u) {
+    for (int u = 1; u <= unroll; ++u) {
         for (const auto &inv : shoals) {
             AddInvAsClauseK(inv, true, u);
         }
@@ -385,7 +385,7 @@ cube SATSolver::AddShoalConstraintsAsLabels(const std::vector<FrameList> &shoals
                                             int shoal_unroll) {
     cube labels;
     int unroll = shoal_unroll >= 1 ? shoal_unroll : 1;
-    for (int u = 0; u <= unroll; ++u) {
+    for (int u = 1; u <= unroll; ++u) {
         for (const auto &inv : shoals) {
             labels.emplace_back(-AddInvAsLabelK(inv, u));
         }
