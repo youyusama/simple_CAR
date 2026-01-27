@@ -74,10 +74,9 @@ pair<cube, cube> CadicalSolver::GetAssignment(bool prime) {
             }
         } else {
             int p = m_model.GetPrime(i);
-            if (val(p) > 0) {
+            if ((val(p) > 0 && p > 0) || (val(p) < 0 && p < 0)) {
                 latches.emplace_back(i);
             } else {
-                assert(val(p) < 0);
                 latches.emplace_back(-i);
             }
         }
@@ -92,7 +91,7 @@ pair<cube, cube> CadicalSolver::GetAssignment(bool prime) {
             }
         } else {
             int p = m_model.GetPrime(i);
-            if (val(p) > 0) {
+            if ((val(p) > 0 && p > 0) || (val(p) < 0 && p < 0)) {
                 latches.emplace_back(i);
             } else {
                 assert(val(p) < 0);

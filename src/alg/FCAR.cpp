@@ -945,7 +945,7 @@ FrameList FCAR::GetInv() {
     for (int i = m_searchFromInitSucc ? 1 : 0; i <= lvl; ++i) {
         inv.emplace_back(m_overSequence->FrameSetToFrame(*m_overSequence->GetFrame(i)));
     }
-    // m_log.L(1, m_overSequence->FramesDetail());
+    m_log.L(3, "Get Invariant:\n", m_overSequence->FramesDetail());
     return inv;
 }
 

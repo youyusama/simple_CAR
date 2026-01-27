@@ -309,9 +309,10 @@ int SATSolver::AddInvAsLabelK(const FrameList &inv, int k) {
 }
 
 int SATSolver::AddCubeAsLabelK(const cube &c, int k) {
-    int sl = GetNewVar();
     cube c_k = GetKUnrolled(c, k);
+    if (c_k.size() == 1) return c_k[0];
 
+    int sl = GetNewVar();
     clause c_to_sl;
     c_to_sl.reserve(c_k.size() + 1);
     for (int lit : c_k) c_to_sl.emplace_back(-lit);

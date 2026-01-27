@@ -11,7 +11,12 @@ rlive::rlive(Settings settings,
              Model &model,
              Log &log) : m_settings(settings),
                          m_model(model),
-                         m_log(log) {}
+                         m_log(log) {
+
+    m_pdSolver = std::make_shared<SATSolver>(m_model, m_settings.solver);
+    m_pdSolver->AddTrans();
+    m_pdSolver->AddConstraints();
+}
 
 CheckResult rlive::Run() {
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
@@ -44,6 +49,7 @@ CheckResult rlive::Run() {
                     }
                 }
                 if (looped) return CheckResult::Unsafe;
+
                 m_badStack.emplace_back(new_t);
             } else {
                 FrameList new_shoal = m_safeChecker->GetInv();
@@ -116,38 +122,35 @@ bool rlive::CheckReachable(const cube &s) {
 bool rlive::PruneDead(const cube &s) {
     m_log.L(1, "===== RLIVE PRUNE DEAD =====");
     m_log.L(3, "bad state ", CubeToStr(s));
-    if (m_pdSolver == nullptr) {
-        m_pdSolver = std::make_shared<SATSolver>(m_model, m_settings.solver);
-        m_pdSolver->AddTrans();
-        m_pdSolver->AddConstraints();
-    }
 
-    // s & T & !C'
+    // s & T & !C' & !q
     m_pdSolver->AddTempClause({m_model.GetBad()});
     bool sat = m_pdSolver->Solve(s);
     while (sat) {
         auto p = m_pdSolver->GetAssignment(true);
         m_pdSolver->ReleaseTempClause();
 
+        // p & T & !C'
         auto assumption = p.second;
+
+        m_log.L(2, "get succ", CubeToStr(assumption));
         bool is_not_dead = m_pdSolver->Solve(assumption);
         if (is_not_dead) {
             m_log.L(1, "not dead");
             return false;
         } else {
             auto new_dead = GetUnsatAssumption(m_pdSolver, assumption);
-            m_pdSolver->AddShoalConstraints({}, {new_dead}, 1);
+            m_log.L(2, "get new dead", CubeToStr(new_dead));
+            m_pdSolver->AddShoalConstraints({}, vector<cube>{new_dead}, 1);
+            m_pdSolver->AddCubeAsClauseK(new_dead, true, 1);
             m_globalDead.emplace_back(new_dead);
         }
         m_pdSolver->AddTempClause({m_model.GetBad()});
         sat = m_pdSolver->Solve(s);
     }
-    auto new_dead = GetUnsatAssumption(m_pdSolver, s);
     m_pdSolver->ReleaseTempClause();
-    m_pdSolver->AddShoalConstraints({}, {new_dead}, 1);
-    m_globalDead.emplace_back(new_dead);
 
-    m_log.L(1, "new dead size: ", m_globalDead.size());
+    m_log.L(1, "global dead size: ", m_globalDead.size());
     for (const auto &d : m_globalDead) {
         m_log.L(3, CubeToStr(d));
     }
