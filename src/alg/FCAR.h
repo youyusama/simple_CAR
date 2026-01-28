@@ -44,8 +44,6 @@ class FCAR : public IncrAlg {
 
     bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
 
-    bool ImmediateSatisfiable();
-
     bool IsInvariant(int frameLevel);
 
     struct LitOrder {

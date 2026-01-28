@@ -338,28 +338,6 @@ bool FCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     return true;
 }
 
-bool FCAR::ImmediateSatisfiable() {
-    [[maybe_unused]] auto scoped = m_log.Section("FC_ImmSAT");
-    if (m_searchFromInitSucc && !m_customInit.empty()) {
-        return false;
-    }
-    cube assumptions(m_initialState->latches);
-    if (!m_customInit.empty()) {
-        assumptions = m_customInit;
-    }
-    assumptions.push_back(m_model.GetBad());
-    m_transSolvers[0]->SetTempDomainCOI(assumptions);
-    bool result;
-    {
-        [[maybe_unused]] auto satScope = m_log.Section("SAT_Imm");
-        result = m_transSolvers[0]->Solve(assumptions);
-    }
-    if (result) {
-        auto p = m_transSolvers[0]->GetAssignment(false);
-    }
-    return result;
-}
-
 
 shared_ptr<State> FCAR::EnumerateStartState() {
     [[maybe_unused]] auto scoped = m_log.Section("FC_StartEnum");

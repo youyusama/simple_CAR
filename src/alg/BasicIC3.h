@@ -69,13 +69,15 @@ class BasicIC3 : public IncrAlg {
   private:
     bool Check();
 
-    bool IsStateImplyBad();
+    void Init();
 
-    bool BaseCases();
+    void Reset();
+
+    bool IsInitStateImplyBad();
+
+    void InitializeStartSolver();
 
     void AddNewFrame();
-
-    void AddNewFrames();
 
     void AddBlockingCube(const cube &blockingCube, int frameLevel, bool toAll);
 
@@ -137,6 +139,8 @@ class BasicIC3 : public IncrAlg {
 
     bool Propagate();
 
+    bool CheckInit(shared_ptr<State> s);
+
     shared_ptr<State> EnumerateStartState();
 
     unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
@@ -163,12 +167,12 @@ class BasicIC3 : public IncrAlg {
     vector<IC3Frame> m_frames;
     shared_ptr<SATSolver> m_liftSolver;
     shared_ptr<SATSolver> m_startSolver;
-    shared_ptr<SATSolver> m_badPredLiftSolver;
-    set<int> m_initialStateSet;
+    shared_ptr<SATSolver> m_badLiftSolver;
+    unordered_set<int> m_initialStateSet;
+    shared_ptr<State> m_initialState;
     shared_ptr<State> m_cexStart;
     bool m_trivial;
-    int m_earliest;
-    int lemmaCount;
+    int m_minUpdateLevel;
     int m_invariantLevel;
     shared_ptr<Branching> m_branching;
 
