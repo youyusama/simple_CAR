@@ -467,7 +467,7 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
 
             size_t pushLevel = Generalize(uc, ob.level);
 
-            if (pushLevel < m_k) {
+            if (pushLevel <= m_k) {
                 LOG_L(m_log, 2, "Creating new obligation for same state at higher level ", pushLevel);
                 obligations.insert(Obligation(ob.state, pushLevel, ob.depth));
             }
@@ -739,7 +739,7 @@ bool BasicIC3::UnreachabilityCheck(const cube &cb, const shared_ptr<SATSolver> &
 
 int BasicIC3::PropagateUp(const cube &cb, int startLevel) {
     int pushLevel = startLevel;
-    while (pushLevel < m_k) {
+    while (pushLevel <= m_k) {
         if (!UnreachabilityCheck(cb, m_frames[pushLevel].solver)) {
             break;
         }
