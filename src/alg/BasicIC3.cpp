@@ -116,10 +116,10 @@ bool BasicIC3::Check() {
 
     if (!m_initialized) {
         Init();
-        m_log.L(2, "Initialized");
+        LOG_L(m_log, 2, "Initialized");
     } else {
         Reset();
-        m_log.L(2, "Reset");
+        LOG_L(m_log, 2, "Reset");
     }
 
     // check if initial state is bad
@@ -128,20 +128,20 @@ bool BasicIC3::Check() {
     // The main IC3 loop.
     while (true) {
         Extend();
-        m_log.L(2, "==================== k = ", m_k, " ====================");
+        LOG_L(m_log, 2, "==================== k = ", m_k, " ====================");
 
         if (!Strengthen()) {
-            m_log.L(2, "UNSAFE: CEX found during strengthening of F_", m_k);
+            LOG_L(m_log, 2, "UNSAFE: CEX found during strengthening of F_", m_k);
             return false;
         }
 
         if (PropagateFrame()) {
-            m_log.L(1, "SAFE: Proof found at F_", m_invariantLevel);
-            m_log.L(1, FramesInfo());
+            LOG_L(m_log, 1, "SAFE: Proof found at F_", m_invariantLevel);
+            LOG_L(m_log, 1, FramesInfo());
             return true;
         }
 
-        m_log.L(1, FramesInfo());
+        LOG_L(m_log, 1, FramesInfo());
         m_k++;
     }
 
@@ -157,7 +157,7 @@ void BasicIC3::Init() {
     if (m_searchFromInitSucc) {
         m_initStateImplyBad = IsInitStateImplyBad();
         if (!m_initStateImplyBad)
-            m_log.L(1, "Initial state does not imply bad");
+            LOG_L(m_log, 1, "Initial state does not imply bad");
     }
 
     // initial states
@@ -247,7 +247,7 @@ void BasicIC3::Reset() {
 
 
 void BasicIC3::AddNewFrame() {
-    m_log.L(2, "Adding new frame F_", m_frames.size());
+    LOG_L(m_log, 2, "Adding new frame F_", m_frames.size());
     IC3Frame newFrame;
     newFrame.k = m_frames.size();
     newFrame.solver = make_shared<SATSolver>(m_model, m_settings.solver);
@@ -298,7 +298,7 @@ cube BasicIC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const cube &fal
 }
 
 shared_ptr<State> BasicIC3::EnumerateStartState() {
-    m_log.L(2, "Searching for a start state at level ", m_k);
+    LOG_L(m_log, 2, "Searching for a start state at level ", m_k);
     bool sat = false;
     {
         [[maybe_unused]] auto satScope = m_log.Section("SAT_Start");
@@ -382,7 +382,7 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
             // (p) -> (bad & c)
             // (p) & (!bad | !c) is unsat
             cube partial_latch = p.second;
-            m_log.L(3, "Bad State Latches Before Lifting: ", CubeToStr(partial_latch));
+            LOG_L(m_log, 3, "Bad State Latches Before Lifting: ", CubeToStr(partial_latch));
 
             // (!bad | !c)
             clause cls;
@@ -392,7 +392,7 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
             for (auto l : m_shoalsLabels) cls.push_back(-l);
             for (auto l : m_wallsLabels) cls.push_back(-l);
             m_badLiftSolver->AddTempClause(cls);
-            m_log.L(3, "lift assume: ", CubeToStr(cls));
+            LOG_L(m_log, 3, "lift assume: ", CubeToStr(cls));
 
             int gen_tried = 0;
 
@@ -444,7 +444,7 @@ bool BasicIC3::Strengthen() {
                 return false;
             }
         } else {
-            m_log.L(2, "No more CTIs at level ", m_k, ". Frame is strengthened.");
+            LOG_L(m_log, 2, "No more CTIs at level ", m_k, ". Frame is strengthened.");
             return true;
         }
     }
@@ -456,7 +456,7 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
         Obligation ob = *obligations.begin();
 
         // Query: F_{ob.level} & T & cti'
-        m_log.L(2, "Handling obligation at level ", ob.level);
+        LOG_L(m_log, 2, "Handling obligation at level ", ob.level);
 
         auto &trans_slv = m_frames[ob.level].solver;
         auto &ctiCube = ob.state->latches;
@@ -468,7 +468,7 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
             size_t pushLevel = Generalize(uc, ob.level);
 
             if (pushLevel < m_k) {
-                m_log.L(2, "Creating new obligation for same state at higher level ", pushLevel);
+                LOG_L(m_log, 2, "Creating new obligation for same state at higher level ", pushLevel);
                 obligations.insert(Obligation(ob.state, pushLevel, ob.depth));
             }
         } else {
@@ -477,14 +477,14 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
                 make_shared<State>(ob.state, p.first, p.second, ob.depth + 1);
 
             if (ob.level == 0) {
-                m_log.L(2, "UNSAFE: Found a path from the initial state.");
+                LOG_L(m_log, 2, "UNSAFE: Found a path from the initial state.");
                 m_cexStart = predecessorState;
                 return false;
             }
 
             GeneralizePredecessor(predecessorState, ob.state);
 
-            m_log.L(2, "Found predecessor for CTI. New obligation at level ", ob.level - 1);
+            LOG_L(m_log, 2, "Found predecessor for CTI. New obligation at level ", ob.level - 1);
             obligations.insert(Obligation(predecessorState, ob.level - 1, ob.depth + 1));
         }
     }
@@ -508,14 +508,14 @@ bool BasicIC3::InductionCheck(const cube &cb, const shared_ptr<SATSolver> &slv) 
 }
 
 bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
-    m_log.L(3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
+    LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
     auto &trans_slv = m_frames[frameLvl].solver;
     shared_ptr<State> downState = make_shared<State>(nullptr, cube(), downCube, 0);
 
     while (true) {
-        m_log.L(3, "Down attempt: ", CubeToStr(downCube));
+        LOG_L(m_log, 3, "Down attempt: ", CubeToStr(downCube));
         if (!InitiationCheck(downCube)) {
             return false;
         }
@@ -533,7 +533,7 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
         GeneralizePredecessor(ctgState, downState);
 
         const cube &ctgCube = ctgState->latches;
-        m_log.L(3, "CTG cube: ", CubeToStr(ctgCube));
+        LOG_L(m_log, 3, "CTG cube: ", CubeToStr(ctgCube));
 
         if (!InitiationCheck(ctgCube)) {
             return false;
@@ -545,14 +545,14 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
             InductionCheck(ctgCube, trans_slv_m1)) {
 
             ctgs++;
-            m_log.L(3, "CTG is inductive at level ", frameLvl - 1);
+            LOG_L(m_log, 3, "CTG is inductive at level ", frameLvl - 1);
             cube ctgCore = GetAndValidateCore(trans_slv_m1, ctgCube);
 
             int pushLevel = PropagateUp(ctgCore, frameLvl);
             if (MIC(ctgCore, pushLevel - 1, recLvl + 1)) {
                 m_branching->Update(ctgCore);
             }
-            m_log.L(2, "Learned ctg clause and pushed to frame ", pushLevel);
+            LOG_L(m_log, 2, "Learned ctg clause and pushed to frame ", pushLevel);
             AddBlockingCube(ctgCore, pushLevel, true);
         } else {
             ctgs = 0;
@@ -564,7 +564,7 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
                     return false;
                 }
             }
-            m_log.L(3, "Joint cube: ", CubeToStr(joinCube));
+            LOG_L(m_log, 3, "Joint cube: ", CubeToStr(joinCube));
             downCube.swap(joinCube);
         }
     }
@@ -582,18 +582,18 @@ void BasicIC3::GetBlockers(const cube &blockingCube, int framelevel, vector<cube
 }
 
 size_t BasicIC3::Generalize(cube &cb, int frameLvl) {
-    m_log.L(3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
+    LOG_L(m_log, 3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
     if (MIC(cb, frameLvl, 0)) {
         m_branching->Update(cb);
     }
     int pushLevel = PropagateUp(cb, frameLvl + 1);
-    m_log.L(2, "Learned clause and pushed to frame ", pushLevel);
+    LOG_L(m_log, 2, "Learned clause and pushed to frame ", pushLevel);
     AddBlockingCube(cb, pushLevel, true);
     return pushLevel;
 }
 
 bool BasicIC3::MIC(cube &cb, int frameLvl, int recLvl) {
-    m_log.L(3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
+    LOG_L(m_log, 3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
     vector<cube> blockers;
     cube blocker;
@@ -642,7 +642,7 @@ bool BasicIC3::MIC(cube &cb, int frameLvl, int recLvl) {
             attempts = maxMicAttempts;
         } else {
             if (--attempts == 0) {
-                m_log.L(3, "Max MIC attempts reached, stopping generalization.");
+                LOG_L(m_log, 3, "Max MIC attempts reached, stopping generalization.");
                 break;
             }
             triedLits.insert(litToDrop);
@@ -658,7 +658,7 @@ bool BasicIC3::MIC(cube &cb, int frameLvl, int recLvl) {
 
 
 void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState) {
-    m_log.L(3, "Generalizing predecessor. Initial latch size: ", predecessorState->latches.size(), ", input size: ", predecessorState->inputs.size(), ", Successor state latch size: ", successorState->latches.size());
+    LOG_L(m_log, 3, "Generalizing predecessor. Initial latch size: ", predecessorState->latches.size(), ", input size: ", predecessorState->inputs.size(), ", Successor state latch size: ", successorState->latches.size());
 
     clause succNegationClause;
     succNegationClause.reserve(successorState->latches.size());
@@ -683,7 +683,7 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
         assert(!result);
 
         auto core = GetUnsatCore(m_liftSolver, partialLatch, false);
-        m_log.L(3, "Core size: ", core.size(), ", Partial latch size: ", partialLatch.size());
+        LOG_L(m_log, 3, "Core size: ", core.size(), ", Partial latch size: ", partialLatch.size());
 
         if (core.size() == 0) break;
         if (core.size() >= partialLatch.size()) {
@@ -693,7 +693,7 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
         }
     }
     m_liftSolver->ReleaseTempClause();
-    m_log.L(3, "Generalized predecessor. Final latch size: ", predecessorState->latches.size());
+    LOG_L(m_log, 3, "Generalized predecessor. Final latch size: ", predecessorState->latches.size());
 }
 
 bool BasicIC3::InitiationCheck(const cube &cb) {
@@ -702,7 +702,7 @@ bool BasicIC3::InitiationCheck(const cube &cb) {
             return true; // Disjoint (UNSAT), check passes.
         }
     }
-    m_log.L(3, "Initiation check failed.");
+    LOG_L(m_log, 3, "Initiation check failed.");
     return false;
 }
 
@@ -710,9 +710,9 @@ bool BasicIC3::InitiationCheck(const cube &cb) {
 cube BasicIC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube) {
     // fallbackCube is sorted
     cube core = GetUnsatCore(solver, fallbackCube, true);
-    m_log.L(3, "Got UNSAT core: ", CubeToStr(core));
+    LOG_L(m_log, 3, "Got UNSAT core: ", CubeToStr(core));
     if (!InitiationCheck(core)) {
-        m_log.L(3, "GetAndValidateCore: core intersects with initial states. Reverting to fallback cube.");
+        LOG_L(m_log, 3, "GetAndValidateCore: core intersects with initial states. Reverting to fallback cube.");
         core = fallbackCube;
     }
     return core;
@@ -750,9 +750,9 @@ int BasicIC3::PropagateUp(const cube &cb, int startLevel) {
 }
 
 bool BasicIC3::PropagateFrame() {
-    m_log.L(2, "Propagating clauses.");
+    LOG_L(m_log, 2, "Propagating clauses.");
 
-    m_log.L(2, "Cleaning up redundant clauses.");
+    LOG_L(m_log, 2, "Cleaning up redundant clauses.");
     set<cube, IC3Frame::CubeComp> allCubes;
     for (int i = m_k + 1; i > m_minUpdateLevel; --i) {
         IC3Frame &frame = m_frames[i];
@@ -766,14 +766,14 @@ bool BasicIC3::PropagateFrame() {
                        IC3Frame::CubeComp());
 
         if (originalSize != remainingCubes.size()) {
-            m_log.L(3, "Frame ", i, " cleanup: ", originalSize, " -> ", remainingCubes.size());
+            LOG_L(m_log, 3, "Frame ", i, " cleanup: ", originalSize, " -> ", remainingCubes.size());
         }
 
         frame.borderCubes.swap(remainingCubes);
         allCubes.insert(frame.borderCubes.begin(), frame.borderCubes.end());
     }
 
-    m_log.L(2, "Propagating clauses forward.");
+    LOG_L(m_log, 2, "Propagating clauses forward.");
     for (int i = m_minUpdateLevel; i <= m_k; ++i) {
         IC3Frame &framei = m_frames[i];
         int cubesKept = 0;
@@ -794,14 +794,14 @@ bool BasicIC3::PropagateFrame() {
             }
         }
 
-        m_log.L(2, "Frame ", i, " propagation: ", cubesPropagated, " propagated, ", cubesKept, " kept.");
+        LOG_L(m_log, 2, "Frame ", i, " propagation: ", cubesPropagated, " propagated, ", cubesKept, " kept.");
 
 
         if (framei.borderCubes.empty()) {
-            m_log.L(2, "SAFE: Frame F_", i, " is empty.");
+            LOG_L(m_log, 2, "SAFE: Frame F_", i, " is empty.");
             m_invariantLevel = i + 1;
-            m_log.L(2, "m_invariantLevel: ", m_invariantLevel);
-            m_log.L(2, FramesInfo());
+            LOG_L(m_log, 2, "m_invariantLevel: ", m_invariantLevel);
+            LOG_L(m_log, 2, FramesInfo());
             return true; // Proof found
         }
     }
@@ -1002,13 +1002,13 @@ void BasicIC3::OutputWitness() {
 
 void BasicIC3::Witness() {
     if (m_checkResult == CheckResult::Unsafe) {
-        m_log.L(2, "Generating counterexample.");
+        LOG_L(m_log, 2, "Generating counterexample.");
         OutputCounterExample();
     } else if (m_checkResult == CheckResult::Safe) {
-        m_log.L(2, "Generating proof.");
+        LOG_L(m_log, 2, "Generating proof.");
         OutputWitness();
     } else {
-        m_log.L(2, "Unknown check result.");
+        LOG_L(m_log, 2, "Unknown check result.");
     }
 }
 

@@ -53,12 +53,10 @@ class Log {
     ~Log() {}
 
     template <typename... Args>
-    void L(int messageVerbosity, const Args &...args) {
-        if (messageVerbosity <= m_verbosity) {
-            ostringstream oss;
-            logHelper(oss, args...);
-            cout << oss.str() << endl;
-        }
+    void L(const Args &...args) {
+        ostringstream oss;
+        logHelper(oss, args...);
+        cout << oss.str() << endl;
     }
 
     void PrintTotalTime();
@@ -85,6 +83,7 @@ class Log {
     }
 
     void SetVerbosity(int verb) { m_verbosity = verb; }
+    int Verbosity() const { return m_verbosity; }
 
   private:
     struct ActiveSection {
@@ -123,5 +122,21 @@ class Log {
 extern Log *GLOBAL_LOG;
 
 } // namespace car
+
+#define LOG_L(log, level, ...)                         \
+    do {                                               \
+        auto &__log = (log);                           \
+        if ((level) <= __log.Verbosity()) {            \
+            __log.L(__VA_ARGS__);                      \
+        }                                              \
+    } while (0)
+
+#define LOG_LP(logptr, level, ...)                       \
+    do {                                                 \
+        auto *__logp = (logptr);                         \
+        if (__logp && (level) <= __logp->Verbosity()) {  \
+            __logp->L(__VA_ARGS__);                      \
+        }                                                \
+    } while (0)
 
 #endif

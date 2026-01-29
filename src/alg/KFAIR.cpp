@@ -18,7 +18,7 @@ CheckResult KFAIR::Run() {
     signal(SIGINT, signalHandler);
 
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
-        m_log.L(0, "KFAIR only supports liveness properties.");
+        LOG_L(m_log, 0, "KFAIR only supports liveness properties.");
         return CheckResult::Unknown;
     }
 
@@ -26,37 +26,37 @@ CheckResult KFAIR::Run() {
     bool enable_fair = (m_settings.alg == MCAlgorithm::FAIR || m_settings.alg == MCAlgorithm::KFAIR);
 
     if (m_settings.alg == MCAlgorithm::KFAIR) {
-        m_log.L(1, "KFAIR running in KFAIR mode.");
+        LOG_L(m_log, 1, "KFAIR running in KFAIR mode.");
     } else if (m_settings.alg == MCAlgorithm::KLIVE) {
-        m_log.L(1, "KFAIR running in k-Liveness mode.");
+        LOG_L(m_log, 1, "KFAIR running in k-Liveness mode.");
     } else if (m_settings.alg == MCAlgorithm::FAIR) {
-        m_log.L(1, "KFAIR running in FAIR mode.");
+        LOG_L(m_log, 1, "KFAIR running in FAIR mode.");
     }
 
     auto prefix = MakeSafeChecker();
 
     while (true) {
         // Search for a lasso prefix.
-        m_log.L(1, "===== Search for a prefix =====");
+        LOG_L(m_log, 1, "===== Search for a prefix =====");
         prefix->SetWalls(m_globalWalls);
         CheckResult res = prefix->Run();
         if (res == CheckResult::Safe){
-            m_log.L(1, "===== No unsafe prefix =====");
+            LOG_L(m_log, 1, "===== No unsafe prefix =====");
             return CheckResult::Safe;
         }
 
         if (enable_klive) {
             if (DetectKLiveCex(*prefix)) {
-                m_log.L(1, "===== CEX found in trace =====");
+                LOG_L(m_log, 1, "===== CEX found in trace =====");
                 return CheckResult::Unsafe;
             }
         }
 
         if (enable_fair) {
-            m_log.L(1, "===== Search for a loop by fair =====");
+            LOG_L(m_log, 1, "===== Search for a loop by fair =====");
             auto trace = prefix->GetCexTrace();
             cube t = trace.back().second;
-            m_log.L(2, "start from bad state ", CubeToStr(t));
+            LOG_L(m_log, 2, "start from bad state ", CubeToStr(t));
             auto loop = MakeSafeChecker();
             loop->SetInit(t);
             loop->SetSearchFromInitSucc(true);
@@ -72,14 +72,14 @@ CheckResult KFAIR::Run() {
         }
 
         if (enable_klive) {
-            m_log.L(1, "===== k-Liveness increase =====");
+            LOG_L(m_log, 1, "===== k-Liveness increase =====");
             prefix->KLiveIncr();
         }
     }
 }
 
 void KFAIR::Witness() {
-    m_log.L(1, "KFAIR witness generation is not implemented.");
+    LOG_L(m_log, 1, "KFAIR witness generation is not implemented.");
 }
 
 std::vector<std::pair<cube, cube>> KFAIR::GetCexTrace() {

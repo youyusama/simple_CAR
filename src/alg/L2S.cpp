@@ -18,7 +18,7 @@ L2S::L2S(Settings settings,
 
 CheckResult L2S::Run() {
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
-        m_log.L(0, "L2S only supports liveness properties.");
+        LOG_L(m_log, 0, "L2S only supports liveness properties.");
         return CheckResult::Unknown;
     }
 
@@ -36,7 +36,7 @@ CheckResult L2S::Run() {
 void L2S::Witness() {
 
 
-    m_log.L(0, "L2S witness output is not implemented yet.");
+    LOG_L(m_log, 0, "L2S witness output is not implemented yet.");
 }
 
 

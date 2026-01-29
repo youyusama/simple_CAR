@@ -267,7 +267,7 @@ class Restart {
     }
 
     bool RestartCheck() {
-        GLOBAL_LOG->L(3, "Restart Check: ", m_ucCounts, " > ", m_threshold);
+        LOG_LP(GLOBAL_LOG, 3, "Restart Check: ", m_ucCounts, " > ", m_threshold);
         return m_ucCounts > m_threshold;
     }
 
@@ -277,7 +277,7 @@ class Restart {
         } else {
             m_threshold = m_threshold * m_growthRate;
         }
-        GLOBAL_LOG->L(2, "Updated Restart Threshold: ", m_threshold);
+        LOG_LP(GLOBAL_LOG, 2, "Updated Restart Threshold: ", m_threshold);
     }
 
     void UcCountsPlus1() { m_ucCounts++; }

@@ -43,10 +43,10 @@ bool FCAR::Check() {
 
     if (!m_initialized) {
         Init();
-        m_log.L(2, "Initialized");
+        LOG_L(m_log, 2, "Initialized");
     } else {
         Reset();
-        m_log.L(2, "Reset");
+        LOG_L(m_log, 2, "Reset");
     }
 
     // main stage
@@ -66,8 +66,8 @@ bool FCAR::Check() {
                 }
             }
         }
-        m_log.L(2, "Start Frame: ", m_k);
-        m_log.L(2, "Working Stack Size: ", workingStack.size());
+        LOG_L(m_log, 2, "Start Frame: ", m_k);
+        LOG_L(m_log, 2, "Working Stack Size: ", workingStack.size());
 
         shared_ptr<State> startState = EnumerateStartState();
         // T & c & P & T' & c' & bad' is unsat
@@ -77,8 +77,8 @@ bool FCAR::Check() {
         }
 
         while (startState != nullptr) {
-            m_log.L(2, "State from StartSolver: ", CubeToStrShort(startState->latches));
-            m_log.L(3, "State Detail: ", CubeToStr(startState->latches));
+            LOG_L(m_log, 2, "State from StartSolver: ", CubeToStrShort(startState->latches));
+            LOG_L(m_log, 3, "State Detail: ", CubeToStr(startState->latches));
             workingStack.emplace(startState, m_k - 1, true);
 
             while (!workingStack.empty()) {
@@ -86,7 +86,7 @@ bool FCAR::Check() {
                 Task &task = workingStack.top();
 
                 if (m_settings.restart && m_restart->RestartCheck()) {
-                    m_log.L(1, "Restarting...");
+                    LOG_L(m_log, 1, "Restarting...");
                     m_underSequence = UnderSequence();
                     while (workingStack.size() > 1) workingStack.pop();
                     m_restart->UpdateThreshold();
@@ -96,7 +96,7 @@ bool FCAR::Check() {
 
                 if (!task.isLocated) {
                     task.frameLevel = GetNewLevel(task.state->latches, task.frameLevel + 1);
-                    m_log.L(3, "State get new Level ", task.frameLevel);
+                    LOG_L(m_log, 3, "State get new Level ", task.frameLevel);
                 }
 
                 if (task.frameLevel >= m_k) {
@@ -112,9 +112,9 @@ bool FCAR::Check() {
                     } else
                         continue;
                 }
-                m_log.L(2, "SAT Check on Frame: ", task.frameLevel);
-                m_log.L(2, "From State: ", CubeToStrShort(task.state->latches));
-                m_log.L(3, "State Detail: ", CubeToStr(task.state->latches));
+                LOG_L(m_log, 2, "SAT Check on Frame: ", task.frameLevel);
+                LOG_L(m_log, 2, "From State: ", CubeToStrShort(task.state->latches));
+                LOG_L(m_log, 3, "State Detail: ", CubeToStr(task.state->latches));
                 cube assumption(task.state->latches);
                 OrderAssumption(assumption);
                 GetPrimed(assumption);
@@ -122,32 +122,32 @@ bool FCAR::Check() {
                 bool result = IsReachable(task.frameLevel, assumption, "SAT_R_Main");
                 if (result) {
                     // Solver return SAT, get a new State, then continue
-                    m_log.L(2, "Result >>> SAT <<<");
+                    LOG_L(m_log, 2, "Result >>> SAT <<<");
                     auto p = GetInputAndState(task.frameLevel);
-                    m_log.L(3, "Input Detail: ", CubeToStr(p.first));
-                    m_log.L(3, "State Detail: ", CubeToStr(p.second));
+                    LOG_L(m_log, 3, "Input Detail: ", CubeToStr(p.first));
+                    LOG_L(m_log, 3, "State Detail: ", CubeToStr(p.second));
                     GeneralizePredecessor(p, task.state);
                     shared_ptr<State> newState =
                         make_shared<State>(task.state, p.first, p.second, task.state->depth + 1);
                     m_underSequence.push(newState);
                     if (m_settings.dt) task.state->HasSucc();
-                    m_log.L(3, "Get State: ", CubeToStrShort(newState->latches));
-                    m_log.L(3, "State Detail: ", CubeToStr(newState->latches));
+                    LOG_L(m_log, 3, "Get State: ", CubeToStrShort(newState->latches));
+                    LOG_L(m_log, 3, "State Detail: ", CubeToStr(newState->latches));
                     int newFrameLevel = GetNewLevel(newState->latches);
                     workingStack.emplace(newState, newFrameLevel, true);
                 } else {
                     // Solver return UNSAT, get uc, then continue
-                    m_log.L(2, "Result >>> UNSAT <<<");
+                    LOG_L(m_log, 2, "Result >>> UNSAT <<<");
                     auto uc = GetUnsatCore(task.frameLevel, task.state->latches);
                     assert(uc.size() > 0);
-                    m_log.L(3, "Get UC: ", CubeToStr(uc));
+                    LOG_L(m_log, 3, "Get UC: ", CubeToStr(uc));
                     if (Generalize(uc, task.frameLevel))
                         m_branching->Update(uc);
-                    m_log.L(2, "Get Generalized UC: ", CubeToStr(uc));
+                    LOG_L(m_log, 2, "Get Generalized UC: ", CubeToStr(uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     if (m_settings.dt) task.state->HasUC();
                     task.frameLevel = PropagateUp(uc, task.frameLevel + 1);
-                    m_log.L(3, m_overSequence->FramesInfo());
+                    LOG_L(m_log, 3, m_overSequence->FramesInfo());
                 }
             } // end while (!workingStack.empty())
             startState = EnumerateStartState();
@@ -171,20 +171,20 @@ bool FCAR::Check() {
 
             // invariant check
             if (IsInvariant(i + 1)) {
-                m_log.L(1, "Proof at Frame ", i + 1);
-                m_log.L(1, m_overSequence->FramesInfo());
+                LOG_L(m_log, 1, "Proof at Frame ", i + 1);
+                LOG_L(m_log, 1, m_overSequence->FramesInfo());
                 m_overSequence->SetInvariantLevel(i);
                 return true;
             }
         }
 
-        m_log.L(1, m_overSequence->FramesInfo());
-        m_log.L(3, m_overSequence->FramesDetail());
+        LOG_L(m_log, 1, m_overSequence->FramesInfo());
+        LOG_L(m_log, 3, m_overSequence->FramesDetail());
         InitializeStartSolver();
 
         m_k++;
         m_restart->ResetUcCounts();
-        m_log.L(2, "\nNew Frame Added");
+        LOG_L(m_log, 2, "\nNew Frame Added");
     }
 }
 
@@ -197,7 +197,7 @@ void FCAR::Init() {
     if (m_searchFromInitSucc) {
         m_initStateImplyBad = IsInitStateImplyBad();
         if (!m_initStateImplyBad)
-            m_log.L(1, "Initial state does not imply bad");
+            LOG_L(m_log, 1, "Initial state does not imply bad");
     }
 
     // initial states
@@ -424,7 +424,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             // (p) -> (bad & c)
             // (p) & (!bad | !c) is unsat
             cube partial_latch = p.second;
-            m_log.L(3, "Bad State Latches Before Lifting: ", CubeToStr(partial_latch));
+            LOG_L(m_log, 3, "Bad State Latches Before Lifting: ", CubeToStr(partial_latch));
 
             // (!bad | !c)
             clause cls;
@@ -434,7 +434,7 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             for (auto l : m_shoalsLabels) cls.push_back(-l);
             for (auto l : m_wallsLabels) cls.push_back(-l);
             m_badLiftSolver->AddTempClause(cls);
-            m_log.L(3, "lift assume: ", CubeToStr(cls));
+            LOG_L(m_log, 3, "lift assume: ", CubeToStr(cls));
 
             int gen_tried = 0;
 
@@ -648,7 +648,7 @@ bool FCAR::Generalize(cube &uc, int frame_lvl, int rec_lvl) {
 bool FCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses) {
     [[maybe_unused]] auto downSetup = m_log.Section("FC_Dn_Set");
     int ctgs = 0;
-    m_log.L(3, "Down:", CubeToStr(uc));
+    LOG_L(m_log, 3, "Down:", CubeToStr(uc));
     cube assumption(uc);
     GetPrimed(assumption);
     shared_ptr<State> p_ucs(new State(nullptr, cube(), uc, 0));
@@ -687,7 +687,7 @@ bool FCAR::CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cu
     if (cts_count >= m_settings.ctgMaxBlocks) return false;
 
     // F_i & T & cts'
-    m_log.L(3, "Try cts:", CubeToStr(cts->latches));
+    LOG_L(m_log, 3, "Try cts:", CubeToStr(cts->latches));
     cube cts_ass(cts->latches);
     OrderAssumption(cts_ass);
     GetPrimed(cts_ass);
@@ -696,10 +696,10 @@ bool FCAR::CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cu
         m_transSolvers[frame_lvl]->SetTempDomainCOI(cts_ass);
         if (!IsReachable(frame_lvl, cts_ass, "SAT_R_CTS_B")) {
             auto uc_cts = GetUnsatCore(frame_lvl, cts->latches);
-            m_log.L(3, "CTG Get UC:", CubeToStr(uc_cts));
+            LOG_L(m_log, 3, "CTG Get UC:", CubeToStr(uc_cts));
             if (Generalize(uc_cts, frame_lvl, rec_lvl + 1))
                 m_branching->Update(uc_cts);
-            m_log.L(3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
+            LOG_L(m_log, 3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
             AddUnsatisfiableCore(uc_cts, frame_lvl + 1);
             PropagateUp(uc_cts, frame_lvl + 1);
             return true;
@@ -733,9 +733,9 @@ bool FCAR::DownHasFailed(const cube &s, const vector<cube> &failed_ctses) {
 
 bool FCAR::CheckInit(shared_ptr<State> s) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_InitChk");
-    m_log.L(2, "SAT Check Init ");
-    m_log.L(2, "From State: ", CubeToStrShort(s->latches));
-    m_log.L(3, "State Detail: ", CubeToStr(s->latches));
+    LOG_L(m_log, 2, "SAT Check Init ");
+    LOG_L(m_log, 2, "From State: ", CubeToStrShort(s->latches));
+    LOG_L(m_log, 3, "State Detail: ", CubeToStr(s->latches));
     cube assumption(s->latches);
     OrderAssumption(assumption);
     if (m_searchFromInitSucc) {
@@ -745,7 +745,7 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
     bool result = IsReachable(0, assumption, "SAT_R_Init");
     if (result) {
         // Solver return SAT
-        m_log.L(2, "Result >>> SAT <<<");
+        LOG_L(m_log, 2, "Result >>> SAT <<<");
         auto p = m_transSolvers[0]->GetAssignment(false);
 
         if (m_searchFromInitSucc) {
@@ -762,7 +762,7 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
         return true;
     } else {
         // Solver return UNSAT, get uc, refine frame 0
-        m_log.L(2, "Result >>> UNSAT <<<");
+        LOG_L(m_log, 2, "Result >>> UNSAT <<<");
         cube uc;
         if (m_searchFromInitSucc)
             uc = GetUnsatCore(0, s->latches);
@@ -796,7 +796,7 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
             }
         }
         sort(uc.begin(), uc.end(), cmp);
-        m_log.L(2, "Get UC: ", CubeToStr(uc));
+        LOG_L(m_log, 2, "Get UC: ", CubeToStr(uc));
         if (m_searchFromInitSucc) {
             AddUnsatisfiableCore(uc, 1);
             PropagateUp(uc, 1);
@@ -804,7 +804,7 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
             AddUnsatisfiableCore(uc, 0);
             PropagateUp(uc, 0);
         }
-        m_log.L(3, "Frames: ", m_overSequence->FramesInfo());
+        LOG_L(m_log, 3, "Frames: ", m_overSequence->FramesInfo());
         return false;
     }
 }
@@ -888,14 +888,14 @@ void FCAR::BuildCEXTrace() {
     }
     m_cexTrace.emplace_back(pair<cube, cube>(state->inputs, state->latches));
 
-    m_log.L(3, "Build CEX Trace:");
+    LOG_L(m_log, 3, "Build CEX Trace:");
     // simulate the concrete execution
     auto slv = make_shared<SATSolver>(m_model, MCSATSolver::minicore);
     slv->AddTrans();
     slv->AddConstraints();
     for (int i = 0; i < m_cexTrace.size() - 1; i++) {
-        m_log.L(3, "Inputs: ", CubeToStr(m_cexTrace[i].first));
-        m_log.L(3, "Latches: ", CubeToStr(m_cexTrace[i].second));
+        LOG_L(m_log, 3, "Inputs: ", CubeToStr(m_cexTrace[i].first));
+        LOG_L(m_log, 3, "Latches: ", CubeToStr(m_cexTrace[i].second));
         cube assumption = m_cexTrace[i].first;
         assumption.insert(assumption.end(),
                           m_cexTrace[i].second.begin(), m_cexTrace[i].second.end());
@@ -908,8 +908,8 @@ void FCAR::BuildCEXTrace() {
         assert(included);
         m_cexTrace[i + 1].second = p.second;
     }
-    m_log.L(3, "Inputs: ", CubeToStr(m_cexTrace.back().first));
-    m_log.L(3, "Latches: ", CubeToStr(m_cexTrace.back().second));
+    LOG_L(m_log, 3, "Inputs: ", CubeToStr(m_cexTrace.back().first));
+    LOG_L(m_log, 3, "Latches: ", CubeToStr(m_cexTrace.back().second));
 }
 
 
@@ -929,7 +929,7 @@ FrameList FCAR::GetInv() {
     for (int i = m_searchFromInitSucc ? 1 : 0; i <= lvl; ++i) {
         inv.emplace_back(m_overSequence->FrameSetToFrame(*m_overSequence->GetFrame(i)));
     }
-    m_log.L(3, "Get Invariant:\n", m_overSequence->FramesDetail());
+    LOG_L(m_log, 3, "Get Invariant:\n", m_overSequence->FramesDetail());
     return inv;
 }
 

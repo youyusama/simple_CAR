@@ -78,26 +78,26 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     int num_bad = m_circuitGraph->bad.size();
     int num_justice = m_circuitGraph->justice.size();
     if (num_bad > 0 && num_justice > 0) {
-        m_log.L(0, "aiger has both safety and justice properties.");
+        LOG_L(m_log, 0, "aiger has both safety and justice properties.");
         exit(0);
     }
     if (num_bad == 0 && num_justice == 0) {
-        m_log.L(0, "aiger has no property to check.");
+        LOG_L(m_log, 0, "aiger has no property to check.");
         exit(0);
     }
     if (num_bad > 1) {
-        m_log.L(0, "aiger has more than one safety property to check.");
+        LOG_L(m_log, 0, "aiger has more than one safety property to check.");
         exit(0);
     }
     if (num_justice > 1) {
-        m_log.L(0, "aiger has more than one justice property to check.");
+        LOG_L(m_log, 0, "aiger has more than one justice property to check.");
         exit(0);
     }
 
-    m_log.L(1, "Model initialized: ",
+    LOG_L(m_log, 1, "Model initialized: ",
             m_circuitGraph->numInputs, " inputs, ", m_circuitGraph->numLatches, " latches, ",
             m_circuitGraph->numAnds, " gates, ", m_circuitGraph->numConstraints, " constraints.");
-    m_log.L(1, "COI Refined Model: ",
+    LOG_L(m_log, 1, "COI Refined Model: ",
             m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
     m_maxId = m_circuitGraph->numVar + 1;
 
@@ -173,9 +173,9 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     //     cout << endl;
     // }
 
-    m_log.L(1, "Model reduced: ",
+    LOG_L(m_log, 1, "Model reduced: ",
             m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
-    m_log.L(1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
+    LOG_L(m_log, 1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
 }
 
 
@@ -431,9 +431,9 @@ void Model::Rebuild() {
     UpdateDependencyVecDAGCNF();
     SimplifyClauses();
 
-    m_log.L(1, "Model rebuilt: ",
+    LOG_L(m_log, 1, "Model rebuilt: ",
             m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
-    m_log.L(1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
+    LOG_L(m_log, 1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
 }
 
 
@@ -686,13 +686,13 @@ void Model::SimplifyDAGClauses() {
 
 
 bool Model::SimplifyModelByTernarySimulation() {
-    m_log.L(1, "Simplify model by ternary simulation.");
+    LOG_L(m_log, 1, "Simplify model by ternary simulation.");
 
     m_log.Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
     simulator.simulate(250);
     if (!simulator.isCycleReached()) return false;
-    m_log.L(1, "Simulation takes ", m_log.Tock(), " seconds.");
+    LOG_L(m_log, 1, "Simulation takes ", m_log.Tock(), " seconds.");
 
     // find equivalent latches
     unordered_map<string, vector<int>> signaturesVariablesMap;
@@ -721,7 +721,7 @@ bool Model::SimplifyModelByTernarySimulation() {
             }
         }
     }
-    m_log.L(1, "Found ", eq_counter, " equivalent latches.");
+    LOG_L(m_log, 1, "Found ", eq_counter, " equivalent latches.");
 
     // find equivalent gates
     unordered_map<string, vector<int>> signaturesGatesMap;
@@ -750,14 +750,14 @@ bool Model::SimplifyModelByTernarySimulation() {
             }
         }
     }
-    m_log.L(1, "Found ", eq_counter, " equivalent gates.");
+    LOG_L(m_log, 1, "Found ", eq_counter, " equivalent gates.");
 
     return true;
 }
 
 
 void Model::SimplifyModelByRandomSimulation() {
-    m_log.L(1, "Simplify model by random simulation.");
+    LOG_L(m_log, 1, "Simplify model by random simulation.");
     if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
 
     m_log.Tick();
@@ -769,7 +769,7 @@ void Model::SimplifyModelByRandomSimulation() {
             simulation_values.emplace_back(values);
         }
     }
-    m_log.L(1, "Simulation takes ", m_log.Tock(), " seconds.");
+    LOG_L(m_log, 1, "Simulation takes ", m_log.Tock(), " seconds.");
 
     VarMapN64 signaturesVariablesMap;
     int mayeq_counter = 0;
@@ -784,7 +784,7 @@ void Model::SimplifyModelByRandomSimulation() {
     // signatures to equivalent variables
     for (auto &s : signaturesVariablesMap) {
         if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
-            m_log.L(1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
+            LOG_L(m_log, 1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
             break;
         }
 
@@ -807,9 +807,9 @@ void Model::SimplifyModelByRandomSimulation() {
             }
         }
     }
-    m_log.L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent latches.");
+    LOG_L(m_log, 1, "Found ", eq_counter, "/", mayeq_counter, " equivalent latches.");
     if (mayeq_counter > 0)
-        m_log.L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
+        LOG_L(m_log, 1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
 
     if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
     // find may equivalent variables
@@ -823,7 +823,7 @@ void Model::SimplifyModelByRandomSimulation() {
     // signatures to equivalent variables
     for (auto &s : signaturesVariablesMap) {
         if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
-            m_log.L(1, "Equivalent gate checking timeout after ", m_settings.eqTimeout, " seconds.");
+            LOG_L(m_log, 1, "Equivalent gate checking timeout after ", m_settings.eqTimeout, " seconds.");
             break;
         }
         if (s.second.size() < 2) continue;
@@ -871,9 +871,9 @@ void Model::SimplifyModelByRandomSimulation() {
             }
         }
     }
-    m_log.L(1, "Found ", eq_counter, "/", mayeq_counter, " equivalent gates.");
+    LOG_L(m_log, 1, "Found ", eq_counter, "/", mayeq_counter, " equivalent gates.");
     if (mayeq_counter > 0)
-        m_log.L(1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
+        LOG_L(m_log, 1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
     if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
 }
 

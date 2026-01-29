@@ -8,7 +8,7 @@ namespace car {
 void signalHandler(int signum) {
     if (GLOBAL_LOG != nullptr) {
         GLOBAL_LOG->PrintCustomStatistics();
-        GLOBAL_LOG->L(0, "Unknown");
+        LOG_LP(GLOBAL_LOG, 0, "Unknown");
     }
     exit(signum);
 }

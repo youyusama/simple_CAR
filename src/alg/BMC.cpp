@@ -69,7 +69,7 @@ bool BMC::Check() {
     Init();
 
     while (true) {
-        m_log.L(1, "BMC Bound: ", m_k);
+        LOG_L(m_log, 1, "BMC Bound: ", m_k);
 
         vector<clause> clauses;
         GetClausesK(m_k, clauses);
@@ -79,7 +79,7 @@ bool BMC::Check() {
             [[maybe_unused]] auto clauseScope = m_log.Section("Add_Trans_Cls");
             for (int i = 0; i < clauses.size(); ++i) {
                 m_Solver->AddClause(clauses[i]);
-                m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
+                LOG_L(m_log, 3, "Add Clause: ", CubeToStr(clauses[i]));
             }
         }
 
@@ -90,7 +90,7 @@ bool BMC::Check() {
         for (auto c : GetConstraintsK(m_k)) {
             assumptions.push_back(c);
         }
-        m_log.L(3, "Assumption: ", CubeToStr(assumptions));
+        LOG_L(m_log, 3, "Assumption: ", CubeToStr(assumptions));
         {
             [[maybe_unused]] auto satScope = m_log.Section("SAT_BMC_Inc");
             bool sat = m_Solver->Solve(assumptions);
@@ -102,14 +102,14 @@ bool BMC::Check() {
             [[maybe_unused]] auto clauseScope = m_log.Section("Add_Cons_Cls");
             for (auto c : GetConstraintsK(m_k)) {
                 m_Solver->AddClause({c});
-                m_log.L(3, "Add Clause: ", c);
+                LOG_L(m_log, 3, "Add Clause: ", c);
             }
         }
         // & !bad^k
         {
             [[maybe_unused]] auto clauseScope = m_log.Section("Add_Prop_Cls");
             m_Solver->AddClause({-k_bad});
-            m_log.L(3, "Add Clause: ", -k_bad);
+            LOG_L(m_log, 3, "Add Clause: ", -k_bad);
         }
         m_k++;
         if (m_maxK != -1 && m_k > m_maxK) return false;
@@ -131,13 +131,13 @@ bool BMC::Check_nonincremental() {
             [[maybe_unused]] auto clauseScope = m_log.Section("Add_Init_Cls");
             for (int i = 0; i < m_clauses.size(); ++i) {
                 m_Solver->AddClause(m_clauses[i]);
-                m_log.L(
+                LOG_L(m_log, 
                     3, "Add Clause: ", CubeToStr(m_clauses[i]));
             }
         }
         badClause.clear();
         for (int s = 0; s < m_step; s++) {
-            m_log.L(1, "BMC Bound: ", m_k);
+            LOG_L(m_log, 1, "BMC Bound: ", m_k);
 
             vector<clause> clauses;
             GetClausesK(m_k, clauses);
@@ -148,7 +148,7 @@ bool BMC::Check_nonincremental() {
                 for (int i = 0; i < clauses.size(); ++i) {
                     m_Solver->AddClause(clauses[i]);
                     m_clauses.emplace_back(clauses[i]); // store for further use
-                    m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
+                    LOG_L(m_log, 3, "Add Clause: ", CubeToStr(clauses[i]));
                 }
             }
 
@@ -156,14 +156,14 @@ bool BMC::Check_nonincremental() {
 
             badClause.push_back({k_bad});
             // m_Solver->AddClause({k_bad});
-            m_log.L(3, "Add Clause: ", k_bad);
+            LOG_L(m_log, 3, "Add Clause: ", k_bad);
 
             {
                 [[maybe_unused]] auto clauseScope = m_log.Section("Add_Cons_Cls");
                 for (auto c : GetConstraintsK(m_k)) {
                     m_Solver->AddClause({c});
                     m_clauses.push_back({c}); // store for further use
-                    m_log.L(3, "Add Clause: ", c);
+                    LOG_L(m_log, 3, "Add Clause: ", c);
                 }
             }
 

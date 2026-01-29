@@ -22,7 +22,7 @@ CheckResult rlive::Run() {
     signal(SIGINT, signalHandler);
 
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
-        m_log.L(0, "rlive only supports liveness properties.");
+        LOG_L(m_log, 0, "rlive only supports liveness properties.");
         return CheckResult::Unknown;
     }
 
@@ -42,7 +42,7 @@ CheckResult rlive::Run() {
             if (CheckReachable(s)) {
                 auto new_trace = m_safeChecker->GetCexTrace();
                 cube new_t = new_trace.back().second;
-                m_log.L(2, "get new bad state ", CubeToStr(new_t));
+                LOG_L(m_log, 2, "get new bad state ", CubeToStr(new_t));
                 bool looped = false;
                 for (const auto &b : m_badStack) {
                     if (b == new_t) {
@@ -73,7 +73,7 @@ CheckResult rlive::Run() {
 }
 
 void rlive::Witness() {
-    m_log.L(1, "rlive witness generation is not implemented.");
+    LOG_L(m_log, 1, "rlive witness generation is not implemented.");
 }
 
 std::vector<std::pair<cube, cube>> rlive::GetCexTrace() {
@@ -97,14 +97,14 @@ std::unique_ptr<IncrAlg> rlive::MakeSafeChecker() {
 
 bool rlive::CheckReachable(const cube &s) {
     m_safeChecker = MakeSafeChecker();
-    m_log.L(1, "===== RLIVE SEARCH BAD =====", " at lvl: ", m_badStack.size());
+    LOG_L(m_log, 1, "===== RLIVE SEARCH BAD =====", " at lvl: ", m_badStack.size());
     if (m_badStack.empty()) {
-        m_log.L(2, "start from initial state");
+        LOG_L(m_log, 2, "start from initial state");
     } else {
-        m_log.L(2, "start from bad state ", CubeToStr(s));
+        LOG_L(m_log, 2, "start from bad state ", CubeToStr(s));
         if (m_settings.verbosity > 2) {
             for (const auto &r : m_badStack) {
-                m_log.L(3, CubeToStr(r));
+                LOG_L(m_log, 3, CubeToStr(r));
             }
         }
     }
@@ -125,7 +125,7 @@ bool rlive::CheckReachable(const cube &s) {
 
 
 bool rlive::PruneDead(const cube &s) {
-    m_log.L(3, "bad state ", CubeToStr(s));
+    LOG_L(m_log, 3, "bad state ", CubeToStr(s));
 
     // s & T & !C' & !q
     m_pdSolver->AddTempClause({m_model.GetBad()});
@@ -137,14 +137,14 @@ bool rlive::PruneDead(const cube &s) {
         // p & T & !C'
         auto assumption = p.second;
 
-        m_log.L(2, "get succ", CubeToStr(assumption));
+        LOG_L(m_log, 2, "get succ", CubeToStr(assumption));
         bool is_not_dead = m_pdSolver->Solve(assumption);
         if (is_not_dead) {
-            m_log.L(2, "not dead");
+            LOG_L(m_log, 2, "not dead");
             return false;
         } else {
             auto new_dead = GetUnsatAssumption(m_pdSolver, assumption);
-            m_log.L(2, "get new dead", CubeToStr(new_dead));
+            LOG_L(m_log, 2, "get new dead", CubeToStr(new_dead));
             m_pdSolver->AddShoalConstraints({}, vector<cube>{new_dead}, 1);
             m_pdSolver->AddCubeAsClauseK(new_dead, true, 1);
             m_globalDead.emplace_back(new_dead);
@@ -154,10 +154,10 @@ bool rlive::PruneDead(const cube &s) {
     }
     m_pdSolver->ReleaseTempClause();
 
-    m_log.L(1, "===== RLIVE PRUNE DEAD =====");
-    m_log.L(2, "global dead size: ", m_globalDead.size());
+    LOG_L(m_log, 1, "===== RLIVE PRUNE DEAD =====");
+    LOG_L(m_log, 2, "global dead size: ", m_globalDead.size());
     for (const auto &d : m_globalDead) {
-        m_log.L(3, CubeToStr(d));
+        LOG_L(m_log, 3, CubeToStr(d));
     }
     return true;
 }

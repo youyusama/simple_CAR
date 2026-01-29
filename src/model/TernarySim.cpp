@@ -139,7 +139,7 @@ void TernarySimulator::reset() {
 
 
 void TernarySimulator::simulate(int maxPreciseDepth) {
-    m_log.L(2, "Simulating circuit with max precise depth ", maxPreciseDepth);
+    LOG_L(m_log, 2, "Simulating circuit with max precise depth ", maxPreciseDepth);
 
     reset();
     // set initial values // TODO: gate reset not supported
@@ -169,21 +169,21 @@ void TernarySimulator::simulate(int maxPreciseDepth) {
         }
 
         simulateOneStep();
-        m_log.L(4, "Step ", m_step, ": ", stepValuesToString(m_step));
+        LOG_L(m_log, 4, "Step ", m_step, ": ", stepValuesToString(m_step));
         m_states.emplace_back();
         pushState(m_step, m_states[m_step]);
         m_gateStates.emplace_back();
         pushGateState(m_step, m_gateStates[m_step]);
 
         if (m_states.back().size() == 1) {
-            m_log.L(2, "All X states, terminating simulation");
+            LOG_L(m_log, 2, "All X states, terminating simulation");
             break;
         }
 
         if (reachCycle()) {
             m_states.pop_back();
             m_gateStates.pop_back();
-            m_log.L(2, "Cycle detected at step: ", m_cycleStart);
+            LOG_L(m_log, 2, "Cycle detected at step: ", m_cycleStart);
             break;
         }
         m_step++;
@@ -192,7 +192,7 @@ void TernarySimulator::simulate(int maxPreciseDepth) {
 
 
 void TernarySimulator::simulateRandom(int maxSteps) {
-    m_log.L(2, "Simulating circuit for ", maxSteps, " steps (random inputs)");
+    LOG_L(m_log, 2, "Simulating circuit for ", maxSteps, " steps (random inputs)");
 
     reset();
 
@@ -228,7 +228,7 @@ void TernarySimulator::simulateRandom(int maxSteps) {
         }
 
         simulateOneStep();
-        m_log.L(4, "Step ", m_step, ": ", stepValuesToString(m_step));
+        LOG_L(m_log, 4, "Step ", m_step, ": ", stepValuesToString(m_step));
         m_step++;
     }
 }
