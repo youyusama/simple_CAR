@@ -136,7 +136,7 @@ bool BasicIC3::Check() {
         }
 
         if (PropagateFrame()) {
-            m_log.L(1, "SAFE: Proof found at F_", m_k);
+            m_log.L(1, "SAFE: Proof found at F_", m_invariantLevel);
             m_log.L(1, FramesInfo());
             return true;
         }
@@ -467,7 +467,7 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
 
             size_t pushLevel = Generalize(uc, ob.level);
 
-            if (pushLevel <= m_k) {
+            if (pushLevel < m_k) {
                 m_log.L(2, "Creating new obligation for same state at higher level ", pushLevel);
                 obligations.insert(Obligation(ob.state, pushLevel, ob.depth));
             }
@@ -739,7 +739,7 @@ bool BasicIC3::UnreachabilityCheck(const cube &cb, const shared_ptr<SATSolver> &
 
 int BasicIC3::PropagateUp(const cube &cb, int startLevel) {
     int pushLevel = startLevel;
-    while (pushLevel <= m_k) {
+    while (pushLevel < m_k) {
         if (!UnreachabilityCheck(cb, m_frames[pushLevel].solver)) {
             break;
         }
@@ -872,16 +872,13 @@ void BasicIC3::OutputWitness() {
     string outPath = m_settings.witnessOutputDir + aigName + ".w.aig";
     aiger *model_aig = m_model.GetAiger().get();
 
-    unsigned lvl_i;
-    // bad is constant
-    // if (m_invariantLevel == 0 || (m_frames[m_invariantLevel].borderCubes.empty() && infFrame.borderCubes.empty())) {
-    if (m_invariantLevel == 0 || (m_frames[m_invariantLevel].borderCubes.empty())) {
+    if (m_invariantLevel == 0 && m_model.GetEquivalenceMap().size() == 0) {
         aiger_open_and_write_to_file(model_aig, outPath.c_str());
         return;
     }
-    lvl_i = m_k;
 
-    aiger *witness_aig = aiger_init();
+    shared_ptr<aiger> witness_aig_ptr(aiger_init(), aigerDeleter);
+    aiger *witness_aig = witness_aig_ptr.get();
     // copy inputs
     for (unsigned i = 0; i < model_aig->num_inputs; i++) {
         aiger_symbol &input = model_aig->inputs[i];
@@ -905,6 +902,52 @@ void BasicIC3::OutputWitness() {
     }
 
     assert(model_aig->maxvar == witness_aig->maxvar);
+
+    // add equivalence
+    // (l1 <-> l2) & (l1 <-> l3) & ( ... ) & l_true
+    // ! ( !l1 & l2 ) & ! ( l1 & !l2 )
+    auto &eq_map = m_model.GetEquivalenceMap();
+    vector<unsigned> eq_lits;
+    for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
+        if (itr->first == m_model.TrueId() || itr->second == m_model.TrueId()) {
+            unsigned true_eq_lit = m_model.GetAigerLit(itr->second);
+            eq_lits.emplace_back(true_eq_lit);
+            continue;
+        }
+        assert(abs(itr->first) <= witness_aig->maxvar);
+        assert(abs(itr->second) <= witness_aig->maxvar);
+        unsigned l1 = m_model.GetAigerLit(itr->first);
+        unsigned l2 = m_model.GetAigerLit(itr->second);
+        eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
+        eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
+    }
+
+    unsigned eq_cons;
+    if (eq_lits.size() > 0) {
+        eq_cons = addCubeToANDGates(witness_aig, eq_lits);
+    }
+
+    // prove on lvl 0
+    if (m_invariantLevel == 0 || (m_frames[m_invariantLevel].borderCubes.empty())) {
+        unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
+        unsigned p = aiger_not(bad_lit);
+        unsigned p_prime = p;
+        if (eq_lits.size() > 0) {
+            p_prime = addCubeToANDGates(witness_aig, {p, eq_cons});
+        }
+
+        if (model_aig->num_bad == 1) {
+            aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);
+        } else if (model_aig->num_outputs == 1) {
+            aiger_add_output(witness_aig, aiger_not(p_prime), model_aig->outputs[0].name);
+        } else {
+            assert(false);
+        }
+
+        aiger_reencode(witness_aig);
+        aiger_open_and_write_to_file(witness_aig, outPath.c_str());
+        return;
+    }
 
     // P' = P & invariant
     // P' = !bad & ( O_0 | O_1 | ... | O_i )
@@ -936,11 +979,13 @@ void BasicIC3::OutputWitness() {
     }
     unsigned inv = addCubeToANDGates(witness_aig, invLits);
 
-    int bad = m_model.GetBad();
-    int bad_lit_int = bad > 0 ? (2 * bad) : (2 * -bad) + 1;
-    unsigned bad_lit = bad_lit_int;
+    unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
+
+    if (eq_lits.size() > 0) {
+        p_prime = addCubeToANDGates(witness_aig, {p, eq_cons});
+    }
 
     if (model_aig->num_bad == 1) {
         aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);

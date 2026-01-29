@@ -167,6 +167,11 @@ class Model {
     }
 
     inline unsigned GetAigerLit(const int car_id) {
+        if (car_id == TrueId())
+            return 1;
+        else if (car_id == -TrueId())
+            return 0;
+
         if (car_id > 0)
             return car_id << 1;
         else
