@@ -73,6 +73,8 @@ class BasicIC3 : public IncrAlg {
 
     void Reset();
 
+    bool ImmediateSatisfiable();
+
     bool IsInitStateImplyBad();
 
     void InitializeStartSolver();
@@ -99,7 +101,7 @@ class BasicIC3 : public IncrAlg {
         }
     }
     string FramesInfo() const;
-    int PushLemmaForward(const cube &cb, int startLevel);
+    int PropagateUp(const cube &cb, int startLevel);
 
     struct LitOrder {
         shared_ptr<Branching> branching;
@@ -137,9 +139,9 @@ class BasicIC3 : public IncrAlg {
 
     void Extend();
 
-    bool Propagate();
+    bool PropagateFrame();
 
-    bool CheckInit(shared_ptr<State> s);
+    bool Propagate();
 
     shared_ptr<State> EnumerateStartState();
 
@@ -148,11 +150,10 @@ class BasicIC3 : public IncrAlg {
     void OutputCounterExample();
 
 
-    cube GetCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube, bool prime);
+    cube GetUnsatCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube, bool prime);
     bool UnreachabilityCheck(const cube &cb, const shared_ptr<SATSolver> &slv);
     bool InductionCheck(const cube &cb, const shared_ptr<SATSolver> &slv);
     cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube);
-    void InitiationAugmentation(const cube &failureCube, const cube &fallbackCube);
     bool InitiationCheck(const cube &cb);
 
     void GetBlockers(const cube &c, int framelevel, vector<cube> &blockers);
@@ -171,7 +172,6 @@ class BasicIC3 : public IncrAlg {
     unordered_set<int> m_initialStateSet;
     shared_ptr<State> m_initialState;
     shared_ptr<State> m_cexStart;
-    bool m_trivial;
     int m_minUpdateLevel;
     int m_invariantLevel;
     shared_ptr<Branching> m_branching;
