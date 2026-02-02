@@ -49,11 +49,14 @@ bool FCAR::Check() {
         LOG_L(m_log, 2, "Reset");
     }
 
+    // check if initial state is bad
+    if (ImmediateSatisfiable()) return false;
+
     // main stage
     stack<Task> workingStack;
     while (true) {
         [[maybe_unused]] auto frameScope = m_log.Section("FC_Frame");
-        m_minUpdateLevel = m_k + 1;
+        m_minUpdateLevel = m_k;
         if (m_settings.dt) { // Dynamic Traversal
             auto dtseq = m_underSequence.GetSeqDT();
             for (auto state : dtseq) {
@@ -75,6 +78,8 @@ bool FCAR::Check() {
             m_overSequence->SetInvariantLevel(-1);
             return true;
         }
+
+        CreateTransSolver(m_k + 1);
 
         while (startState != nullptr) {
             LOG_L(m_log, 2, "State from StartSolver: ", CubeToStrShort(startState->latches));
@@ -99,7 +104,7 @@ bool FCAR::Check() {
                     LOG_L(m_log, 3, "State get new Level ", task.frameLevel);
                 }
 
-                if (task.frameLevel >= m_k) {
+                if (task.frameLevel > m_k) {
                     workingStack.pop();
                     continue;
                 }
@@ -107,7 +112,7 @@ bool FCAR::Check() {
                 task.isLocated = false;
 
                 if (task.frameLevel == (m_searchFromInitSucc ? 0 : -1)) {
-                    if (CheckInit(task.state)) {
+                    if (!m_searchFromInitSucc || CheckInit(task.state)) {
                         return false;
                     } else
                         continue;
@@ -156,7 +161,7 @@ bool FCAR::Check() {
         // inv
         m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
         if (!m_searchFromInitSucc) IsInvariant(0);
-        for (int i = 0; i < m_k; ++i) {
+        for (int i = 0; i <= m_k; ++i) {
             // propagation
             if (i >= m_minUpdateLevel) {
                 shared_ptr<OverSequenceSet::FrameSet> fi = m_overSequence->GetFrame(i);
@@ -192,7 +197,8 @@ bool FCAR::Check() {
 void FCAR::Init() {
     [[maybe_unused]] auto initScope = m_log.Section("FC_Init");
 
-    m_k = m_searchFromInitSucc ? 1 : 0;
+    // start solver search state in frame k
+    m_k = m_searchFromInitSucc ? 2 : 1;
 
     if (m_searchFromInitSucc) {
         m_initStateImplyBad = IsInitStateImplyBad();
@@ -216,14 +222,7 @@ void FCAR::Init() {
     m_transSolvers.clear();
     m_lastState = nullptr;
 
-    // O_i & T & c & s'
-    m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
-    if (m_settings.satSolveInDomain) m_transSolvers[0]->SetSolveInDomain();
-    m_transSolvers[0]->AddTrans();
-    m_transSolvers[0]->AddConstraints();
-    m_transSolvers[0]->AddInitialClauses();
-    // liveness: T = T & (W <-> W')
-    m_transSolvers[0]->AddWallConstraints(m_walls);
+    CreateTransSolver(0);
 
     // lift
     m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
@@ -256,15 +255,25 @@ void FCAR::Init() {
         m_transSolvers[0]->AddUC(uc);
         m_overSequence->Insert(uc, 0);
 
-        if (!m_searchFromInitSucc) {
-            m_startSolver->AddUC(uc);
-        }
-
         if (m_searchFromInitSucc && !m_initStateImplyBad)
             m_transSolvers[0]->AddBad();
     }
 
     m_initialized = true;
+}
+
+
+void FCAR::CreateTransSolver(int k) {
+    while (m_transSolvers.size() <= k) {
+        // O_i & T & c & s'
+        m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
+        if (m_settings.satSolveInDomain) m_transSolvers.back()->SetSolveInDomain();
+        m_transSolvers.back()->AddTrans();
+        m_transSolvers.back()->AddConstraints();
+        if (m_settings.solveInProperty && k > 0) m_transSolvers.back()->AddProperty();
+        // liveness: T = T & ( W <-> W' )
+        m_transSolvers.back()->AddWallConstraints(m_walls);
+    }
 }
 
 
@@ -317,18 +326,9 @@ bool FCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
     m_restart->UcCountsPlus1();
     if (!m_overSequence->Insert(uc, frameLevel)) return false;
 
-    if (frameLevel >= m_transSolvers.size()) {
-        m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
-        if (m_settings.satSolveInDomain) m_transSolvers.back()->SetSolveInDomain();
-        m_transSolvers.back()->AddTrans();
-        m_transSolvers.back()->AddConstraints();
-        if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
-        // liveness: T = T & ( W <-> W' )
-        m_transSolvers.back()->AddWallConstraints(m_walls);
-    }
     m_transSolvers[frameLevel]->AddUC(uc);
 
-    if (frameLevel >= m_k) {
+    if (frameLevel == m_k) {
         m_startSolver->AddUC(uc);
     }
     if (frameLevel < m_minUpdateLevel) {
@@ -478,13 +478,13 @@ int FCAR::GetNewLevel(const cube &states, int start) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_GetNewLevel");
     if (m_searchFromInitSucc) start = (start == 0) ? 1 : start;
 
-    for (int i = start; i <= m_k; i++) {
+    for (int i = start; i <= m_k + 1; i++) {
         if (!m_overSequence->IsBlockedByFrame(states, i)) {
             return i - 1;
         }
     }
 
-    return m_k;
+    return m_k + 1;
 }
 
 
@@ -731,8 +731,23 @@ bool FCAR::DownHasFailed(const cube &s, const vector<cube> &failed_ctses) {
 }
 
 
+bool FCAR::ImmediateSatisfiable() {
+    [[maybe_unused]] auto scoped = m_log.Section("FC_InitSat");
+    cube assumptions;
+    assumptions.push_back(m_model.GetBad());
+    m_transSolvers[0]->SetTempDomainCOI(assumptions);
+    bool sat = m_transSolvers[0]->Solve(assumptions);
+    if (sat) {
+        auto p = m_transSolvers[0]->GetAssignment(false);
+        m_lastState = make_shared<State>(nullptr, p.first, p.second, 0);
+    }
+    return sat;
+}
+
+
 bool FCAR::CheckInit(shared_ptr<State> s) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_InitChk");
+    assert(!m_searchFromInitSucc);
     LOG_L(m_log, 2, "SAT Check Init ");
     LOG_L(m_log, 2, "From State: ", CubeToStrShort(s->latches));
     LOG_L(m_log, 3, "State Detail: ", CubeToStr(s->latches));
@@ -829,7 +844,7 @@ bool FCAR::Propagate(const cube &c, int lvl) {
 
 int FCAR::PropagateUp(const cube &c, int lvl) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_PropUp");
-    while (lvl < m_k) {
+    while (lvl <= m_k) {
         if (Propagate(c, lvl))
             m_branching->Update(c);
         else

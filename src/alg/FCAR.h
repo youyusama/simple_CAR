@@ -38,6 +38,10 @@ class FCAR : public IncrAlg {
 
     void Reset();
 
+    bool ImmediateSatisfiable();
+
+    void CreateTransSolver(int k);
+
     bool IsInitStateImplyBad();
 
     void InitializeStartSolver();
