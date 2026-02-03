@@ -736,15 +736,40 @@ bool FCAR::DownHasFailed(const cube &s, const vector<cube> &failed_ctses) {
 
 bool FCAR::ImmediateSatisfiable() {
     [[maybe_unused]] auto scoped = m_log.Section("FC_InitSat");
-    cube assumptions;
-    assumptions.push_back(m_model.GetBad());
-    m_transSolvers[0]->SetTempDomainCOI(assumptions);
-    bool sat = m_transSolvers[0]->Solve(assumptions);
-    if (sat) {
-        auto p = m_transSolvers[0]->GetAssignment(false);
-        m_lastState = make_shared<State>(nullptr, p.first, p.second, 0);
+    auto slv = make_unique<SATSolver>(m_model, MCSATSolver::cadical);
+    slv->AddTrans();
+    slv->AddConstraints();
+    slv->AddInitialClauses();
+    for (auto i : m_model.GetInitialState()) {
+        slv->AddClause(cube{i});
     }
-    return sat;
+    cube assumptions = cube{m_model.GetBad()};
+    bool sat = slv->Solve(assumptions);
+    if (sat) {
+        auto p = slv->GetAssignment(false);
+        m_lastState = make_shared<State>(nullptr, p.first, p.second, 0);
+        return true;
+    } else if (m_settings.searchFromBadPred) {
+        slv->AddTransK(1);
+        slv->AddConstraintsK(1);
+        slv->AddBadk(1);
+        sat = slv->Solve(cube{});
+        if (sat) {
+            cube inputs_bad;
+            for (int i : m_model.GetPropertyCOIInputs()) {
+                int i_p = m_model.GetPrimeK(i, 1);
+                if (slv->GetModel(i_p) == t_True)
+                    inputs_bad.push_back(i);
+                else if (slv->GetModel(i_p) == t_False)
+                    inputs_bad.push_back(-i);
+            }
+            shared_ptr<State> badState(new State(nullptr, inputs_bad, cube(), 0));
+            auto p = slv->GetAssignment(false);
+            m_lastState = make_shared<State>(badState, p.first, p.second, 0);
+            return true;
+        }
+    }
+    return false;
 }
 
 

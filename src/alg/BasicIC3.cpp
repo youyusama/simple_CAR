@@ -77,16 +77,40 @@ void BasicIC3::KLiveIncr() {
 
 
 bool BasicIC3::ImmediateSatisfiable() {
-    auto &init_slv = m_frames[0].solver;
-    cube assumptions;
-    assumptions.push_back(m_model.GetBad());
-    init_slv->SetTempDomainCOI(assumptions);
-    bool sat = init_slv->Solve(assumptions);
-    if (sat) {
-        auto p = init_slv->GetAssignment(false);
-        m_cexStart = make_shared<State>(nullptr, p.first, p.second, 0);
+    auto slv = make_unique<SATSolver>(m_model, MCSATSolver::cadical);
+    slv->AddTrans();
+    slv->AddConstraints();
+    slv->AddInitialClauses();
+    for (auto i : m_model.GetInitialState()) {
+        slv->AddClause(cube{i});
     }
-    return sat;
+    cube assumptions = cube{m_model.GetBad()};
+    bool sat = slv->Solve(assumptions);
+    if (sat) {
+        auto p = slv->GetAssignment(false);
+        m_cexStart = make_shared<State>(nullptr, p.first, p.second, 0);
+        return true;
+    } else if (m_settings.searchFromBadPred) {
+        slv->AddTransK(1);
+        slv->AddConstraintsK(1);
+        slv->AddBadk(1);
+        sat = slv->Solve(cube{});
+        if (sat) {
+            cube inputs_bad;
+            for (int i : m_model.GetPropertyCOIInputs()) {
+                int i_p = m_model.GetPrimeK(i, 1);
+                if (slv->GetModel(i_p) == t_True)
+                    inputs_bad.push_back(i);
+                else if (slv->GetModel(i_p) == t_False)
+                    inputs_bad.push_back(-i);
+            }
+            shared_ptr<State> badState(new State(nullptr, inputs_bad, cube(), 0));
+            auto p = slv->GetAssignment(false);
+            m_cexStart = make_shared<State>(badState, p.first, p.second, 0);
+            return true;
+        }
+    }
+    return false;
 }
 
 
@@ -512,7 +536,6 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
     int ctgs = 0;
     int joins = 0;
     auto &trans_slv = m_frames[frameLvl].solver;
-    shared_ptr<State> downState = make_shared<State>(nullptr, cube(), downCube, 0);
 
     while (true) {
         LOG_L(m_log, 3, "Down attempt: ", CubeToStr(downCube));
@@ -525,9 +548,10 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
             return true;
         }
 
-        if (recLvl > m_settings.ctgMaxRecursionDepth || frameLvl > 0)
+        if (recLvl > m_settings.ctgMaxRecursionDepth)
             return false;
 
+        shared_ptr<State> downState = make_shared<State>(nullptr, cube(), downCube, 0);
         auto p = trans_slv->GetAssignment(false);
         auto ctgState = make_shared<State>(downState, p.first, p.second, 0);
         GeneralizePredecessor(ctgState, downState);
@@ -542,6 +566,7 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
         auto &trans_slv_m1 = m_frames[frameLvl - 1].solver;
 
         if (ctgs < m_settings.ctgMaxStates &&
+            frameLvl > 0 &&
             InductionCheck(ctgCube, trans_slv_m1)) {
 
             ctgs++;
