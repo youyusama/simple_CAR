@@ -35,6 +35,19 @@ class Branching {
 };
 
 
+static bool cubeComp(const cube &c1, const cube &c2) {
+    if (c1.size() != c2.size()) return c1.size() < c2.size();
+    for (size_t i = 0; i < c1.size(); i++) {
+        int v1 = c1[i], v2 = c2[i];
+        if (abs(v1) != abs(v2))
+            return abs(v1) < abs(v2);
+        else if (v1 != v2)
+            return v1 > v2;
+    }
+    return false;
+}
+
+
 struct CubeHash {
     size_t operator()(const vector<int> &cube) const noexcept {
         size_t seed = cube.size();
@@ -44,6 +57,61 @@ struct CubeHash {
         return seed;
     }
 };
+
+class LitSet {
+  public:
+    LitSet() = default;
+
+    void newSet(const cube &c) {
+        clear();
+        for (int lit : c) {
+            insert(lit);
+        }
+    }
+
+    void insert(int lit) {
+        assert(lit != 0);
+        std::size_t i = idx(lit);
+        if (i >= has_.size()) has_.resize(i + 1, 0);
+        if (!has_[i]) {
+            set_.push_back(lit);
+            has_[i] = 1;
+        }
+    }
+
+    bool has(int lit) const {
+        assert(lit != 0);
+        std::size_t i = idx(lit);
+        return i < has_.size() && has_[i];
+    }
+
+    void clear() {
+        for (int l : set_) has_[idx(l)] = 0;
+        set_.clear();
+    }
+
+    int size() const { return static_cast<int>(set_.size()); }
+
+  private:
+    static std::size_t idx(int lit) {
+        assert(lit != 0);
+        unsigned v = static_cast<unsigned>(lit > 0 ? lit : -lit);
+        return (static_cast<std::size_t>(v) << 1) | (lit < 0 ? 1u : 0u);
+    }
+
+    std::vector<int> set_;
+    std::vector<uint8_t> has_;
+};
+
+
+inline bool SubsumeSet(const cube &a, const LitSet &b) {
+    if (a.size() > static_cast<size_t>(b.size())) return false;
+    for (int lit : a) {
+        if (!b.has(lit)) return false;
+    }
+    return true;
+}
+
 
 using frame = std::vector<cube>;
 using FrameList = std::vector<frame>;

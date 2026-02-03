@@ -13,16 +13,19 @@
 namespace car {
 
 struct Obligation {
-    Obligation(shared_ptr<State> s, int l, int d) : state(s), level(l), depth(d) {}
+    Obligation(shared_ptr<State> s, int l, int d, double a = 0.0)
+        : state(s), level(l), depth(d), act(a) {}
     shared_ptr<State> state;
     int level;
     int depth;
+    double act;
 
     bool operator<(const Obligation &other) const {
-        if (level != other.level) {
+        if (level != other.level)
             return level < other.level;
-        }
-        return depth < other.depth;
+        if (depth != other.depth)
+            return depth > other.depth;
+        return cubeComp(state->latches, other.state->latches);
     }
 };
 
@@ -86,6 +89,12 @@ class BasicIC3 : public IncrAlg {
     bool Strengthen();
 
     bool HandleObligations(set<Obligation> &obligations);
+
+    bool PopObligation(set<Obligation> &obligations, Obligation &ob);
+
+    void PushObligation(set<Obligation> &obligations, Obligation ob, int newLevel);
+
+    int LazyCheck(const cube &cb, int startLvl, int endLvl);
 
     size_t Generalize(cube &cb, int frameLvl);
 
@@ -170,6 +179,7 @@ class BasicIC3 : public IncrAlg {
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badLiftSolver;
     unordered_set<int> m_initialStateSet;
+    LitSet m_tmpLitSet;
     shared_ptr<State> m_initialState;
     shared_ptr<State> m_cexStart;
     int m_minUpdateLevel;

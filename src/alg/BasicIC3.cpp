@@ -474,10 +474,51 @@ bool BasicIC3::Strengthen() {
     }
 }
 
+int BasicIC3::LazyCheck(const cube &cb, int startLvl, int endLvl) {
+    m_tmpLitSet.newSet(cb);
+    for (int i = startLvl + 1; i <= endLvl; ++i) {
+        for (const auto &lemma : m_frames[i].borderCubes) {
+            if (SubsumeSet(lemma, m_tmpLitSet)) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+bool BasicIC3::PopObligation(set<Obligation> &obligations, Obligation &ob) {
+    if (obligations.empty()) return false;
+    auto it = obligations.begin();
+    if (it->level > m_k) return false;
+    ob = *it;
+    obligations.erase(it);
+    ob.act += 1.0;
+    return true;
+}
+
+void BasicIC3::PushObligation(set<Obligation> &obligations, Obligation ob, int newLevel) {
+    while (ob.level < newLevel) {
+        ob.act *= 0.6;
+        ob.level++;
+    }
+    obligations.insert(ob);
+}
 
 bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
-    while (!obligations.empty()) {
-        Obligation ob = *obligations.begin();
+    Obligation ob(nullptr, 0, 0);
+    while (PopObligation(obligations, ob)) {
+
+        if (ob.act >= m_settings.maxObligationAct) {
+            LOG_L(m_log, 2, "Obligation at level ", ob.level, " depth ", ob.depth, " reached max activity. Skipped.");
+            continue;
+        }
+
+        int subsumeLvl = LazyCheck(ob.state->latches, ob.level, m_k + 1);
+        if (subsumeLvl != -1) {
+            LOG_L(m_log, 2, "Obligation at level ", ob.level, " depth ", ob.depth, " is subsumed at level ", subsumeLvl, ". Skipped.");
+            PushObligation(obligations, ob, subsumeLvl);
+            continue;
+        }
 
         // Query: F_{ob.level} & T & cti'
         LOG_L(m_log, 2, "Handling obligation at level ", ob.level);
@@ -486,14 +527,13 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
         auto &ctiCube = ob.state->latches;
 
         if (UnreachabilityCheck(ctiCube, trans_slv)) {
-            obligations.erase(obligations.begin());
             auto uc = GetAndValidateCore(trans_slv, ctiCube);
 
             size_t pushLevel = Generalize(uc, ob.level);
 
             if (pushLevel <= m_k) {
                 LOG_L(m_log, 2, "Creating new obligation for same state at higher level ", pushLevel);
-                obligations.insert(Obligation(ob.state, pushLevel, ob.depth));
+                PushObligation(obligations, ob, static_cast<int>(pushLevel));
             }
         } else {
             auto p = trans_slv->GetAssignment(false);
@@ -509,7 +549,8 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
             GeneralizePredecessor(predecessorState, ob.state);
 
             LOG_L(m_log, 2, "Found predecessor for CTI. New obligation at level ", ob.level - 1);
-            obligations.insert(Obligation(predecessorState, ob.level - 1, ob.depth + 1));
+            PushObligation(obligations, ob, ob.level);
+            PushObligation(obligations, Obligation(predecessorState, ob.level - 1, ob.depth + 1), ob.level - 1);
         }
     }
     return true;

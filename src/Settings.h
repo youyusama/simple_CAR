@@ -48,6 +48,7 @@ struct Settings {
     int ctgMaxStates = 3;
     int ctgMaxBlocks = 1;
     bool satSolveInDomain = false;
+    double maxObligationAct = 20.0;
     int bmc_step = 1;
     int eq = 2;
     int eqTimeout = 600;
