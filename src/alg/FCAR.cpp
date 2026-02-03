@@ -79,7 +79,7 @@ bool FCAR::Check() {
             return true;
         }
 
-        CreateTransSolver(m_k + 1);
+        CreateTransSolver(m_k);
 
         while (startState != nullptr) {
             LOG_L(m_log, 2, "State from StartSolver: ", CubeToStrShort(startState->latches));
@@ -104,7 +104,7 @@ bool FCAR::Check() {
                     LOG_L(m_log, 3, "State get new Level ", task.frameLevel);
                 }
 
-                if (task.frameLevel > m_k) {
+                if (task.frameLevel >= m_k) {
                     workingStack.pop();
                     continue;
                 }
@@ -112,7 +112,10 @@ bool FCAR::Check() {
                 task.isLocated = false;
 
                 if (task.frameLevel == (m_searchFromInitSucc ? 0 : -1)) {
-                    if (!m_searchFromInitSucc || CheckInit(task.state)) {
+                    if (!m_searchFromInitSucc) {
+                        m_lastState = task.state;
+                        return false;
+                    } else if (CheckInit(task.state)) {
                         return false;
                     } else
                         continue;
@@ -161,7 +164,7 @@ bool FCAR::Check() {
         // inv
         m_invSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
         if (!m_searchFromInitSucc) IsInvariant(0);
-        for (int i = 0; i <= m_k; ++i) {
+        for (int i = 0; i < m_k; ++i) {
             // propagation
             if (i >= m_minUpdateLevel) {
                 shared_ptr<OverSequenceSet::FrameSet> fi = m_overSequence->GetFrame(i);
@@ -478,13 +481,13 @@ int FCAR::GetNewLevel(const cube &states, int start) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_GetNewLevel");
     if (m_searchFromInitSucc) start = (start == 0) ? 1 : start;
 
-    for (int i = start; i <= m_k + 1; i++) {
+    for (int i = start; i <= m_k; i++) {
         if (!m_overSequence->IsBlockedByFrame(states, i)) {
             return i - 1;
         }
     }
 
-    return m_k + 1;
+    return m_k;
 }
 
 
@@ -844,7 +847,7 @@ bool FCAR::Propagate(const cube &c, int lvl) {
 
 int FCAR::PropagateUp(const cube &c, int lvl) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_PropUp");
-    while (lvl <= m_k) {
+    while (lvl < m_k) {
         if (Propagate(c, lvl))
             m_branching->Update(c);
         else
