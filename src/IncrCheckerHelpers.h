@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace car {
@@ -111,6 +112,88 @@ inline bool SubsumeSet(const cube &a, const LitSet &b) {
     }
     return true;
 }
+
+struct ForestNode {
+    int parentId{-1};
+    std::vector<int> childrenIds;
+    int frameLvl{0};
+    int depth{0};
+
+    int refineCount{0};
+    int refineCountSinceALL{0};
+    bool reachable{false};
+
+    std::vector<std::pair<cube, int>> ctpPreds;
+    cube ctpSucc;
+    bool hasCTPSucc{false};
+};
+
+class LemmaForestManager {
+  public:
+    LemmaForestManager() = default;
+
+    void Reset();
+    void EnsureLevel(int level);
+
+    std::pair<int, int> AddLemma(const cube &cb, int frameLevel);
+    int PropagateLemma(int lemmaId, int newFrameLevel);
+
+    void GetBlockers(const cube &blockingCube, int level, std::vector<cube> &blockers) const;
+    bool IsBlockedAtLevel(const cube &cb, int level) const;
+    std::vector<int> GetAncestorChain(int lemmaId) const;
+
+    const std::vector<int> &BorderIds(int level) const;
+    bool BorderEmpty(int level) const;
+    size_t BorderSize(int level) const;
+    void CleanDeadBorders(int level);
+    void SortBorderByCubeSize(int level);
+
+    const cube &CubeOf(int id) const;
+    bool Alive(int id) const;
+
+    class BorderCubesRange {
+      public:
+        struct Iterator {
+            const LemmaForestManager *lfm;
+            int level;
+            size_t idx;
+
+            void SkipDead();
+            const cube &operator*() const;
+            Iterator &operator++();
+            bool operator!=(const Iterator &other) const;
+        };
+
+        BorderCubesRange(const LemmaForestManager *inLfm, int inLevel)
+            : lfm(inLfm), level(inLevel) {}
+
+        Iterator begin() const;
+        Iterator end() const;
+
+      private:
+        const LemmaForestManager *lfm;
+        int level;
+    };
+
+    BorderCubesRange BorderCubes(int level) const;
+
+  private:
+    std::pair<int, int> FindParentLemma(int startLevel, const cube &cb);
+    int CreateLemma(const cube &cb, int parentId, int frameLevel);
+    int SwapCreateLemma(const cube &cb, int existingLemmaId, int frameLevel);
+    void AddLemmaToBorder(int frameLevel, int lemmaId);
+    void RemoveFromBorder(int level, int lemmaId);
+    void UnregisterLemma(int lemmaId);
+    void AdoptRelations(int newLemmaId, int oldLemmaId);
+    uint64_t RemoveRedundantLemmas(int startLevel, int endLevel, int newLemmaId);
+    void UpdateRefineCountersOnInsert(int newLemmaId);
+
+    std::vector<cube> m_lemmas;
+    std::vector<ForestNode> m_forest;
+    std::vector<uint8_t> m_alive;
+    std::vector<std::vector<int>> m_borders;
+    mutable LitSet m_tmpLitSet;
+};
 
 
 using frame = std::vector<cube>;

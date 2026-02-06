@@ -324,6 +324,346 @@ string OverSequenceSet::FramesDetail() {
 }
 
 
+void LemmaForestManager::Reset() {
+    m_lemmas.clear();
+    m_forest.clear();
+    m_alive.clear();
+    m_borders.clear();
+    m_tmpLitSet.clear();
+}
+
+void LemmaForestManager::EnsureLevel(int level) {
+    if (level < 0) return;
+    if (static_cast<int>(m_borders.size()) <= level) {
+        m_borders.resize(level + 1);
+    }
+}
+
+const std::vector<int> &LemmaForestManager::BorderIds(int level) const {
+    static const std::vector<int> empty;
+    if (level < 0 || level >= static_cast<int>(m_borders.size())) return empty;
+    return m_borders[level];
+}
+
+bool LemmaForestManager::BorderEmpty(int level) const {
+    return BorderIds(level).empty();
+}
+
+size_t LemmaForestManager::BorderSize(int level) const {
+    return BorderIds(level).size();
+}
+
+void LemmaForestManager::CleanDeadBorders(int level) {
+    if (level < 0 || level >= static_cast<int>(m_borders.size())) return;
+    auto &border = m_borders[level];
+    size_t w = 0;
+    for (int lemmaId : border) {
+        if (Alive(lemmaId)) {
+            border[w++] = lemmaId;
+        }
+    }
+    border.resize(w);
+}
+
+void LemmaForestManager::SortBorderByCubeSize(int level) {
+    if (level < 0 || level >= static_cast<int>(m_borders.size())) return;
+    auto &border = m_borders[level];
+    std::sort(border.begin(), border.end(), [&](int a, int b) {
+        size_t sa = m_lemmas[a].size();
+        size_t sb = m_lemmas[b].size();
+        if (sa != sb) return sa < sb;
+        return a < b;
+    });
+}
+
+const cube &LemmaForestManager::CubeOf(int id) const {
+    assert(id >= 0 && id < static_cast<int>(m_lemmas.size()));
+    return m_lemmas[id];
+}
+
+bool LemmaForestManager::Alive(int id) const {
+    return id >= 0 && id < static_cast<int>(m_alive.size()) && m_alive[id];
+}
+
+void LemmaForestManager::BorderCubesRange::Iterator::SkipDead() {
+    if (!lfm) return;
+    if (level < 0 || level >= static_cast<int>(lfm->m_borders.size())) return;
+    const auto &border = lfm->m_borders[level];
+    while (idx < border.size()) {
+        int lemmaId = border[idx];
+        if (lfm->Alive(lemmaId)) {
+            return;
+        }
+        idx++;
+    }
+}
+
+const cube &LemmaForestManager::BorderCubesRange::Iterator::operator*() const {
+    const auto &border = lfm->m_borders[level];
+    int lemmaId = border[idx];
+    return lfm->CubeOf(lemmaId);
+}
+
+LemmaForestManager::BorderCubesRange::Iterator &LemmaForestManager::BorderCubesRange::Iterator::operator++() {
+    idx++;
+    SkipDead();
+    return *this;
+}
+
+bool LemmaForestManager::BorderCubesRange::Iterator::operator!=(const Iterator &other) const {
+    return lfm != other.lfm || level != other.level || idx != other.idx;
+}
+
+LemmaForestManager::BorderCubesRange::Iterator LemmaForestManager::BorderCubesRange::begin() const {
+    Iterator it{lfm, level, 0};
+    it.SkipDead();
+    return it;
+}
+
+LemmaForestManager::BorderCubesRange::Iterator LemmaForestManager::BorderCubesRange::end() const {
+    if (!lfm || level < 0 || level >= static_cast<int>(lfm->m_borders.size())) {
+        return Iterator{lfm, level, 0};
+    }
+    return Iterator{lfm, level, lfm->m_borders[level].size()};
+}
+
+LemmaForestManager::BorderCubesRange LemmaForestManager::BorderCubes(int level) const {
+    return BorderCubesRange(this, level);
+}
+
+std::pair<int, int> LemmaForestManager::FindParentLemma(int startLevel, const cube &cb) {
+    m_tmpLitSet.newSet(cb);
+    for (int lvl = startLevel; lvl >= 1; --lvl) {
+        const auto &borders = m_borders[lvl];
+        for (int j = 0; j < static_cast<int>(borders.size()); ++j) {
+            int lemmaId = borders[j];
+            if (!Alive(lemmaId)) continue;
+            if (SubsumeSet(m_lemmas[lemmaId], m_tmpLitSet)) {
+                return {lemmaId, j};
+            }
+        }
+    }
+    return {-1, -1};
+}
+
+int LemmaForestManager::CreateLemma(const cube &cb, int parentId, int frameLevel) {
+    int id = static_cast<int>(m_lemmas.size());
+    m_lemmas.push_back(cb);
+    ForestNode node;
+    node.parentId = parentId;
+    node.frameLvl = frameLevel;
+    node.depth = (parentId == -1) ? 0 : (m_forest[parentId].depth + 1);
+    m_forest.push_back(std::move(node));
+    m_alive.push_back(1);
+    if (parentId != -1) {
+        m_forest[parentId].childrenIds.push_back(id);
+    }
+    return id;
+}
+
+void LemmaForestManager::UnregisterLemma(int lemmaId) {
+    if (!Alive(lemmaId)) return;
+    m_alive[lemmaId] = 0;
+}
+
+void LemmaForestManager::RemoveFromBorder(int level, int lemmaId) {
+    if (level < 0 || level >= static_cast<int>(m_borders.size())) return;
+    auto &border = m_borders[level];
+    for (int i = 0; i < static_cast<int>(border.size()); ++i) {
+        if (border[i] == lemmaId) {
+            border[i] = border.back();
+            border.pop_back();
+            return;
+        }
+    }
+}
+
+int LemmaForestManager::SwapCreateLemma(const cube &cb, int existingLemmaId, int frameLevel) {
+    assert(Alive(existingLemmaId));
+    int parentId = m_forest[existingLemmaId].parentId;
+    int depth = m_forest[existingLemmaId].depth;
+
+    int newId = static_cast<int>(m_lemmas.size());
+    m_lemmas.push_back(cb);
+    ForestNode node;
+    node.parentId = parentId;
+    node.frameLvl = frameLevel;
+    node.depth = depth;
+    m_forest.push_back(std::move(node));
+    m_alive.push_back(1);
+
+    if (parentId != -1) {
+        auto &siblings = m_forest[parentId].childrenIds;
+        for (int &sid : siblings) {
+            if (sid == existingLemmaId) {
+                sid = newId;
+                break;
+            }
+        }
+    }
+
+    auto children = std::move(m_forest[existingLemmaId].childrenIds);
+    for (int childId : children) {
+        m_forest[childId].parentId = newId;
+        m_forest[newId].childrenIds.push_back(childId);
+    }
+    UnregisterLemma(existingLemmaId);
+    return newId;
+}
+
+void LemmaForestManager::AddLemmaToBorder(int frameLevel, int lemmaId) {
+    m_borders[frameLevel].push_back(lemmaId);
+}
+
+void LemmaForestManager::AdoptRelations(int newLemmaId, int oldLemmaId) {
+    assert(Alive(newLemmaId));
+    assert(Alive(oldLemmaId));
+    ForestNode &newMeta = m_forest[newLemmaId];
+    ForestNode &oldMeta = m_forest[oldLemmaId];
+
+    if (oldMeta.parentId != -1) {
+        auto &siblings = m_forest[oldMeta.parentId].childrenIds;
+        for (int i = 0; i < static_cast<int>(siblings.size()); ++i) {
+            if (siblings[i] == oldLemmaId) {
+                siblings[i] = siblings.back();
+                siblings.pop_back();
+                break;
+            }
+        }
+    }
+
+    for (int childId : oldMeta.childrenIds) {
+        m_forest[childId].parentId = newLemmaId;
+        newMeta.childrenIds.push_back(childId);
+    }
+    oldMeta.childrenIds.clear();
+    UnregisterLemma(oldLemmaId);
+}
+
+uint64_t LemmaForestManager::RemoveRedundantLemmas(int startLevel, int endLevel, int newLemmaId) {
+    if (startLevel < 1) startLevel = 1;
+    if (endLevel >= static_cast<int>(m_borders.size())) endLevel = static_cast<int>(m_borders.size()) - 1;
+    if (startLevel > endLevel) return 0;
+
+    const cube &newCube = m_lemmas[newLemmaId];
+    uint64_t removed = 0;
+
+    for (int lvl = startLevel; lvl <= endLevel; ++lvl) {
+        auto &border = m_borders[lvl];
+        int i = 0;
+        while (i < static_cast<int>(border.size())) {
+            int existingId = border[i];
+            if (!Alive(existingId)) {
+                border[i] = border.back();
+                border.pop_back();
+                continue;
+            }
+            if (existingId == newLemmaId) {
+                i++;
+                continue;
+            }
+            m_tmpLitSet.newSet(m_lemmas[existingId]);
+            if (SubsumeSet(newCube, m_tmpLitSet)) {
+                AdoptRelations(newLemmaId, existingId);
+                border[i] = border.back();
+                border.pop_back();
+                removed++;
+                continue;
+            }
+            i++;
+        }
+    }
+    return removed;
+}
+
+void LemmaForestManager::UpdateRefineCountersOnInsert(int newLemmaId) {
+    int parentId = m_forest[newLemmaId].parentId;
+    while (parentId != -1) {
+        m_forest[parentId].refineCount++;
+        m_forest[parentId].refineCountSinceALL++;
+        parentId = m_forest[parentId].parentId;
+    }
+}
+
+std::pair<int, int> LemmaForestManager::AddLemma(const cube &cb, int frameLevel) {
+    assert(frameLevel >= 1);
+    EnsureLevel(frameLevel);
+
+    auto parent = FindParentLemma(frameLevel - 1, cb);
+    int parentId = parent.first;
+    int parentIndex = parent.second;
+    int parentLevel = (parentId == -1) ? 0 : m_forest[parentId].frameLvl;
+
+    int newLemmaId;
+    if (parentId != -1 && cb.size() == m_lemmas[parentId].size()) {
+        auto &parentBorder = m_borders[parentLevel];
+        assert(parentIndex >= 0 && parentIndex < static_cast<int>(parentBorder.size()));
+        assert(parentBorder[parentIndex] == parentId);
+        parentBorder[parentIndex] = parentBorder.back();
+        parentBorder.pop_back();
+        newLemmaId = SwapCreateLemma(cb, parentId, frameLevel);
+    } else {
+        newLemmaId = CreateLemma(cb, parentId, frameLevel);
+    }
+
+    int beginLevel = parentLevel + 1;
+    RemoveRedundantLemmas(beginLevel, frameLevel, newLemmaId);
+    AddLemmaToBorder(frameLevel, newLemmaId);
+    UpdateRefineCountersOnInsert(newLemmaId);
+    return {beginLevel, frameLevel};
+}
+
+int LemmaForestManager::PropagateLemma(int lemmaId, int newFrameLevel) {
+    assert(Alive(lemmaId));
+    EnsureLevel(newFrameLevel);
+    ForestNode &meta = m_forest[lemmaId];
+    RemoveFromBorder(meta.frameLvl, lemmaId);
+    meta.frameLvl = newFrameLevel;
+    meta.ctpPreds.clear();
+    meta.ctpSucc.clear();
+    meta.hasCTPSucc = false;
+
+    RemoveRedundantLemmas(newFrameLevel, newFrameLevel, lemmaId);
+    AddLemmaToBorder(newFrameLevel, lemmaId);
+    return newFrameLevel;
+}
+
+void LemmaForestManager::GetBlockers(const cube &blockingCube, int level, std::vector<cube> &blockers) const {
+    if (level < 0 || level >= static_cast<int>(m_borders.size())) return;
+    m_tmpLitSet.newSet(blockingCube);
+    for (int lemmaId : m_borders[level]) {
+        if (!Alive(lemmaId)) continue;
+        if (SubsumeSet(m_lemmas[lemmaId], m_tmpLitSet)) {
+            blockers.push_back(m_lemmas[lemmaId]);
+        }
+    }
+}
+
+bool LemmaForestManager::IsBlockedAtLevel(const cube &cb, int level) const {
+    if (level < 0 || level >= static_cast<int>(m_borders.size())) return false;
+    m_tmpLitSet.newSet(cb);
+    for (int lemmaId : m_borders[level]) {
+        if (!Alive(lemmaId)) continue;
+        if (SubsumeSet(m_lemmas[lemmaId], m_tmpLitSet)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<int> LemmaForestManager::GetAncestorChain(int lemmaId) const {
+    std::vector<int> chain;
+    if (!Alive(lemmaId)) return chain;
+    int parentId = m_forest[lemmaId].parentId;
+    while (parentId != -1) {
+        if (!Alive(parentId)) break;
+        chain.push_back(parentId);
+        parentId = m_forest[parentId].parentId;
+    }
+    return chain;
+}
+
+
 int State::numInputs = -1;
 int State::numLatches = -1;
 

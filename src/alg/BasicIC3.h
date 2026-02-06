@@ -29,25 +29,6 @@ struct Obligation {
     }
 };
 
-struct IC3Frame {
-    int k;
-    shared_ptr<SATSolver> solver;
-    struct CubeComp {
-        bool operator()(const cube &a, const cube &b) const {
-            if (a.size() != b.size()) return a.size() < b.size();
-            for (size_t i = 0; i < a.size(); ++i) {
-                int v1 = a[i], v2 = b[i];
-                if (abs(v1) != abs(v2))
-                    return abs(v1) < abs(v2);
-                else if (v1 != v2)
-                    return v1 > v2;
-            }
-            return false;
-        }
-    };
-    set<cube, CubeComp> borderCubes;
-};
-
 class BasicIC3 : public IncrAlg {
   public:
     BasicIC3(Settings settings,
@@ -84,7 +65,9 @@ class BasicIC3 : public IncrAlg {
 
     void AddNewFrame();
 
-    void AddBlockingCube(const cube &blockingCube, int frameLevel, bool toAll);
+    void AddLemma(const cube &blockingCube, int frameLevel);
+
+    void AddLemmaToSolvers(const cube &blockingCube, int beginLevel, int endLevel);
 
     bool Strengthen();
 
@@ -94,7 +77,7 @@ class BasicIC3 : public IncrAlg {
 
     void PushObligation(set<Obligation> &obligations, Obligation ob, int newLevel);
 
-    int LazyCheck(const cube &cb, int startLvl, int endLvl);
+    int LazyCheck(const cube &cb, int startLvl);
 
     size_t Generalize(cube &cb, int frameLvl);
 
@@ -165,8 +148,6 @@ class BasicIC3 : public IncrAlg {
     cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube);
     bool InitiationCheck(const cube &cb);
 
-    void GetBlockers(const cube &c, int framelevel, vector<cube> &blockers);
-
     CheckResult m_checkResult;
 
     int m_k;
@@ -174,12 +155,12 @@ class BasicIC3 : public IncrAlg {
     Settings m_settings;
     Log &m_log;
     Model &m_model;
-    vector<IC3Frame> m_frames;
+    vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_liftSolver;
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badLiftSolver;
     unordered_set<int> m_initialStateSet;
-    LitSet m_tmpLitSet;
+    LemmaForestManager m_lfm;
     shared_ptr<State> m_initialState;
     shared_ptr<State> m_cexStart;
     int m_minUpdateLevel;

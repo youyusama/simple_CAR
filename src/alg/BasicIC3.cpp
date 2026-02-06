@@ -60,9 +60,9 @@ std::vector<std::pair<cube, cube>> BasicIC3::GetCexTrace() {
 FrameList BasicIC3::GetInv() {
     FrameList inv;
     if (m_invariantLevel <= 0) return inv;
-    for (int i = 0; i < m_invariantLevel && i < static_cast<int>(m_frames.size()); ++i) {
+    for (int i = 0; i < m_invariantLevel && i < static_cast<int>(m_transSolvers.size()); ++i) {
         frame f;
-        for (const auto &cb : m_frames[i].borderCubes) {
+        for (const cube &cb : m_lfm.BorderCubes(i)) {
             f.emplace_back(cb);
         }
         inv.emplace_back(std::move(f));
@@ -128,11 +128,11 @@ bool BasicIC3::IsInitStateImplyBad() {
 
 void BasicIC3::Extend() {
     // reserve k+1 frames
-    while (m_frames.size() <= m_k + 1) AddNewFrame();
+    while (m_transSolvers.size() <= m_k + 1) AddNewFrame();
 
     InitializeStartSolver();
-    for (const auto &lemma : m_frames[m_k].borderCubes) {
-        m_startSolver->AddUC(lemma);
+    for (const cube &cb : m_lfm.BorderCubes(m_k)) {
+        m_startSolver->AddUC(cb);
     }
 }
 
@@ -177,6 +177,8 @@ void BasicIC3::Init() {
 
     // start solver search state in frame k
     m_k = m_searchFromInitSucc ? 2 : 1;
+    m_lfm.Reset();
+    m_transSolvers.clear();
 
     if (m_searchFromInitSucc) {
         m_initStateImplyBad = IsInitStateImplyBad();
@@ -224,11 +226,11 @@ void BasicIC3::Init() {
     }
 
     // initialize frame 0
-    IC3Frame &frame0 = m_frames[0];
+    auto &init_slv = m_transSolvers[0];
     // F_0 is defined as exactly the initial states.
     for (const auto &lit : m_initialStateSet) {
         auto lemma = clause{-lit};
-        frame0.solver->AddUC(lemma);
+        init_slv->AddUC(lemma);
     }
 
     m_initialized = true;
@@ -271,34 +273,43 @@ void BasicIC3::Reset() {
 
 
 void BasicIC3::AddNewFrame() {
-    LOG_L(m_log, 2, "Adding new frame F_", m_frames.size());
-    IC3Frame newFrame;
-    newFrame.k = m_frames.size();
-    newFrame.solver = make_shared<SATSolver>(m_model, m_settings.solver);
-    if (m_settings.satSolveInDomain) newFrame.solver->SetSolveInDomain();
-    newFrame.solver->AddTrans();
-    newFrame.solver->AddConstraints();
-    m_frames.push_back(newFrame);
+    int level = static_cast<int>(m_transSolvers.size());
+    LOG_L(m_log, 2, "Adding new frame F_", level);
+
+    m_lfm.EnsureLevel(level);
+
+    auto solver = make_shared<SATSolver>(m_model, m_settings.solver);
+    if (m_settings.satSolveInDomain) solver->SetSolveInDomain();
+    solver->AddTrans();
+    solver->AddConstraints();
+    m_transSolvers.push_back(solver);
 }
 
-void BasicIC3::AddBlockingCube(const cube &blockingCube, int frameLevel, bool toAll) {
-    assert(frameLevel >= 1);
-    auto insertionResult = m_frames[frameLevel].borderCubes.insert(blockingCube);
-    if (!insertionResult.second) {
-        return;
+
+void BasicIC3::AddLemmaToSolvers(const cube &blockingCube, int beginLevel, int endLevel) {
+    // add lemma to trans solvers
+    for (int i = beginLevel; i <= endLevel; ++i) {
+        m_transSolvers[i]->AddUC(blockingCube);
     }
 
-    if (frameLevel < m_minUpdateLevel) m_minUpdateLevel = frameLevel;
-
-    for (int i = toAll ? 1 : frameLevel; i <= frameLevel; ++i) {
-        if (m_frames[i].solver) {
-            m_frames[i].solver->AddUC(blockingCube);
-        }
-    }
-    if (frameLevel >= m_k) {
+    // add lemma to start solver
+    if (endLevel >= m_k) {
         m_startSolver->AddUC(blockingCube);
     }
 }
+
+
+void BasicIC3::AddLemma(const cube &blockingCube, int frameLevel) {
+    // add lemma to lemma forest
+    auto plan = m_lfm.AddLemma(blockingCube, frameLevel);
+
+    // add lemma to solvers
+    AddLemmaToSolvers(blockingCube, plan.first, plan.second);
+
+    // update minUpdateLevel
+    if (plan.first < m_minUpdateLevel) m_minUpdateLevel = plan.first;
+}
+
 
 cube BasicIC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube, bool prime) {
     unordered_set<int> conflictSet = solver->GetConflict();
@@ -474,13 +485,13 @@ bool BasicIC3::Strengthen() {
     }
 }
 
-int BasicIC3::LazyCheck(const cube &cb, int startLvl, int endLvl) {
-    m_tmpLitSet.newSet(cb);
-    for (int i = startLvl + 1; i <= endLvl; ++i) {
-        for (const auto &lemma : m_frames[i].borderCubes) {
-            if (SubsumeSet(lemma, m_tmpLitSet)) {
-                return i;
-            }
+int BasicIC3::LazyCheck(const cube &cb, int startLvl) {
+    if (startLvl < 0) startLvl = 0;
+    if (startLvl > m_k + 1) return -1;
+
+    for (int lvl = startLvl; lvl <= m_k + 1; ++lvl) {
+        if (m_lfm.IsBlockedAtLevel(cb, lvl)) {
+            return lvl;
         }
     }
     return -1;
@@ -513,17 +524,17 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
             continue;
         }
 
-        int subsumeLvl = LazyCheck(ob.state->latches, ob.level, m_k + 1);
+        int subsumeLvl = LazyCheck(ob.state->latches, ob.level + 1);
         if (subsumeLvl != -1) {
-            LOG_L(m_log, 2, "Obligation at level ", ob.level, " depth ", ob.depth, " is subsumed at level ", subsumeLvl, ". Skipped.");
-            PushObligation(obligations, ob, subsumeLvl);
+            LOG_L(m_log, 2, "Obligation at level ", ob.level + 1, " depth ", ob.depth, " is subsumed at level ", subsumeLvl, ". Skipped.");
+            PushObligation(obligations, ob, subsumeLvl + 1);
             continue;
         }
 
         // Query: F_{ob.level} & T & cti'
         LOG_L(m_log, 2, "Handling obligation at level ", ob.level);
 
-        auto &trans_slv = m_frames[ob.level].solver;
+        auto &trans_slv = m_transSolvers[ob.level];
         auto &ctiCube = ob.state->latches;
 
         if (UnreachabilityCheck(ctiCube, trans_slv)) {
@@ -576,7 +587,7 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
     LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
-    auto &trans_slv = m_frames[frameLvl].solver;
+    auto &trans_slv = m_transSolvers[frameLvl];
 
     while (true) {
         LOG_L(m_log, 3, "Down attempt: ", CubeToStr(downCube));
@@ -604,22 +615,20 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
             return false;
         }
 
-        auto &trans_slv_m1 = m_frames[frameLvl - 1].solver;
-
         if (ctgs < m_settings.ctgMaxStates &&
             frameLvl > 0 &&
-            InductionCheck(ctgCube, trans_slv_m1)) {
+            InductionCheck(ctgCube, m_transSolvers[frameLvl - 1])) {
 
             ctgs++;
             LOG_L(m_log, 3, "CTG is inductive at level ", frameLvl - 1);
-            cube ctgCore = GetAndValidateCore(trans_slv_m1, ctgCube);
+            cube ctgCore = GetAndValidateCore(m_transSolvers[frameLvl - 1], ctgCube);
 
             int pushLevel = PropagateUp(ctgCore, frameLvl);
             if (MIC(ctgCore, pushLevel - 1, recLvl + 1)) {
                 m_branching->Update(ctgCore);
             }
             LOG_L(m_log, 2, "Learned ctg clause and pushed to frame ", pushLevel);
-            AddBlockingCube(ctgCore, pushLevel, true);
+            AddLemma(ctgCore, pushLevel);
         } else {
             ctgs = 0;
             cube joinCube;
@@ -636,16 +645,6 @@ bool BasicIC3::Down(cube &downCube, int frameLvl, int recLvl, const set<int> &tr
     }
 }
 
-void BasicIC3::GetBlockers(const cube &blockingCube, int framelevel, vector<cube> &blockers) {
-    int size = -1;
-    for (const auto &cb : m_frames[framelevel].borderCubes) {
-        if (size != -1 && size < cb.size()) break;
-        if (includes(blockingCube.begin(), blockingCube.end(), cb.begin(), cb.end(), cmp)) {
-            size = cb.size();
-            blockers.push_back(cb);
-        }
-    }
-}
 
 size_t BasicIC3::Generalize(cube &cb, int frameLvl) {
     LOG_L(m_log, 3, "Generalizing cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
@@ -654,9 +653,10 @@ size_t BasicIC3::Generalize(cube &cb, int frameLvl) {
     }
     int pushLevel = PropagateUp(cb, frameLvl + 1);
     LOG_L(m_log, 2, "Learned clause and pushed to frame ", pushLevel);
-    AddBlockingCube(cb, pushLevel, true);
+    AddLemma(cb, pushLevel);
     return pushLevel;
 }
+
 
 bool BasicIC3::MIC(cube &cb, int frameLvl, int recLvl) {
     LOG_L(m_log, 3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
@@ -666,7 +666,7 @@ bool BasicIC3::MIC(cube &cb, int frameLvl, int recLvl) {
     set<int> triedLits;
 
     if (m_settings.referSkipping && frameLvl > 0) {
-        GetBlockers(cb, frameLvl, blockers);
+        m_lfm.GetBlockers(cb, frameLvl, blockers);
         if (!blockers.empty()) {
             if (m_settings.branching > 0) {
                 sort(blockers.begin(), blockers.end(), blockerOrder);
@@ -784,14 +784,16 @@ cube BasicIC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const cub
     return core;
 }
 
+
 string BasicIC3::FramesInfo() const {
     stringstream ss;
-    ss << "Frames " << m_frames.size() << endl;
-    for (size_t i = 0; i < m_frames.size(); ++i) {
-        ss << m_frames[i].borderCubes.size() << " ";
+    ss << "Frames " << m_transSolvers.size() << endl;
+    for (size_t i = 0; i < m_transSolvers.size(); ++i) {
+        ss << m_lfm.BorderSize(static_cast<int>(i)) << " ";
     }
     return ss.str();
 }
+
 
 bool BasicIC3::UnreachabilityCheck(const cube &cb, const shared_ptr<SATSolver> &slv) {
     cube assumption(cb);
@@ -806,7 +808,7 @@ bool BasicIC3::UnreachabilityCheck(const cube &cb, const shared_ptr<SATSolver> &
 int BasicIC3::PropagateUp(const cube &cb, int startLevel) {
     int pushLevel = startLevel;
     while (pushLevel <= m_k) {
-        if (!UnreachabilityCheck(cb, m_frames[pushLevel].solver)) {
+        if (!UnreachabilityCheck(cb, m_transSolvers[pushLevel])) {
             break;
         }
         m_branching->Update(cb);
@@ -815,55 +817,39 @@ int BasicIC3::PropagateUp(const cube &cb, int startLevel) {
     return pushLevel;
 }
 
+
 bool BasicIC3::PropagateFrame() {
     LOG_L(m_log, 2, "Propagating clauses.");
 
-    LOG_L(m_log, 2, "Cleaning up redundant clauses.");
-    set<cube, IC3Frame::CubeComp> allCubes;
-    for (int i = m_k + 1; i > m_minUpdateLevel; --i) {
-        IC3Frame &frame = m_frames[i];
-        if (frame.borderCubes.empty()) continue;
-        size_t originalSize = frame.borderCubes.size();
-
-        set<cube, IC3Frame::CubeComp> remainingCubes;
-        set_difference(frame.borderCubes.begin(), frame.borderCubes.end(),
-                       allCubes.begin(), allCubes.end(),
-                       inserter(remainingCubes, remainingCubes.end()),
-                       IC3Frame::CubeComp());
-
-        if (originalSize != remainingCubes.size()) {
-            LOG_L(m_log, 3, "Frame ", i, " cleanup: ", originalSize, " -> ", remainingCubes.size());
-        }
-
-        frame.borderCubes.swap(remainingCubes);
-        allCubes.insert(frame.borderCubes.begin(), frame.borderCubes.end());
-    }
-
-    LOG_L(m_log, 2, "Propagating clauses forward.");
     for (int i = m_minUpdateLevel; i <= m_k; ++i) {
-        IC3Frame &framei = m_frames[i];
-        int cubesKept = 0;
-        int cubesPropagated = 0;
+        int lemmasKept = 0;
+        int lemmasPropagated = 0;
 
-        for (auto it = framei.borderCubes.begin(); it != framei.borderCubes.end();) {
-            const auto &cb = *it;
-            if (UnreachabilityCheck(cb, framei.solver)) {
-                cubesPropagated++;
-                auto core = GetAndValidateCore(framei.solver, cb);
-                AddBlockingCube(core, i + 1, core.size() < cb.size());
+        m_lfm.CleanDeadBorders(i);
+        m_lfm.SortBorderByCubeSize(i);
+
+        std::vector<int> lemmasToIterate = m_lfm.BorderIds(i);
+        for (int lemmaId : lemmasToIterate) {
+            if (!m_lfm.Alive(lemmaId)) continue;
+            const cube &cb = m_lfm.CubeOf(lemmaId);
+            if (UnreachabilityCheck(cb, m_transSolvers[i])) {
+                lemmasPropagated++;
+                auto core = GetAndValidateCore(m_transSolvers[i], cb);
+                if (core.size() < cb.size()) {
+                    AddLemma(core, i + 1);
+                } else {
+                    int propagatedLevel = m_lfm.PropagateLemma(lemmaId, i + 1);
+                    AddLemmaToSolvers(cb, propagatedLevel, propagatedLevel);
+                }
                 m_branching->Update(core);
-                // Safely erase and advance the iterator
-                it = framei.borderCubes.erase(it);
-            } else {
-                cubesKept++;
-                ++it;
+                continue;
             }
+            lemmasKept++;
         }
 
-        LOG_L(m_log, 2, "Frame ", i, " propagation: ", cubesPropagated, " propagated, ", cubesKept, " kept.");
+        LOG_L(m_log, 2, "Frame ", i, " propagation: ", lemmasPropagated, " propagated, ", lemmasKept, " kept.");
 
-
-        if (framei.borderCubes.empty()) {
+        if (m_lfm.BorderEmpty(i)) {
             LOG_L(m_log, 2, "SAFE: Frame F_", i, " is empty.");
             m_invariantLevel = i + 1;
             LOG_L(m_log, 2, "m_invariantLevel: ", m_invariantLevel);
@@ -872,7 +858,6 @@ bool BasicIC3::PropagateFrame() {
         }
     }
 
-    // No proof was found in this iteration.
     return false;
 }
 
@@ -994,7 +979,7 @@ void BasicIC3::OutputWitness() {
     }
 
     // prove on lvl 0
-    if (m_invariantLevel == 0 || (m_frames[m_invariantLevel].borderCubes.empty())) {
+    if (m_invariantLevel == 0 || m_lfm.BorderEmpty(m_invariantLevel)) {
         unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
@@ -1026,14 +1011,13 @@ void BasicIC3::OutputWitness() {
     //             F_{i+1} = c_1 & c_2 & ... & c_j
     //                       c_j = !( l_1 & l_2 & .. & l_k )
 
-    set<cube, IC3Frame::CubeComp> indInv;
+    std::set<cube, bool (*)(const cube &, const cube &)> indInv(cubeComp);
 
     for (int i = m_invariantLevel; i <= m_k + 1; i++) {
-        indInv.insert(m_frames[i].borderCubes.begin(), m_frames[i].borderCubes.end());
+        for (const cube &cb : m_lfm.BorderCubes(i)) {
+            indInv.insert(cb);
+        }
     }
-    // if (indInv.empty()) {
-    //     indInv.insert(infFrame.borderCubes.begin(), infFrame.borderCubes.end());
-    // }
     assert(!indInv.empty());
 
     vector<unsigned> invLits;
