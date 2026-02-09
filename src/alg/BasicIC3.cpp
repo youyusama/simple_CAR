@@ -978,8 +978,16 @@ void BasicIC3::OutputWitness() {
         eq_cons = addCubeToANDGates(witness_aig, eq_lits);
     }
 
+    bool empty_inv = true;
+    for (int i = m_invariantLevel; i <= m_k + 1; i++) {
+        if (!m_lfm.BorderEmpty(i)) {
+            empty_inv = false;
+            break;
+        }
+    }
+
     // prove on lvl 0
-    if (m_invariantLevel == 0 || m_lfm.BorderEmpty(m_invariantLevel)) {
+    if (m_invariantLevel == 0 || empty_inv) {
         unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
