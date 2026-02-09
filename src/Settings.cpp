@@ -98,6 +98,18 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("--ctg_max_blocks", settings.ctgMaxBlocks, "CTG max blocks")
         ->default_val(1);
 
+    app.add_flag("--all,--active_lemma_learning", settings.activeLemmaLearning,
+                 "enable Active Lemma Learning (ALL)")
+        ->default_val(false);
+
+    app.add_option("--all_threshold", settings.allThreshold, "ALL hotspot threshold")
+        ->default_val(8)
+        ->check(CLI::Range(1, INT32_MAX));
+
+    app.add_option("--all_max_states", settings.allMaxStates, "ALL prover budget (max CTP states)")
+        ->default_val(32)
+        ->check(CLI::Range(1, INT32_MAX));
+
     app.add_option("--max_ob_act", settings.maxObligationAct, "max obligation activity")
         ->default_val(20.0);
 

@@ -47,6 +47,9 @@ struct Settings {
     int ctgMaxRecursionDepth = 1;
     int ctgMaxStates = 3;
     int ctgMaxBlocks = 1;
+    bool activeLemmaLearning = false;
+    int allThreshold = 8;
+    int allMaxStates = 32;
     bool satSolveInDomain = false;
     double maxObligationAct = 20.0;
     int bmc_step = 1;

@@ -114,6 +114,13 @@ inline bool SubsumeSet(const cube &a, const LitSet &b) {
 }
 
 struct ForestNode {
+    ForestNode() = default;
+
+    ForestNode(int inParentId, int inFrameLvl, int inDepth)
+        : parentId(inParentId),
+          frameLvl(inFrameLvl),
+          depth(inDepth) {}
+
     int parentId{-1};
     std::vector<int> childrenIds;
     int frameLvl{0};
@@ -128,6 +135,12 @@ struct ForestNode {
     bool hasCTPSucc{false};
 };
 
+struct AddLemmaResult {
+    int lemmaId{-1};
+    int beginLevel{0};
+    int endLevel{0};
+};
+
 class LemmaForestManager {
   public:
     LemmaForestManager() = default;
@@ -135,12 +148,22 @@ class LemmaForestManager {
     void Reset();
     void EnsureLevel(int level);
 
-    std::pair<int, int> AddLemma(const cube &cb, int frameLevel);
+    AddLemmaResult AddLemma(const cube &cb, int frameLevel);
     int PropagateLemma(int lemmaId, int newFrameLevel);
 
     void GetBlockers(const cube &blockingCube, int level, std::vector<cube> &blockers) const;
     bool IsBlockedAtLevel(const cube &cb, int level) const;
     std::vector<int> GetAncestorChain(int lemmaId) const;
+    int FrameLevelOf(int lemmaId) const;
+    int ParentOf(int lemmaId) const;
+    int RefineCountSinceALL(int lemmaId) const;
+    void ResetRefineCountSinceALL(int lemmaId);
+    bool Reachable(int lemmaId) const;
+    void SetReachable(int lemmaId, bool value = true);
+    bool PopCTPPred(int lemmaId, cube &ctpCube, int &ctpLevel);
+    void PushCTPPred(int lemmaId, const cube &ctpCube, int ctpLevel);
+    bool HasCTPPreds(int lemmaId) const;
+    void ClearCTPState(int lemmaId);
 
     const std::vector<int> &BorderIds(int level) const;
     bool BorderEmpty(int level) const;

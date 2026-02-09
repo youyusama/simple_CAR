@@ -65,9 +65,28 @@ class BasicIC3 : public IncrAlg {
 
     void AddNewFrame();
 
-    void AddLemma(const cube &blockingCube, int frameLevel);
+    int AddLemma(const cube &blockingCube, int frameLevel, bool fromCTI = false);
 
     void AddLemmaToSolvers(const cube &blockingCube, int beginLevel, int endLevel);
+
+    void RunALLFromInsertion(int newLemmaId);
+
+    std::vector<int> FindALLHotSpots(const std::vector<int> &ancestorChain);
+
+    void MarkReachableChain(int lemmaId);
+
+    bool AncestralPush(int hotspotLemmaId);
+
+    void PrintALLStats() const;
+
+    enum class ALLProveStatus {
+        Proved,
+        Reachable,
+        Bailout,
+        Invalidated,
+    };
+
+    ALLProveStatus RunALLProver(int targetLemmaId);
 
     bool Strengthen();
 
@@ -166,6 +185,13 @@ class BasicIC3 : public IncrAlg {
     int m_minUpdateLevel;
     int m_invariantLevel;
     shared_ptr<Branching> m_branching;
+
+    // all stats
+    uint64_t m_allPushAttempted{0};
+    uint64_t m_allStatusProved{0};
+    uint64_t m_allStatusReachable{0};
+    uint64_t m_allStatusBailout{0};
+    uint64_t m_allStatusInvalidated{0};
 
     // liveness
     bool m_initialized{false};
