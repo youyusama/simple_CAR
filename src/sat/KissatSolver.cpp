@@ -25,7 +25,7 @@ bool KissatSolver::Solve() {
     }
 }
 
-void KissatSolver::AddClause(const cube &cls) {
+void KissatSolver::AddClause(const Cube &cls) {
     for (int l : cls) {
         kissat_add(m_solver, l);
     }
@@ -33,7 +33,7 @@ void KissatSolver::AddClause(const cube &cls) {
         m_maxId += m_maxId;
         kissat_reserve(m_solver, m_maxId);
     }
-    kissat_add(m_solver, 0); // end of a clause
+    kissat_add(m_solver, 0); // end of a Clause
 }
 
 

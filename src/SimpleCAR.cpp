@@ -34,7 +34,7 @@ static std::unique_ptr<BaseAlg> CreateChecker(
     case MCAlgorithm::KFAIR:
         return std::make_unique<KFAIR>(settings, aigerModel, log);
     case MCAlgorithm::RLIVE:
-        return std::make_unique<rlive>(settings, aigerModel, log);
+        return std::make_unique<RLive>(settings, aigerModel, log);
     default:
         return nullptr;
     }
@@ -43,12 +43,12 @@ static std::unique_ptr<BaseAlg> CreateChecker(
 SimpleCAR::SimpleCAR(const Settings &settings) : m_settings(settings) {}
 
 SimpleCAR::~SimpleCAR() {
-    GLOBAL_LOG = nullptr;
+    global_log = nullptr;
 }
 
 bool SimpleCAR::LoadModel() {
     m_log = std::make_unique<Log>(m_settings.verbosity, m_settings.detailedTimers);
-    [[maybe_unused]] auto initScope = m_log->Section("Model_Init");
+    [[maybe_unused]] auto init_scope = m_log->Section("Model_Init");
     m_model = std::make_unique<Model>(m_settings, *m_log);
     m_checker = CreateChecker(m_settings, *m_model, *m_log);
     return static_cast<bool>(m_checker);

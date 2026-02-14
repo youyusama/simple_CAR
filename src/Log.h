@@ -16,11 +16,11 @@ namespace car {
 
 string CubeToStr(const vector<int> &c);
 
-void compress_vector(vector<int> &res, const vector<int> &v);
+void CompressVector(vector<int> &res, const vector<int> &v);
 
 string CubeToStrShort(const vector<int> &c);
 
-void signalHandler(int signum);
+void SignalHandler(int signum);
 
 class Log {
   public:
@@ -55,7 +55,7 @@ class Log {
     template <typename... Args>
     void L(const Args &...args) {
         ostringstream oss;
-        logHelper(oss, args...);
+        LogHelper(oss, args...);
         cout << oss.str() << endl;
     }
 
@@ -95,13 +95,13 @@ class Log {
     friend class ScopedTimer;
 
     template <typename T, typename... Args>
-    void logHelper(std::ostringstream &oss, const T &first, const Args &...args) {
+    void LogHelper(std::ostringstream &oss, const T &first, const Args &...args) {
         oss << first;
-        logHelper(oss, args...);
+        LogHelper(oss, args...);
     }
 
     template <typename T>
-    void logHelper(std::ostringstream &oss, const T &last) {
+    void LogHelper(std::ostringstream &oss, const T &last) {
         oss << last;
     }
 
@@ -119,7 +119,7 @@ class Log {
     void EndSection();
 };
 
-extern Log *GLOBAL_LOG;
+extern Log *global_log;
 
 } // namespace car
 

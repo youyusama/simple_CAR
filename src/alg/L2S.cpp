@@ -40,7 +40,7 @@ void L2S::Witness() {
 }
 
 
-std::vector<std::pair<cube, cube>> L2S::GetCexTrace() {
+std::vector<std::pair<Cube, Cube>> L2S::GetCexTrace() {
 
     return {};
 }

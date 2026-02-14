@@ -4,47 +4,47 @@
 namespace car {
 
 Branching::Branching(int type) {
-    branching_type = type;
-    conflict_index = 1;
-    mini = 1 << 20;
-    counts.clear();
+    m_branchingType = type;
+    m_conflictIndex = 1;
+    m_mini = 1 << 20;
+    m_counts.clear();
 }
 
 
 Branching::~Branching() {}
 
 
-void Branching::Update(const cube &uc) {
+void Branching::Update(const Cube &uc) {
     if (uc.empty()) return;
-    conflict_index++;
-    switch (branching_type) {
+    m_conflictIndex++;
+    switch (m_branchingType) {
     case 1: {
         Decay();
         break;
     }
     case 2: {
-        if (conflict_index == 256) {
-            for (int i = mini; i < counts.size(); i++)
-                counts[i] *= 0.5;
-            conflict_index = 0;
+        if (m_conflictIndex == 256) {
+            for (int i = m_mini; i < m_counts.size(); i++)
+                m_counts[i] *= 0.5;
+            m_conflictIndex = 0;
         }
         break;
     }
     }
-    // assumes cube is ordered
+    // assumes Cube is ordered
     int sz = abs(uc.back());
-    if (sz >= counts.size()) counts.resize(sz + 1);
-    if (mini > abs(uc.at(0))) mini = abs(uc.at(0));
+    if (sz >= m_counts.size()) m_counts.resize(sz + 1);
+    if (m_mini > abs(uc.at(0))) m_mini = abs(uc.at(0));
     for (auto l : uc) {
-        switch (branching_type) {
+        switch (m_branchingType) {
         case 1:
         case 2: {
-            assert(abs(l) < counts.size());
-            counts[abs(l)]++;
+            assert(abs(l) < m_counts.size());
+            m_counts[abs(l)]++;
             break;
         }
         case 3:
-            counts[abs(l)] = (counts[abs(l)] + conflict_index) / 2.0;
+            m_counts[abs(l)] = (m_counts[abs(l)] + m_conflictIndex) / 2.0;
             break;
         }
     }
@@ -52,25 +52,25 @@ void Branching::Update(const cube &uc) {
 
 
 void Branching::Decay() {
-    for (int i = mini; i < counts.size(); i++)
-        counts[i] *= 0.99;
+    for (int i = m_mini; i < m_counts.size(); i++)
+        m_counts[i] *= 0.99;
 }
 
 
-void Branching::Decay(const cube &uc, int gap) {
+void Branching::Decay(const Cube &uc, int gap) {
     if (uc.empty()) return;
-    conflict_index++;
-    // assumes cube is ordered
+    m_conflictIndex++;
+    // assumes Cube is ordered
     int sz = abs(uc.back());
-    if (sz >= counts.size()) counts.resize(sz + 1);
-    if (mini > abs(uc.at(0))) mini = abs(uc.at(0));
+    if (sz >= m_counts.size()) m_counts.resize(sz + 1);
+    if (m_mini > abs(uc.at(0))) m_mini = abs(uc.at(0));
     for (auto l : uc) {
-        counts[abs(l)] *= 1 - 0.01 * (gap - 1);
+        m_counts[abs(l)] *= 1 - 0.01 * (gap - 1);
     }
 }
 
 
-static bool _cmp(int a, int b) {
+static bool CubeLitCmp(int a, int b) {
     if (abs(a) != abs(b))
         return abs(a) < abs(b);
     else
@@ -78,7 +78,7 @@ static bool _cmp(int a, int b) {
 }
 
 
-static bool CubeImplies(const cube &a, const cube &b) {
+static bool CubeImplies(const Cube &a, const Cube &b) {
     if (a.size() > b.size()) return false;
     unordered_set<int> bset;
     bset.reserve(b.size() * 2);
@@ -95,13 +95,13 @@ static bool CubeImplies(const cube &a, const cube &b) {
 // @input:
 // @output:
 // ================================================================================
-bool OverSequenceSet::Imply(const cube &a, const cube &b) {
+bool OverSequenceSet::Imply(const Cube &a, const Cube &b) {
     if (a.size() > b.size())
         return false;
-    return (includes(b.begin(), b.end(), a.begin(), a.end(), _cmp));
+    return (includes(b.begin(), b.end(), a.begin(), a.end(), CubeLitCmp));
 }
 
-void OverSequenceSet::EnsureTmpLitCapacity(const cube &latches) {
+void OverSequenceSet::EnsureTmpLitCapacity(const Cube &latches) {
     int max_abs = 0;
     for (int lit : latches) {
         int a = abs(lit);
@@ -136,14 +136,14 @@ void OverSequenceSet::ClearTmpLitSet() {
 }
 
 
-bool OverSequenceSet::Insert(const cube &uc, int index) {
+bool OverSequenceSet::Insert(const Cube &uc, int index) {
     auto f = GetFrame(index);
     if (f->find(uc) != f->end()) return false;
 
     f->emplace(uc);
     int &counter = m_insertCounter[index];
     counter++;
-    if (counter >= kCleanupThreshold) {
+    if (counter >= K_CLEANUP_THRESHOLD) {
         counter = 0;
         CleanupImplied(index);
     }
@@ -152,7 +152,7 @@ bool OverSequenceSet::Insert(const cube &uc, int index) {
 }
 
 
-bool IsStateInInv(const cube &s, const FrameList &inv) {
+bool IsStateInInv(const Cube &s, const FrameList &inv) {
     bool flag = false;
     for (const auto &f : inv) {
         flag = false;
@@ -177,8 +177,8 @@ shared_ptr<OverSequenceSet::FrameSet> OverSequenceSet::GetFrame(int lvl) {
     return m_sequence[lvl];
 }
 
-frame OverSequenceSet::FrameSetToFrame(const FrameSet &fset) const {
-    frame out;
+Frame OverSequenceSet::FrameSetToFrame(const FrameSet &fset) const {
+    Frame out;
     out.reserve(fset.size());
     for (const auto &fc : fset) {
         out.emplace_back(fc);
@@ -190,15 +190,15 @@ frame OverSequenceSet::FrameSetToFrame(const FrameSet &fset) const {
 void OverSequenceSet::CleanupImplied(int frameLevel) {
     auto f = GetFrame(frameLevel);
 
-    vector<cube> cubes;
+    vector<Cube> cubes;
     cubes.reserve(f->size());
     for (const auto &uc : *f) {
         cubes.emplace_back(uc);
     }
 
-    sort(cubes.begin(), cubes.end(), [](const cube &a, const cube &b) {
+    sort(cubes.begin(), cubes.end(), [](const Cube &a, const Cube &b) {
         if (a.size() != b.size()) return a.size() < b.size();
-        return lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(), _cmp);
+        return lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(), CubeLitCmp);
     });
 
     unordered_map<int, vector<size_t>> occurs;
@@ -240,7 +240,7 @@ void OverSequenceSet::CleanupImplied(int frameLevel) {
 }
 
 
-bool OverSequenceSet::IsBlockedByFrame(const cube &latches, int frameLevel) {
+bool OverSequenceSet::IsBlockedByFrame(const Cube &latches, int frameLevel) {
     auto f = GetFrame(frameLevel);
     if (f->empty()) return false;
 
@@ -269,8 +269,8 @@ bool OverSequenceSet::IsBlockedByFrame(const cube &latches, int frameLevel) {
 }
 
 
-void OverSequenceSet::GetBlockers(const cube &latches, int framelevel, vector<cube> &b) {
-    auto f = GetFrame(framelevel);
+void OverSequenceSet::GetBlockers(const Cube &latches, int frameLevel, vector<Cube> &b) {
+    auto f = GetFrame(frameLevel);
     if (f->empty()) return;
 
     EnsureTmpLitCapacity(latches);
@@ -329,7 +329,7 @@ void LemmaForestManager::Reset() {
     m_forest.clear();
     m_alive.clear();
     m_borders.clear();
-    m_tmpLitSet.clear();
+    m_tmpLitSet.Clear();
 }
 
 void LemmaForestManager::EnsureLevel(int level) {
@@ -340,8 +340,8 @@ void LemmaForestManager::EnsureLevel(int level) {
 }
 
 const std::vector<int> &LemmaForestManager::BorderIds(int level) const {
-    static const std::vector<int> empty;
-    if (level < 0 || level >= static_cast<int>(m_borders.size())) return empty;
+    static const std::vector<int> EMPTY;
+    if (level < 0 || level >= static_cast<int>(m_borders.size())) return EMPTY;
     return m_borders[level];
 }
 
@@ -357,9 +357,9 @@ void LemmaForestManager::CleanDeadBorders(int level) {
     if (level < 0 || level >= static_cast<int>(m_borders.size())) return;
     auto &border = m_borders[level];
     size_t w = 0;
-    for (int lemmaId : border) {
-        if (Alive(lemmaId)) {
-            border[w++] = lemmaId;
+    for (int lemma_id : border) {
+        if (Alive(lemma_id)) {
+            border[w++] = lemma_id;
         }
     }
     border.resize(w);
@@ -376,7 +376,7 @@ void LemmaForestManager::SortBorderByCubeSize(int level) {
     });
 }
 
-const cube &LemmaForestManager::CubeOf(int id) const {
+const Cube &LemmaForestManager::CubeOf(int id) const {
     assert(id >= 0 && id < static_cast<int>(m_lemmas.size()));
     return m_lemmas[id];
 }
@@ -390,18 +390,18 @@ void LemmaForestManager::BorderCubesRange::Iterator::SkipDead() {
     if (level < 0 || level >= static_cast<int>(lfm->m_borders.size())) return;
     const auto &border = lfm->m_borders[level];
     while (idx < border.size()) {
-        int lemmaId = border[idx];
-        if (lfm->Alive(lemmaId)) {
+        int lemma_id = border[idx];
+        if (lfm->Alive(lemma_id)) {
             return;
         }
         idx++;
     }
 }
 
-const cube &LemmaForestManager::BorderCubesRange::Iterator::operator*() const {
+const Cube &LemmaForestManager::BorderCubesRange::Iterator::operator*() const {
     const auto &border = lfm->m_borders[level];
-    int lemmaId = border[idx];
-    return lfm->CubeOf(lemmaId);
+    int lemma_id = border[idx];
+    return lfm->CubeOf(lemma_id);
 }
 
 LemmaForestManager::BorderCubesRange::Iterator &LemmaForestManager::BorderCubesRange::Iterator::operator++() {
@@ -415,38 +415,38 @@ bool LemmaForestManager::BorderCubesRange::Iterator::operator!=(const Iterator &
 }
 
 LemmaForestManager::BorderCubesRange::Iterator LemmaForestManager::BorderCubesRange::begin() const {
-    Iterator it{lfm, level, 0};
+    Iterator it{m_lfm, m_level, 0};
     it.SkipDead();
     return it;
 }
 
 LemmaForestManager::BorderCubesRange::Iterator LemmaForestManager::BorderCubesRange::end() const {
-    if (!lfm || level < 0 || level >= static_cast<int>(lfm->m_borders.size())) {
-        return Iterator{lfm, level, 0};
+    if (!m_lfm || m_level < 0 || m_level >= static_cast<int>(m_lfm->m_borders.size())) {
+        return Iterator{m_lfm, m_level, 0};
     }
-    return Iterator{lfm, level, lfm->m_borders[level].size()};
+    return Iterator{m_lfm, m_level, m_lfm->m_borders[m_level].size()};
 }
 
 LemmaForestManager::BorderCubesRange LemmaForestManager::BorderCubes(int level) const {
     return BorderCubesRange(this, level);
 }
 
-std::pair<int, int> LemmaForestManager::FindParentLemma(int startLevel, const cube &cb) {
-    m_tmpLitSet.newSet(cb);
+std::pair<int, int> LemmaForestManager::FindParentLemma(int startLevel, const Cube &cb) {
+    m_tmpLitSet.NewSet(cb);
     for (int lvl = startLevel; lvl >= 1; --lvl) {
         const auto &borders = m_borders[lvl];
         for (int j = 0; j < static_cast<int>(borders.size()); ++j) {
-            int lemmaId = borders[j];
-            if (!Alive(lemmaId)) continue;
-            if (SubsumeSet(m_lemmas[lemmaId], m_tmpLitSet)) {
-                return {lemmaId, j};
+            int lemma_id = borders[j];
+            if (!Alive(lemma_id)) continue;
+            if (SubsumeSet(m_lemmas[lemma_id], m_tmpLitSet)) {
+                return {lemma_id, j};
             }
         }
     }
     return {-1, -1};
 }
 
-int LemmaForestManager::CreateLemma(const cube &cb, int parentId, int frameLevel) {
+int LemmaForestManager::CreateLemma(const Cube &cb, int parentId, int frameLevel) {
     int id = static_cast<int>(m_lemmas.size());
     m_lemmas.push_back(cb);
     ForestNode node;
@@ -478,37 +478,37 @@ void LemmaForestManager::RemoveFromBorder(int level, int lemmaId) {
     }
 }
 
-int LemmaForestManager::SwapCreateLemma(const cube &cb, int existingLemmaId, int frameLevel) {
+int LemmaForestManager::SwapCreateLemma(const Cube &cb, int existingLemmaId, int frameLevel) {
     assert(Alive(existingLemmaId));
-    int parentId = m_forest[existingLemmaId].parentId;
+    int parent_id = m_forest[existingLemmaId].parentId;
     int depth = m_forest[existingLemmaId].depth;
 
-    int newId = static_cast<int>(m_lemmas.size());
+    int new_id = static_cast<int>(m_lemmas.size());
     m_lemmas.push_back(cb);
     ForestNode node;
-    node.parentId = parentId;
+    node.parentId = parent_id;
     node.frameLvl = frameLevel;
     node.depth = depth;
     m_forest.push_back(std::move(node));
     m_alive.push_back(1);
 
-    if (parentId != -1) {
-        auto &siblings = m_forest[parentId].childrenIds;
+    if (parent_id != -1) {
+        auto &siblings = m_forest[parent_id].childrenIds;
         for (int &sid : siblings) {
             if (sid == existingLemmaId) {
-                sid = newId;
+                sid = new_id;
                 break;
             }
         }
     }
 
     auto children = std::move(m_forest[existingLemmaId].childrenIds);
-    for (int childId : children) {
-        m_forest[childId].parentId = newId;
-        m_forest[newId].childrenIds.push_back(childId);
+    for (int child_id : children) {
+        m_forest[child_id].parentId = new_id;
+        m_forest[new_id].childrenIds.push_back(child_id);
     }
     UnregisterLemma(existingLemmaId);
-    return newId;
+    return new_id;
 }
 
 void LemmaForestManager::AddLemmaToBorder(int frameLevel, int lemmaId) {
@@ -518,11 +518,11 @@ void LemmaForestManager::AddLemmaToBorder(int frameLevel, int lemmaId) {
 void LemmaForestManager::AdoptRelations(int newLemmaId, int oldLemmaId) {
     assert(Alive(newLemmaId));
     assert(Alive(oldLemmaId));
-    ForestNode &newMeta = m_forest[newLemmaId];
-    ForestNode &oldMeta = m_forest[oldLemmaId];
+    ForestNode &new_meta = m_forest[newLemmaId];
+    ForestNode &old_meta = m_forest[oldLemmaId];
 
-    if (oldMeta.parentId != -1) {
-        auto &siblings = m_forest[oldMeta.parentId].childrenIds;
+    if (old_meta.parentId != -1) {
+        auto &siblings = m_forest[old_meta.parentId].childrenIds;
         for (int i = 0; i < static_cast<int>(siblings.size()); ++i) {
             if (siblings[i] == oldLemmaId) {
                 siblings[i] = siblings.back();
@@ -532,11 +532,11 @@ void LemmaForestManager::AdoptRelations(int newLemmaId, int oldLemmaId) {
         }
     }
 
-    for (int childId : oldMeta.childrenIds) {
-        m_forest[childId].parentId = newLemmaId;
-        newMeta.childrenIds.push_back(childId);
+    for (int child_id : old_meta.childrenIds) {
+        m_forest[child_id].parentId = newLemmaId;
+        new_meta.childrenIds.push_back(child_id);
     }
-    oldMeta.childrenIds.clear();
+    old_meta.childrenIds.clear();
     UnregisterLemma(oldLemmaId);
 }
 
@@ -545,26 +545,26 @@ uint64_t LemmaForestManager::RemoveRedundantLemmas(int startLevel, int endLevel,
     if (endLevel >= static_cast<int>(m_borders.size())) endLevel = static_cast<int>(m_borders.size()) - 1;
     if (startLevel > endLevel) return 0;
 
-    const cube &newCube = m_lemmas[newLemmaId];
+    const Cube &new_cube = m_lemmas[newLemmaId];
     uint64_t removed = 0;
 
     for (int lvl = startLevel; lvl <= endLevel; ++lvl) {
         auto &border = m_borders[lvl];
         int i = 0;
         while (i < static_cast<int>(border.size())) {
-            int existingId = border[i];
-            if (!Alive(existingId)) {
+            int existing_id = border[i];
+            if (!Alive(existing_id)) {
                 border[i] = border.back();
                 border.pop_back();
                 continue;
             }
-            if (existingId == newLemmaId) {
+            if (existing_id == newLemmaId) {
                 i++;
                 continue;
             }
-            m_tmpLitSet.newSet(m_lemmas[existingId]);
-            if (SubsumeSet(newCube, m_tmpLitSet)) {
-                AdoptRelations(newLemmaId, existingId);
+            m_tmpLitSet.NewSet(m_lemmas[existing_id]);
+            if (SubsumeSet(new_cube, m_tmpLitSet)) {
+                AdoptRelations(newLemmaId, existing_id);
                 border[i] = border.back();
                 border.pop_back();
                 removed++;
@@ -577,40 +577,40 @@ uint64_t LemmaForestManager::RemoveRedundantLemmas(int startLevel, int endLevel,
 }
 
 void LemmaForestManager::UpdateRefineCountersOnInsert(int newLemmaId) {
-    int parentId = m_forest[newLemmaId].parentId;
-    while (parentId != -1) {
-        m_forest[parentId].refineCount++;
-        m_forest[parentId].refineCountSinceALL++;
-        parentId = m_forest[parentId].parentId;
+    int parent_id = m_forest[newLemmaId].parentId;
+    while (parent_id != -1) {
+        m_forest[parent_id].refineCount++;
+        m_forest[parent_id].refineCountSinceALL++;
+        parent_id = m_forest[parent_id].parentId;
     }
 }
 
-AddLemmaResult LemmaForestManager::AddLemma(const cube &cb, int frameLevel) {
+AddLemmaResult LemmaForestManager::AddLemma(const Cube &cb, int frameLevel) {
     assert(frameLevel >= 1);
     EnsureLevel(frameLevel);
 
     auto parent = FindParentLemma(frameLevel - 1, cb);
-    int parentId = parent.first;
-    int parentIndex = parent.second;
-    int parentLevel = (parentId == -1) ? 0 : m_forest[parentId].frameLvl;
+    int parent_id = parent.first;
+    int parent_index = parent.second;
+    int parent_level = (parent_id == -1) ? 0 : m_forest[parent_id].frameLvl;
 
-    int newLemmaId;
-    if (parentId != -1 && cb.size() == m_lemmas[parentId].size()) {
-        auto &parentBorder = m_borders[parentLevel];
-        assert(parentIndex >= 0 && parentIndex < static_cast<int>(parentBorder.size()));
-        assert(parentBorder[parentIndex] == parentId);
-        parentBorder[parentIndex] = parentBorder.back();
-        parentBorder.pop_back();
-        newLemmaId = SwapCreateLemma(cb, parentId, frameLevel);
+    int new_lemma_id;
+    if (parent_id != -1 && cb.size() == m_lemmas[parent_id].size()) {
+        auto &parent_border = m_borders[parent_level];
+        assert(parent_index >= 0 && parent_index < static_cast<int>(parent_border.size()));
+        assert(parent_border[parent_index] == parent_id);
+        parent_border[parent_index] = parent_border.back();
+        parent_border.pop_back();
+        new_lemma_id = SwapCreateLemma(cb, parent_id, frameLevel);
     } else {
-        newLemmaId = CreateLemma(cb, parentId, frameLevel);
+        new_lemma_id = CreateLemma(cb, parent_id, frameLevel);
     }
 
-    int beginLevel = parentLevel + 1;
-    RemoveRedundantLemmas(beginLevel, frameLevel, newLemmaId);
-    AddLemmaToBorder(frameLevel, newLemmaId);
-    UpdateRefineCountersOnInsert(newLemmaId);
-    return AddLemmaResult{newLemmaId, beginLevel, frameLevel};
+    int begin_level = parent_level + 1;
+    RemoveRedundantLemmas(begin_level, frameLevel, new_lemma_id);
+    AddLemmaToBorder(frameLevel, new_lemma_id);
+    UpdateRefineCountersOnInsert(new_lemma_id);
+    return AddLemmaResult{new_lemma_id, begin_level, frameLevel};
 }
 
 int LemmaForestManager::PropagateLemma(int lemmaId, int newFrameLevel) {
@@ -626,23 +626,23 @@ int LemmaForestManager::PropagateLemma(int lemmaId, int newFrameLevel) {
     return newFrameLevel;
 }
 
-void LemmaForestManager::GetBlockers(const cube &blockingCube, int level, std::vector<cube> &blockers) const {
+void LemmaForestManager::GetBlockers(const Cube &blockingCube, int level, std::vector<Cube> &blockers) const {
     if (level < 0 || level >= static_cast<int>(m_borders.size())) return;
-    m_tmpLitSet.newSet(blockingCube);
-    for (int lemmaId : m_borders[level]) {
-        if (!Alive(lemmaId)) continue;
-        if (SubsumeSet(m_lemmas[lemmaId], m_tmpLitSet)) {
-            blockers.push_back(m_lemmas[lemmaId]);
+    m_tmpLitSet.NewSet(blockingCube);
+    for (int lemma_id : m_borders[level]) {
+        if (!Alive(lemma_id)) continue;
+        if (SubsumeSet(m_lemmas[lemma_id], m_tmpLitSet)) {
+            blockers.push_back(m_lemmas[lemma_id]);
         }
     }
 }
 
-bool LemmaForestManager::IsBlockedAtLevel(const cube &cb, int level) const {
+bool LemmaForestManager::IsBlockedAtLevel(const Cube &cb, int level) const {
     if (level < 0 || level >= static_cast<int>(m_borders.size())) return false;
-    m_tmpLitSet.newSet(cb);
-    for (int lemmaId : m_borders[level]) {
-        if (!Alive(lemmaId)) continue;
-        if (SubsumeSet(m_lemmas[lemmaId], m_tmpLitSet)) {
+    m_tmpLitSet.NewSet(cb);
+    for (int lemma_id : m_borders[level]) {
+        if (!Alive(lemma_id)) continue;
+        if (SubsumeSet(m_lemmas[lemma_id], m_tmpLitSet)) {
             return true;
         }
     }
@@ -652,11 +652,11 @@ bool LemmaForestManager::IsBlockedAtLevel(const cube &cb, int level) const {
 std::vector<int> LemmaForestManager::GetAncestorChain(int lemmaId) const {
     std::vector<int> chain;
     if (!Alive(lemmaId)) return chain;
-    int parentId = m_forest[lemmaId].parentId;
-    while (parentId != -1) {
-        if (!Alive(parentId)) break;
-        chain.push_back(parentId);
-        parentId = m_forest[parentId].parentId;
+    int parent_id = m_forest[lemmaId].parentId;
+    while (parent_id != -1) {
+        if (!Alive(parent_id)) break;
+        chain.push_back(parent_id);
+        parent_id = m_forest[parent_id].parentId;
     }
     return chain;
 }
@@ -690,7 +690,7 @@ void LemmaForestManager::SetReachable(int lemmaId, bool value) {
     m_forest[lemmaId].reachable = value;
 }
 
-bool LemmaForestManager::PopCTPPred(int lemmaId, cube &ctpCube, int &ctpLevel) {
+bool LemmaForestManager::PopCTPPred(int lemmaId, Cube &ctpCube, int &ctpLevel) {
     assert(Alive(lemmaId));
     auto &preds = m_forest[lemmaId].ctpPreds;
     if (preds.empty()) return false;
@@ -701,7 +701,7 @@ bool LemmaForestManager::PopCTPPred(int lemmaId, cube &ctpCube, int &ctpLevel) {
     return true;
 }
 
-void LemmaForestManager::PushCTPPred(int lemmaId, const cube &ctpCube, int ctpLevel) {
+void LemmaForestManager::PushCTPPred(int lemmaId, const Cube &ctpCube, int ctpLevel) {
     assert(Alive(lemmaId));
     m_forest[lemmaId].ctpPreds.emplace_back(ctpCube, ctpLevel);
 }
@@ -720,16 +720,16 @@ void LemmaForestManager::ClearCTPState(int lemmaId) {
 }
 
 
-int State::numInputs = -1;
-int State::numLatches = -1;
+int State::num_inputs = -1;
+int State::num_latches = -1;
 
 
 string State::GetLatchesString() {
     string result = "";
-    result.reserve(numLatches);
+    result.reserve(num_latches);
     int j = 0;
-    for (int i = 0; i < numLatches; ++i) {
-        if (j >= latches.size() || numInputs + i + 1 < abs(latches.at(j))) {
+    for (int i = 0; i < num_latches; ++i) {
+        if (j >= latches.size() || num_inputs + i + 1 < abs(latches.at(j))) {
             result += "x";
         } else {
             result += (latches.at(j) > 0) ? "1" : "0";
@@ -742,9 +742,9 @@ string State::GetLatchesString() {
 
 string State::GetInputsString() {
     string result = "";
-    result.reserve(numInputs);
+    result.reserve(num_inputs);
     int j = 0;
-    for (int i = 1; i <= numInputs; ++i) {
+    for (int i = 1; i <= num_inputs; ++i) {
         if (j >= inputs.size() || i < abs(inputs.at(j))) {
             result += "x";
         } else {

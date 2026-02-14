@@ -15,7 +15,7 @@ KFAIR::KFAIR(Settings settings,
                          m_log(log) {}
 
 CheckResult KFAIR::Run() {
-    signal(SIGINT, signalHandler);
+    signal(SIGINT, SignalHandler);
 
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
         LOG_L(m_log, 0, "KFAIR only supports liveness properties.");
@@ -55,19 +55,19 @@ CheckResult KFAIR::Run() {
         if (enable_fair) {
             LOG_L(m_log, 1, "===== Search for a loop by fair =====");
             auto trace = prefix->GetCexTrace();
-            cube t = trace.back().second;
+            Cube t = trace.back().second;
             LOG_L(m_log, 2, "start from bad state ", CubeToStr(t));
             auto loop = MakeSafeChecker();
             loop->SetInit(t);
             loop->SetSearchFromInitSucc(true);
             loop->SetLoopRefuting(true);
             loop->SetWalls(m_globalWalls);
-            CheckResult loopRes = loop->Run();
-            if (loopRes == CheckResult::Unsafe) {
+            CheckResult loop_res = loop->Run();
+            if (loop_res == CheckResult::Unsafe) {
                 return CheckResult::Unsafe;
             } else {
-                FrameList newWall = loop->GetInv();
-                m_globalWalls.emplace_back(std::move(newWall));
+                FrameList new_wall = loop->GetInv();
+                m_globalWalls.emplace_back(std::move(new_wall));
             }
         }
 
@@ -82,7 +82,7 @@ void KFAIR::Witness() {
     LOG_L(m_log, 1, "KFAIR witness generation is not implemented.");
 }
 
-std::vector<std::pair<cube, cube>> KFAIR::GetCexTrace() {
+std::vector<std::pair<Cube, Cube>> KFAIR::GetCexTrace() {
     return {};
 }
 
@@ -102,7 +102,7 @@ std::unique_ptr<IncrAlg> KFAIR::MakeSafeChecker() {
 }
 
 bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
-    std::vector<cube> states;
+    std::vector<Cube> states;
     auto trace = checker.GetCexTrace();
     states.reserve(trace.size());
     for (auto &step : trace) {
@@ -121,13 +121,13 @@ bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
     // Track indices where the k-counter value changes and store the trimmed trace
     // (state without k-liveness latch literals).
     std::vector<int> bad_indices;
-    std::vector<cube> trace_to_bad;
+    std::vector<Cube> trace_to_bad;
     trace_to_bad.reserve(states.size());
 
     int k_counter_last = -1;
     for (size_t i = 0; i < states.size(); i++) {
         int k_counter = 0;
-        cube s_trim;
+        Cube s_trim;
         s_trim.reserve(states[i].size());
         for (int lit : states[i]) {
             if (live_set.count(abs(lit))) {

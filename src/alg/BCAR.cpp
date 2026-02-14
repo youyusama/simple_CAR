@@ -8,15 +8,15 @@ BCAR::BCAR(Settings settings,
            Log &log) : m_settings(settings),
                        m_model(model),
                        m_log(log),
-                       innOrder(model) {
-    State::numInputs = model.GetNumInputs();
-    State::numLatches = model.GetNumLatches();
+                       m_innOrder(model) {
+    State::num_inputs = model.GetNumInputs();
+    State::num_latches = model.GetNumLatches();
     m_lastState = nullptr;
-    GLOBAL_LOG = &m_log;
+    global_log = &m_log;
 }
 
 CheckResult BCAR::Run() {
-    signal(SIGINT, signalHandler);
+    signal(SIGINT, SignalHandler);
 
     if (Check())
         m_checkResult = CheckResult::Safe;
@@ -37,7 +37,7 @@ void BCAR::Witness() {
 }
 
 
-std::vector<std::pair<cube, cube>> BCAR::GetCexTrace() {
+std::vector<std::pair<Cube, Cube>> BCAR::GetCexTrace() {
     assert(m_checkResult == CheckResult::Unsafe);
     if (m_cexTrace.empty()) BuildCEXTrace();
 
@@ -58,7 +58,7 @@ void BCAR::BuildCEXTrace() {
     }
     reverse(trace.begin(), trace.end());
     for (int i = 0; i < trace.size() - 1; ++i) {
-        m_cexTrace.emplace_back(pair<cube, cube>(trace[i + 1]->inputs, trace[i]->latches));
+        m_cexTrace.emplace_back(pair<Cube, Cube>(trace[i + 1]->inputs, trace[i]->latches));
     }
 }
 
@@ -76,7 +76,7 @@ FrameList BCAR::GetInv() {
 
 void BCAR::KLiveIncr() {
     int k_step = m_model.KLivenessIncrement();
-    vector<clause> k_clauses = m_model.GetKLiveClauses(k_step);
+    vector<Clause> k_clauses = m_model.GetKLiveClauses(k_step);
 
     // add trans
     for (auto slv : m_transSolvers) {
@@ -111,7 +111,7 @@ void BCAR::ResetBadSolver() {
 
 
 bool BCAR::Check() {
-    [[maybe_unused]] auto checkScope = m_log.Section("FC_Check");
+    [[maybe_unused]] auto check_scope = m_log.Section("FC_Check");
 
     if (!m_initialized) {
         Init();
@@ -121,7 +121,7 @@ bool BCAR::Check() {
         LOG_L(m_log, 2, "Reset");
     }
 
-    if (!CheckBad(make_shared<State>(nullptr, cube{}, cube{}, 0))) {
+    if (!CheckBad(make_shared<State>(nullptr, Cube{}, Cube{}, 0))) {
         LOG_L(m_log, 1, "Bad State not reachable");
         m_overSequence->SetInvariantLevel(-1);
         return true;
@@ -133,41 +133,41 @@ bool BCAR::Check() {
     }
 
     // main stage
-    stack<Task> workingStack;
+    stack<Task> working_stack;
     while (true) {
-        [[maybe_unused]] auto frameScope = m_log.Section("FC_Frame");
+        [[maybe_unused]] auto frame_scope = m_log.Section("FC_Frame");
         m_minUpdateLevel = m_k + 1;
         if (m_settings.dt) { // Dynamic Traversal
             auto dtseq = m_underSequence.GetSeqDT();
             for (auto state : dtseq) {
-                workingStack.emplace(state, m_k - 1, false);
+                working_stack.emplace(state, m_k - 1, false);
             }
         } else { // from the shallow and the start
-            for (int i = m_underSequence.size() - 1; i >= 0; i--) {
+            for (int i = m_underSequence.Size() - 1; i >= 0; i--) {
                 for (int j = m_underSequence[i].size() - 1; j >= 0; j--) {
-                    workingStack.emplace(m_underSequence[i][j], m_k - 1, false);
+                    working_stack.emplace(m_underSequence[i][j], m_k - 1, false);
                 }
             }
         }
 
         LOG_L(m_log, 2, "Start Frame: ", m_k);
-        LOG_L(m_log, 2, "Working Stack Size: ", workingStack.size());
+        LOG_L(m_log, 2, "Working Stack Size: ", working_stack.size());
 
-        shared_ptr<State> startState = EnumerateStartState();
+        shared_ptr<State> start_state = EnumerateStartState();
 
-        while (startState != nullptr) {
-            LOG_L(m_log, 2, "State from StartSolver: ", CubeToStrShort(startState->latches));
-            LOG_L(m_log, 3, "State Detail: ", CubeToStr(startState->latches));
-            workingStack.emplace(startState, m_k - 1, true);
+        while (start_state != nullptr) {
+            LOG_L(m_log, 2, "State from StartSolver: ", CubeToStrShort(start_state->latches));
+            LOG_L(m_log, 3, "State Detail: ", CubeToStr(start_state->latches));
+            working_stack.emplace(start_state, m_k - 1, true);
 
-            while (!workingStack.empty()) {
-                [[maybe_unused]] auto taskScope = m_log.Section("FC_Task");
-                Task &task = workingStack.top();
+            while (!working_stack.empty()) {
+                [[maybe_unused]] auto task_scope = m_log.Section("FC_Task");
+                Task &task = working_stack.top();
 
                 if (m_settings.restart && m_restart->RestartCheck()) {
                     LOG_L(m_log, 1, "Restarting...");
                     m_underSequence = UnderSequence();
-                    while (!workingStack.empty()) workingStack.pop();
+                    while (!working_stack.empty()) working_stack.pop();
                     m_restart->UpdateThreshold();
                     m_restart->ResetUcCounts();
                     continue;
@@ -179,7 +179,7 @@ bool BCAR::Check() {
                 }
 
                 if (task.frameLevel >= m_k) {
-                    workingStack.pop();
+                    working_stack.pop();
                     continue;
                 }
 
@@ -192,7 +192,7 @@ bool BCAR::Check() {
                         continue;
                 }
 
-                cube assumption(task.state->latches);
+                Cube assumption(task.state->latches);
                 OrderAssumption(assumption);
                 LOG_L(m_log, 2, "SAT Check on frame: ", task.frameLevel);
                 LOG_L(m_log, 3, "From state: ", CubeToStr(task.state->latches));
@@ -201,13 +201,13 @@ bool BCAR::Check() {
                     // Solver return SAT, get a new State, then continue
                     LOG_L(m_log, 2, "Result >>> SAT <<<");
                     auto p = m_transSolvers[task.frameLevel]->GetAssignment(true);
-                    auto newState =
+                    auto new_state =
                         make_shared<State>(task.state, p.first, p.second, task.state->depth + 1);
-                    LOG_L(m_log, 3, "Get state: ", CubeToStr(newState->latches));
-                    m_underSequence.push(newState);
+                    LOG_L(m_log, 3, "Get state: ", CubeToStr(new_state->latches));
+                    m_underSequence.Push(new_state);
                     if (m_settings.dt) task.state->HasSucc();
-                    int newFrameLevel = GetNewLevel(newState->latches);
-                    workingStack.emplace(newState, newFrameLevel, true);
+                    int new_frame_level = GetNewLevel(new_state->latches);
+                    working_stack.emplace(new_state, new_frame_level, true);
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     LOG_L(m_log, 2, "Result >>> UNSAT <<<");
@@ -222,7 +222,7 @@ bool BCAR::Check() {
                     LOG_L(m_log, 3, m_overSequence->FramesInfo());
                 }
             }
-            startState = EnumerateStartState();
+            start_state = EnumerateStartState();
         }
 
         // inv
@@ -234,7 +234,7 @@ bool BCAR::Check() {
                 shared_ptr<OverSequenceSet::FrameSet> fi = m_overSequence->GetFrame(i);
                 shared_ptr<OverSequenceSet::FrameSet> fi_plus_1 = m_overSequence->GetFrame(i + 1);
                 OverSequenceSet::FrameSet::iterator iter;
-                for (const cube &uc : *fi) {
+                for (const Cube &uc : *fi) {
                     if (fi_plus_1->find(uc) != fi_plus_1->end()) continue; // propagated
                     if (Propagate(uc, i))
                         m_branching->Update(uc);
@@ -263,7 +263,7 @@ bool BCAR::Check() {
 
 
 void BCAR::Init() {
-    [[maybe_unused]] auto initScope = m_log.Section("FC_Init");
+    [[maybe_unused]] auto init_scope = m_log.Section("FC_Init");
 
     m_k = 0;
 
@@ -274,8 +274,8 @@ void BCAR::Init() {
     m_overSequence = make_shared<OverSequenceSet>(m_model);
     m_underSequence = UnderSequence();
     m_branching = make_shared<Branching>(m_settings.branching);
-    litOrder.branching = m_branching;
-    blockerOrder.branching = m_branching;
+    m_litOrder.branching = m_branching;
+    m_blockerOrder.branching = m_branching;
     m_transSolvers.clear();
     m_lastState = nullptr;
 
@@ -325,7 +325,7 @@ void BCAR::InitializeStartSolver() {
 
 
 void BCAR::Reset() {
-    m_underSequence.clear();
+    m_underSequence.Clear();
     m_lastState = nullptr;
     m_cexTrace.clear();
 
@@ -333,7 +333,7 @@ void BCAR::Reset() {
     // add exist lemma
     auto frame_i = m_overSequence->GetFrame(m_k);
     for (auto l : *frame_i) {
-        cube pl(l);
+        Cube pl(l);
         GetPrimed(pl);
         m_startSolver->AddUC(pl);
     }
@@ -347,20 +347,20 @@ bool BCAR::IsInitStateImplyBad() {
     auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
     slv->AddTrans();
     slv->AddConstraints();
-    cube assumptions = m_customInit;
+    Cube assumptions = m_customInit;
     assumptions.push_back(m_model.GetBad());
     bool sat = slv->Solve(assumptions);
     return !sat;
 }
 
 
-bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
+bool BCAR::AddUnsatisfiableCore(const Cube &uc, int frameLevel) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_AddUC");
     m_restart->UcCountsPlus1();
 
     if (!m_overSequence->Insert(uc, frameLevel)) return false;
 
-    cube puc(uc);
+    Cube puc(uc);
     GetPrimed(puc);
     if (frameLevel >= m_transSolvers.size()) {
         m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
@@ -388,26 +388,26 @@ bool BCAR::AddUnsatisfiableCore(const cube &uc, int frameLevel) {
 
 
 bool BCAR::ImmediateSatisfiable() {
-    [[maybe_unused]] auto immScope = m_log.Section("FC_ImmSAT");
+    [[maybe_unused]] auto imm_scope = m_log.Section("FC_ImmSAT");
     if (!m_customInit.empty()) {
         return false;
     }
 
-    cube assumptions;
+    Cube assumptions;
     assumptions.push_back(m_model.GetBad());
     bool result = false;
     {
-        [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_Imm");
+        [[maybe_unused]] auto sat_scope = m_log.Section("SAT_BC_Imm");
         result = m_startSolver->Solve(assumptions);
     }
     if (result) {
         // initial state
         auto init = m_startSolver->GetAssignment(false);
-        auto initState = make_shared<State>(nullptr, cube{}, init.second, 0);
+        auto init_state = make_shared<State>(nullptr, Cube{}, init.second, 0);
         // start state is a successor of initial state
         auto p = m_startSolver->GetAssignment(true);
-        auto startState = make_shared<State>(initState, p.first, p.second, 1);
-        m_lastState = startState;
+        auto start_state = make_shared<State>(init_state, p.first, p.second, 1);
+        m_lastState = start_state;
     }
     m_startSolver->ClearAssumption();
     return result;
@@ -417,22 +417,22 @@ bool BCAR::ImmediateSatisfiable() {
 shared_ptr<State> BCAR::EnumerateStartState() {
     [[maybe_unused]] auto scoped = m_log.Section("FC_StartEnum");
     {
-        [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_Start");
+        [[maybe_unused]] auto sat_scope = m_log.Section("SAT_BC_Start");
         if (!m_startSolver->Solve()) return nullptr;
     }
 
     // initial state
     auto init = m_startSolver->GetAssignment(false);
-    auto initState = make_shared<State>(nullptr, cube{}, init.second, 0);
+    auto init_state = make_shared<State>(nullptr, Cube{}, init.second, 0);
     // start state is a successor of initial state
     auto p = m_startSolver->GetAssignment(true);
-    auto startState = make_shared<State>(initState, p.first, p.second, 1);
-    return startState;
+    auto start_state = make_shared<State>(init_state, p.first, p.second, 1);
+    return start_state;
 }
 
 
 void BCAR::OverSequenceRefine(int lvl) {
-    [[maybe_unused]] auto refineScope = m_log.Section("FC_Refine");
+    [[maybe_unused]] auto refine_scope = m_log.Section("FC_Refine");
     // sometimes we have I & T & c & (O_0 | O_1 | ... | O_i+1)' is UNSAT,
     // but to output a correct witness,
     // we need I & c & (O_0 | O_1 | ... | O_i) is UNSAT.
@@ -456,12 +456,12 @@ void BCAR::OverSequenceRefine(int lvl) {
 
     // if I & c & (O_0 | O_1 | ... | O_i) is SAT, get model s
     while (true) {
-        bool refineSat = false;
+        bool refine_sat = false;
         {
-            [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_Refine");
-            refineSat = refine_solver->Solve();
+            [[maybe_unused]] auto sat_scope = m_log.Section("SAT_BC_Refine");
+            refine_sat = refine_solver->Solve();
         }
-        if (!refineSat) break;
+        if (!refine_sat) break;
         LOG_L(m_log, 1, "Refine OverSequence");
         auto s = refine_solver->GetAssignment(false);
 
@@ -470,14 +470,14 @@ void BCAR::OverSequenceRefine(int lvl) {
         auto uc = GetUnsatAssumption(m_transSolvers[lvl + 1], s.second);
         for (int i = 0; i <= lvl; i++)
             AddUnsatisfiableCore(uc, i);
-        clause cls;
+        Clause cls;
         for (auto ci : uc) cls.emplace_back(-ci);
         refine_solver->AddClause(cls);
     }
 }
 
 
-int BCAR::GetNewLevel(const cube &states, int start) {
+int BCAR::GetNewLevel(const Cube &states, int start) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_GetNewLevel");
 
     for (int i = start; i <= m_k; i++) {
@@ -491,7 +491,7 @@ int BCAR::GetNewLevel(const cube &states, int start) {
 
 
 bool BCAR::IsInvariant(int frameLevel) {
-    [[maybe_unused]] auto invScope = m_log.Section("FC_Invariant");
+    [[maybe_unused]] auto inv_scope = m_log.Section("FC_Invariant");
     shared_ptr<OverSequenceSet::FrameSet> frame_i = m_overSequence->GetFrame(frameLevel);
 
     if (frameLevel < m_minUpdateLevel) {
@@ -502,7 +502,7 @@ bool BCAR::IsInvariant(int frameLevel) {
     AddConstraintAnd(frame_i);
     bool result = false;
     {
-        [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_Inv");
+        [[maybe_unused]] auto sat_scope = m_log.Section("SAT_BC_Inv");
         result = !m_invSolver->Solve();
     }
     m_invSolver->FlipLastConstrain();
@@ -518,12 +518,12 @@ bool BCAR::IsInvariant(int frameLevel) {
 // @output:
 // ================================================================================
 void BCAR::AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f) {
-    cube cls;
-    for (const cube &frame_cube : *f) {
+    Cube cls;
+    for (const Cube &frame_cube : *f) {
         int flag = m_invSolver->GetNewVar();
         cls.push_back(flag);
         for (int i = 0; i < frame_cube.size(); i++) {
-            m_invSolver->AddClause(cube{-flag, frame_cube[i]});
+            m_invSolver->AddClause(Cube{-flag, frame_cube[i]});
         }
     }
     m_invSolver->AddClause(cls);
@@ -537,15 +537,15 @@ void BCAR::AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f) {
 // ================================================================================
 void BCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
     int flag = m_invSolver->GetNewVar();
-    for (const cube &frame_cube : *f) {
-        cube cls;
+    for (const Cube &frame_cube : *f) {
+        Cube cls;
         for (int i = 0; i < frame_cube.size(); i++) {
             cls.push_back(-frame_cube[i]);
         }
         cls.push_back(-flag);
         m_invSolver->AddClause(cls);
     }
-    m_invSolver->AddAssumption(cube{flag});
+    m_invSolver->AddAssumption(Cube{flag});
 }
 
 
@@ -554,102 +554,102 @@ void BCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
 // @input:
 // @output:
 // ================================================================================
-bool BCAR::Generalize(cube &uc, int frame_lvl, int rec_lvl) {
-    [[maybe_unused]] auto genScope = m_log.Section("FC_Gen");
+bool BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
+    [[maybe_unused]] auto gen_scope = m_log.Section("FC_Gen");
     unordered_set<int> required_lits;
 
-    vector<cube> uc_blockers;
-    m_overSequence->GetBlockers(uc, frame_lvl, uc_blockers);
-    cube uc_blocker;
+    vector<Cube> uc_blockers;
+    m_overSequence->GetBlockers(uc, frameLvl, uc_blockers);
+    Cube uc_blocker;
     if (uc_blockers.size() > 0) {
         if (m_settings.branching > 0)
-            stable_sort(uc_blockers.begin(), uc_blockers.end(), blockerOrder);
+            stable_sort(uc_blockers.begin(), uc_blockers.end(), m_blockerOrder);
         uc_blocker = uc_blockers[0];
     }
 
     if (m_settings.referSkipping)
         for (auto b : uc_blocker) required_lits.emplace(b);
-    vector<cube> failed_ctses;
+    vector<Cube> failed_ctses;
     OrderAssumption(uc);
     for (int i = uc.size() - 1; i > 0; i--) {
         if (required_lits.find(uc[i]) != required_lits.end()) continue;
-        cube temp_uc;
+        Cube temp_uc;
         temp_uc.reserve(uc.size());
         for (auto ll : uc)
             if (ll != uc[i]) temp_uc.emplace_back(ll);
-        if (Down(temp_uc, frame_lvl, rec_lvl, failed_ctses)) {
+        if (Down(temp_uc, frameLvl, recLvl, failed_ctses)) {
             uc.swap(temp_uc);
             i = uc.size();
         } else {
             required_lits.emplace(uc[i]);
         }
     }
-    sort(uc.begin(), uc.end(), cmp);
-    if (uc.size() > uc_blocker.size() && frame_lvl != 0) {
+    sort(uc.begin(), uc.end(), Cmp);
+    if (uc.size() > uc_blocker.size() && frameLvl != 0) {
         return false;
     } else
         return true;
 }
 
 
-bool BCAR::Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses) {
-    [[maybe_unused]] auto downScope = m_log.Section("FC_Dn");
+bool BCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
+    [[maybe_unused]] auto down_scope = m_log.Section("FC_Dn");
     int ctgs = 0;
-    cube assumption(uc);
+    Cube assumption(uc);
     while (true) {
         // F_i & T & temp_uc'
-        bool reachable = IsReachable(frame_lvl, assumption, "SAT_BC_Down");
+        bool reachable = IsReachable(frameLvl, assumption, "SAT_BC_Down");
         if (!reachable) {
-            uc = GetUnsatAssumption(m_transSolvers[frame_lvl], uc);
+            uc = GetUnsatAssumption(m_transSolvers[frameLvl], uc);
             return true;
         }
 
-        if (rec_lvl >= m_settings.ctgMaxRecursionDepth ||
+        if (recLvl >= m_settings.ctgMaxRecursionDepth ||
             ctgs >= m_settings.ctgMaxStates ||
-            frame_lvl < 1) {
+            frameLvl < 1) {
             return false;
         }
 
-        auto p = m_transSolvers[frame_lvl]->GetAssignment(false);
+        auto p = m_transSolvers[frameLvl]->GetAssignment(false);
         shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
-        if (DownHasFailed(cts->latches, failed_ctses)) return false;
+        if (DownHasFailed(cts->latches, failedCtses)) return false;
 
-        if (CTSBlock(cts, frame_lvl - 1, rec_lvl, failed_ctses)) {
+        if (CTSBlock(cts, frameLvl - 1, recLvl, failedCtses)) {
             ctgs++;
         } else {
-            failed_ctses.emplace_back(cts->latches);
+            failedCtses.emplace_back(cts->latches);
             return false;
         }
     }
 }
 
 
-bool BCAR::CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses, int cts_count) {
-    if (cts_count >= m_settings.ctgMaxBlocks) return false;
+bool BCAR::CTSBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int ctsCount) {
+    if (ctsCount >= m_settings.ctgMaxBlocks) return false;
 
     LOG_L(m_log, 3, "Try cts:", CubeToStr(cts->latches));
-    cube cts_ass(cts->latches);
+    Cube cts_ass(cts->latches);
     OrderAssumption(cts_ass);
 
     while (true) {
-        if (!IsReachable(frame_lvl, cts_ass, "SAT_R_CTS_B")) {
-            auto uc_cts = GetUnsatAssumption(m_transSolvers[frame_lvl], cts->latches);
+        if (!IsReachable(frameLvl, cts_ass, "SAT_R_CTS_B")) {
+            auto uc_cts = GetUnsatAssumption(m_transSolvers[frameLvl], cts->latches);
             LOG_L(m_log, 3, "CTG Get UC:", CubeToStr(uc_cts));
-            if (Generalize(uc_cts, frame_lvl, rec_lvl + 1)) m_branching->Update(uc_cts);
+            if (Generalize(uc_cts, frameLvl, recLvl + 1)) m_branching->Update(uc_cts);
             LOG_L(m_log, 3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
-            AddUnsatisfiableCore(uc_cts, frame_lvl + 1);
-            PropagateUp(uc_cts, frame_lvl + 1);
+            AddUnsatisfiableCore(uc_cts, frameLvl + 1);
+            PropagateUp(uc_cts, frameLvl + 1);
             return true;
         } else {
-            auto p = m_transSolvers[frame_lvl]->GetAssignment(false);
+            auto p = m_transSolvers[frameLvl]->GetAssignment(false);
             shared_ptr<State> post_cts(new State(nullptr, p.first, p.second, 0));
-            if (DownHasFailed(post_cts->latches, failed_ctses)) return false;
+            if (DownHasFailed(post_cts->latches, failedCtses)) return false;
 
-            int pre_cts_lvl = frame_lvl - 1;
+            int pre_cts_lvl = frameLvl - 1;
             if (pre_cts_lvl < 0 ||
-                !CTSBlock(post_cts, pre_cts_lvl, rec_lvl, failed_ctses, cts_count + 1)) {
+                !CTSBlock(post_cts, pre_cts_lvl, recLvl, failedCtses, ctsCount + 1)) {
 
-                failed_ctses.emplace_back(cts->latches);
+                failedCtses.emplace_back(cts->latches);
                 return false;
             }
         }
@@ -657,34 +657,34 @@ bool BCAR::CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cu
 }
 
 
-bool BCAR::DownHasFailed(const cube &s, const vector<cube> &failed_ctses) {
-    for (auto f : failed_ctses) {
+bool BCAR::DownHasFailed(const Cube &s, const vector<Cube> &failedCtses) {
+    for (auto f : failedCtses) {
         // if f->s , return true
         if (f.size() > s.size()) continue;
-        if (includes(s.begin(), s.end(), f.begin(), f.end(), cmp)) return true;
+        if (includes(s.begin(), s.end(), f.begin(), f.end(), Cmp)) return true;
     }
     return false;
 }
 
 
 bool BCAR::CheckBad(shared_ptr<State> s) {
-    [[maybe_unused]] auto checkScope = m_log.Section("FC_CheckBad");
+    [[maybe_unused]] auto check_scope = m_log.Section("FC_CheckBad");
 
     LOG_L(m_log, 2, "\nSAT CHECK on bad");
     LOG_L(m_log, 3, "From state: ", CubeToStr(s->latches));
-    cube assumption(s->latches);
+    Cube assumption(s->latches);
     OrderAssumption(assumption);
     bool result = false;
     {
-        [[maybe_unused]] auto satScope = m_log.Section("SAT_BC_Bad");
+        [[maybe_unused]] auto sat_scope = m_log.Section("SAT_BC_Bad");
         result = m_badSolver->Solve(assumption);
     }
     if (result) {
         LOG_L(m_log, 2, "Result >>> SAT <<<");
         auto p = m_badSolver->GetAssignment(false);
         LOG_L(m_log, 3, "Get Assignment:", CubeToStr(p.second));
-        shared_ptr<State> newState(new State(s, p.first, p.second, s->depth + 1));
-        m_lastState = newState;
+        shared_ptr<State> new_state(new State(s, p.first, p.second, s->depth + 1));
+        m_lastState = new_state;
         LOG_L(m_log, 3, m_overSequence->FramesInfo());
         return true;
     } else {
@@ -695,14 +695,14 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
         for (int i = uc.size() - 1; i >= 0; i--) {
             if (uc.size() < 3) break;
             if (required_lits.find(uc[i]) != required_lits.end()) continue;
-            cube temp_uc;
+            Cube temp_uc;
             temp_uc.reserve(uc.size());
             for (auto ll : uc)
                 if (ll != uc[i]) temp_uc.emplace_back(ll);
 
             bool result = false;
             {
-                [[maybe_unused]] auto satGenScope = m_log.Section("SAT_BC_BadGen");
+                [[maybe_unused]] auto sat_gen_scope = m_log.Section("SAT_BC_BadGen");
                 result = m_badSolver->Solve(temp_uc);
             }
             if (!result) {
@@ -713,7 +713,7 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
                 required_lits.emplace(uc[i]);
             }
         }
-        sort(uc.begin(), uc.end(), cmp);
+        sort(uc.begin(), uc.end(), Cmp);
         LOG_L(m_log, 2, "Get UC:", CubeToStr(uc));
         m_branching->Update(uc);
         AddUnsatisfiableCore(uc, 0);
@@ -723,47 +723,47 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
 }
 
 
-bool BCAR::IsReachable(int lvl, const cube &assumption, const string &label) {
+bool BCAR::IsReachable(int lvl, const Cube &assumption, const string &label) {
     [[maybe_unused]] auto scoped = m_log.Section(label);
     return m_transSolvers[lvl]->Solve(assumption);
 }
 
 
-cube BCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions) {
+Cube BCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions) {
     const unordered_set<int> &conflict = solver->GetConflict();
-    cube res;
+    Cube res;
 
     for (auto a : assumptions) {
         if (conflict.find(a) != conflict.end())
             res.emplace_back(a);
     }
 
-    sort(res.begin(), res.end(), cmp);
+    sort(res.begin(), res.end(), Cmp);
     return res;
 }
 
 
 // ================================================================================
-// @brief: add the cube as and gates to the aiger model
+// @brief: add the Cube as and gates to the aiger model
 // @input:
 // @output:
 // ================================================================================
-unsigned BCAR::addCubeToANDGates(aiger *circuit, vector<unsigned> cube) {
-    assert(cube.size() > 0);
-    unsigned res = cube[0];
+unsigned BCAR::AddCubeToAndGates(aiger *circuit, vector<unsigned> cb) {
+    assert(cb.size() > 0);
+    unsigned res = cb[0];
     assert(res / 2 <= circuit->maxvar);
-    for (unsigned i = 1; i < cube.size(); i++) {
-        assert(cube[i] / 2 <= circuit->maxvar);
+    for (unsigned i = 1; i < cb.size(); i++) {
+        assert(cb[i] / 2 <= circuit->maxvar);
         unsigned new_gate = (circuit->maxvar + 1) * 2;
-        aiger_add_and(circuit, new_gate, res, cube[i]);
+        aiger_add_and(circuit, new_gate, res, cb[i]);
         res = new_gate;
     }
     return res;
 }
 
 
-bool BCAR::Propagate(const cube &c, int lvl) {
-    [[maybe_unused]] auto propScope = m_log.Section("FC_Prop");
+bool BCAR::Propagate(const Cube &c, int lvl) {
+    [[maybe_unused]] auto prop_scope = m_log.Section("FC_Prop");
     bool result = !IsReachable(lvl, c, "SAT_BC_Prop");
     if (result) {
         auto uc = GetUnsatAssumption(m_transSolvers[lvl], c);
@@ -773,7 +773,7 @@ bool BCAR::Propagate(const cube &c, int lvl) {
 }
 
 
-int BCAR::PropagateUp(const cube &c, int lvl) {
+int BCAR::PropagateUp(const Cube &c, int lvl) {
     while (lvl < m_k) {
         if (Propagate(c, lvl))
             m_branching->Update(c);
@@ -786,26 +786,26 @@ int BCAR::PropagateUp(const cube &c, int lvl) {
 
 
 void BCAR::OutputWitness() {
-    [[maybe_unused]] auto witScope = m_log.Section("FC_Witness");
+    [[maybe_unused]] auto wit_scope = m_log.Section("FC_Witness");
     // get outputfile
-    auto startIndex = m_settings.aigFilePath.find_last_of("/");
-    if (startIndex == string::npos) {
-        startIndex = 0;
+    auto start_index = m_settings.aigFilePath.find_last_of("/");
+    if (start_index == string::npos) {
+        start_index = 0;
     } else {
-        startIndex++;
+        start_index++;
     }
-    auto endIndex = m_settings.aigFilePath.find_last_of(".");
-    assert(endIndex != string::npos);
-    string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
-    string outPath = m_settings.witnessOutputDir + aigName + ".w.aig";
+    auto end_index = m_settings.aigFilePath.find_last_of(".");
+    assert(end_index != string::npos);
+    string aig_name = m_settings.aigFilePath.substr(start_index, end_index - start_index);
+    string out_path = m_settings.witnessOutputDir + aig_name + ".w.aig";
     aiger *model_aig = m_model.GetAiger().get();
 
     if (m_overSequence->GetInvariantLevel() < 0 && m_model.GetEquivalenceMap().size() == 0) {
-        aiger_open_and_write_to_file(model_aig, outPath.c_str());
+        aiger_open_and_write_to_file(model_aig, out_path.c_str());
         return;
     }
 
-    shared_ptr<aiger> witness_aig_ptr(aiger_init(), aigerDeleter);
+    shared_ptr<aiger> witness_aig_ptr(aiger_init(), AigerDeleter);
     aiger *witness_aig = witness_aig_ptr.get();
     // copy inputs
     for (unsigned i = 0; i < model_aig->num_inputs; i++) {
@@ -845,13 +845,13 @@ void BCAR::OutputWitness() {
         assert(abs(itr->second) < witness_aig->maxvar);
         unsigned l1 = m_model.GetAigerLit(itr->first);
         unsigned l2 = m_model.GetAigerLit(itr->second);
-        eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
-        eq_lits.emplace_back(addCubeToANDGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
+        eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
+        eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
     }
 
     unsigned eq_cons;
     if (eq_lits.size() > 0) {
-        eq_cons = addCubeToANDGates(witness_aig, eq_lits);
+        eq_cons = AddCubeToAndGates(witness_aig, eq_lits);
     }
 
     // prove on lvl 0
@@ -860,7 +860,7 @@ void BCAR::OutputWitness() {
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
         if (eq_lits.size() > 0) {
-            p_prime = addCubeToANDGates(witness_aig, {p, eq_cons});
+            p_prime = AddCubeToAndGates(witness_aig, {p, eq_cons});
         }
 
         if (model_aig->num_bad == 1) {
@@ -872,7 +872,7 @@ void BCAR::OutputWitness() {
         }
 
         aiger_reencode(witness_aig);
-        aiger_open_and_write_to_file(witness_aig, outPath.c_str());
+        aiger_open_and_write_to_file(witness_aig, out_path.c_str());
         return;
     }
     unsigned lvl_i = m_overSequence->GetInvariantLevel();
@@ -887,22 +887,22 @@ void BCAR::OutputWitness() {
     for (unsigned i = 0; i <= lvl_i; i++) {
         shared_ptr<OverSequenceSet::FrameSet> frame_i = m_overSequence->GetFrame(i);
         vector<unsigned> frame_i_lits;
-        for (const cube &frame_cube : *frame_i) {
+        for (const Cube &frame_cube : *frame_i) {
             vector<unsigned> cube_j;
             for (int l : frame_cube) cube_j.push_back(l > 0 ? (2 * l) : (2 * -l + 1));
-            unsigned c_j = addCubeToANDGates(witness_aig, cube_j) ^ 1;
+            unsigned c_j = AddCubeToAndGates(witness_aig, cube_j) ^ 1;
             frame_i_lits.push_back(c_j);
         }
-        unsigned O_i = addCubeToANDGates(witness_aig, frame_i_lits);
-        inv_lits.push_back(O_i ^ 1);
+        unsigned o_i = AddCubeToAndGates(witness_aig, frame_i_lits);
+        inv_lits.push_back(o_i ^ 1);
     }
-    unsigned inv = addCubeToANDGates(witness_aig, inv_lits);
+    unsigned inv = AddCubeToAndGates(witness_aig, inv_lits);
     unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
     unsigned p = aiger_not(bad_lit);
-    unsigned p_prime = addCubeToANDGates(witness_aig, {p, inv});
+    unsigned p_prime = AddCubeToAndGates(witness_aig, {p, inv});
 
     if (eq_lits.size() > 0) {
-        p_prime = addCubeToANDGates(witness_aig, {p_prime, eq_cons});
+        p_prime = AddCubeToAndGates(witness_aig, {p_prime, eq_cons});
     }
 
     if (model_aig->num_bad == 1) {
@@ -914,28 +914,28 @@ void BCAR::OutputWitness() {
     }
 
     aiger_reencode(witness_aig);
-    aiger_open_and_write_to_file(witness_aig, outPath.c_str());
+    aiger_open_and_write_to_file(witness_aig, out_path.c_str());
 }
 
 
 void BCAR::OutputCounterExample() {
     // get outputfile
-    auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
-    if (startIndex == string::npos) {
-        startIndex = 0;
+    auto start_index = m_settings.aigFilePath.find_last_of("/\\");
+    if (start_index == string::npos) {
+        start_index = 0;
     } else {
-        startIndex++;
+        start_index++;
     }
-    auto endIndex = m_settings.aigFilePath.find_last_of(".");
-    assert(endIndex != string::npos);
-    string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
-    string cexPath = m_settings.witnessOutputDir + aigName + ".cex";
-    std::ofstream cexFile;
-    cexFile.open(cexPath);
+    auto end_index = m_settings.aigFilePath.find_last_of(".");
+    assert(end_index != string::npos);
+    string aig_name = m_settings.aigFilePath.substr(start_index, end_index - start_index);
+    string cex_path = m_settings.witnessOutputDir + aig_name + ".cex";
+    std::ofstream cex_file;
+    cex_file.open(cex_path);
 
     assert(m_lastState != nullptr);
 
-    cexFile << "1" << endl
+    cex_file << "1" << endl
             << "b0" << endl;
 
     vector<shared_ptr<State>> trace;
@@ -945,12 +945,12 @@ void BCAR::OutputCounterExample() {
         state = state->preState;
     }
     reverse(trace.begin(), trace.end());
-    cexFile << trace[0]->GetLatchesString() << endl;
+    cex_file << trace[0]->GetLatchesString() << endl;
 
     for (int i = 1; i < trace.size(); i++) {
-        cexFile << trace[i]->GetInputsString() << endl;
+        cex_file << trace[i]->GetInputsString() << endl;
     }
-    cexFile << "." << endl;
-    cexFile.close();
+    cex_file << "." << endl;
+    cex_file.close();
 }
 } // namespace car

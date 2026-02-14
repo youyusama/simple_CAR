@@ -9,17 +9,16 @@ namespace car {
 
 class DAGCNFSimplifier {
   public:
-    using clause = std::vector<int>;
-
+    using Clause = std::vector<int>;
     DAGCNFSimplifier() = default;
 
     void FreezeVar(int var);
 
-    std::vector<clause> Simplify(const std::vector<clause> &dag_clauses, int true_id);
+    std::vector<Clause> Simplify(const std::vector<Clause> &dagClauses, int trueId);
 
   private:
     struct ClauseEntry {
-        clause lits;
+        Clause lits;
         bool removed = false;
     };
 
@@ -37,14 +36,14 @@ class DAGCNFSimplifier {
     std::vector<Occur> m_occurs;
     std::vector<int8_t> m_values;
 
-    void Reset(const std::vector<clause> &dag_clauses);
+    void Reset(const std::vector<Clause> &dagClauses);
 
     void EnableOccur();
     void DisableOccur();
 
-    void AddRel(clause rel);
-    void RemoveRel(int clause_id);
-    void RemoveRels(const std::vector<int> &clause_ids);
+    void AddRel(Clause rel);
+    void RemoveRel(int clauseId);
+    void RemoveRels(const std::vector<int> &clauseIds);
     void RemoveNode(int var);
     std::vector<int> VarRels(int var) const;
 
@@ -59,36 +58,36 @@ class DAGCNFSimplifier {
     static int VarPosLit(int var);
     static int VarNegLit(int var);
 
-    bool TryOrderedSimplify(clause &cls) const;
-    bool TryOrderedResolvent(const clause &a, const clause &b, int pivot_var, clause &out) const;
-    static bool TryOrderedSubsumeExceptOne(const clause &a,
-                                           const clause &b,
+    bool TryOrderedSimplify(Clause &cls) const;
+    bool TryOrderedResolvent(const Clause &a, const Clause &b, int pivotVar, Clause &out) const;
+    static bool TryOrderedSubsumeExceptOne(const Clause &a,
+                                           const Clause &b,
                                            bool &subsume,
-                                           bool &diff_found,
+                                           bool &diffFound,
                                            int &diff);
 
-    void OccurAdd(int lit, int clause_id);
-    void OccurDel(int lit, int clause_id);
+    void OccurAdd(int lit, int clauseId);
+    void OccurDel(int lit, int clauseId);
     size_t OccurNum(int lit) const;
     const std::vector<int> &OccurGet(int lit);
     void OccurClean(int lit);
 
     bool TryResolvent(const std::vector<int> &pcnf,
                       const std::vector<int> &ncnf,
-                      int pivot_var,
+                      int pivotVar,
                       size_t limit,
-                      std::vector<clause> &out);
+                      std::vector<Clause> &out);
 
     void Eliminate(int var);
     void BveSimplify();
     void ConstSimplify();
     void ConstSimplifyVar(int var);
     void SubsumeSimplify();
-    void ClauseSubsumeCheck(int clause_id);
+    void ClauseSubsumeCheck(int clauseId);
 
-    static std::vector<clause> ClauseSubsumeSimplify(std::vector<clause> clauses);
+    static std::vector<Clause> ClauseSubsumeSimplify(std::vector<Clause> clauses);
 
-    std::vector<clause> Finalize() const;
+    std::vector<Clause> Finalize() const;
 };
 
 } // namespace car

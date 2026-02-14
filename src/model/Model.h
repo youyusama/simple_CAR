@@ -28,8 +28,8 @@ extern "C" {
 
 using namespace std;
 
-typedef vector<int> cube;
-typedef vector<int> clause;
+using Cube = vector<int>;
+using Clause = vector<int>;
 
 namespace car {
 
@@ -166,16 +166,16 @@ class Model {
         return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
     }
 
-    inline unsigned GetAigerLit(const int car_id) {
-        if (car_id == TrueId())
+    inline unsigned GetAigerLit(const int carId) {
+        if (carId == TrueId())
             return 1;
-        else if (car_id == -TrueId())
+        else if (carId == -TrueId())
             return 0;
 
-        if (car_id > 0)
-            return car_id << 1;
+        if (carId > 0)
+            return carId << 1;
         else
-            return (-car_id << 1) + 1;
+            return (-carId << 1) + 1;
     }
 
     inline shared_ptr<aiger> GetAiger() { return m_aiger; }
@@ -197,7 +197,7 @@ class Model {
     int GetKLiveStep() { return m_kliveStep; }
     int KLivenessIncrement();
     int GetKLiveSignal(int k) { return m_kliveSignals[k]; }
-    vector<clause> GetKLiveClauses(int k) { return m_kliveTransClauses[k]; }
+    vector<Clause> GetKLiveClauses(int k) { return m_kliveTransClauses[k]; }
 
     inline PropKind GetPropKind() const { return m_propKind; }
 
@@ -209,11 +209,11 @@ class Model {
 
     int GetPrimeK(const int id, int k);
 
-    vector<clause> &GetClauses() { return m_clauses; }
+    vector<Clause> &GetClauses() { return m_clauses; }
 
-    vector<clause> &GetSimpClauses() { return m_simpClauses; }
+    vector<Clause> &GetSimpClauses() { return m_simpClauses; }
 
-    vector<clause> &GetInitialClauses() { return m_initialClauses; }
+    vector<Clause> &GetInitialClauses() { return m_initialClauses; }
 
     vector<int> GetConstraints() { return m_circuitGraph->constraints; };
 
@@ -229,14 +229,14 @@ class Model {
     vector<int> &GetInnards() { return m_innardsVec; };
 
     int GetInnardslvl(int id) {
-        unordered_map<int, int>::iterator it = m_innards_lvl.find(abs(id));
-        if (it == m_innards_lvl.end()) return 0;
+        unordered_map<int, int>::iterator it = m_innardsLvl.find(abs(id));
+        if (it == m_innardsLvl.end()) return 0;
         return it->second;
     }
 
     vector<int> &GetPropertyCOIInputs() { return m_circuitGraph->propertyCOIInputs; };
 
-    cube GetCOIDomain(const cube &c);
+    Cube GetCOIDomain(const Cube &c);
 
     const vector<vector<int>> &GetDependencyVec() const { return m_dependencyVec; }
 
@@ -289,7 +289,7 @@ class Model {
 
     void EncodeStatesToSignatuers(const vector<vector<int>> &states, unordered_map<string, vector<int>> &signatures);
 
-    void EncodeStatesToN64Signatuers(const vector<vector<tbool>> &values, const vector<int> &vars, VarMapN64 &signatures);
+    void EncodeStatesToN64Signatuers(const vector<vector<Tbool>> &values, const vector<int> &vars, VarMapN64 &signatures);
 
     bool CheckLatchEquivalenceBySAT(int a, int b);
 
@@ -305,13 +305,13 @@ class Model {
     shared_ptr<CircuitGraph> m_circuitGraph;
 
     int m_maxId;
-    cube m_initialState;
+    Cube m_initialState;
     int m_bad;
     KLivenessCounter m_kliveCounter;
     PropKind m_propKind{PropKind::Safety};
-    vector<clause> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
-    vector<clause> m_simpClauses;
-    vector<clause> m_initialClauses;
+    vector<Clause> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
+    vector<Clause> m_simpClauses;
+    vector<Clause> m_initialClauses;
 
     vector<unordered_map<int, int>> m_primeMaps;
     unordered_map<int, vector<int>> m_preValueOfLatchMap;
@@ -332,11 +332,11 @@ class Model {
 
     unordered_set<int> m_innards;
     vector<int> m_innardsVec;
-    unordered_map<int, int> m_innards_lvl;
+    unordered_map<int, int> m_innardsLvl;
 
     int m_kliveStep{0};
     vector<int> m_kliveSignals;
-    vector<vector<clause>> m_kliveTransClauses;
+    vector<vector<Clause>> m_kliveTransClauses;
 };
 } // namespace car
 

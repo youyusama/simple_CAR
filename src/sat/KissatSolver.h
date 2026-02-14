@@ -19,24 +19,24 @@ class KissatSolver : public ISolver {
     KissatSolver(Model &m);
     ~KissatSolver() { kissat_release(m_solver); }
 
-    void AddClause(const cube &cls) override;
-    void AddAssumption(const cube &assumption) override {}
+    void AddClause(const Cube &cls) override;
+    void AddAssumption(const Cube &assumption) override {}
     bool Solve() override;
-    bool Solve(const cube &assumption) override { return false; }
-    pair<cube, cube> GetAssignment(bool prime) override { return pair<cube, cube>(cube(), cube()); }
-    cube GetUC(bool prime) { return cube(); }
+    bool Solve(const Cube &assumption) override { return false; }
+    pair<Cube, Cube> GetAssignment(bool prime) override { return pair<Cube, Cube>(Cube(), Cube()); }
+    Cube GetUC(bool prime) { return Cube(); }
     unordered_set<int> GetConflict() override { return unordered_set<int>(); }
     int GetNewVar() override { return 0; }
-    void AddTempClause(const cube &cls) override {}
+    void AddTempClause(const Cube &cls) override {}
     void ReleaseTempClause() override {}
 
-    inline tbool GetModel(int id) override {
+    inline Tbool GetModel(int id) override {
         int val = kissat_value(m_solver, id);
         assert(!val);
         if (val < 0)
-            return t_False;
+            return T_FALSE;
         else
-            return t_True;
+            return T_TRUE;
     }
     void ClearAssumption() override {}
     void PushAssumption(int a) override {}

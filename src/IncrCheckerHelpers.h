@@ -19,24 +19,24 @@ class Branching {
   public:
     Branching(int type = 1);
     ~Branching();
-    void Update(const cube &uc);
+    void Update(const Cube &uc);
     void Decay();
-    void Decay(const cube &uc, int gap);
+    void Decay(const Cube &uc, int gap);
 
     inline float PriorityOf(int lit) {
-        if (abs(lit) >= counts.size()) return 0;
-        return counts[abs(lit)];
+        if (abs(lit) >= m_counts.size()) return 0;
+        return m_counts[abs(lit)];
     }
 
   private:
-    int branching_type; // 1: sum 2: vsids 3: acids 4: MAB (to do) 0: static
-    int conflict_index;
-    int mini;
-    std::vector<float> counts;
+    int m_branchingType; // 1: sum 2: vsids 3: acids 4: MAB (to do) 0: static
+    int m_conflictIndex;
+    int m_mini;
+    std::vector<float> m_counts;
 };
 
 
-static bool cubeComp(const cube &c1, const cube &c2) {
+static bool CubeComp(const Cube &c1, const Cube &c2) {
     if (c1.size() != c2.size()) return c1.size() < c2.size();
     for (size_t i = 0; i < c1.size(); i++) {
         int v1 = c1[i], v2 = c2[i];
@@ -50,9 +50,9 @@ static bool cubeComp(const cube &c1, const cube &c2) {
 
 
 struct CubeHash {
-    size_t operator()(const vector<int> &cube) const noexcept {
-        size_t seed = cube.size();
-        for (int i : cube) {
+    size_t operator()(const vector<int> &cb) const noexcept {
+        size_t seed = cb.size();
+        for (int i : cb) {
             seed ^= i + 0x9e3779b9 + (seed << 6) + (seed >> 2);
         }
         return seed;
@@ -63,52 +63,52 @@ class LitSet {
   public:
     LitSet() = default;
 
-    void newSet(const cube &c) {
-        clear();
+    void NewSet(const Cube &c) {
+        Clear();
         for (int lit : c) {
-            insert(lit);
+            Insert(lit);
         }
     }
 
-    void insert(int lit) {
+    void Insert(int lit) {
         assert(lit != 0);
-        std::size_t i = idx(lit);
-        if (i >= has_.size()) has_.resize(i + 1, 0);
-        if (!has_[i]) {
-            set_.push_back(lit);
-            has_[i] = 1;
+        std::size_t i = Idx(lit);
+        if (i >= m_has.size()) m_has.resize(i + 1, 0);
+        if (!m_has[i]) {
+            m_set.push_back(lit);
+            m_has[i] = 1;
         }
     }
 
-    bool has(int lit) const {
+    bool Has(int lit) const {
         assert(lit != 0);
-        std::size_t i = idx(lit);
-        return i < has_.size() && has_[i];
+        std::size_t i = Idx(lit);
+        return i < m_has.size() && m_has[i];
     }
 
-    void clear() {
-        for (int l : set_) has_[idx(l)] = 0;
-        set_.clear();
+    void Clear() {
+        for (int l : m_set) m_has[Idx(l)] = 0;
+        m_set.clear();
     }
 
-    int size() const { return static_cast<int>(set_.size()); }
+    int Size() const { return static_cast<int>(m_set.size()); }
 
   private:
-    static std::size_t idx(int lit) {
+    static std::size_t Idx(int lit) {
         assert(lit != 0);
         unsigned v = static_cast<unsigned>(lit > 0 ? lit : -lit);
         return (static_cast<std::size_t>(v) << 1) | (lit < 0 ? 1u : 0u);
     }
 
-    std::vector<int> set_;
-    std::vector<uint8_t> has_;
+    std::vector<int> m_set;
+    std::vector<uint8_t> m_has;
 };
 
 
-inline bool SubsumeSet(const cube &a, const LitSet &b) {
-    if (a.size() > static_cast<size_t>(b.size())) return false;
+inline bool SubsumeSet(const Cube &a, const LitSet &b) {
+    if (a.size() > static_cast<size_t>(b.Size())) return false;
     for (int lit : a) {
-        if (!b.has(lit)) return false;
+        if (!b.Has(lit)) return false;
     }
     return true;
 }
@@ -130,8 +130,8 @@ struct ForestNode {
     int refineCountSinceALL{0};
     bool reachable{false};
 
-    std::vector<std::pair<cube, int>> ctpPreds;
-    cube ctpSucc;
+    std::vector<std::pair<Cube, int>> ctpPreds;
+    Cube ctpSucc;
     bool hasCTPSucc{false};
 };
 
@@ -148,11 +148,11 @@ class LemmaForestManager {
     void Reset();
     void EnsureLevel(int level);
 
-    AddLemmaResult AddLemma(const cube &cb, int frameLevel);
+    AddLemmaResult AddLemma(const Cube &cb, int frameLevel);
     int PropagateLemma(int lemmaId, int newFrameLevel);
 
-    void GetBlockers(const cube &blockingCube, int level, std::vector<cube> &blockers) const;
-    bool IsBlockedAtLevel(const cube &cb, int level) const;
+    void GetBlockers(const Cube &blockingCube, int level, std::vector<Cube> &blockers) const;
+    bool IsBlockedAtLevel(const Cube &cb, int level) const;
     std::vector<int> GetAncestorChain(int lemmaId) const;
     int FrameLevelOf(int lemmaId) const;
     int ParentOf(int lemmaId) const;
@@ -160,8 +160,8 @@ class LemmaForestManager {
     void ResetRefineCountSinceALL(int lemmaId);
     bool Reachable(int lemmaId) const;
     void SetReachable(int lemmaId, bool value = true);
-    bool PopCTPPred(int lemmaId, cube &ctpCube, int &ctpLevel);
-    void PushCTPPred(int lemmaId, const cube &ctpCube, int ctpLevel);
+    bool PopCTPPred(int lemmaId, Cube &ctpCube, int &ctpLevel);
+    void PushCTPPred(int lemmaId, const Cube &ctpCube, int ctpLevel);
     bool HasCTPPreds(int lemmaId) const;
     void ClearCTPState(int lemmaId);
 
@@ -171,7 +171,7 @@ class LemmaForestManager {
     void CleanDeadBorders(int level);
     void SortBorderByCubeSize(int level);
 
-    const cube &CubeOf(int id) const;
+    const Cube &CubeOf(int id) const;
     bool Alive(int id) const;
 
     class BorderCubesRange {
@@ -182,28 +182,28 @@ class LemmaForestManager {
             size_t idx;
 
             void SkipDead();
-            const cube &operator*() const;
+            const Cube &operator*() const;
             Iterator &operator++();
             bool operator!=(const Iterator &other) const;
         };
 
         BorderCubesRange(const LemmaForestManager *inLfm, int inLevel)
-            : lfm(inLfm), level(inLevel) {}
+            : m_lfm(inLfm), m_level(inLevel) {}
 
         Iterator begin() const;
         Iterator end() const;
 
       private:
-        const LemmaForestManager *lfm;
-        int level;
+        const LemmaForestManager *m_lfm;
+        int m_level;
     };
 
     BorderCubesRange BorderCubes(int level) const;
 
   private:
-    std::pair<int, int> FindParentLemma(int startLevel, const cube &cb);
-    int CreateLemma(const cube &cb, int parentId, int frameLevel);
-    int SwapCreateLemma(const cube &cb, int existingLemmaId, int frameLevel);
+    std::pair<int, int> FindParentLemma(int startLevel, const Cube &cb);
+    int CreateLemma(const Cube &cb, int parentId, int frameLevel);
+    int SwapCreateLemma(const Cube &cb, int existingLemmaId, int frameLevel);
     void AddLemmaToBorder(int frameLevel, int lemmaId);
     void RemoveFromBorder(int level, int lemmaId);
     void UnregisterLemma(int lemmaId);
@@ -211,7 +211,7 @@ class LemmaForestManager {
     uint64_t RemoveRedundantLemmas(int startLevel, int endLevel, int newLemmaId);
     void UpdateRefineCountersOnInsert(int newLemmaId);
 
-    std::vector<cube> m_lemmas;
+    std::vector<Cube> m_lemmas;
     std::vector<ForestNode> m_forest;
     std::vector<uint8_t> m_alive;
     std::vector<std::vector<int>> m_borders;
@@ -219,12 +219,12 @@ class LemmaForestManager {
 };
 
 
-using frame = std::vector<cube>;
-using FrameList = std::vector<frame>;
+using Frame = std::vector<Cube>;
+using FrameList = std::vector<Frame>;
 
 class OverSequenceSet {
   public:
-    using FrameSet = unordered_set<cube, CubeHash>;
+    using FrameSet = unordered_set<Cube, CubeHash>;
 
     OverSequenceSet(Model &model) : m_model(model) {
         m_invariantLevel = 0;
@@ -238,14 +238,14 @@ class OverSequenceSet {
 
     int GetInvariantLevel() { return m_invariantLevel; }
 
-    bool Insert(const cube &uc, int index);
+    bool Insert(const Cube &uc, int index);
 
     shared_ptr<FrameSet> GetFrame(int lvl);
-    frame FrameSetToFrame(const FrameSet &fset) const;
+    Frame FrameSetToFrame(const FrameSet &fset) const;
 
-    bool IsBlockedByFrame(const cube &latches, int frameLevel);
+    bool IsBlockedByFrame(const Cube &latches, int frameLevel);
 
-    void GetBlockers(const cube &latches, int framelevel, vector<cube> &b);
+    void GetBlockers(const Cube &latches, int frameLevel, vector<Cube> &b);
 
     bool IsEmpty(int frameLevel) {
         if (frameLevel < 0 || frameLevel >= m_sequence.size()) return true;
@@ -259,9 +259,9 @@ class OverSequenceSet {
   private:
     void CleanupImplied(int frameLevel);
 
-    bool Imply(const cube &a, const cube &b);
+    bool Imply(const Cube &a, const Cube &b);
 
-    void EnsureTmpLitCapacity(const cube &latches);
+    void EnsureTmpLitCapacity(const Cube &latches);
     void TmpLitSetInsert(int lit);
     bool TmpLitSetHas(int lit) const;
     void ClearTmpLitSet();
@@ -274,29 +274,29 @@ class OverSequenceSet {
     vector<uint8_t> m_tmpLitFlags;
     vector<size_t> m_tmpLitList;
     int m_tmpLitOffset = 0;
-    static constexpr int kCleanupThreshold = 128;
+    static constexpr int K_CLEANUP_THRESHOLD = 128;
 };
 
 
 struct State {
     State(shared_ptr<State> inPreState,
-          const cube &inInputs,
-          const cube &inLatches,
+          const Cube &inInputs,
+          const Cube &inLatches,
           int inDepth) : depth(inDepth),
                          preState(inPreState),
                          inputs(inInputs),
                          latches(inLatches),
                          dtScore(0) {}
-    static int numInputs;
-    static int numLatches;
+    static int num_inputs;
+    static int num_latches;
 
     string GetLatchesString();
     string GetInputsString();
 
     int depth;
     shared_ptr<State> preState = nullptr;
-    cube inputs;
-    cube latches;
+    Cube inputs;
+    Cube latches;
     double dtScore;
 
     void HasUC() {
@@ -330,18 +330,18 @@ class UnderSequence {
         }
     }
 
-    void push(shared_ptr<State> state) {
+    void Push(shared_ptr<State> state) {
         while (m_sequence.size() <= state->depth) {
             m_sequence.emplace_back(vector<shared_ptr<State>>());
         }
         m_sequence[state->depth].emplace_back(state);
     }
 
-    int size() { return m_sequence.size(); }
+    int Size() { return m_sequence.size(); }
 
-    void clear() { m_sequence.clear(); }
+    void Clear() { m_sequence.clear(); }
 
-    static bool state_ptr_cmp(shared_ptr<State> s1, shared_ptr<State> s2) {
+    static bool StatePtrCmp(shared_ptr<State> s1, shared_ptr<State> s2) {
         return s1->dtScore > s2->dtScore;
     }
 
@@ -352,7 +352,7 @@ class UnderSequence {
                 res.emplace_back(m_sequence[i][j]);
             }
         }
-        sort(res.begin(), res.end(), state_ptr_cmp);
+        sort(res.begin(), res.end(), StatePtrCmp);
         res.resize(res.size() / 5);
         return res;
     }
@@ -425,14 +425,14 @@ struct Luby {
     int m_index;
 };
 
-bool IsStateInInv(const cube &s, const FrameList &inv);
+bool IsStateInInv(const Cube &s, const FrameList &inv);
 
 
 class Restart {
   public:
     Restart(Settings settings) {
         if (settings.restartLuby) {
-            isLubyActived = true;
+            m_isLubyActive = true;
             m_luby.PushLuby(15);
         }
         m_baseThreshold = settings.restartThreshold;
@@ -441,17 +441,17 @@ class Restart {
     }
 
     bool RestartCheck() {
-        LOG_LP(GLOBAL_LOG, 3, "Restart Check: ", m_ucCounts, " > ", m_threshold);
+        LOG_LP(global_log, 3, "Restart Check: ", m_ucCounts, " > ", m_threshold);
         return m_ucCounts > m_threshold;
     }
 
     void UpdateThreshold() {
-        if (isLubyActived) {
+        if (m_isLubyActive) {
             m_threshold = m_luby.GetNextLuby() * m_baseThreshold;
         } else {
             m_threshold = m_threshold * m_growthRate;
         }
-        LOG_LP(GLOBAL_LOG, 2, "Updated Restart Threshold: ", m_threshold);
+        LOG_LP(global_log, 2, "Updated Restart Threshold: ", m_threshold);
     }
 
     void UcCountsPlus1() { m_ucCounts++; }
@@ -459,7 +459,7 @@ class Restart {
     void ResetUcCounts() { m_ucCounts = 0; }
 
   private:
-    bool isLubyActived = false;
+    bool m_isLubyActive = false;
     int m_threshold;
     int m_baseThreshold;
     int m_ucCounts = 0;

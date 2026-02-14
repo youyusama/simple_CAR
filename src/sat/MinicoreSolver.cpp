@@ -17,7 +17,7 @@ bool MinicoreSolver::Solve() {
 }
 
 
-bool MinicoreSolver::Solve(const cube &assumption) {
+bool MinicoreSolver::Solve(const Cube &assumption) {
     m_assumptions.clear();
     for (auto it : assumption) {
         m_assumptions.emplace_back(GetLit(it));
@@ -26,14 +26,14 @@ bool MinicoreSolver::Solve(const cube &assumption) {
 }
 
 
-void MinicoreSolver::AddAssumption(const cube &assumption) {
+void MinicoreSolver::AddAssumption(const Cube &assumption) {
     for (auto it : assumption) {
         m_assumptions.emplace_back(GetLit(it));
     }
 }
 
 
-void MinicoreSolver::AddClause(const cube &cls) {
+void MinicoreSolver::AddClause(const Cube &cls) {
     vector<minicore::Lit> lit_cls;
     for (int l : cls) {
         lit_cls.emplace_back(GetLit(l));
@@ -43,9 +43,9 @@ void MinicoreSolver::AddClause(const cube &cls) {
 }
 
 
-pair<cube, cube> MinicoreSolver::GetAssignment(bool prime) {
-    cube inputs;
-    cube latches;
+pair<Cube, Cube> MinicoreSolver::GetAssignment(bool prime) {
+    Cube inputs;
+    Cube latches;
     inputs.reserve(m_model.GetNumInputs());
     latches.reserve(m_model.GetNumLatches());
     for (int i : m_model.GetModelInputs()) {
@@ -89,17 +89,17 @@ pair<cube, cube> MinicoreSolver::GetAssignment(bool prime) {
             }
         }
     }
-    return pair<cube, cube>(inputs, latches);
+    return pair<Cube, Cube>(inputs, latches);
 }
 
 
 unordered_set<int> MinicoreSolver::GetConflict() {
-    unordered_set<int> conflictSet;
+    unordered_set<int> conflict_set;
     for (minicore::Lit l : conflict) {
         int val = -GetLiteralId(l);
-        conflictSet.insert(val);
+        conflict_set.insert(val);
     }
-    return conflictSet;
+    return conflict_set;
 }
 
 
@@ -108,7 +108,7 @@ inline int MinicoreSolver::GetLiteralId(const minicore::Lit &l) {
 }
 
 
-void MinicoreSolver::AddTempClause(const cube &cls) {
+void MinicoreSolver::AddTempClause(const Cube &cls) {
     m_tempClause.clear();
     for (int l : cls) {
         m_tempClause.emplace_back(GetLit(l));

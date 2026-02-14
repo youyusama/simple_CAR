@@ -16,7 +16,7 @@ class BaseAlg {
   public:
     virtual CheckResult Run() = 0;
     virtual void Witness() = 0;
-    virtual std::vector<std::pair<cube, cube>> GetCexTrace() = 0;
+    virtual std::vector<std::pair<Cube, Cube>> GetCexTrace() = 0;
     virtual ~BaseAlg() = default;
 };
 

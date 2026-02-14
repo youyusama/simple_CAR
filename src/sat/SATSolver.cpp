@@ -2,8 +2,8 @@
 #include <algorithm>
 
 namespace car {
-SATSolver::SATSolver(Model &model, MCSATSolver slv_kind)
-    : m_model(model), m_slvKind(slv_kind) {
+SATSolver::SATSolver(Model &model, MCSATSolver slvKind)
+    : m_model(model), m_slvKind(slvKind) {
 
     switch (m_slvKind) {
     case MCSATSolver::minisat:
@@ -34,7 +34,7 @@ bool SATSolver::Solve() {
     return m_slv->Solve();
 }
 
-bool SATSolver::Solve(const cube &assumption) {
+bool SATSolver::Solve(const Cube &assumption) {
     return m_slv->Solve(assumption);
 }
 
@@ -48,11 +48,11 @@ void SATSolver::SetSolveInDomain() {
     auto slv = GetMinicoreSolver();
     if (slv == nullptr) return;
     slv->setSolveInDomain(true);
-    m_true_id = m_model.TrueId();
-    m_domain_fixed = 1;
+    m_trueId = m_model.TrueId();
+    m_domainFixed = 1;
 }
 
-void SATSolver::AddPermanentVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi) {
+void SATSolver::AddPermanentVars(shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi) {
     if (!solver) return;
     std::vector<char> &domain = solver->domainSet();
     std::vector<minicore::Var> &list = solver->domainList();
@@ -60,7 +60,7 @@ void SATSolver::AddPermanentVars(shared_ptr<MinicoreSolver> solver, const cube &
     ResetTemporaryVars(solver);
 
     vector<int> work_stack;
-    work_stack.emplace_back(abs(m_true_id));
+    work_stack.emplace_back(abs(m_trueId));
     for (int v : vars) {
         int a = abs(v);
         work_stack.emplace_back(abs(v));
@@ -76,10 +76,10 @@ void SATSolver::AddPermanentVars(shared_ptr<MinicoreSolver> solver, const cube &
         if (!in_dom) {
             domain[cur] = 1;
             list.push_back(cur);
-            m_domain_fixed++;
+            m_domainFixed++;
         }
 
-        if (use_coi) {
+        if (useCoi) {
             auto &coi_vec = dep_map[cur];
             for (int d : coi_vec) {
                 work_stack.emplace_back(d);
@@ -88,7 +88,7 @@ void SATSolver::AddPermanentVars(shared_ptr<MinicoreSolver> solver, const cube &
     }
 }
 
-void SATSolver::AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const cube &vars, bool use_coi) {
+void SATSolver::AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi) {
     if (!solver) return;
     std::vector<char> &domain = solver->domainSet();
     std::vector<minicore::Var> &list = solver->domainList();
@@ -96,7 +96,7 @@ void SATSolver::AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const cube &
     ResetTemporaryVars(solver);
 
     vector<int> work_stack;
-    work_stack.emplace_back(abs(m_true_id));
+    work_stack.emplace_back(abs(m_trueId));
     for (int v : vars) {
         int a = abs(v);
         work_stack.emplace_back(abs(v));
@@ -112,7 +112,7 @@ void SATSolver::AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const cube &
         domain[cur] = 1;
         list.push_back(cur);
 
-        if (use_coi) {
+        if (useCoi) {
             auto &coi_vec = dep_map[cur];
             for (int d : coi_vec) {
                 work_stack.emplace_back(d);
@@ -126,21 +126,21 @@ void SATSolver::ResetTemporaryVars(shared_ptr<MinicoreSolver> solver) {
     std::vector<char> &domain = solver->domainSet();
     std::vector<minicore::Var> &list = solver->domainList();
 
-    for (size_t i = m_domain_fixed; i < list.size(); ++i) {
+    for (size_t i = m_domainFixed; i < list.size(); ++i) {
         int v = list[i];
         domain[v] = 0;
     }
-    list.resize(m_domain_fixed);
+    list.resize(m_domainFixed);
 }
 
-void SATSolver::SetDomain(const cube &domain) {
+void SATSolver::SetDomain(const Cube &domain) {
     if (!m_solveInDomain) return;
     auto slv = GetMinicoreSolver();
     if (!slv) return;
     AddPermanentVars(slv, domain, false);
 }
 
-void SATSolver::SetTempDomain(const cube &domain) {
+void SATSolver::SetTempDomain(const Cube &domain) {
     if (!m_solveInDomain) return;
     auto slv = GetMinicoreSolver();
     if (!slv) return;
@@ -154,28 +154,28 @@ void SATSolver::ResetTempDomain() {
     ResetTemporaryVars(slv);
 }
 
-void SATSolver::SetDomainCOI(const cube &c) {
+void SATSolver::SetDomainCOI(const Cube &c) {
     if (!m_solveInDomain) return;
     auto slv = GetMinicoreSolver();
     if (!slv) return;
     AddPermanentVars(slv, c, true);
 }
 
-void SATSolver::SetTempDomainCOI(const cube &c) {
+void SATSolver::SetTempDomainCOI(const Cube &c) {
     if (!m_solveInDomain) return;
     auto slv = GetMinicoreSolver();
     if (!slv) return;
     AddTemporaryVars(slv, c, true);
 }
 
-cube SATSolver::GetDomain() {
+Cube SATSolver::GetDomain() {
     if (!m_solveInDomain) return {};
     auto slv = GetMinicoreSolver();
     if (!slv) return {};
-    cube res;
+    Cube res;
     std::vector<minicore::Var> &list = slv->domainList();
     for (size_t i = 0; i < list.size(); ++i) {
-        if (i == m_domain_fixed) res.emplace_back(-1);
+        if (i == m_domainFixed) res.emplace_back(-1);
         res.emplace_back(list[i]);
     }
     return res;
@@ -189,12 +189,12 @@ cube SATSolver::GetDomain() {
 // ================================================================================
 void SATSolver::AddTrans() {
     if (m_solveInDomain) {
-        vector<clause> &clauses = m_model.GetClauses();
+        vector<Clause> &clauses = m_model.GetClauses();
         for (int i = 0; i < clauses.size(); ++i) {
             AddClause(clauses[i]);
         }
     } else {
-        vector<clause> &clauses = m_model.GetSimpClauses();
+        vector<Clause> &clauses = m_model.GetSimpClauses();
         for (int i = 0; i < clauses.size(); ++i) {
             AddClause(clauses[i]);
         }
@@ -209,8 +209,8 @@ void SATSolver::AddTrans() {
 // ================================================================================
 void SATSolver::AddConstraints() {
     for (auto c : m_model.GetConstraints()) {
-        AddClause(clause{c});
-        SetDomainCOI(cube{c});
+        AddClause(Clause{c});
+        SetDomainCOI(Cube{c});
     }
 }
 
@@ -221,10 +221,10 @@ void SATSolver::AddConstraints() {
 // @output:
 // ================================================================================
 void SATSolver::AddTransK(int k) {
-    vector<clause> &clauses = m_model.GetSimpClauses();
+    vector<Clause> &clauses = m_model.GetSimpClauses();
     for (int i = 0; i < clauses.size(); ++i) {
-        clause &ori = clauses[i];
-        clause cls_k;
+        Clause &ori = clauses[i];
+        Clause cls_k;
         for (int v : ori) {
             cls_k.push_back(m_model.GetPrimeK(v, k));
         }
@@ -240,26 +240,26 @@ void SATSolver::AddTransK(int k) {
 // ================================================================================
 void SATSolver::AddConstraintsK(int k) {
     for (auto c : m_model.GetConstraints()) {
-        AddClause(clause{m_model.GetPrimeK(c, k)});
+        AddClause(Clause{m_model.GetPrimeK(c, k)});
     }
 }
 
 
 void SATSolver::AddBad() {
     int bad = m_model.GetBad();
-    AddClause(clause{bad});
+    AddClause(Clause{bad});
 }
 
 
 void SATSolver::AddBadk(int k) {
     int bad = m_model.GetBad();
     int bad_k = m_model.GetPrimeK(bad, k);
-    AddClause(clause{bad_k});
+    AddClause(Clause{bad_k});
 }
 
-cube SATSolver::GetKUnrolled(const cube &c, int k) {
+Cube SATSolver::GetKUnrolled(const Cube &c, int k) {
     if (k == 0) return c;
-    cube out;
+    Cube out;
     out.reserve(c.size());
     for (int lit : c) {
         out.emplace_back(m_model.GetPrimeK(lit, k));
@@ -275,8 +275,8 @@ int SATSolver::AddInvAsLabelK(const FrameList &inv, int k) {
     for (const auto &f : inv) {
         int ol = GetNewVar();
         for (const auto &fc : f) {
-            cube fc_k = GetKUnrolled(fc, k);
-            clause cls;
+            Cube fc_k = GetKUnrolled(fc, k);
+            Clause cls;
             cls.reserve(fc_k.size() + 1);
             for (int lit : fc_k) cls.emplace_back(-lit);
             cls.emplace_back(-ol);
@@ -284,21 +284,21 @@ int SATSolver::AddInvAsLabelK(const FrameList &inv, int k) {
         }
         o_labels.emplace_back(ol);
     }
-    clause sl_clause;
+    Clause sl_clause;
     sl_clause.reserve(o_labels.size() + 1);
     for (int ol : o_labels) sl_clause.emplace_back(ol);
     sl_clause.emplace_back(-sl);
     AddClause(sl_clause);
 
     for (const auto &f : inv) {
-        clause tmp;
+        Clause tmp;
         tmp.reserve(f.size() + 1);
         for (const auto &fc : f) {
             int cl = GetNewVar();
             tmp.emplace_back(cl);
-            cube fc_k = GetKUnrolled(fc, k);
+            Cube fc_k = GetKUnrolled(fc, k);
             for (int lit : fc_k) {
-                AddClause(clause{-cl, lit});
+                AddClause(Clause{-cl, lit});
             }
         }
         tmp.emplace_back(sl);
@@ -308,18 +308,18 @@ int SATSolver::AddInvAsLabelK(const FrameList &inv, int k) {
     return sl;
 }
 
-int SATSolver::AddCubeAsLabelK(const cube &c, int k) {
-    cube c_k = GetKUnrolled(c, k);
+int SATSolver::AddCubeAsLabelK(const Cube &c, int k) {
+    Cube c_k = GetKUnrolled(c, k);
     if (c_k.size() == 1) return c_k[0];
 
     int sl = GetNewVar();
-    clause c_to_sl;
+    Clause c_to_sl;
     c_to_sl.reserve(c_k.size() + 1);
     for (int lit : c_k) c_to_sl.emplace_back(-lit);
     c_to_sl.emplace_back(sl);
     AddClause(c_to_sl);
     for (int lit : c_k) {
-        AddClause(clause{-sl, lit});
+        AddClause(Clause{-sl, lit});
     }
 
     return sl;
@@ -328,17 +328,17 @@ int SATSolver::AddCubeAsLabelK(const cube &c, int k) {
 void SATSolver::AddInvAsClauseK(const FrameList &inv, bool neg, int k) {
     int l_inv = AddInvAsLabelK(inv, k);
     if (neg)
-        AddClause(clause{-l_inv});
+        AddClause(Clause{-l_inv});
     else
-        AddClause(clause{l_inv});
+        AddClause(Clause{l_inv});
 }
 
-void SATSolver::AddCubeAsClauseK(const cube &c, bool neg, int k) {
+void SATSolver::AddCubeAsClauseK(const Cube &c, bool neg, int k) {
     int l_cube = AddCubeAsLabelK(c, k);
     if (neg)
-        AddClause(clause{-l_cube});
+        AddClause(Clause{-l_cube});
     else
-        AddClause(clause{l_cube});
+        AddClause(Clause{l_cube});
 }
 
 void SATSolver::AddWallConstraints(const std::vector<FrameList> &walls) {
@@ -346,30 +346,30 @@ void SATSolver::AddWallConstraints(const std::vector<FrameList> &walls) {
     for (const auto &inv : walls) {
         int p = AddInvAsLabelK(inv, 0);
         int pp = AddInvAsLabelK(inv, 1);
-        AddClause(clause{-p, pp});
-        AddClause(clause{-pp, p});
+        AddClause(Clause{-p, pp});
+        AddClause(Clause{-pp, p});
     }
 }
 
-cube SATSolver::AddWallConstraintsAsLabels(const std::vector<FrameList> &walls) {
-    cube labels;
+Cube SATSolver::AddWallConstraintsAsLabels(const std::vector<FrameList> &walls) {
+    Cube labels;
     for (const auto &inv : walls) {
         int p = AddInvAsLabelK(inv, 0);
         int pp = AddInvAsLabelK(inv, 1);
         int l = GetNewVar();
-        AddClause(clause{-l, -p, pp});
-        AddClause(clause{-l, p, -pp});
-        AddClause(clause{l, p, pp});
-        AddClause(clause{l, -p, -pp});
+        AddClause(Clause{-l, -p, pp});
+        AddClause(Clause{-l, p, -pp});
+        AddClause(Clause{l, p, pp});
+        AddClause(Clause{l, -p, -pp});
         labels.emplace_back(l);
     }
     return labels;
 }
 
 void SATSolver::AddShoalConstraints(const std::vector<FrameList> &shoals,
-                                    const std::vector<cube> &dead,
-                                    int shoal_unroll) {
-    int unroll = shoal_unroll >= 1 ? shoal_unroll : 1;
+                                    const std::vector<Cube> &dead,
+                                    int shoalUnroll) {
+    int unroll = shoalUnroll >= 1 ? shoalUnroll : 1;
     for (int u = 1; u <= unroll; ++u) {
         for (const auto &inv : shoals) {
             AddInvAsClauseK(inv, true, u);
@@ -380,11 +380,11 @@ void SATSolver::AddShoalConstraints(const std::vector<FrameList> &shoals,
     }
 }
 
-cube SATSolver::AddShoalConstraintsAsLabels(const std::vector<FrameList> &shoals,
-                                            const std::vector<cube> &dead,
-                                            int shoal_unroll) {
-    cube labels;
-    int unroll = shoal_unroll >= 1 ? shoal_unroll : 1;
+Cube SATSolver::AddShoalConstraintsAsLabels(const std::vector<FrameList> &shoals,
+                                            const std::vector<Cube> &dead,
+                                            int shoalUnroll) {
+    Cube labels;
+    int unroll = shoalUnroll >= 1 ? shoalUnroll : 1;
     for (int u = 1; u <= unroll; ++u) {
         for (const auto &inv : shoals) {
             labels.emplace_back(-AddInvAsLabelK(inv, u));
@@ -403,7 +403,7 @@ cube SATSolver::AddShoalConstraintsAsLabels(const std::vector<FrameList> &shoals
 // @output:
 // ================================================================================
 void SATSolver::AddInitialClauses() {
-    vector<clause> &clauses = m_model.GetInitialClauses();
+    vector<Clause> &clauses = m_model.GetInitialClauses();
     for (auto &c : clauses) {
         AddClause(c);
         SetDomainCOI(c);
@@ -416,7 +416,7 @@ void SATSolver::AddInitialClauses() {
 // @input:
 // @output:
 // ================================================================================
-bool SATSolver::SolveFrame(const cube &assumption, int lvl) {
+bool SATSolver::SolveFrame(const Cube &assumption, int lvl) {
     ClearAssumption();
     PushAssumption(GetFrameFlag(lvl));
     AddAssumption(assumption);
@@ -425,13 +425,13 @@ bool SATSolver::SolveFrame(const cube &assumption, int lvl) {
 
 
 // ================================================================================
-// @brief: add cube to frame, F_i = F_i & !uc
+// @brief: add Cube to frame, F_i = F_i & !uc
 // @input:
 // @output:
 // ================================================================================
-void SATSolver::AddUC(const cube &uc, int lvl) {
+void SATSolver::AddUC(const Cube &uc, int lvl) {
     int flag = GetFrameFlag(lvl);
-    clause cls;
+    Clause cls;
     cls.reserve(uc.size() + 1);
     cls.emplace_back(-flag);
     for (auto ci : uc) cls.emplace_back(-ci);
@@ -440,8 +440,8 @@ void SATSolver::AddUC(const cube &uc, int lvl) {
     SetDomain(cls);
 }
 
-void SATSolver::AddUC(const cube &uc) {
-    clause cls;
+void SATSolver::AddUC(const Cube &uc) {
+    Clause cls;
     cls.reserve(uc.size());
     for (auto ci : uc) cls.emplace_back(-ci);
 
@@ -456,7 +456,7 @@ void SATSolver::AddUC(const cube &uc) {
 // @output:
 // ================================================================================
 void SATSolver::AddProperty() {
-    clause cls = clause{m_model.GetProperty()};
+    Clause cls = Clause{m_model.GetProperty()};
     AddClause(cls);
     SetDomainCOI(cls);
 }

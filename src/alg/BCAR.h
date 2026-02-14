@@ -5,10 +5,10 @@
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
-#include "random"
 #include <algorithm>
 #include <assert.h>
 #include <memory>
+#include <random>
 #include <string>
 
 
@@ -22,14 +22,14 @@ class BCAR : public IncrAlg {
     CheckResult Run() override;
     void Witness() override;
 
-    void SetInit(const cube &c) override { m_customInit = c; }
+    void SetInit(const Cube &c) override { m_customInit = c; }
     void SetSearchFromInitSucc(bool b) override { /*bcar originally search from init succ*/ }
     void SetLoopRefuting(bool b) override { m_loopRefuting = b; }
-    void SetDead(const std::vector<cube> &dead) override { m_dead = dead; }
+    void SetDead(const std::vector<Cube> &dead) override { m_dead = dead; }
     void SetShoals(const std::vector<FrameList> &shoals) override { m_shoals = shoals; }
     void SetWalls(const std::vector<FrameList> &walls) override { m_walls = walls; }
 
-    std::vector<std::pair<cube, cube>> GetCexTrace() override;
+    std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
     FrameList GetInv() override;
 
     void KLiveIncr() override;
@@ -45,13 +45,13 @@ class BCAR : public IncrAlg {
 
     void InitializeStartSolver();
 
-    bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
+    bool AddUnsatisfiableCore(const Cube &uc, int frameLevel);
 
     bool ImmediateSatisfiable();
 
     void ResetBadSolver();
 
-    int GetNewLevel(const cube &states, int start = 0);
+    int GetNewLevel(const Cube &states, int start = 0);
 
     bool IsInvariant(int frameLevel);
 
@@ -63,24 +63,24 @@ class BCAR : public IncrAlg {
         bool operator()(const int &l1, const int &l2) const {
             return (branching->PriorityOf(l1) > branching->PriorityOf(l2));
         }
-    } litOrder;
+    } m_litOrder;
 
     struct InnOrder {
         Model &m;
 
         explicit InnOrder(Model &model) : m(model) {}
 
-        bool operator()(const int &inn_1, const int &inn_2) const {
-            return (m.GetInnardslvl(inn_1) > m.GetInnardslvl(inn_2));
+        bool operator()(const int &inn1, const int &inn2) const {
+            return (m.GetInnardslvl(inn1) > m.GetInnardslvl(inn2));
         }
-    } innOrder;
+    } m_innOrder;
 
     struct BlockerOrder {
         shared_ptr<Branching> branching;
 
         BlockerOrder() {}
 
-        bool operator()(const cube &a, const cube &b) const {
+        bool operator()(const Cube &a, const Cube &b) const {
             float score_a = 0, score_b = 0;
             for (int i = 0; i < a.size(); i++) {
                 score_a += branching->PriorityOf(a[i]);
@@ -92,43 +92,43 @@ class BCAR : public IncrAlg {
             score_b /= b.size();
             return score_a > score_b;
         }
-    } blockerOrder;
+    } m_blockerOrder;
 
-    void OrderAssumption(cube &uc) {
+    void OrderAssumption(Cube &uc) {
         if (m_settings.randomSeed > 0) {
             shuffle(uc.begin(), uc.end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        stable_sort(uc.begin(), uc.end(), litOrder);
+        stable_sort(uc.begin(), uc.end(), m_litOrder);
         if (m_settings.internalSignals) {
-            stable_sort(uc.begin(), uc.end(), innOrder);
+            stable_sort(uc.begin(), uc.end(), m_innOrder);
         }
     }
 
-    inline void GetPrimed(cube &p) {
+    inline void GetPrimed(Cube &p) {
         for (auto &x : p) {
             x = m_model.GetPrime(x);
         }
     }
 
-    bool Generalize(cube &uc, int frame_lvl, int rec_lvl = 0);
+    bool Generalize(Cube &uc, int frameLvl, int recLvl = 0);
 
-    bool Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses);
+    bool Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses);
 
-    bool CTSBlock(shared_ptr<State> cts, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses, int cts_count = 0);
+    bool CTSBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int ctsCount = 0);
 
-    bool DownHasFailed(const cube &s, const vector<cube> &failed_ctses);
+    bool DownHasFailed(const Cube &s, const vector<Cube> &failedCtses);
 
-    bool Propagate(const cube &c, int lvl);
+    bool Propagate(const Cube &c, int lvl);
 
-    int PropagateUp(const cube &c, int lvl);
+    int PropagateUp(const Cube &c, int lvl);
 
     void OutputWitness();
 
     void OutputCounterExample();
 
-    unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
+    unsigned AddCubeToAndGates(aiger *circuit, vector<unsigned> cb);
 
     bool CheckBad(shared_ptr<State> s);
 
@@ -136,9 +136,9 @@ class BCAR : public IncrAlg {
 
     void AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f);
 
-    bool IsReachable(int lvl, const cube &assumption, const string &label);
+    bool IsReachable(int lvl, const Cube &assumption, const string &label);
 
-    cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
+    Cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions);
 
     shared_ptr<State> EnumerateStartState();
 
@@ -165,13 +165,13 @@ class BCAR : public IncrAlg {
 
     // liveness
     bool m_initialized{false};
-    cube m_customInit;
+    Cube m_customInit;
     bool m_loopRefuting{false};
-    std::vector<cube> m_dead;
+    std::vector<Cube> m_dead;
     std::vector<FrameList> m_shoals;
     std::vector<FrameList> m_walls;
     bool m_initStateImplyBad{false};
-    std::vector<std::pair<cube, cube>> m_cexTrace;
+    std::vector<std::pair<Cube, Cube>> m_cexTrace;
 };
 
 } // namespace car

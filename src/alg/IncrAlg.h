@@ -9,10 +9,10 @@ namespace car {
 
 class IncrAlg : public BaseAlg {
   public:
-    virtual void SetInit(const cube &c) = 0;
+    virtual void SetInit(const Cube &c) = 0;
     virtual void SetSearchFromInitSucc(bool b) = 0;
     virtual void SetLoopRefuting(bool b) = 0;
-    virtual void SetDead(const std::vector<cube> &dead) = 0;
+    virtual void SetDead(const std::vector<Cube> &dead) = 0;
     virtual void SetShoals(const std::vector<FrameList> &shoals) = 0;
     virtual void SetWalls(const std::vector<FrameList> &walls) = 0;
 

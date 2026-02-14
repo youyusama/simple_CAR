@@ -11,32 +11,32 @@
 
 namespace car {
 
-class rlive : public BaseAlg {
+class RLive : public BaseAlg {
   public:
-    rlive(Settings settings,
+    RLive(Settings settings,
           Model &model,
           Log &log);
     CheckResult Run() override;
     void Witness() override;
-    std::vector<std::pair<cube, cube>> GetCexTrace() override;
+    std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
 
   private:
     std::unique_ptr<IncrAlg> MakeSafeChecker();
-    bool CheckReachable(const cube &s);
-    bool PruneDead(const cube &s);
+    bool CheckReachable(const Cube &s);
+    bool PruneDead(const Cube &s);
 
     Settings m_settings;
     Model &m_model;
     Log &m_log;
 
     std::vector<FrameList> m_globalShoals;
-    std::vector<cube> m_globalDead;
-    std::vector<cube> m_badStack;
+    std::vector<Cube> m_globalDead;
+    std::vector<Cube> m_badStack;
 
     std::unique_ptr<IncrAlg> m_safeChecker;
     std::shared_ptr<SATSolver> m_pdSolver;
 
-    cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
+    Cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions);
 };
 
 } // namespace car

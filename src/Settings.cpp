@@ -57,7 +57,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("-k", settings.bmcK, "BMC bound")
         ->default_val(-1);
 
-    app.add_option("--step", settings.bmc_step, "Performs BMC by unrolling k steps in a single batch")
+    app.add_option("--step", settings.bmcStep, "Performs BMC by unrolling k steps in a single batch")
         ->default_val(1);
 
     app.add_option("--br", settings.branching, "branching # i-good lemma")

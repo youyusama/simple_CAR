@@ -18,14 +18,14 @@ using namespace std;
 
 namespace car {
 
-inline bool cmp(int a, int b) {
+inline bool Cmp(int a, int b) {
     if (abs(a) != abs(b))
         return abs(a) < abs(b);
     else
         return a < b;
 }
 
-void aigerDeleter(aiger *aig);
+void AigerDeleter(aiger *aig);
 
 struct CircuitGate {
     enum GateType { AND,
@@ -113,11 +113,11 @@ class CircuitGraph {
     unordered_map<int, CircuitGate> gatesMap; // gates in the COI of property & constraints & transition relation
 
   private:
-    bool TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits);
+    bool TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits);
 
-    bool TryMakeITEGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits);
+    bool TryMakeITEGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits);
 
-    bool MakeAndGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits);
+    bool MakeAndGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits);
 
     inline int GetCarId(const unsigned lit) {
         if (lit == 0)
@@ -127,11 +127,11 @@ class CircuitGraph {
         return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
     }
 
-    inline unsigned GetAigerLit(const int car_id) {
-        if (car_id > 0)
-            return car_id << 1;
+    inline unsigned GetAigerLit(const int carId) {
+        if (carId > 0)
+            return carId << 1;
         else
-            return (-car_id << 1) + 1;
+            return (-carId << 1) + 1;
     }
 };
 

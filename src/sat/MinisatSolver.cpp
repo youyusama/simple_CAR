@@ -21,7 +21,7 @@ bool MinisatSolver::Solve() {
 }
 
 
-bool MinisatSolver::Solve(const cube &assumption) {
+bool MinisatSolver::Solve(const Cube &assumption) {
     m_assumptions.clear();
     for (auto it : assumption) {
         m_assumptions.push(GetLit(it));
@@ -30,29 +30,29 @@ bool MinisatSolver::Solve(const cube &assumption) {
 }
 
 
-void MinisatSolver::AddAssumption(const cube &assumption) {
+void MinisatSolver::AddAssumption(const Cube &assumption) {
     for (auto it : assumption) {
         m_assumptions.push(GetLit(it));
     }
 }
 
 
-void MinisatSolver::AddClause(const cube &cls) {
+void MinisatSolver::AddClause(const Cube &cls) {
     Minisat::vec<Minisat::Lit> literals;
     for (int l : cls) {
         literals.push(GetLit(l));
         if (abs(l) > m_maxId) m_maxId = abs(l) + 1;
     }
     bool result = addClause(literals);
-    // result may be false when the clause is already conflict
+    // result may be false when the Clause is already conflict
     // assert(result != false);
 }
 
 
-pair<cube, cube> MinisatSolver::GetAssignment(bool prime) {
+pair<Cube, Cube> MinisatSolver::GetAssignment(bool prime) {
     assert(m_model.GetNumInputs() < nVars());
-    cube inputs;
-    cube latches;
+    Cube inputs;
+    Cube latches;
     inputs.reserve(m_model.GetNumInputs());
     latches.reserve(m_model.GetNumLatches());
     for (int i : m_model.GetModelInputs()) {
@@ -99,16 +99,16 @@ pair<cube, cube> MinisatSolver::GetAssignment(bool prime) {
             }
         }
     }
-    return pair<cube, cube>(inputs, latches);
+    return pair<Cube, Cube>(inputs, latches);
 }
 
 unordered_set<int> MinisatSolver::GetConflict() {
-    unordered_set<int> conflictSet;
+    unordered_set<int> conflict_set;
     for (int i = 0; i < conflict.size(); ++i) {
         int val = -GetLiteralId(conflict[i]);
-        conflictSet.insert(val);
+        conflict_set.insert(val);
     }
-    return conflictSet;
+    return conflict_set;
 }
 
 
@@ -117,9 +117,9 @@ inline int MinisatSolver::GetLiteralId(const Minisat::Lit &l) {
 }
 
 
-void MinisatSolver::AddTempClause(const cube &cls) {
+void MinisatSolver::AddTempClause(const Cube &cls) {
     m_tempVar = GetNewVar();
-    cube temp_cls = cls;
+    Cube temp_cls = cls;
     temp_cls.push_back(-m_tempVar);
     AddClause(temp_cls);
 }

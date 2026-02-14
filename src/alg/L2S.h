@@ -19,7 +19,7 @@ class L2S : public BaseAlg {
 
     CheckResult Run() override;
     void Witness() override;
-    std::vector<std::pair<cube, cube>> GetCexTrace() override;
+    std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
 
   private:
     void Translate();

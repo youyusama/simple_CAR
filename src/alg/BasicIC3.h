@@ -25,7 +25,7 @@ struct Obligation {
             return level < other.level;
         if (depth != other.depth)
             return depth > other.depth;
-        return cubeComp(state->latches, other.state->latches);
+        return CubeComp(state->latches, other.state->latches);
     }
 };
 
@@ -39,14 +39,14 @@ class BasicIC3 : public IncrAlg {
     CheckResult Run() override;
     void Witness() override;
 
-    void SetInit(const cube &c) override { m_customInit = c; }
+    void SetInit(const Cube &c) override { m_customInit = c; }
     void SetSearchFromInitSucc(bool b) override { m_searchFromInitSucc = b; }
     void SetLoopRefuting(bool b) override { m_loopRefuting = b; }
-    void SetDead(const std::vector<cube> &dead) override { m_dead = dead; }
+    void SetDead(const std::vector<Cube> &dead) override { m_dead = dead; }
     void SetShoals(const std::vector<FrameList> &shoals) override { m_shoals = shoals; }
     void SetWalls(const std::vector<FrameList> &walls) override { m_walls = walls; }
 
-    std::vector<std::pair<cube, cube>> GetCexTrace() override;
+    std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
     FrameList GetInv() override;
     void KLiveIncr() override;
 
@@ -65,9 +65,9 @@ class BasicIC3 : public IncrAlg {
 
     void AddNewFrame();
 
-    int AddLemma(const cube &blockingCube, int frameLevel, bool fromCTI = false);
+    int AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI = false);
 
-    void AddLemmaToSolvers(const cube &blockingCube, int beginLevel, int endLevel);
+    void AddLemmaToSolvers(const Cube &blockingCube, int beginLevel, int endLevel);
 
     void RunALLFromInsertion(int newLemmaId);
 
@@ -96,23 +96,23 @@ class BasicIC3 : public IncrAlg {
 
     void PushObligation(set<Obligation> &obligations, Obligation ob, int newLevel);
 
-    int LazyCheck(const cube &cb, int startLvl);
+    int LazyCheck(const Cube &cb, int startLvl);
 
-    size_t Generalize(cube &cb, int frameLvl);
+    size_t Generalize(Cube &cb, int frameLvl);
 
-    bool MIC(cube &cb, int frameLvl, int recLvl);
+    bool MIC(Cube &cb, int frameLvl, int recLvl);
 
-    bool Down(cube &c, int frameLvl, int recLvl, const set<int> &triedLits);
+    bool Down(Cube &c, int frameLvl, int recLvl, const set<int> &triedLits);
 
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 
-    inline void GetPrimed(cube &p) {
+    inline void GetPrimed(Cube &p) {
         for (auto &x : p) {
             x = m_model.GetPrimeK(x, 1);
         }
     }
     string FramesInfo() const;
-    int PropagateUp(const cube &cb, int startLevel);
+    int PropagateUp(const Cube &cb, int startLevel);
 
     struct LitOrder {
         shared_ptr<Branching> branching;
@@ -122,14 +122,14 @@ class BasicIC3 : public IncrAlg {
         bool operator()(const int &l1, const int &l2) const {
             return (branching->PriorityOf(l1) > branching->PriorityOf(l2));
         }
-    } litOrder;
+    } m_litOrder;
 
     struct BlockerOrder {
         shared_ptr<Branching> branching;
 
         BlockerOrder() {}
 
-        bool operator()(const cube &a, const cube &b) const {
+        bool operator()(const Cube &a, const Cube &b) const {
             float score_a = 0, score_b = 0;
             for (int i = 0; i < a.size(); i++) {
                 score_a += branching->PriorityOf(a[i]);
@@ -137,15 +137,15 @@ class BasicIC3 : public IncrAlg {
             }
             return score_a > score_b;
         }
-    } blockerOrder;
+    } m_blockerOrder;
 
-    void OrderAssumption(cube &c) {
+    void OrderAssumption(Cube &c) {
         if (m_settings.randomSeed > 0) {
             shuffle(c.begin(), c.end(), default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        sort(c.begin(), c.end(), litOrder);
+        sort(c.begin(), c.end(), m_litOrder);
     }
 
     void Extend();
@@ -156,16 +156,16 @@ class BasicIC3 : public IncrAlg {
 
     shared_ptr<State> EnumerateStartState();
 
-    unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
+    unsigned AddCubeToAndGates(aiger *circuit, vector<unsigned> cb);
     void OutputWitness();
     void OutputCounterExample();
 
 
-    cube GetUnsatCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube, bool prime);
-    bool UnreachabilityCheck(const cube &cb, const shared_ptr<SATSolver> &slv);
-    bool InductionCheck(const cube &cb, const shared_ptr<SATSolver> &slv);
-    cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const cube &fallbackCube);
-    bool InitiationCheck(const cube &cb);
+    Cube GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime);
+    bool UnreachabilityCheck(const Cube &cb, const shared_ptr<SATSolver> &slv);
+    bool InductionCheck(const Cube &cb, const shared_ptr<SATSolver> &slv);
+    Cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube);
+    bool InitiationCheck(const Cube &cb);
 
     CheckResult m_checkResult;
 
@@ -195,16 +195,16 @@ class BasicIC3 : public IncrAlg {
 
     // liveness
     bool m_initialized{false};
-    cube m_customInit;
+    Cube m_customInit;
     bool m_searchFromInitSucc{false};
     bool m_loopRefuting{false};
-    std::vector<cube> m_dead;
+    std::vector<Cube> m_dead;
     std::vector<FrameList> m_shoals;
     std::vector<FrameList> m_walls;
     bool m_initStateImplyBad{false};
-    std::vector<std::pair<cube, cube>> m_cexTrace;
-    cube m_shoalsLabels;
-    cube m_wallsLabels;
+    std::vector<std::pair<Cube, Cube>> m_cexTrace;
+    Cube m_shoalsLabels;
+    Cube m_wallsLabels;
 };
 
 } // namespace car

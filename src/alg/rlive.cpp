@@ -7,7 +7,7 @@
 
 namespace car {
 
-rlive::rlive(Settings settings,
+RLive::RLive(Settings settings,
              Model &model,
              Log &log) : m_settings(settings),
                          m_model(model),
@@ -18,21 +18,21 @@ rlive::rlive(Settings settings,
     m_pdSolver->AddConstraints();
 }
 
-CheckResult rlive::Run() {
-    signal(SIGINT, signalHandler);
+CheckResult RLive::Run() {
+    signal(SIGINT, SignalHandler);
 
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
         LOG_L(m_log, 0, "rlive only supports liveness properties.");
         return CheckResult::Unknown;
     }
 
-    while (CheckReachable(cube())) {
+    while (CheckReachable(Cube())) {
         auto trace = m_safeChecker->GetCexTrace();
-        cube t = trace.back().second;
+        Cube t = trace.back().second;
         m_badStack.emplace_back(t);
 
         while (!m_badStack.empty()) {
-            cube s = m_badStack.back();
+            Cube s = m_badStack.back();
 
             if (PruneDead(s)) {
                 m_badStack.pop_back();
@@ -41,7 +41,7 @@ CheckResult rlive::Run() {
 
             if (CheckReachable(s)) {
                 auto new_trace = m_safeChecker->GetCexTrace();
-                cube new_t = new_trace.back().second;
+                Cube new_t = new_trace.back().second;
                 LOG_L(m_log, 2, "get new bad state ", CubeToStr(new_t));
                 bool looped = false;
                 for (const auto &b : m_badStack) {
@@ -72,15 +72,15 @@ CheckResult rlive::Run() {
     return CheckResult::Safe;
 }
 
-void rlive::Witness() {
+void RLive::Witness() {
     LOG_L(m_log, 1, "rlive witness generation is not implemented.");
 }
 
-std::vector<std::pair<cube, cube>> rlive::GetCexTrace() {
+std::vector<std::pair<Cube, Cube>> RLive::GetCexTrace() {
     return {};
 }
 
-std::unique_ptr<IncrAlg> rlive::MakeSafeChecker() {
+std::unique_ptr<IncrAlg> RLive::MakeSafeChecker() {
     Settings sub_settings = m_settings;
     sub_settings.alg = m_settings.safetyBaseAlg;
     switch (m_settings.safetyBaseAlg) {
@@ -95,7 +95,7 @@ std::unique_ptr<IncrAlg> rlive::MakeSafeChecker() {
     }
 }
 
-bool rlive::CheckReachable(const cube &s) {
+bool RLive::CheckReachable(const Cube &s) {
     m_safeChecker = MakeSafeChecker();
     LOG_L(m_log, 1, "===== RLIVE SEARCH BAD =====", " at lvl: ", m_badStack.size());
     if (m_badStack.empty()) {
@@ -124,7 +124,7 @@ bool rlive::CheckReachable(const cube &s) {
 }
 
 
-bool rlive::PruneDead(const cube &s) {
+bool RLive::PruneDead(const Cube &s) {
     LOG_L(m_log, 3, "bad state ", CubeToStr(s));
 
     // s & T & !C' & !q
@@ -145,7 +145,7 @@ bool rlive::PruneDead(const cube &s) {
         } else {
             auto new_dead = GetUnsatAssumption(m_pdSolver, assumption);
             LOG_L(m_log, 2, "get new dead", CubeToStr(new_dead));
-            m_pdSolver->AddShoalConstraints({}, vector<cube>{new_dead}, 1);
+            m_pdSolver->AddShoalConstraints({}, vector<Cube>{new_dead}, 1);
             m_pdSolver->AddCubeAsClauseK(new_dead, true, 1);
             m_globalDead.emplace_back(new_dead);
         }
@@ -163,9 +163,9 @@ bool rlive::PruneDead(const cube &s) {
 }
 
 
-cube rlive::GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions) {
+Cube RLive::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions) {
     const unordered_set<int> &conflict = solver->GetConflict();
-    cube res;
+    Cube res;
     for (auto a : assumptions) {
         if (conflict.find(a) != conflict.end())
             res.emplace_back(a);

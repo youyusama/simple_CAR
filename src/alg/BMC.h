@@ -16,11 +16,11 @@ class BMC : public BaseAlg {
 
     CheckResult Run() override;
     void Witness() override;
-    std::vector<std::pair<cube, cube>> GetCexTrace() override;
+    std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
 
   private:
     bool Check();
-    bool Check_nonincremental();
+    bool CheckNonIncremental();
     Settings m_settings;
     Log &m_log;
     Model &m_model;
@@ -28,17 +28,17 @@ class BMC : public BaseAlg {
     int m_maxK;
     int m_step;
     shared_ptr<State> m_initialState;
-    shared_ptr<SATSolver> m_Solver;
+    shared_ptr<SATSolver> m_solver;
 
     // for kissat to store clauses from previous unrolling
-    vector<clause> m_clauses;
+    vector<Clause> m_clauses;
 
     CheckResult m_checkResult;
     void Init();
     void OutputCounterExample();
-    void GetClausesK(int m_k, vector<clause> &clauses);
-    int GetBadK(int m_k);
-    vector<int> GetConstraintsK(int m_k);
+    void GetClausesK(int mK, vector<Clause> &clauses);
+    int GetBadK(int mK);
+    vector<int> GetConstraintsK(int mK);
 };
 
 } // namespace car

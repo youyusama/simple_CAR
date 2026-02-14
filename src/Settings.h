@@ -52,7 +52,7 @@ struct Settings {
     int allMaxStates = 32;
     bool satSolveInDomain = false;
     double maxObligationAct = 20.0;
-    int bmc_step = 1;
+    int bmcStep = 1;
     int eq = 2;
     int eqTimeout = 600;
     bool searchFromBadPred = false;

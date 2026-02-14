@@ -5,10 +5,10 @@
 
 namespace car {
 
-void signalHandler(int signum) {
-    if (GLOBAL_LOG != nullptr) {
-        GLOBAL_LOG->PrintCustomStatistics();
-        LOG_LP(GLOBAL_LOG, 0, "Unknown");
+void SignalHandler(int signum) {
+    if (global_log != nullptr) {
+        global_log->PrintCustomStatistics();
+        LOG_LP(global_log, 0, "Unknown");
     }
     exit(signum);
 }
@@ -44,7 +44,7 @@ Log::ScopedTimer::~ScopedTimer() {
 }
 
 
-Log *GLOBAL_LOG = nullptr;
+Log *global_log = nullptr;
 
 
 string CubeToStr(const vector<int> &c) {
@@ -54,7 +54,7 @@ string CubeToStr(const vector<int> &c) {
 }
 
 
-void compress_vector(vector<int> &res, const vector<int> &v) {
+void CompressVector(vector<int> &res, const vector<int> &v) {
     int count = 0;
     int tempi = 0;
     for (int l : v) {
@@ -74,7 +74,7 @@ void compress_vector(vector<int> &res, const vector<int> &v) {
 
 string CubeToStrShort(const vector<int> &c) {
     vector<int> s;
-    compress_vector(s, c);
+    CompressVector(s, c);
     return CubeToStr(s);
 }
 
@@ -130,19 +130,19 @@ void Log::PrintCustomStatistics() {
         cout << endl
              << "Detailed Timers:" << endl;
     }
-    double totalSum = 0.0;
+    double total_sum = 0.0;
     for (const auto &entry : sorted) {
         double total = GetTimeDouble(entry.second.total);
         double per = entry.second.calls == 0 ? 0.0 : total / entry.second.calls;
         cout << "  " << left << setw(18) << entry.first << "called: " << setw(10) << entry.second.calls
              << "takes: " << fixed << setprecision(3) << setw(10) << total
              << "per: " << fixed << setprecision(6) << per << endl;
-        totalSum += total;
+        total_sum += total;
     }
     if (!sorted.empty()) {
         cout << "  " << left << setw(18) << "Sum"
              << "called: " << setw(10) << "-"
-             << "takes: " << fixed << setprecision(3) << setw(10) << totalSum
+             << "takes: " << fixed << setprecision(3) << setw(10) << total_sum
              << "per: " << fixed << setprecision(6) << 0.0 << endl;
     }
 

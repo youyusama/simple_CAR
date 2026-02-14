@@ -13,24 +13,24 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     MinisatSolver(Model &m);
     ~MinisatSolver();
 
-    void AddClause(const cube &cls) override;
-    void AddAssumption(const cube &assumption) override;
+    void AddClause(const Cube &cls) override;
+    void AddAssumption(const Cube &assumption) override;
     bool Solve() override;
-    bool Solve(const cube &assumption) override;
-    pair<cube, cube> GetAssignment(bool prime) override;
+    bool Solve(const Cube &assumption) override;
+    pair<Cube, Cube> GetAssignment(bool prime) override;
     unordered_set<int> GetConflict() override;
     inline int GetNewVar() override {
         return ++m_maxId;
     }
-    void AddTempClause(const cube &cls) override;
+    void AddTempClause(const Cube &cls) override;
     void ReleaseTempClause() override;
-    inline tbool GetModel(int id) override {
+    inline Tbool GetModel(int id) override {
         if (model[id] == Minisat::l_True)
-            return t_True;
+            return T_TRUE;
         else if (model[id] == Minisat::l_False) {
-            return t_False;
+            return T_FALSE;
         } else {
-            return t_Undef;
+            return T_UNDEF;
         }
     }
     void ClearAssumption() override;

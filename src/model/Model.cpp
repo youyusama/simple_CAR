@@ -60,9 +60,9 @@ pair<int, int> EquivalenceManager::FindRootRecursive(int key) {
 Model::Model(Settings settings, Log &log) : m_settings(settings),
                                             m_log(log) {
     // load aiger
-    string aigFilePath = settings.aigFilePath;
-    m_aiger = shared_ptr<aiger>(aiger_init(), aigerDeleter);
-    aiger_open_and_read_from_file(m_aiger.get(), aigFilePath.c_str());
+    string aig_file_path = settings.aigFilePath;
+    m_aiger = shared_ptr<aiger>(aiger_init(), AigerDeleter);
+    aiger_open_and_read_from_file(m_aiger.get(), aig_file_path.c_str());
     if (aiger_error(m_aiger.get())) {
         cout << "aiger parse error" << endl;
         exit(0);
@@ -95,10 +95,10 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     }
 
     LOG_L(m_log, 1, "Model initialized: ",
-            m_circuitGraph->numInputs, " inputs, ", m_circuitGraph->numLatches, " latches, ",
-            m_circuitGraph->numAnds, " gates, ", m_circuitGraph->numConstraints, " constraints.");
+          m_circuitGraph->numInputs, " inputs, ", m_circuitGraph->numLatches, " latches, ",
+          m_circuitGraph->numAnds, " gates, ", m_circuitGraph->numConstraints, " constraints.");
     LOG_L(m_log, 1, "COI Refined Model: ",
-            m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
+          m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
     m_maxId = m_circuitGraph->numVar + 1;
 
     // try to find equivalences
@@ -147,7 +147,7 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // update dependency by DAG CNF
     UpdateDependencyVecDAGCNF();
 
-    // further clause simplification
+    // further Clause simplification
     SimplifyClauses();
 
     // cout << "model latches:" << endl;
@@ -174,7 +174,7 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // }
 
     LOG_L(m_log, 1, "Model reduced: ",
-            m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
+          m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
     LOG_L(m_log, 1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
 }
 
@@ -287,8 +287,8 @@ void Model::CollectInitialState() {
         } else if (reset == -TrueId()) {
             m_initialState.push_back(-l);
         } else if (reset != l && IsAnd(reset)) {
-            m_initialClauses.emplace_back(clause{l, -reset});
-            m_initialClauses.emplace_back(clause{-l, reset});
+            m_initialClauses.emplace_back(Clause{l, -reset});
+            m_initialClauses.emplace_back(Clause{-l, reset});
         }
     }
 }
@@ -315,7 +315,7 @@ void Model::CollectClauses() {
 
     // true id first for the correctness of dag cnf simplifier,
     // a more rubust way is needed in the future
-    m_clauses.emplace_back(clause{TrueId()});
+    m_clauses.emplace_back(Clause{TrueId()});
 
     for (int g_id : m_circuitGraph->modelGates) {
         auto g = m_circuitGraph->gatesMap[g_id];
@@ -323,20 +323,20 @@ void Model::CollectClauses() {
         int fanin0 = g.fanins[0];
         int fanin1 = g.fanins[1];
         if (g.gateType == CircuitGate::GateType::AND) {
-            m_clauses.emplace_back(clause{fanout, -fanin0, -fanin1});
-            m_clauses.emplace_back(clause{-fanout, fanin0});
-            m_clauses.emplace_back(clause{-fanout, fanin1});
+            m_clauses.emplace_back(Clause{fanout, -fanin0, -fanin1});
+            m_clauses.emplace_back(Clause{-fanout, fanin0});
+            m_clauses.emplace_back(Clause{-fanout, fanin1});
         } else if (g.gateType == CircuitGate::GateType::XOR) {
-            m_clauses.emplace_back(clause{fanout, -fanin0, fanin1});
-            m_clauses.emplace_back(clause{fanout, fanin0, -fanin1});
-            m_clauses.emplace_back(clause{-fanout, fanin0, fanin1});
-            m_clauses.emplace_back(clause{-fanout, -fanin0, -fanin1});
+            m_clauses.emplace_back(Clause{fanout, -fanin0, fanin1});
+            m_clauses.emplace_back(Clause{fanout, fanin0, -fanin1});
+            m_clauses.emplace_back(Clause{-fanout, fanin0, fanin1});
+            m_clauses.emplace_back(Clause{-fanout, -fanin0, -fanin1});
         } else if (g.gateType == CircuitGate::GateType::ITE) {
             int fanin2 = g.fanins[2];
-            m_clauses.emplace_back(clause{fanout, -fanin0, -fanin1});
-            m_clauses.emplace_back(clause{fanout, fanin0, -fanin2});
-            m_clauses.emplace_back(clause{-fanout, -fanin0, fanin1});
-            m_clauses.emplace_back(clause{-fanout, fanin0, fanin2});
+            m_clauses.emplace_back(Clause{fanout, -fanin0, -fanin1});
+            m_clauses.emplace_back(Clause{fanout, fanin0, -fanin2});
+            m_clauses.emplace_back(Clause{-fanout, -fanin0, fanin1});
+            m_clauses.emplace_back(Clause{-fanout, fanin0, fanin2});
         }
     }
 }
@@ -432,7 +432,7 @@ void Model::Rebuild() {
     SimplifyClauses();
 
     LOG_L(m_log, 1, "Model rebuilt: ",
-            m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
+          m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
     LOG_L(m_log, 1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
 }
 
@@ -484,7 +484,7 @@ int Model::BuildLiveness() {
 }
 
 
-cube Model::GetCOIDomain(const cube &c) {
+Cube Model::GetCOIDomain(const Cube &c) {
     m_coiDomain.clear();
     for (int v : c) {
         int a = abs(v);
@@ -499,7 +499,7 @@ cube Model::GetCOIDomain(const cube &c) {
 
     for (int v : m_coiDomain) m_coiVisited[v] = 0;
 
-    cube domain = m_coiDomain;
+    Cube domain = m_coiDomain;
     domain.emplace_back(abs(TrueId()));
     return domain;
 }
@@ -548,8 +548,8 @@ int Model::GetPrimeK(const int id, int k) {
 
 
 int Model::InnardsLogiclvlDFS(int id) {
-    auto it = m_innards_lvl.find(id);
-    if (it != m_innards_lvl.end())
+    auto it = m_innardsLvl.find(id);
+    if (it != m_innardsLvl.end())
         return it->second;
     int lvl = 0;
     if (IsAnd(id)) {
@@ -562,7 +562,7 @@ int Model::InnardsLogiclvlDFS(int id) {
     } else {
         lvl = 0;
     }
-    m_innards_lvl.insert(pair<int, int>(id, lvl));
+    m_innardsLvl.insert(pair<int, int>(id, lvl));
     return lvl;
 }
 
@@ -641,27 +641,27 @@ void Model::SimplifyClauses() {
     solver->freeze(TrueId());
     solver->freeze(m_bad);
 
-    class carClauseIterator : public CaDiCaL::ClauseIterator {
+    class CarClauseIterator : public CaDiCaL::ClauseIterator {
       public:
-        ~carClauseIterator() {}
+        ~CarClauseIterator() {}
         bool clause(const std::vector<int> &cls) {
-            simp_clauses.emplace_back(cls);
+            m_simpClauses.emplace_back(cls);
             return true;
         }
-        vector<std::vector<int>> &getClauses() {
-            return simp_clauses;
+        vector<std::vector<int>> &GetClauses() {
+            return m_simpClauses;
         }
 
       private:
-        vector<std::vector<int>> simp_clauses;
+        vector<std::vector<int>> m_simpClauses;
     };
 
-    carClauseIterator it;
+    CarClauseIterator it;
     solver->simplify();
     solver->traverse_clauses(it);
     // cout << "clauses: " << m_clauses.size() << endl;
-    // cout << "simplified clauses: " << it.getClauses().size() << endl;
-    m_simpClauses = it.getClauses();
+    // cout << "simplified clauses: " << it.GetClauses().size() << endl;
+    m_simpClauses = it.GetClauses();
 }
 
 void Model::SimplifyDAGClauses() {
@@ -690,17 +690,17 @@ bool Model::SimplifyModelByTernarySimulation() {
 
     m_log.Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
-    simulator.simulate(250);
-    if (!simulator.isCycleReached()) return false;
+    simulator.Simulate(250);
+    if (!simulator.IsCycleReached()) return false;
     LOG_L(m_log, 1, "Simulation takes ", m_log.Tock(), " seconds.");
 
     // find equivalent latches
-    unordered_map<string, vector<int>> signaturesVariablesMap;
-    EncodeStatesToSignatuers(simulator.getStates(), signaturesVariablesMap);
+    unordered_map<string, vector<int>> signatures_variables_map;
+    EncodeStatesToSignatuers(simulator.GetStates(), signatures_variables_map);
     int eq_counter = 0;
 
     // signatures to equivalent latches
-    for (auto &s : signaturesVariablesMap) {
+    for (auto &s : signatures_variables_map) {
         if (s.second.size() > 1) {
             // the neg version of variables is processed
             if (m_equivalenceManager->HasEquivalence(s.second[0]) ||
@@ -708,7 +708,7 @@ bool Model::SimplifyModelByTernarySimulation() {
 
             // get the var0 with the smallest id
             vector<int> equal_vars(s.second);
-            sort(equal_vars.begin(), equal_vars.end(), cmp);
+            sort(equal_vars.begin(), equal_vars.end(), Cmp);
 
             // equivalent var
             int var0 = equal_vars[0];
@@ -724,12 +724,12 @@ bool Model::SimplifyModelByTernarySimulation() {
     LOG_L(m_log, 1, "Found ", eq_counter, " equivalent latches.");
 
     // find equivalent gates
-    unordered_map<string, vector<int>> signaturesGatesMap;
-    EncodeStatesToSignatuers(simulator.getGateStates(), signaturesGatesMap);
+    unordered_map<string, vector<int>> signatures_gates_map;
+    EncodeStatesToSignatuers(simulator.GetGateStates(), signatures_gates_map);
     eq_counter = 0;
 
     // signatures to equivalent latches
-    for (auto &s : signaturesGatesMap) {
+    for (auto &s : signatures_gates_map) {
         if (s.second.size() > 1) {
             // the neg version of variables is processed
             if (m_equivalenceManager->HasEquivalence(s.second[0]) ||
@@ -737,7 +737,7 @@ bool Model::SimplifyModelByTernarySimulation() {
 
             // get the var0 with the smallest id
             vector<int> equal_vars(s.second);
-            sort(equal_vars.begin(), equal_vars.end(), cmp);
+            sort(equal_vars.begin(), equal_vars.end(), Cmp);
 
             // equivalent var
             int var0 = equal_vars[0];
@@ -762,16 +762,16 @@ void Model::SimplifyModelByRandomSimulation() {
 
     m_log.Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
-    vector<vector<tbool>> simulation_values;
+    vector<vector<Tbool>> simulation_values;
     for (int i = 0; i < NUM_CHUNKS; i++) {
-        simulator.simulateRandom(64);
-        for (auto &values : simulator.getValues()) {
+        simulator.SimulateRandom(64);
+        for (auto &values : simulator.GetValues()) {
             simulation_values.emplace_back(values);
         }
     }
     LOG_L(m_log, 1, "Simulation takes ", m_log.Tock(), " seconds.");
 
-    VarMapN64 signaturesVariablesMap;
+    VarMapN64 signatures_variables_map;
     int mayeq_counter = 0;
     int eq_counter = 0;
     auto start_time = chrono::steady_clock::now();
@@ -779,10 +779,10 @@ void Model::SimplifyModelByRandomSimulation() {
     // find may equivalent latches
     vector<int> eqcheck_latches = m_circuitGraph->modelLatches;
     eqcheck_latches.emplace_back(TrueId());
-    EncodeStatesToN64Signatuers(simulation_values, eqcheck_latches, signaturesVariablesMap);
+    EncodeStatesToN64Signatuers(simulation_values, eqcheck_latches, signatures_variables_map);
 
     // signatures to equivalent variables
-    for (auto &s : signaturesVariablesMap) {
+    for (auto &s : signatures_variables_map) {
         if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
             LOG_L(m_log, 1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
             break;
@@ -791,7 +791,7 @@ void Model::SimplifyModelByRandomSimulation() {
         if (s.second.size() < 2) continue;
 
         vector<int> may_equal_vars(s.second);
-        sort(may_equal_vars.begin(), may_equal_vars.end(), cmp);
+        sort(may_equal_vars.begin(), may_equal_vars.end(), Cmp);
 
         for (int i = 0; i < may_equal_vars.size() - 1; i++) {
             if (m_equivalenceManager->HasEquivalence(may_equal_vars[i])) continue;
@@ -813,15 +813,15 @@ void Model::SimplifyModelByRandomSimulation() {
 
     if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
     // find may equivalent variables
-    signaturesVariablesMap.clear();
+    signatures_variables_map.clear();
     vector<int> eqcheck_gates = m_circuitGraph->modelGates;
     eqcheck_gates.emplace_back(TrueId());
-    EncodeStatesToN64Signatuers(simulation_values, eqcheck_gates, signaturesVariablesMap);
+    EncodeStatesToN64Signatuers(simulation_values, eqcheck_gates, signatures_variables_map);
     mayeq_counter = 0;
     eq_counter = 0;
 
     // signatures to equivalent variables
-    for (auto &s : signaturesVariablesMap) {
+    for (auto &s : signatures_variables_map) {
         if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
             LOG_L(m_log, 1, "Equivalent gate checking timeout after ", m_settings.eqTimeout, " seconds.");
             break;
@@ -829,7 +829,7 @@ void Model::SimplifyModelByRandomSimulation() {
         if (s.second.size() < 2) continue;
 
         vector<int> may_equal_vars(s.second);
-        sort(may_equal_vars.begin(), may_equal_vars.end(), cmp);
+        sort(may_equal_vars.begin(), may_equal_vars.end(), Cmp);
 
         if (may_equal_vars.size() <= 3) {
             for (int i = 0; i + 1 < may_equal_vars.size(); i++) {
@@ -907,7 +907,7 @@ void Model::EncodeStatesToSignatuers(const vector<vector<int>> &states, unordere
 }
 
 
-void Model::EncodeStatesToN64Signatuers(const vector<vector<tbool>> &values, const vector<int> &vars, VarMapN64 &signatures) {
+void Model::EncodeStatesToN64Signatuers(const vector<vector<Tbool>> &values, const vector<int> &vars, VarMapN64 &signatures) {
     assert(values.size() == 64 * NUM_CHUNKS);
 
     for (auto l : vars) {
@@ -916,7 +916,7 @@ void Model::EncodeStatesToN64Signatuers(const vector<vector<tbool>> &values, con
             const auto &vmapi = values[i];
             int j = i / 64;
             signature.chunks[j] = signature.chunks[j] << 1;
-            if (vmapi[l] == t_True) {
+            if (vmapi[l] == T_TRUE) {
                 signature.chunks[j] |= 1;
             }
         }
@@ -985,7 +985,7 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a_prime, b_prime}));
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a_prime, -b_prime}));
 
-    cube d = GetCOIDomain(cube{abs(a), abs(b), abs(a_prime), abs(b_prime)});
+    Cube d = GetCOIDomain(Cube{abs(a), abs(b), abs(a_prime), abs(b_prime)});
     {
         std::vector<char> &dom = m_equivalenceSolver->domainSet();
         std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
@@ -1042,7 +1042,7 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a, b}));
     m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a, -b}));
 
-    cube d = GetCOIDomain(cube{abs(a), abs(b)});
+    Cube d = GetCOIDomain(Cube{abs(a), abs(b)});
     {
         std::vector<char> &dom = m_equivalenceSolver->domainSet();
         std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
@@ -1087,16 +1087,16 @@ int Model::KLivenessIncrement() {
 
     // get clauses
     m_kliveTransClauses.resize(m_kliveStep + 1);
-    vector<clause> k_clauses;
+    vector<Clause> k_clauses;
     // and gate
-    k_clauses.emplace_back(clause{m_bad, -q, -latch});
-    k_clauses.emplace_back(clause{-m_bad, q});
-    k_clauses.emplace_back(clause{-m_bad, latch});
-    // ite gate
-    k_clauses.emplace_back(clause{next, -q, -TrueId()});
-    k_clauses.emplace_back(clause{next, q, -latch});
-    k_clauses.emplace_back(clause{-next, -q, TrueId()});
-    k_clauses.emplace_back(clause{-next, q, latch});
+    k_clauses.emplace_back(Clause{m_bad, -q, -latch});
+    k_clauses.emplace_back(Clause{-m_bad, q});
+    k_clauses.emplace_back(Clause{-m_bad, latch});
+    // Ite gate
+    k_clauses.emplace_back(Clause{next, -q, -TrueId()});
+    k_clauses.emplace_back(Clause{next, q, -latch});
+    k_clauses.emplace_back(Clause{-next, -q, TrueId()});
+    k_clauses.emplace_back(Clause{-next, q, latch});
     m_kliveTransClauses[m_kliveStep] = k_clauses;
 
     // rebuild manually

@@ -4,7 +4,7 @@
 namespace car {
 CadicalSolver::CadicalSolver(Model &m) : m_model(m) {
     m_maxId = m_model.NumVar() + 1; // reserve variable numbers for one step reachability check
-    m_tempClause = cube();
+    m_tempClause = Cube();
 }
 
 CadicalSolver::~CadicalSolver() {}
@@ -29,7 +29,7 @@ bool CadicalSolver::Solve() {
 }
 
 
-bool CadicalSolver::Solve(const cube &assumption) {
+bool CadicalSolver::Solve(const Cube &assumption) {
     m_assumptions.clear();
     m_assumptions.resize(assumption.size());
     std::copy(assumption.begin(), assumption.end(), m_assumptions.begin());
@@ -37,23 +37,23 @@ bool CadicalSolver::Solve(const cube &assumption) {
 }
 
 
-void CadicalSolver::AddAssumption(const cube &assumption) {
+void CadicalSolver::AddAssumption(const Cube &assumption) {
     for (auto it : assumption) {
         m_assumptions.push_back(it);
     }
 }
 
 
-void CadicalSolver::AddClause(const cube &cls) {
+void CadicalSolver::AddClause(const Cube &cls) {
     for (int l : cls)
         if (abs(l) > m_maxId) m_maxId = abs(l) + 1;
     clause(cls);
 }
 
 
-pair<cube, cube> CadicalSolver::GetAssignment(bool prime) {
-    cube inputs;
-    cube latches;
+pair<Cube, Cube> CadicalSolver::GetAssignment(bool prime) {
+    Cube inputs;
+    Cube latches;
     inputs.reserve(m_model.GetNumInputs());
     latches.reserve(m_model.GetNumLatches());
     for (int i : m_model.GetModelInputs()) {
@@ -99,21 +99,21 @@ pair<cube, cube> CadicalSolver::GetAssignment(bool prime) {
             }
         }
     }
-    return pair<cube, cube>(inputs, latches);
+    return pair<Cube, Cube>(inputs, latches);
 }
 
 
 unordered_set<int> CadicalSolver::GetConflict() {
-    unordered_set<int> conflictSet;
+    unordered_set<int> conflict_set;
     for (auto v : m_assumptions) {
         if (failed(v)) {
-            conflictSet.insert(v);
+            conflict_set.insert(v);
         }
     }
-    return conflictSet;
+    return conflict_set;
 }
 
-void CadicalSolver::AddTempClause(const cube &cls) {
+void CadicalSolver::AddTempClause(const Cube &cls) {
     m_tempClause = cls;
 }
 

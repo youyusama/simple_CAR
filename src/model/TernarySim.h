@@ -13,57 +13,57 @@
 namespace car {
 
 // ternary logic
-class tbool {
-    uint8_t value;
+class Tbool {
+    uint8_t m_value;
 
   public:
-    tbool() : value(0) {}
+    Tbool() : m_value(0) {}
 
-    explicit tbool(uint8_t v) : value(v) {}
+    explicit Tbool(uint8_t v) : m_value(v) {}
 
-    explicit tbool(bool x) : value(!x) {}
+    explicit Tbool(bool x) : m_value(!x) {}
 
-    tbool operator!() const { return (value == 2) ? *this : tbool((uint8_t)(1 - value)); }
+    Tbool operator!() const { return (m_value == 2) ? *this : Tbool((uint8_t)(1 - m_value)); }
 
-    bool operator==(tbool b) const { return (value == b.value) && (value != 2); }
+    bool operator==(Tbool b) const { return (m_value == b.m_value) && (m_value != 2); }
 
-    bool operator!=(tbool b) const { return !(*this == b); }
+    bool operator!=(Tbool b) const { return !(*this == b); }
 
-    tbool operator^(tbool b) const {
-        uint8_t sel = (this->value << 1) | (b.value << 3);
+    Tbool operator^(Tbool b) const {
+        uint8_t sel = (this->m_value << 1) | (b.m_value << 3);
         uint8_t v = (0x2A2421 >> sel) & 3;
-        return tbool(v);
+        return Tbool(v);
     }
 
-    tbool operator&&(tbool b) const {
-        uint8_t sel = (this->value << 1) | (b.value << 3);
+    Tbool operator&&(Tbool b) const {
+        uint8_t sel = (this->m_value << 1) | (b.m_value << 3);
         uint8_t v = (0x261524 >> sel) & 3;
-        return tbool(v);
+        return Tbool(v);
     }
 
-    tbool operator||(tbool b) const {
-        uint8_t sel = (this->value << 1) | (b.value << 3);
+    Tbool operator||(Tbool b) const {
+        uint8_t sel = (this->m_value << 1) | (b.m_value << 3);
         uint8_t v = (0x282400 >> sel) & 3;
-        return tbool(v);
+        return Tbool(v);
     }
 
-    uint8_t raw() const { return value; }
+    uint8_t Raw() const { return m_value; }
 
-    friend const char *toStr(tbool l);
+    friend const char *ToStr(Tbool l);
 };
 
-const tbool t_True((uint8_t)0);
-const tbool t_False((uint8_t)1);
-const tbool t_Undef((uint8_t)2);
+const Tbool T_TRUE((uint8_t)0);
+const Tbool T_FALSE((uint8_t)1);
+const Tbool T_UNDEF((uint8_t)2);
 
-inline tbool ite(tbool c, tbool a, tbool b) {
-    if (c == t_True) return a;
-    if (c == t_False) return b;
-    return (a == b) ? a : t_Undef;
+inline Tbool Ite(Tbool c, Tbool a, Tbool b) {
+    if (c == T_TRUE) return a;
+    if (c == T_FALSE) return b;
+    return (a == b) ? a : T_UNDEF;
 }
 
-inline const char *toStr(tbool l) {
-    switch (l.value) {
+inline const char *ToStr(Tbool l) {
+    switch (l.m_value) {
     case 0: return "1";
     case 1: return "0";
     case 2: return "X";
@@ -71,45 +71,45 @@ inline const char *toStr(tbool l) {
     }
 }
 
-void testTruthTables();
+void TestTruthTables();
 
 class TernarySimulator {
   public:
     TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, Log &log);
     ~TernarySimulator() {};
 
-    bool setVal(int id, tbool v, int step);
+    bool SetVal(int id, Tbool v, int step);
 
-    tbool getVal(int id, int step);
+    Tbool GetVal(int id, int step);
 
-    tbool getVal(int id, const vector<tbool> &vmap);
+    Tbool GetVal(int id, const vector<Tbool> &vmap);
 
-    void simulate(int maxPreciseDepth);
+    void Simulate(int maxPreciseDepth);
 
-    void simulateRandom(int maxSteps);
+    void SimulateRandom(int maxSteps);
 
-    bool isCycleReached() { return m_cycleStart != -1; };
+    bool IsCycleReached() { return m_cycleStart != -1; };
 
-    const vector<vector<tbool>> &getValues() { return m_values; };
+    const vector<vector<Tbool>> &GetValues() { return m_values; };
 
-    const vector<vector<int>> &getStates() { return m_states; };
+    const vector<vector<int>> &GetStates() { return m_states; };
 
-    const vector<vector<int>> &getGateStates() { return m_gateStates; };
+    const vector<vector<int>> &GetGateStates() { return m_gateStates; };
 
   private:
     Log &m_log;
 
     shared_ptr<CircuitGraph> m_circuitGraph;
 
-    vector<vector<tbool>> m_values;
+    vector<vector<Tbool>> m_values;
 
-    void initStepValues();
+    void InitStepValues();
 
-    void pushState(int step, vector<int> &state);
+    void PushState(int step, vector<int> &state);
 
     vector<vector<int>> m_states;
 
-    void pushGateState(int step, vector<int> &gatestate);
+    void PushGateState(int step, vector<int> &gatestate);
 
     vector<vector<int>> m_gateStates;
 
@@ -117,17 +117,17 @@ class TernarySimulator {
 
     int m_step; // next step to simulate
 
-    void reset();
+    void Reset();
 
-    void simulateOneStep();
+    void SimulateOneStep();
 
-    bool reachCycle();
+    bool ReachCycle();
 
     int m_cycleStart;
 
-    string stepValuesToString(int step);
+    string StepValuesToString(int step);
 
-    int abstractCurrentState(int step);
+    int AbstractCurrentState(int step);
 };
 
 } // namespace car
