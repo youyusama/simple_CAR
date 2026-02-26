@@ -13,7 +13,7 @@ verbose = True
 def modify_input_file(filepath):
     if verbose:
         print(f"Modifying input file: {filepath}")
-    btor2aiger_cmd = btor2aig_path + " " + filepath + " -a > " + filepath + ".aig"
+    btor2aiger_cmd = btor2aig_path + " " + filepath + " > " + filepath + ".aig"
     try:
         subprocess.run(btor2aiger_cmd, shell=True)
     except Exception as e:
