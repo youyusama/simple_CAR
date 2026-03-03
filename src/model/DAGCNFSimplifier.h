@@ -26,7 +26,7 @@ class DAGCNFSimplifier {
     struct Occur {
         std::vector<int> occur;
         bool dirty = false;
-        size_t size = 0;
+        std::size_t size = 0;
     };
 
     int m_maxVar = 0;
@@ -69,14 +69,14 @@ class DAGCNFSimplifier {
 
     void OccurAdd(int lit, int clause_id);
     void OccurDel(int lit, int clause_id);
-    size_t OccurNum(int lit) const;
+    std::size_t OccurNum(int lit) const;
     const std::vector<int> &OccurGet(int lit);
     void OccurClean(int lit);
 
     bool TryResolvent(const std::vector<int> &pcnf,
                       const std::vector<int> &ncnf,
                       int pivot_var,
-                      size_t limit,
+                      std::size_t limit,
                       std::vector<clause> &out);
 
     void Eliminate(int var);
