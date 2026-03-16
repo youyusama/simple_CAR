@@ -49,16 +49,6 @@ void Solver::reset() {
     }
 
     // clean temprary learnts
-    if (temp_cls_activated || solve_in_domain) {
-        // unit
-        while (trail.size() > traillim_snapshot) {
-            Var x = var(trail.back());
-            assigns[x] = l_Undef;
-            polarity[x] = sign(trail.back());
-            trail.pop_back();
-        }
-        qhead = trail.size();
-    }
     if (temp_cls_activated) {
         // temp clause
         temp_cls_activated = false;
@@ -423,7 +413,78 @@ void Solver::uncheckedEnqueue(Lit p, CRef from) {
 }
 
 
-CRef Solver::propagate() {
+CRef Solver::propagate_full() {
+    CRef confl = CRef_Undef;
+    int num_props = 0;
+
+    while (qhead < trail.size()) {
+        Lit p = trail[qhead++]; // 'p' is enqueued fact to propagate.
+        std::vector<Watcher> &ws = watches[p];
+        Watcher *ws_data = ws.data();
+        size_t ws_len = ws.size();
+        size_t i = 0;
+        num_props++;
+
+        while (i < ws_len) {
+            // Try to avoid inspecting the clause:
+            Watcher w_cur = ws_data[i];
+            Lit blocker = w_cur.blocker;
+            if (value(blocker) == l_True) {
+                i++;
+                continue;
+            }
+
+            // Make sure the false literal is data[1]:
+            CRef cr = w_cur.cref;
+            Clause &c = ca->get_clause(cr);
+            Lit false_lit = ~p;
+            if (c[0] == false_lit)
+                c[0] = c[1], c[1] = false_lit;
+            assert(c[1] == false_lit);
+
+            // If 0th watch is true, then clause is already satisfied.
+            Lit first = c[0];
+            if (first != blocker && (value(first) == l_True)) {
+                ws_data[i].blocker = first;
+                i++;
+                continue;
+            }
+
+            // Look for new watch:
+            for (size_t k = 2; k < c.size(); k++) {
+                if (value(c[k]) != l_False) {
+                    c[1] = c[k];
+                    c[k] = false_lit;
+                    watches[~c[1]].emplace_back(Watcher(cr, first));
+                    ws_data[i] = ws_data[ws_len - 1];
+                    ws_len--;
+                    goto NextClause;
+                }
+            }
+
+            // Did not find watch -- clause is unit under assignment:
+            ws_data[i].blocker = first;
+            if (value(first) == l_False) {
+                confl = cr;
+                qhead = trail.size();
+                break;
+            } else {
+                uncheckedEnqueue(first, cr);
+                i++;
+            }
+
+        NextClause:;
+        }
+        ws.resize(ws_len);
+    }
+    propagations += num_props;
+    simpDB_props -= num_props;
+
+    return confl;
+}
+
+
+CRef Solver::propagate_domain() {
     CRef confl = CRef_Undef;
     int num_props = 0;
 

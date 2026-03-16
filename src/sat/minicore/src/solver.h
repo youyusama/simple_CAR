@@ -169,6 +169,8 @@ class Solver {
     void uncheckedEnqueue(Lit p,
                           CRef from = CRef_Undef); // Enqueue a literal. Assumes value of literal is undefined.
     CRef propagate();                              // Perform unit propagation. Returns possibly conflicting clause.
+    CRef propagate_full();                         // Perform *full* unit propagation.
+    CRef propagate_domain();                       // Perform unit propagation *in domain*.
     void cancelUntil(size_t level);                // Backtrack until a certain level.
     void analyze(CRef confl,
                  std::vector<Lit> &out_learnt,
@@ -277,6 +279,13 @@ inline size_t Solver::nAssigns() const { return trail.size(); }
 inline int Solver::nClauses() const { return num_clauses; }
 inline int Solver::nLearnts() const { return num_learnts; }
 inline int Solver::nVars() const { return next_var; }
+
+inline CRef Solver::propagate() {
+    if (decisionLevel() == 0)
+        return propagate_full();
+    else
+        return propagate_domain();
+}
 
 inline lbool Solver::solve() {
     if (state_ != SolverState::Ready) reset();
