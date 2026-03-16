@@ -47,6 +47,7 @@ struct Settings {
     int ctgMaxRecursionDepth = 1;
     int ctgMaxStates = 3;
     int ctgMaxBlocks = 1;
+    int ctgMaxAttempts = 3;
     bool activeLemmaLearning = false;
     int allThreshold = 8;
     int allMaxStates = 32;

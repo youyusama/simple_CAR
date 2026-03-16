@@ -570,6 +570,7 @@ bool BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
     if (m_settings.referSkipping)
         for (auto b : uc_blocker) required_lits.emplace(b);
     vector<Cube> failed_ctses;
+    int attempts = m_settings.ctgMaxAttempts;
     OrderAssumption(uc);
     for (int i = uc.size() - 1; i > 0; i--) {
         if (required_lits.find(uc[i]) != required_lits.end()) continue;
@@ -580,7 +581,9 @@ bool BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
         if (Down(temp_uc, frameLvl, recLvl, failed_ctses)) {
             uc.swap(temp_uc);
             i = uc.size();
+            attempts = m_settings.ctgMaxAttempts;
         } else {
+            if (--attempts == 0) break;
             required_lits.emplace(uc[i]);
         }
     }
@@ -936,7 +939,7 @@ void BCAR::OutputCounterExample() {
     assert(m_lastState != nullptr);
 
     cex_file << "1" << endl
-            << "b0" << endl;
+             << "b0" << endl;
 
     vector<shared_ptr<State>> trace;
     shared_ptr<State> state = m_lastState;

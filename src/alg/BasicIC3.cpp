@@ -840,9 +840,7 @@ bool BasicIC3::MIC(Cube &cb, int frameLvl, int recLvl) {
         }
     }
 
-
-    const int max_mic_attempts = 3;
-    size_t attempts = max_mic_attempts;
+    int attempts = m_settings.ctgMaxAttempts;
 
     OrderAssumption(cb);
     // Iterate backwards to handle the shrinking Cube size gracefully.
@@ -867,12 +865,9 @@ bool BasicIC3::MIC(Cube &cb, int frameLvl, int recLvl) {
             // dropCube is sorted
             cb.swap(drop_cube);
             i = cb.size();
-            attempts = max_mic_attempts;
+            attempts = m_settings.ctgMaxAttempts;
         } else {
-            if (--attempts == 0) {
-                LOG_L(m_log, 3, "Max MIC attempts reached, stopping generalization.");
-                break;
-            }
+            if (--attempts == 0) break;
             tried_lits.insert(lit_to_drop);
         }
     }
@@ -1043,7 +1038,7 @@ void BasicIC3::OutputCounterExample() {
     assert(m_cexStart != nullptr);
 
     cex_file << "1" << endl
-            << "b0" << endl;
+             << "b0" << endl;
 
     shared_ptr<State> state = m_cexStart;
     cex_file << state->GetLatchesString() << endl;
