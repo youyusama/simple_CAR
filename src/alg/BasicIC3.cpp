@@ -367,7 +367,7 @@ BasicIC3::ALLProveStatus BasicIC3::RunALLProver(int targetLemmaId) {
         const Cube goal_cube = m_lfm.CubeOf(targetLemmaId);
 
         if (!m_lfm.HasCTPPreds(targetLemmaId)) {
-            if (UnreachabilityCheck(goal_cube, m_transSolvers[goal_level])) {
+            if (!IsReachable(goal_cube, m_transSolvers[goal_level])) {
                 return ALLProveStatus::Proved;
             }
             if (attempts_left <= 0) return ALLProveStatus::Bailout;
@@ -392,12 +392,12 @@ BasicIC3::ALLProveStatus BasicIC3::RunALLProver(int targetLemmaId) {
             return ALLProveStatus::Invalidated;
         }
 
-        if (LazyCheck(ctp_cube, ctp_level) != -1) {
+        if (GetSubsumeLevel(ctp_cube, ctp_level) != -1) {
             continue;
         }
 
         auto ctp_solver = m_transSolvers[ctp_level - 1];
-        if (InductionCheck(ctp_cube, ctp_solver)) {
+        if (IsInductive(ctp_cube, ctp_solver)) {
             auto ctp_core = GetAndValidateCore(ctp_solver, ctp_cube);
             if (MIC(ctp_core, ctp_level, 0)) {
                 m_branching->Update(ctp_core);
@@ -647,7 +647,13 @@ bool BasicIC3::Strengthen() {
     }
 }
 
-int BasicIC3::LazyCheck(const Cube &cb, int startLvl) {
+
+// ================================================================================
+// @brief: Get a frame level where cb is subsumed
+// @input:
+// @output: -1 if not subsumed
+// ================================================================================
+int BasicIC3::GetSubsumeLevel(const Cube &cb, int startLvl) {
     if (startLvl < 0) startLvl = 0;
     if (startLvl > m_k + 1) return -1;
 
@@ -686,7 +692,7 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
             continue;
         }
 
-        int subsume_lvl = LazyCheck(ob.state->latches, ob.level + 1);
+        int subsume_lvl = GetSubsumeLevel(ob.state->latches, ob.level + 1);
         if (subsume_lvl != -1) {
             LOG_L(m_log, 2, "Obligation at level ", ob.level + 1, " depth ", ob.depth, " is subsumed at level ", subsume_lvl, ". Skipped.");
             PushObligation(obligations, ob, subsume_lvl + 1);
@@ -699,7 +705,7 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
         auto &trans_slv = m_transSolvers[ob.level];
         auto &cti_cube = ob.state->latches;
 
-        if (UnreachabilityCheck(cti_cube, trans_slv)) {
+        if (!IsReachable(cti_cube, trans_slv)) {
             auto uc = GetAndValidateCore(trans_slv, cti_cube);
 
             size_t push_level = Generalize(uc, ob.level);
@@ -729,7 +735,7 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
     return true;
 }
 
-bool BasicIC3::InductionCheck(const Cube &cb, const shared_ptr<SATSolver> &slv) {
+bool BasicIC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     Clause cls;
     cls.reserve(cb.size());
     for (const auto &lit : cb) {
@@ -756,7 +762,7 @@ bool BasicIC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &tr
         if (!InitiationCheck(downCube)) {
             return false;
         }
-        if (InductionCheck(downCube, trans_slv)) {
+        if (IsInductive(downCube, trans_slv)) {
             Cube down_core = GetAndValidateCore(trans_slv, downCube);
             downCube.swap(down_core);
             return true;
@@ -779,7 +785,7 @@ bool BasicIC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &tr
 
         if (ctgs < m_settings.ctgMaxStates &&
             frameLvl > 0 &&
-            InductionCheck(ctg_cube, m_transSolvers[frameLvl - 1])) {
+            IsInductive(ctg_cube, m_transSolvers[frameLvl - 1])) {
 
             ctgs++;
             LOG_L(m_log, 3, "CTG is inductive at level ", frameLvl - 1);
@@ -952,20 +958,19 @@ string BasicIC3::FramesInfo() const {
 }
 
 
-bool BasicIC3::UnreachabilityCheck(const Cube &cb, const shared_ptr<SATSolver> &slv) {
+bool BasicIC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     Cube assumption(cb);
     OrderAssumption(assumption);
     GetPrimed(assumption);
     slv->SetTempDomainCOI(assumption);
 
-    bool sat = slv->Solve(assumption);
-    return !sat;
+    return slv->Solve(assumption);
 }
 
 int BasicIC3::PropagateUp(const Cube &cb, int startLevel) {
     int push_level = startLevel;
     while (push_level <= m_k) {
-        if (!UnreachabilityCheck(cb, m_transSolvers[push_level])) {
+        if (IsReachable(cb, m_transSolvers[push_level])) {
             break;
         }
         m_branching->Update(cb);
@@ -989,7 +994,7 @@ bool BasicIC3::PropagateFrame() {
         for (int lemma_id : lemmas_to_iterate) {
             if (!m_lfm.Alive(lemma_id) || m_lfm.Reachable(lemma_id)) continue;
             const Cube &cb = m_lfm.CubeOf(lemma_id);
-            if (UnreachabilityCheck(cb, m_transSolvers[i])) {
+            if (!IsReachable(cb, m_transSolvers[i])) {
                 lemmas_propagated++;
                 auto core = GetAndValidateCore(m_transSolvers[i], cb);
                 if (core.size() < cb.size()) {

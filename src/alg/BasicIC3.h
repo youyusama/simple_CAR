@@ -96,7 +96,7 @@ class BasicIC3 : public IncrAlg {
 
     void PushObligation(set<Obligation> &obligations, Obligation ob, int newLevel);
 
-    int LazyCheck(const Cube &cb, int startLvl);
+    int GetSubsumeLevel(const Cube &cb, int startLvl);
 
     size_t Generalize(Cube &cb, int frameLvl);
 
@@ -162,8 +162,8 @@ class BasicIC3 : public IncrAlg {
 
 
     Cube GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime);
-    bool UnreachabilityCheck(const Cube &cb, const shared_ptr<SATSolver> &slv);
-    bool InductionCheck(const Cube &cb, const shared_ptr<SATSolver> &slv);
+    bool IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv);
+    bool IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv);
     Cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube);
     bool InitiationCheck(const Cube &cb);
 
