@@ -1,4 +1,4 @@
-#include "BasicIC3.h"
+#include "IC3.h"
 #include <algorithm>
 #include <iostream>
 #include <set>

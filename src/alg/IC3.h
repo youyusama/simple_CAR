@@ -1,5 +1,5 @@
-#ifndef BASICIC3_H
-#define BASICIC3_H
+#ifndef IC3_H
+#define IC3_H
 
 #include "IncrAlg.h"
 #include "IncrCheckerHelpers.h"
@@ -207,4 +207,4 @@ class IC3 : public IncrAlg {
 };
 
 } // namespace car
-#endif // BASICIC3_H
+#endif // IC3_H

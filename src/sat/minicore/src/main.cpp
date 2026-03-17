@@ -167,17 +167,6 @@ int main(int argc, char **argv) {
         std::cout << "|                                                                             |\n";
     }
 
-    if (!S.simplify()) {
-        if (S.verbosity > 0) {
-            std::cout << "===============================================================================\n";
-            std::cout << "Solved by unit propagation\n";
-            S.printStats();
-            std::cout << std::endl;
-        }
-        std::cout << "UNSATISFIABLE\n";
-        exit(20);
-    }
-
     lbool ret = S.solve();
     if (S.verbosity > 0) {
         S.printStats();

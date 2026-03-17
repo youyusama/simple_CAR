@@ -73,7 +73,7 @@ set(SRCS
     src/alg/BCAR.cpp
     src/alg/FCAR.cpp
     src/alg/BMC.cpp
-    src/alg/BasicIC3.cpp
+    src/alg/IC3.cpp
     src/alg/L2S.cpp
     src/alg/KFAIR.cpp
     src/alg/RLive.cpp

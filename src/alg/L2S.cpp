@@ -2,7 +2,7 @@
 
 #include "BCAR.h"
 #include "BMC.h"
-#include "BasicIC3.h"
+#include "IC3.h"
 #include "FCAR.h"
 
 namespace car {
