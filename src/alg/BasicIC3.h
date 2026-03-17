@@ -69,13 +69,11 @@ class BasicIC3 : public IncrAlg {
 
     void AddLemmaToSolvers(const Cube &blockingCube, int beginLevel, int endLevel);
 
-    void RunALLFromInsertion(int newLemmaId);
+    void ActiveLemmaLearning(int newLemmaId);
 
-    std::vector<int> FindALLHotSpots(const std::vector<int> &ancestorChain);
+    std::vector<int> FindHotSpots(const std::vector<int> &ancestorChain);
 
-    void MarkReachableChain(int lemmaId);
-
-    bool AncestralPush(int hotspotLemmaId);
+    void MarkReachable(int lemmaId);
 
     void PrintALLStats() const;
 
@@ -86,7 +84,7 @@ class BasicIC3 : public IncrAlg {
         Invalidated,
     };
 
-    ALLProveStatus RunALLProver(int targetLemmaId);
+    ALLProveStatus ActiveProve(int targetLemmaId);
 
     bool Strengthen();
 
@@ -112,7 +110,6 @@ class BasicIC3 : public IncrAlg {
         }
     }
     string FramesInfo() const;
-    int PropagateUp(const Cube &cb, int startLevel);
 
     struct LitOrder {
         shared_ptr<Branching> branching;
@@ -152,7 +149,9 @@ class BasicIC3 : public IncrAlg {
 
     bool PropagateFrame();
 
-    bool Propagate();
+    bool Propagate(int lemmaId, int lvl);
+
+    int PropagateUp(int lemmaId, int startLevel);
 
     shared_ptr<State> EnumerateStartState();
 

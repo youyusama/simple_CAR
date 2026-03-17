@@ -312,24 +312,51 @@ int BasicIC3::AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI) {
 
     // active lemma learning
     if (fromCTI && m_settings.activeLemmaLearning) {
-        RunALLFromInsertion(res.lemmaId);
+        ActiveLemmaLearning(res.lemmaId);
     }
     return res.lemmaId;
 }
 
-void BasicIC3::RunALLFromInsertion(int newLemmaId) {
-    if (!m_lfm.Alive(newLemmaId)) return;
-
+void BasicIC3::ActiveLemmaLearning(int newLemmaId) {
     auto ancestor_chain = m_lfm.GetAncestorChain(newLemmaId);
     if (ancestor_chain.empty()) return;
 
-    auto hot_spots = FindALLHotSpots(ancestor_chain);
+    auto hot_spots = FindHotSpots(ancestor_chain);
+
     for (int hotspot_lemma_id : hot_spots) {
-        AncestralPush(hotspot_lemma_id);
+        if (!m_lfm.Alive(hotspot_lemma_id) ||
+            m_lfm.Reachable(hotspot_lemma_id)) continue;
+
+        m_allPushAttempted++;
+        m_lfm.ResetRefineCountSinceALL(hotspot_lemma_id);
+
+        auto status = ActiveProve(hotspot_lemma_id);
+
+        if (status == ALLProveStatus::Invalidated) {
+            m_allStatusInvalidated++;
+            continue;
+        }
+        if (status == ALLProveStatus::Bailout) {
+            m_allStatusBailout++;
+            continue;
+        }
+        if (status == ALLProveStatus::Reachable) {
+            m_allStatusReachable++;
+            MarkReachable(hotspot_lemma_id);
+            continue;
+        }
+
+        assert(status == ALLProveStatus::Proved);
+        m_allStatusProved++;
+
+        if (!m_lfm.Alive(hotspot_lemma_id)) continue;
+
+        const int frame_level = m_lfm.FrameLevelOf(hotspot_lemma_id);
+        PropagateUp(hotspot_lemma_id, frame_level);
     }
 }
 
-std::vector<int> BasicIC3::FindALLHotSpots(const std::vector<int> &ancestorChain) {
+std::vector<int> BasicIC3::FindHotSpots(const std::vector<int> &ancestorChain) {
     std::vector<int> hot_spots;
     for (int lemma_id : ancestorChain) {
         if (!m_lfm.Alive(lemma_id)) continue;
@@ -342,7 +369,7 @@ std::vector<int> BasicIC3::FindALLHotSpots(const std::vector<int> &ancestorChain
     return hot_spots;
 }
 
-void BasicIC3::MarkReachableChain(int lemmaId) {
+void BasicIC3::MarkReachable(int lemmaId) {
     int cur = lemmaId;
     while (cur != -1) {
         if (!m_lfm.Alive(cur)) break;
@@ -352,7 +379,7 @@ void BasicIC3::MarkReachableChain(int lemmaId) {
     }
 }
 
-BasicIC3::ALLProveStatus BasicIC3::RunALLProver(int targetLemmaId) {
+BasicIC3::ALLProveStatus BasicIC3::ActiveProve(int targetLemmaId) {
     if (!m_lfm.Alive(targetLemmaId)) return ALLProveStatus::Invalidated;
 
     int attempts_left = m_settings.allMaxStates;
@@ -402,8 +429,8 @@ BasicIC3::ALLProveStatus BasicIC3::RunALLProver(int targetLemmaId) {
             if (MIC(ctp_core, ctp_level, 0)) {
                 m_branching->Update(ctp_core);
             }
-            int push_level = PropagateUp(ctp_core, ctp_level);
-            AddLemma(ctp_core, push_level);
+            int ctp_lemma_id = AddLemma(ctp_core, ctp_level);
+            PropagateUp(ctp_lemma_id, ctp_level);
             continue;
         }
 
@@ -418,50 +445,6 @@ BasicIC3::ALLProveStatus BasicIC3::RunALLProver(int targetLemmaId) {
     }
 }
 
-bool BasicIC3::AncestralPush(int hotspotLemmaId) {
-    if (!m_lfm.Alive(hotspotLemmaId)) return false;
-    if (m_lfm.Reachable(hotspotLemmaId)) return false;
-
-    m_allPushAttempted++;
-    m_lfm.ResetRefineCountSinceALL(hotspotLemmaId);
-
-    auto status = RunALLProver(hotspotLemmaId);
-    if (status == ALLProveStatus::Invalidated) {
-        m_allStatusInvalidated++;
-        return false;
-    }
-    if (status == ALLProveStatus::Bailout) {
-        m_allStatusBailout++;
-        return false;
-    }
-    if (status == ALLProveStatus::Reachable) {
-        m_allStatusReachable++;
-        MarkReachableChain(hotspotLemmaId);
-        return true;
-    }
-
-    assert(status == ALLProveStatus::Proved);
-    m_allStatusProved++;
-    if (!m_lfm.Alive(hotspotLemmaId)) return false;
-
-    const int frame_level = m_lfm.FrameLevelOf(hotspotLemmaId);
-    const Cube hotspot_cube = m_lfm.CubeOf(hotspotLemmaId);
-    if (frame_level + 1 > m_k + 1) return false;
-
-    const int prop_level = PropagateUp(hotspot_cube, frame_level + 1);
-    if (prop_level <= frame_level) return true;
-
-    auto core = GetAndValidateCore(m_transSolvers[prop_level - 1], hotspot_cube);
-    if (core.size() < hotspot_cube.size()) {
-        AddLemma(core, prop_level);
-        m_branching->Update(core);
-        return true;
-    }
-
-    int new_level = m_lfm.PropagateLemma(hotspotLemmaId, prop_level);
-    AddLemmaToSolvers(hotspot_cube, new_level, new_level);
-    return true;
-}
 
 void BasicIC3::PrintALLStats() const {
     if (!m_settings.activeLemmaLearning) return;
@@ -791,12 +774,11 @@ bool BasicIC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &tr
             LOG_L(m_log, 3, "CTG is inductive at level ", frameLvl - 1);
             Cube ctg_core = GetAndValidateCore(m_transSolvers[frameLvl - 1], ctg_cube);
 
-            int push_level = PropagateUp(ctg_core, frameLvl);
-            if (MIC(ctg_core, push_level - 1, recLvl + 1)) {
+            if (MIC(ctg_core, frameLvl - 1, recLvl + 1)) {
                 m_branching->Update(ctg_core);
             }
-            LOG_L(m_log, 2, "Learned ctg Clause and pushed to frame ", push_level);
-            AddLemma(ctg_core, push_level);
+            int ctg_lemma_id = AddLemma(ctg_core, frameLvl - 1);
+            PropagateUp(ctg_lemma_id, frameLvl - 1);
         } else {
             ctgs = 0;
             Cube join_cube;
@@ -819,9 +801,8 @@ size_t BasicIC3::Generalize(Cube &cb, int frameLvl) {
     if (MIC(cb, frameLvl, 0)) {
         m_branching->Update(cb);
     }
-    int push_level = PropagateUp(cb, frameLvl + 1);
-    LOG_L(m_log, 2, "Learned Clause and pushed to frame ", push_level);
-    AddLemma(cb, push_level, true);
+    int lemma_id = AddLemma(cb, frameLvl, true);
+    size_t push_level = PropagateUp(lemma_id, frameLvl);
     return push_level;
 }
 
@@ -967,16 +948,43 @@ bool BasicIC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     return slv->Solve(assumption);
 }
 
-int BasicIC3::PropagateUp(const Cube &cb, int startLevel) {
-    int push_level = startLevel;
-    while (push_level <= m_k) {
-        if (IsReachable(cb, m_transSolvers[push_level])) {
-            break;
+
+// ================================================================================
+// @brief: ~cb is in F_i, check if F_i (& ~cb) & T & cb' is UNSAT?
+// @input:
+// @output:
+// ================================================================================
+bool BasicIC3::Propagate(int lemmaId, int lvl) {
+    bool result;
+    Cube cb = m_lfm.CubeOf(lemmaId);
+
+    if (!IsReachable(cb, m_transSolvers[lvl])) {
+        auto core = GetAndValidateCore(m_transSolvers[lvl], cb);
+        if (core.size() < cb.size()) {
+            AddLemma(core, lvl + 1);
+        } else {
+            int propagated_level = m_lfm.PropagateLemma(lemmaId, lvl + 1);
+            AddLemmaToSolvers(cb, propagated_level, propagated_level);
         }
-        m_branching->Update(cb);
-        push_level++;
+        m_branching->Update(core);
+        result = true;
+    } else {
+        result = false;
     }
-    return push_level;
+    return result;
+}
+
+
+int BasicIC3::PropagateUp(int LemmaId, int startLevel) {
+    int lvl = startLevel;
+    while (lvl <= m_k) {
+        if (Propagate(LemmaId, lvl))
+            m_branching->Update(m_lfm.CubeOf(LemmaId));
+        else
+            break;
+        lvl++;
+    }
+    return lvl;
 }
 
 
@@ -993,20 +1001,12 @@ bool BasicIC3::PropagateFrame() {
         std::vector<int> lemmas_to_iterate = m_lfm.BorderIds(i);
         for (int lemma_id : lemmas_to_iterate) {
             if (!m_lfm.Alive(lemma_id) || m_lfm.Reachable(lemma_id)) continue;
-            const Cube &cb = m_lfm.CubeOf(lemma_id);
-            if (!IsReachable(cb, m_transSolvers[i])) {
+
+            if (Propagate(lemma_id, i)) {
                 lemmas_propagated++;
-                auto core = GetAndValidateCore(m_transSolvers[i], cb);
-                if (core.size() < cb.size()) {
-                    AddLemma(core, i + 1);
-                } else {
-                    int propagated_level = m_lfm.PropagateLemma(lemma_id, i + 1);
-                    AddLemmaToSolvers(cb, propagated_level, propagated_level);
-                }
-                m_branching->Update(core);
-                continue;
+            } else {
+                lemmas_kept++;
             }
-            lemmas_kept++;
         }
 
         LOG_L(m_log, 2, "Frame ", i, " propagation: ", lemmas_propagated, " propagated, ", lemmas_kept, " kept.");
