@@ -9,11 +9,9 @@ SATSolver::SATSolver(Model &model, MCSATSolver slvKind)
     case MCSATSolver::minisat:
         m_slv = make_shared<MinisatSolver>(m_model);
         break;
-#ifdef CADICAL
     case MCSATSolver::cadical:
         m_slv = make_shared<CadicalSolver>(m_model);
         break;
-#endif
 #ifdef KISSAT
     case MCSATSolver::kissat:
         m_slv = make_shared<KissatSolver>(m_model);

@@ -1,9 +1,7 @@
 #ifndef SATSOLVER_H
 #define SATSOLVER_H
 
-#ifdef CADICAL
 #include "CadicalSolver.h"
-#endif
 #ifdef KISSAT
 #include "KissatSolver.h"
 #endif

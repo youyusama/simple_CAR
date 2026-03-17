@@ -2,9 +2,7 @@
 #include "DAGCNFSimplifier.h"
 #include <bitset>
 
-#ifdef CADICAL
 #include "cadical/src/cadical.hpp"
-#endif
 
 
 namespace car {
@@ -624,7 +622,6 @@ void Model::CollectInnards() {
 
 
 void Model::SimplifyClauses() {
-#ifdef CADICAL
     std::shared_ptr<CaDiCaL::Solver> solver = std::make_shared<CaDiCaL::Solver>();
     for (auto &c : m_clauses) {
         solver->clause(c);
@@ -667,9 +664,6 @@ void Model::SimplifyClauses() {
     // cout << "clauses: " << m_clauses.size() << endl;
     // cout << "simplified clauses: " << it.GetClauses().size() << endl;
     m_simpClauses = it.GetClauses();
-#else
-    m_simpClauses = m_clauses;
-#endif
 }
 
 void Model::SimplifyDAGClauses() {

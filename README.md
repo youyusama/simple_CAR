@@ -24,7 +24,7 @@
 
 `cd build`
 
-`cmake .. -DCMAKE_BUILD_TYPE=Release -DCADICAL=1 -DKISSAT=1`
+`cmake .. -DCMAKE_BUILD_TYPE=Release -DKISSAT=1`
 
 `make -j`
 

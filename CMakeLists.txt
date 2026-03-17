@@ -101,14 +101,18 @@ set(SRCS
 )
 
 # cadical
-if(CADICAL)
-    add_definitions(-DCADICAL)
-    set(SRCS
-        ${SRCS}
-        src/sat/CadicalSolver.cpp
-    )
-    set(LIBS ${LIBS} ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/cadical/build/libcadical.a)
+set(CADICAL_LIB ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/cadical/build/libcadical.a)
+if(NOT EXISTS ${CADICAL_LIB})
+    message(FATAL_ERROR
+        "CaDiCaL is required but '${CADICAL_LIB}' was not found. "
+        "Build it first under src/sat/cadical/ (for example: ./configure --competition && make).")
 endif()
+
+set(SRCS
+    ${SRCS}
+    src/sat/CadicalSolver.cpp
+)
+set(LIBS ${LIBS} ${CADICAL_LIB})
 
 # kissat
 if(KISSAT)
