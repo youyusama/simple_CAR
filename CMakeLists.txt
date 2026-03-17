@@ -62,6 +62,15 @@ set(DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sat
 )
 
+set(MINICORE_LIB_SRCS
+    src/sat/minicore/src/solver.cpp
+)
+
+set(MINICORE_CLI_SRCS
+    src/sat/minicore/src/main.cpp
+    src/sat/minicore/src/dimacs.cpp
+)
+
 set(SRCS
     src/model/aiger.c
     src/model/CircuitGraph.cpp
@@ -89,7 +98,6 @@ set(SRCS
     src/sat/minisat/utils/System.cc
     # minicore
     src/sat/MinicoreSolver.cpp
-    src/sat/minicore/src/solver.cpp
 )
 
 # cadical
@@ -114,7 +122,14 @@ endif()
 
 add_executable(simpleCAR ${SRCS})
 target_include_directories(simpleCAR PUBLIC ${DIRS})
-target_link_libraries(simpleCAR PUBLIC ${LIBS})
+add_library(minicore_lib STATIC ${MINICORE_LIB_SRCS})
+target_include_directories(minicore_lib PUBLIC ${DIRS})
+
+add_executable(minicore ${MINICORE_CLI_SRCS})
+target_include_directories(minicore PUBLIC ${DIRS})
+target_link_libraries(minicore PUBLIC minicore_lib)
+
+target_link_libraries(simpleCAR PUBLIC ${LIBS} minicore_lib)
 
 if(APPLE)
     # On macOS, avoid -static (causes missing crt0.o); keep strip and LTO.

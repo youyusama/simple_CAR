@@ -1,19 +1,17 @@
+#include "dimacs.h"
 #include "solver.h"
 #include "solver_types.h"
-#include <cctype>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
-#include <vector>
 
 using namespace minicore;
 
-static Solver *solver;
+static Solver *solver = nullptr;
 
 
 static void SIGINT_exit(int) {
-    if (solver->verbosity > 0) {
+    if (solver != nullptr && solver->verbosity > 0) {
         solver->printStats();
     }
     std::cout << std::endl
@@ -21,104 +19,36 @@ static void SIGINT_exit(int) {
     exit(0);
 }
 
-
-bool parse_DIMACS(const std::string &filename, Solver &S) {
-    std::ifstream in(filename);
-    if (!in.is_open()) {
-        std::cerr << "Error! Cannot open file: " << filename << std::endl;
-        return false;
-    }
-
-    std::string line;
-    int nvars = 0;
-    int nclauses = 0;
-    int parsed_clauses = 0;
-    int line_num = 0;
-
-    while (std::getline(in, line)) {
-        line_num++;
-
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        if (line.empty()) continue;
-        if (line[0] == 'c') continue;
-        if (line[0] == 'p') {
-            std::istringstream iss(line);
-            std::string token;
-
-            if (!(iss >> token) || token != "p") {
-                std::cerr << "Error! Wrong head, line " << line_num << std::endl;
-                return false;
-            }
-
-            if (!(iss >> token) || token != "cnf") {
-                std::cerr << "Error! Only support cnf, line " << line_num << std::endl;
-                return false;
-            }
-
-            if (!(iss >> nvars)) {
-                std::cerr << "Error! Cannot read var num , line " << line_num << std::endl;
-                return false;
-            }
-
-            if (!(iss >> nclauses)) {
-                std::cerr << "Error! Cannot read clause num , line " << line_num << std::endl;
-                return false;
-            }
-
-            for (int i = 0; i < nvars; i++) {
-                S.newVar();
-            }
-
-            continue;
-        }
-
-        // handle clauses
-        std::vector<Lit> clause;
-        std::istringstream iss(line);
-        int literal;
-
-        while (iss >> literal) {
-            if (literal == 0) {
-                if (!clause.empty()) {
-                    if (!S.addClause_(clause)) {
-                        std::cerr << "Warning! Clause conflict, line " << line_num << std::endl;
-                    }
-                    clause.clear();
-                    parsed_clauses++;
-                }
-                break;
-            }
-
-            if (abs(literal) > nvars) {
-                std::cerr << "Error! Over indexed var " << abs(literal)
-                          << " , line " << line_num << std::endl;
-                return false;
-            }
-
-            int var;
-            var = abs(literal) - 1;
-            clause.push_back(literal > 0 ? mkLit(var) : ~mkLit(var));
-        }
-    }
-
-    if (nclauses > 0 && parsed_clauses != nclauses) {
-        std::cerr << "Warning! Wrong number of clauses " << parsed_clauses
-                  << " different with declared" << nclauses << std::endl;
-    }
-
-    return true;
+static void printUsage(const char *argv0) {
+    std::cout << "Usage: " << argv0 << " [-v] [--model] [input.cnf|-]\n";
 }
 
+static void printModel(const Solver &solver, int max_var) {
+    std::cout << "v";
+    for (int i = 1; i <= max_var; ++i) {
+        const lbool value = solver.value(i);
+        if (value == l_True) {
+            std::cout << " " << i;
+        } else if (value == l_False) {
+            std::cout << " -" << i;
+        }
+    }
+    std::cout << " 0\n";
+}
 
 int main(int argc, char **argv) {
     std::string filename = "";
     bool verbose = false;
+    bool print_model = false;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-v") == 0) {
             verbose = true;
+        } else if (strcmp(argv[i], "--model") == 0) {
+            print_model = true;
+        } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            printUsage(argv[0]);
+            return 0;
         } else {
             if (filename.empty()) {
                 filename = argv[i];
@@ -130,6 +60,7 @@ int main(int argc, char **argv) {
     }
 
     Solver S;
+    DimacsStats stats;
     double initial_time = cpuTime();
     S.verbosity = verbose ? 1 : 0;
     solver = &S;
@@ -142,18 +73,31 @@ int main(int argc, char **argv) {
         std::cout << "|                                                                             |" << std::endl;
     }
 
-    if (!parse_DIMACS(filename, S)) {
+    bool parsed = false;
+    std::string input_name = filename.empty() || filename == "-" ? "<stdin>" : filename;
+    if (filename.empty() || filename == "-") {
+        parsed = parse_DIMACS(std::cin, input_name, S, stats, std::cerr);
+    } else {
+        std::ifstream in(filename);
+        if (!in.is_open()) {
+            std::cerr << "Error! Cannot open file: " << filename << std::endl;
+            return 1;
+        }
+        parsed = parse_DIMACS(in, input_name, S, stats, std::cerr);
+    }
+
+    if (!parsed) {
         std::cerr << "Error! Parse file failed." << std::endl;
-        return 0;
+        return 1;
     }
 
     if (S.verbosity > 0) {
         std::cout << "|  Number of variables:  "
-                  << std::setw(12) << S.nVars()
+                  << std::setw(12) << stats.declared_vars
                   << "                                         |\n";
 
         std::cout << "|  Number of clauses:    "
-                  << std::setw(12) << S.nClauses()
+                  << std::setw(12) << stats.parsed_clauses
                   << "                                         |\n";
     }
 
@@ -168,9 +112,8 @@ int main(int argc, char **argv) {
     }
 
     lbool ret = S.solve();
-    if (S.verbosity > 0) {
-        S.printStats();
-        std::cout << std::endl;
+    if (ret == l_True && print_model) {
+        printModel(S, stats.declared_vars);
     }
     std::cout << (ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n"
                                                                    : "INDETERMINATE\n");

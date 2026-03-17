@@ -9,7 +9,6 @@ extern "C" {
 #include "Log.h"
 #include "Settings.h"
 #include "TernarySim.h"
-#include "cadical/src/cadical.hpp"
 #include "minicore/src/solver.h"
 #include <algorithm>
 #include <assert.h>
