@@ -40,7 +40,7 @@ CheckResult KFAIR::Run() {
         LOG_L(m_log, 1, "===== Search for a prefix =====");
         prefix->SetWalls(m_globalWalls);
         CheckResult res = prefix->Run();
-        if (res == CheckResult::Safe){
+        if (res == CheckResult::Safe) {
             LOG_L(m_log, 1, "===== No unsafe prefix =====");
             return CheckResult::Safe;
         }
@@ -95,7 +95,7 @@ std::unique_ptr<IncrAlg> KFAIR::MakeSafeChecker() {
     case MCAlgorithm::BCAR:
         return std::make_unique<BCAR>(sub_settings, m_model, m_log);
     case MCAlgorithm::IC3:
-        return std::make_unique<BasicIC3>(sub_settings, m_model, m_log);
+        return std::make_unique<IC3>(sub_settings, m_model, m_log);
     default:
         return std::make_unique<FCAR>(sub_settings, m_model, m_log);
     }

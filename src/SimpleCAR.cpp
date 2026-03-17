@@ -26,7 +26,7 @@ static std::unique_ptr<BaseAlg> CreateChecker(
     case MCAlgorithm::BMC:
         return std::make_unique<BMC>(settings, aigerModel, log);
     case MCAlgorithm::IC3:
-        return std::make_unique<BasicIC3>(settings, aigerModel, log);
+        return std::make_unique<IC3>(settings, aigerModel, log);
     case MCAlgorithm::L2S:
         return std::make_unique<L2S>(settings, aigerModel, log);
     case MCAlgorithm::KLIVE:

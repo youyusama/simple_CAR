@@ -6,11 +6,11 @@
 
 namespace car {
 
-BasicIC3::BasicIC3(Settings settings,
-                   Model &model,
-                   Log &log) : m_settings(settings),
-                               m_log(log),
-                               m_model(model) {
+IC3::IC3(Settings settings,
+         Model &model,
+         Log &log) : m_settings(settings),
+                     m_log(log),
+                     m_model(model) {
     State::num_inputs = model.GetNumInputs();
     State::num_latches = model.GetNumLatches();
     m_cexStart = nullptr;
@@ -20,10 +20,10 @@ BasicIC3::BasicIC3(Settings settings,
     m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
 }
 
-BasicIC3::~BasicIC3() {
+IC3::~IC3() {
 }
 
-CheckResult BasicIC3::Run() {
+CheckResult IC3::Run() {
     signal(SIGINT, SignalHandler);
 
     if (Check())
@@ -37,7 +37,7 @@ CheckResult BasicIC3::Run() {
     return m_checkResult;
 }
 
-std::vector<std::pair<Cube, Cube>> BasicIC3::GetCexTrace() {
+std::vector<std::pair<Cube, Cube>> IC3::GetCexTrace() {
     std::vector<std::pair<Cube, Cube>> trace;
     if (!m_cexStart) return trace;
 
@@ -58,7 +58,7 @@ std::vector<std::pair<Cube, Cube>> BasicIC3::GetCexTrace() {
     return trace;
 }
 
-FrameList BasicIC3::GetInv() {
+FrameList IC3::GetInv() {
     FrameList inv;
     if (m_invariantLevel <= 0) return inv;
     for (int i = 0; i < m_invariantLevel && i < static_cast<int>(m_transSolvers.size()); ++i) {
@@ -71,13 +71,13 @@ FrameList BasicIC3::GetInv() {
     return inv;
 }
 
-void BasicIC3::KLiveIncr() {
+void IC3::KLiveIncr() {
     int k_step = m_model.KLivenessIncrement();
     vector<Clause> k_clauses = m_model.GetKLiveClauses(k_step);
 }
 
 
-bool BasicIC3::ImmediateSatisfiable() {
+bool IC3::ImmediateSatisfiable() {
     auto slv = make_unique<SATSolver>(m_model, MCSATSolver::cadical);
     slv->AddTrans();
     slv->AddConstraints();
@@ -115,7 +115,7 @@ bool BasicIC3::ImmediateSatisfiable() {
 }
 
 
-bool BasicIC3::IsInitStateImplyBad() {
+bool IC3::IsInitStateImplyBad() {
     if (m_customInit.empty()) return false;
     auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
     slv->AddTrans();
@@ -127,7 +127,7 @@ bool BasicIC3::IsInitStateImplyBad() {
 }
 
 
-void BasicIC3::Extend() {
+void IC3::Extend() {
     // reserve k+1 frames
     while (m_transSolvers.size() <= m_k + 1) AddNewFrame();
 
@@ -137,7 +137,7 @@ void BasicIC3::Extend() {
     }
 }
 
-bool BasicIC3::Check() {
+bool IC3::Check() {
 
     if (!m_initialized) {
         Init();
@@ -174,7 +174,7 @@ bool BasicIC3::Check() {
 }
 
 
-void BasicIC3::Init() {
+void IC3::Init() {
 
     // start solver search state in frame k
     m_k = m_searchFromInitSucc ? 2 : 1;
@@ -238,7 +238,7 @@ void BasicIC3::Init() {
 }
 
 
-void BasicIC3::InitializeStartSolver() {
+void IC3::InitializeStartSolver() {
     if (m_settings.searchFromBadPred) {
         // s & T & c & P & T' & c' & bad'
         m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
@@ -269,11 +269,11 @@ void BasicIC3::InitializeStartSolver() {
 }
 
 
-void BasicIC3::Reset() {
+void IC3::Reset() {
 }
 
 
-void BasicIC3::AddNewFrame() {
+void IC3::AddNewFrame() {
     int level = static_cast<int>(m_transSolvers.size());
     LOG_L(m_log, 2, "Adding new frame F_", level);
 
@@ -287,7 +287,7 @@ void BasicIC3::AddNewFrame() {
 }
 
 
-void BasicIC3::AddLemmaToSolvers(const Cube &blockingCube, int beginLevel, int endLevel) {
+void IC3::AddLemmaToSolvers(const Cube &blockingCube, int beginLevel, int endLevel) {
     // add lemma to trans solvers
     for (int i = beginLevel; i <= endLevel; ++i) {
         m_transSolvers[i]->AddUC(blockingCube);
@@ -300,7 +300,7 @@ void BasicIC3::AddLemmaToSolvers(const Cube &blockingCube, int beginLevel, int e
 }
 
 
-int BasicIC3::AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI) {
+int IC3::AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI) {
     // add lemma to lemma forest
     auto res = m_lfm.AddLemma(blockingCube, frameLevel);
 
@@ -317,7 +317,7 @@ int BasicIC3::AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI) {
     return res.lemmaId;
 }
 
-void BasicIC3::ActiveLemmaLearning(int newLemmaId) {
+void IC3::ActiveLemmaLearning(int newLemmaId) {
     auto ancestor_chain = m_lfm.GetAncestorChain(newLemmaId);
     if (ancestor_chain.empty()) return;
 
@@ -356,7 +356,7 @@ void BasicIC3::ActiveLemmaLearning(int newLemmaId) {
     }
 }
 
-std::vector<int> BasicIC3::FindHotSpots(const std::vector<int> &ancestorChain) {
+std::vector<int> IC3::FindHotSpots(const std::vector<int> &ancestorChain) {
     std::vector<int> hot_spots;
     for (int lemma_id : ancestorChain) {
         if (!m_lfm.Alive(lemma_id)) continue;
@@ -369,7 +369,7 @@ std::vector<int> BasicIC3::FindHotSpots(const std::vector<int> &ancestorChain) {
     return hot_spots;
 }
 
-void BasicIC3::MarkReachable(int lemmaId) {
+void IC3::MarkReachable(int lemmaId) {
     int cur = lemmaId;
     while (cur != -1) {
         if (!m_lfm.Alive(cur)) break;
@@ -379,7 +379,7 @@ void BasicIC3::MarkReachable(int lemmaId) {
     }
 }
 
-BasicIC3::ALLProveStatus BasicIC3::ActiveProve(int targetLemmaId) {
+IC3::ALLProveStatus IC3::ActiveProve(int targetLemmaId) {
     if (!m_lfm.Alive(targetLemmaId)) return ALLProveStatus::Invalidated;
 
     int attempts_left = m_settings.allMaxStates;
@@ -446,7 +446,7 @@ BasicIC3::ALLProveStatus BasicIC3::ActiveProve(int targetLemmaId) {
 }
 
 
-void BasicIC3::PrintALLStats() const {
+void IC3::PrintALLStats() const {
     if (!m_settings.activeLemmaLearning) return;
     m_log.L("ALL stats: pushAttempted=", m_allPushAttempted,
             ", statusProved=", m_allStatusProved,
@@ -456,7 +456,7 @@ void BasicIC3::PrintALLStats() const {
 }
 
 
-Cube BasicIC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime) {
+Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime) {
     unordered_set<int> conflict_set = solver->GetConflict();
     Cube core;
     if (!prime) {
@@ -477,7 +477,7 @@ Cube BasicIC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fal
     }
 }
 
-shared_ptr<State> BasicIC3::EnumerateStartState() {
+shared_ptr<State> IC3::EnumerateStartState() {
     LOG_L(m_log, 2, "Searching for a start state at level ", m_k);
     bool sat = false;
     {
@@ -611,7 +611,7 @@ shared_ptr<State> BasicIC3::EnumerateStartState() {
     }
 }
 
-bool BasicIC3::Strengthen() {
+bool IC3::Strengthen() {
     m_minUpdateLevel = m_k;
 
     while (true) {
@@ -636,7 +636,7 @@ bool BasicIC3::Strengthen() {
 // @input:
 // @output: -1 if not subsumed
 // ================================================================================
-int BasicIC3::GetSubsumeLevel(const Cube &cb, int startLvl) {
+int IC3::GetSubsumeLevel(const Cube &cb, int startLvl) {
     if (startLvl < 0) startLvl = 0;
     if (startLvl > m_k + 1) return -1;
 
@@ -648,7 +648,7 @@ int BasicIC3::GetSubsumeLevel(const Cube &cb, int startLvl) {
     return -1;
 }
 
-bool BasicIC3::PopObligation(set<Obligation> &obligations, Obligation &ob) {
+bool IC3::PopObligation(set<Obligation> &obligations, Obligation &ob) {
     if (obligations.empty()) return false;
     auto it = obligations.begin();
     if (it->level > m_k) return false;
@@ -658,7 +658,7 @@ bool BasicIC3::PopObligation(set<Obligation> &obligations, Obligation &ob) {
     return true;
 }
 
-void BasicIC3::PushObligation(set<Obligation> &obligations, Obligation ob, int newLevel) {
+void IC3::PushObligation(set<Obligation> &obligations, Obligation ob, int newLevel) {
     while (ob.level < newLevel) {
         ob.act *= 0.6;
         ob.level++;
@@ -666,7 +666,7 @@ void BasicIC3::PushObligation(set<Obligation> &obligations, Obligation ob, int n
     obligations.insert(ob);
 }
 
-bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
+bool IC3::HandleObligations(set<Obligation> &obligations) {
     Obligation ob(nullptr, 0, 0);
     while (PopObligation(obligations, ob)) {
 
@@ -718,7 +718,7 @@ bool BasicIC3::HandleObligations(set<Obligation> &obligations) {
     return true;
 }
 
-bool BasicIC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
+bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     Clause cls;
     cls.reserve(cb.size());
     for (const auto &lit : cb) {
@@ -734,7 +734,7 @@ bool BasicIC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     return result;
 }
 
-bool BasicIC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
+bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
     LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
@@ -796,7 +796,7 @@ bool BasicIC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &tr
 }
 
 
-size_t BasicIC3::Generalize(Cube &cb, int frameLvl) {
+size_t IC3::Generalize(Cube &cb, int frameLvl) {
     LOG_L(m_log, 3, "Generalizing Cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
     if (MIC(cb, frameLvl, 0)) {
         m_branching->Update(cb);
@@ -807,7 +807,7 @@ size_t BasicIC3::Generalize(Cube &cb, int frameLvl) {
 }
 
 
-bool BasicIC3::MIC(Cube &cb, int frameLvl, int recLvl) {
+bool IC3::MIC(Cube &cb, int frameLvl, int recLvl) {
     LOG_L(m_log, 3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
     vector<Cube> blockers;
@@ -867,7 +867,7 @@ bool BasicIC3::MIC(Cube &cb, int frameLvl, int recLvl) {
 }
 
 
-void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState) {
+void IC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState) {
     LOG_L(m_log, 3, "Generalizing predecessor. Initial latch size: ", predecessorState->latches.size(), ", input size: ", predecessorState->inputs.size(), ", Successor state latch size: ", successorState->latches.size());
 
     Clause succ_negation_clause;
@@ -906,7 +906,7 @@ void BasicIC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, 
     LOG_L(m_log, 3, "Generalized predecessor. Final latch size: ", predecessorState->latches.size());
 }
 
-bool BasicIC3::InitiationCheck(const Cube &cb) {
+bool IC3::InitiationCheck(const Cube &cb) {
     for (const auto &lit : cb) {
         if (m_initialStateSet.count(-lit)) {
             return true; // Disjoint (UNSAT), check passes.
@@ -917,7 +917,7 @@ bool BasicIC3::InitiationCheck(const Cube &cb) {
 }
 
 
-Cube BasicIC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube) {
+Cube IC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube) {
     // fallbackCube is sorted
     Cube core = GetUnsatCore(solver, fallbackCube, true);
     LOG_L(m_log, 3, "Got UNSAT core: ", CubeToStr(core));
@@ -929,7 +929,7 @@ Cube BasicIC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cub
 }
 
 
-string BasicIC3::FramesInfo() const {
+string IC3::FramesInfo() const {
     stringstream ss;
     ss << "Frames " << m_transSolvers.size() << endl;
     for (size_t i = 0; i < m_transSolvers.size(); ++i) {
@@ -939,7 +939,7 @@ string BasicIC3::FramesInfo() const {
 }
 
 
-bool BasicIC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
+bool IC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     Cube assumption(cb);
     OrderAssumption(assumption);
     GetPrimed(assumption);
@@ -954,7 +954,7 @@ bool BasicIC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
 // @input:
 // @output:
 // ================================================================================
-bool BasicIC3::Propagate(int lemmaId, int lvl) {
+bool IC3::Propagate(int lemmaId, int lvl) {
     bool result;
     Cube cb = m_lfm.CubeOf(lemmaId);
 
@@ -975,7 +975,7 @@ bool BasicIC3::Propagate(int lemmaId, int lvl) {
 }
 
 
-int BasicIC3::PropagateUp(int LemmaId, int startLevel) {
+int IC3::PropagateUp(int LemmaId, int startLevel) {
     int lvl = startLevel;
     while (lvl <= m_k) {
         if (Propagate(LemmaId, lvl))
@@ -988,7 +988,7 @@ int BasicIC3::PropagateUp(int LemmaId, int startLevel) {
 }
 
 
-bool BasicIC3::PropagateFrame() {
+bool IC3::PropagateFrame() {
     LOG_L(m_log, 2, "Propagating clauses.");
 
     for (int i = m_minUpdateLevel; i <= m_k; ++i) {
@@ -1024,7 +1024,7 @@ bool BasicIC3::PropagateFrame() {
 }
 
 
-void BasicIC3::OutputCounterExample() {
+void IC3::OutputCounterExample() {
     // get outputfile
     auto start_index = m_settings.aigFilePath.find_last_of("/\\");
     if (start_index == string::npos) {
@@ -1058,7 +1058,7 @@ void BasicIC3::OutputCounterExample() {
 }
 
 
-unsigned BasicIC3::AddCubeToAndGates(aiger *circuit, vector<unsigned> cb) {
+unsigned IC3::AddCubeToAndGates(aiger *circuit, vector<unsigned> cb) {
     assert(cb.size() > 0);
     unsigned res = cb[0];
     assert(res / 2 <= circuit->maxvar);
@@ -1071,7 +1071,7 @@ unsigned BasicIC3::AddCubeToAndGates(aiger *circuit, vector<unsigned> cb) {
     return res;
 }
 
-void BasicIC3::OutputWitness() {
+void IC3::OutputWitness() {
     // get outputfile
     auto start_index = m_settings.aigFilePath.find_last_of("/");
     if (start_index == string::npos) {
@@ -1220,7 +1220,7 @@ void BasicIC3::OutputWitness() {
 }
 
 
-void BasicIC3::Witness() {
+void IC3::Witness() {
     if (m_checkResult == CheckResult::Unsafe) {
         LOG_L(m_log, 2, "Generating counterexample.");
         OutputCounterExample();

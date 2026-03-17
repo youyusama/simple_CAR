@@ -89,7 +89,7 @@ std::unique_ptr<IncrAlg> RLive::MakeSafeChecker() {
     case MCAlgorithm::BCAR:
         return std::make_unique<BCAR>(sub_settings, m_model, m_log);
     case MCAlgorithm::IC3:
-        return std::make_unique<BasicIC3>(sub_settings, m_model, m_log);
+        return std::make_unique<IC3>(sub_settings, m_model, m_log);
     default:
         return std::make_unique<FCAR>(sub_settings, m_model, m_log);
     }

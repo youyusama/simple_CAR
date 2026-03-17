@@ -57,7 +57,7 @@ std::unique_ptr<BaseAlg> L2S::CreateSafetyChecker() {
     case MCAlgorithm::BMC:
         return std::make_unique<BMC>(safety_settings, m_model, m_log);
     case MCAlgorithm::IC3:
-        return std::make_unique<BasicIC3>(safety_settings, m_model, m_log);
+        return std::make_unique<IC3>(safety_settings, m_model, m_log);
     default:
         return std::make_unique<FCAR>(safety_settings, m_model, m_log);
     }

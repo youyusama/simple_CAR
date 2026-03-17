@@ -29,12 +29,12 @@ struct Obligation {
     }
 };
 
-class BasicIC3 : public IncrAlg {
+class IC3 : public IncrAlg {
   public:
-    BasicIC3(Settings settings,
-             Model &model,
-             Log &log);
-    ~BasicIC3();
+    IC3(Settings settings,
+        Model &model,
+        Log &log);
+    ~IC3();
 
     CheckResult Run() override;
     void Witness() override;
