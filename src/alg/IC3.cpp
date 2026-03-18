@@ -426,7 +426,7 @@ IC3::ALLProveStatus IC3::ActiveProve(int targetLemmaId) {
         auto ctp_solver = m_transSolvers[ctp_level - 1];
         if (IsInductive(ctp_cube, ctp_solver)) {
             auto ctp_core = GetAndValidateCore(ctp_solver, ctp_cube);
-            if (MIC(ctp_core, ctp_level, 0)) {
+            if (Generalize(ctp_core, ctp_level, 0)) {
                 m_branching->Update(ctp_core);
             }
             int ctp_lemma_id = AddLemma(ctp_core, ctp_level);
@@ -690,8 +690,11 @@ bool IC3::HandleObligations(set<Obligation> &obligations) {
 
         if (!IsReachable(cti_cube, trans_slv)) {
             auto uc = GetAndValidateCore(trans_slv, cti_cube);
-
-            size_t push_level = Generalize(uc, ob.level);
+            if (Generalize(uc, ob.level)) {
+                m_branching->Update(uc);
+            }
+            int lemma_id = AddLemma(uc, ob.level, true);
+            size_t push_level = PropagateUp(lemma_id, ob.level);
 
             if (push_level <= m_k) {
                 LOG_L(m_log, 2, "Creating new obligation for same state at higher level ", push_level);
@@ -774,7 +777,7 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &triedLi
             LOG_L(m_log, 3, "CTG is inductive at level ", frameLvl - 1);
             Cube ctg_core = GetAndValidateCore(m_transSolvers[frameLvl - 1], ctg_cube);
 
-            if (MIC(ctg_core, frameLvl - 1, recLvl + 1)) {
+            if (Generalize(ctg_core, frameLvl - 1, recLvl + 1)) {
                 m_branching->Update(ctg_core);
             }
             int ctg_lemma_id = AddLemma(ctg_core, frameLvl - 1);
@@ -796,19 +799,8 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &triedLi
 }
 
 
-size_t IC3::Generalize(Cube &cb, int frameLvl) {
-    LOG_L(m_log, 3, "Generalizing Cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl);
-    if (MIC(cb, frameLvl, 0)) {
-        m_branching->Update(cb);
-    }
-    int lemma_id = AddLemma(cb, frameLvl, true);
-    size_t push_level = PropagateUp(lemma_id, frameLvl);
-    return push_level;
-}
-
-
-bool IC3::MIC(Cube &cb, int frameLvl, int recLvl) {
-    LOG_L(m_log, 3, "MIC: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
+bool IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
+    LOG_L(m_log, 3, "Generalizing Cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
     vector<Cube> blockers;
     Cube blocker;

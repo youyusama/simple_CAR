@@ -96,9 +96,7 @@ class IC3 : public IncrAlg {
 
     int GetSubsumeLevel(const Cube &cb, int startLvl);
 
-    size_t Generalize(Cube &cb, int frameLvl);
-
-    bool MIC(Cube &cb, int frameLvl, int recLvl);
+    bool Generalize(Cube &cb, int frameLvl, int recLvl = 0);
 
     bool Down(Cube &c, int frameLvl, int recLvl, const set<int> &triedLits);
 
