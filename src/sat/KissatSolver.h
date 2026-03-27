@@ -25,12 +25,12 @@ class KissatSolver : public ISolver {
     bool Solve(const Cube &assumption) override { return false; }
     pair<Cube, Cube> GetAssignment(bool prime) override { return pair<Cube, Cube>(Cube(), Cube()); }
     Cube GetUC(bool prime) { return Cube(); }
-    unordered_set<int> GetConflict() override { return unordered_set<int>(); }
-    int GetNewVar() override { return 0; }
+    unordered_set<Lit, LitHash> GetConflict() override { return unordered_set<Lit, LitHash>(); }
+    Var GetNewVar() override { return 0; }
     void AddTempClause(const Cube &cls) override {}
     void ReleaseTempClause() override {}
 
-    inline Tbool GetModel(int id) override {
+    inline Tbool GetModel(Var id) override {
         int val = kissat_value(m_solver, id);
         assert(!val);
         if (val < 0)
@@ -39,8 +39,8 @@ class KissatSolver : public ISolver {
             return T_TRUE;
     }
     void ClearAssumption() override {}
-    void PushAssumption(int a) override {}
-    int PopAssumption() override { return 0; }
+    void PushAssumption(Lit a) override {}
+    Lit PopAssumption() override { return Lit{}; }
 
   protected:
     /*
@@ -48,12 +48,12 @@ class KissatSolver : public ISolver {
       inline Lit GetLit(int id) {
           int var = abs(id) - 1;
           while (var >= nVars()) newVar();
-          return ((id > 0) ? mkLit(var) : ~mkLit(var));
+          return ((id > 0) ? MkLit(var) : ~MkLit(var));
       };
       */
 
     Model &m_model;
-    int m_maxId;
+    Var m_maxId;
     // vec<Lit> m_assumptions;
     // int m_tempVar;
     kissat *m_solver = NULL;

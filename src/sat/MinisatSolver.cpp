@@ -39,9 +39,9 @@ void MinisatSolver::AddAssumption(const Cube &assumption) {
 
 void MinisatSolver::AddClause(const Cube &cls) {
     Minisat::vec<Minisat::Lit> literals;
-    for (int l : cls) {
+    for (Lit l : cls) {
         literals.push(GetLit(l));
-        if (abs(l) > m_maxId) m_maxId = abs(l) + 1;
+        if (VarOf(l) > m_maxId) m_maxId = VarOf(l) + 1;
     }
     bool result = addClause(literals);
     // result may be false when the Clause is already conflict
@@ -55,79 +55,78 @@ pair<Cube, Cube> MinisatSolver::GetAssignment(bool prime) {
     Cube latches;
     inputs.reserve(m_model.GetNumInputs());
     latches.reserve(m_model.GetNumLatches());
-    for (int i : m_model.GetModelInputs()) {
-        if (model[i] == Minisat::l_True) {
-            inputs.emplace_back(i);
+    for (Var i : m_model.GetModelInputs()) {
+        if (model[static_cast<int>(i)] == Minisat::l_True) {
+            inputs.emplace_back(MkLit(i));
         } else {
-            assert(model[i] == Minisat::l_False);
-            inputs.emplace_back(-i);
+            assert(model[static_cast<int>(i)] == Minisat::l_False);
+            inputs.emplace_back(~MkLit(i));
         }
     }
-    for (int i : m_model.GetModelLatches()) {
+    for (Var i : m_model.GetModelLatches()) {
         if (!prime) {
-            if (model[i] == Minisat::l_True) {
-                latches.emplace_back(i);
+            if (model[static_cast<int>(i)] == Minisat::l_True) {
+                latches.emplace_back(MkLit(i));
             } else {
-                assert(model[i] == Minisat::l_False);
-                latches.emplace_back(-i);
+                assert(model[static_cast<int>(i)] == Minisat::l_False);
+                latches.emplace_back(~MkLit(i));
             }
         } else {
-            int p = m_model.GetPrime(i);
-            Minisat::lbool val = model[abs(p)];
-            if ((val == Minisat::l_True && p > 0) || (val == Minisat::l_False && p < 0)) {
-                latches.emplace_back(i);
+            Lit p = m_model.LookupPrime(MkLit(i));
+            Minisat::lbool val = model[static_cast<int>(VarOf(p))];
+            if ((val == Minisat::l_True && !Sign(p)) || (val == Minisat::l_False && Sign(p))) {
+                latches.emplace_back(MkLit(i));
             } else {
-                latches.emplace_back(-i);
+                latches.emplace_back(~MkLit(i));
             }
         }
     }
-    for (int i : m_model.GetInnards()) {
+    for (Var i : m_model.GetInnards()) {
         if (!prime) {
-            if (model[i] == Minisat::l_True) {
-                latches.emplace_back(i);
+            if (model[static_cast<int>(i)] == Minisat::l_True) {
+                latches.emplace_back(MkLit(i));
             } else {
-                assert(model[i - 1] == Minisat::l_False);
-                latches.emplace_back(-i);
+                assert(model[static_cast<int>(i)] == Minisat::l_False);
+                latches.emplace_back(~MkLit(i));
             }
         } else {
-            int p = m_model.GetPrime(i);
-            Minisat::lbool val = model[abs(p)];
-            if ((val == Minisat::l_True && p > 0) || (val == Minisat::l_False && p < 0)) {
-                latches.emplace_back(i);
+            Lit p = m_model.LookupPrime(MkLit(i));
+            Minisat::lbool val = model[static_cast<int>(VarOf(p))];
+            if ((val == Minisat::l_True && !Sign(p)) || (val == Minisat::l_False && Sign(p))) {
+                latches.emplace_back(MkLit(i));
             } else {
-                latches.emplace_back(-i);
+                latches.emplace_back(~MkLit(i));
             }
         }
     }
     return pair<Cube, Cube>(inputs, latches);
 }
 
-unordered_set<int> MinisatSolver::GetConflict() {
-    unordered_set<int> conflict_set;
+unordered_set<Lit, LitHash> MinisatSolver::GetConflict() {
+    unordered_set<Lit, LitHash> conflict_set;
     for (int i = 0; i < conflict.size(); ++i) {
-        int val = -GetLiteralId(conflict[i]);
-        conflict_set.insert(val);
+        conflict_set.insert(~GetLiteral(conflict[i]));
     }
     return conflict_set;
 }
 
 
-inline int MinisatSolver::GetLiteralId(const Minisat::Lit &l) {
-    return sign(l) ? -var(l) : var(l);
+inline Lit MinisatSolver::GetLiteral(const Minisat::Lit &l) {
+    return MkLit(static_cast<Var>(Minisat::var(l)), Minisat::sign(l));
 }
 
 
 void MinisatSolver::AddTempClause(const Cube &cls) {
     m_tempVar = GetNewVar();
     Cube temp_cls = cls;
-    temp_cls.push_back(-m_tempVar);
+    temp_cls.push_back(~MkLit(m_tempVar));
     AddClause(temp_cls);
 }
 
 
 void MinisatSolver::ReleaseTempClause() {
     assert(m_tempVar != 0);
-    releaseVar(~GetLit(m_tempVar));
+    releaseVar(~GetLit(MkLit(m_tempVar)));
     m_tempVar = 0;
 }
 
@@ -137,15 +136,15 @@ void MinisatSolver::ClearAssumption() {
 }
 
 
-void MinisatSolver::PushAssumption(int a) {
+void MinisatSolver::PushAssumption(Lit a) {
     m_assumptions.push(GetLit(a));
 }
 
 
-int MinisatSolver::PopAssumption() {
+Lit MinisatSolver::PopAssumption() {
     Minisat::Lit p = m_assumptions.last();
     m_assumptions.pop();
-    return GetLiteralId(p);
+    return GetLiteral(p);
 }
 
 } // namespace car

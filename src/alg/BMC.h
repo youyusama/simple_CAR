@@ -37,8 +37,8 @@ class BMC : public BaseAlg {
     void Init();
     void OutputCounterExample();
     void GetClausesK(int mK, vector<Clause> &clauses);
-    int GetBadK(int mK);
-    vector<int> GetConstraintsK(int mK);
+    Lit GetBadK(int mK);
+    Cube GetConstraintsK(int mK);
 };
 
 } // namespace car

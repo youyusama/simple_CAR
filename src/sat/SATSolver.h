@@ -37,11 +37,11 @@ class SATSolver {
         return m_slv->GetAssignment(prime);
     }
 
-    unordered_set<int> GetConflict() {
+    unordered_set<Lit, LitHash> GetConflict() {
         return m_slv->GetConflict();
     }
 
-    int GetNewVar() {
+    Var GetNewVar() {
         return m_slv->GetNewVar();
     }
 
@@ -53,7 +53,7 @@ class SATSolver {
         m_slv->ReleaseTempClause();
     }
 
-    Tbool GetModel(int id) {
+    Tbool GetModel(Var id) {
         return m_slv->GetModel(id);
     }
 
@@ -61,11 +61,11 @@ class SATSolver {
         m_slv->ClearAssumption();
     }
 
-    void PushAssumption(int a) {
+    void PushAssumption(Lit a) {
         m_slv->PushAssumption(a);
     }
 
-    int PopAssumption() {
+    Lit PopAssumption() {
         return m_slv->PopAssumption();
     }
 
@@ -82,8 +82,6 @@ class SATSolver {
 
     void SetTempDomainCOI(const Cube &c);
 
-    Cube GetDomain();
-
     // SAT interface for IC3/CAR
     void AddTrans();
 
@@ -99,9 +97,9 @@ class SATSolver {
 
     Cube GetKUnrolled(const Cube &c, int k);
 
-    int AddInvAsLabelK(const FrameList &inv, int k);
+    Lit AddInvAsLabelK(const FrameList &inv, int k);
 
-    int AddCubeAsLabelK(const Cube &c, int k);
+    Lit AddCubeAsLabelK(const Cube &c, int k);
 
     void AddInvAsClauseK(const FrameList &inv, bool neg, int k);
 
@@ -121,17 +119,11 @@ class SATSolver {
 
     void AddInitialClauses();
 
-    bool SolveFrame(const Cube &assumption, int lvl);
-
-    void AddUC(const Cube &uc, int lvl);
-
     void AddUC(const Cube &uc);
 
     void AddProperty();
 
     void FlipLastConstrain();
-
-    void UpdateStartSolverFlag();
 
   protected:
     Model &m_model;
@@ -139,23 +131,14 @@ class SATSolver {
     shared_ptr<ISolver> m_slv;
     bool m_solveInDomain;
 
-    vector<int> m_frameFlags;
-    inline int GetFrameFlag(int lvl) {
-        assert(lvl >= 0);
-        while (m_frameFlags.size() <= lvl) {
-            m_frameFlags.emplace_back(GetNewVar());
-        }
-        return m_frameFlags[lvl];
-    }
-
   private:
     shared_ptr<MinicoreSolver> GetMinicoreSolver() const;
     void AddPermanentVars(shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi);
     void AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi);
     void ResetTemporaryVars(shared_ptr<MinicoreSolver> solver);
 
-    int m_trueId;
-    size_t m_domainFixed;
+    Var m_trueId;
+    size_t m_fixedDomainSize;
 };
 
 } // namespace car

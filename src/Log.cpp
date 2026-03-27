@@ -47,35 +47,33 @@ Log::ScopedTimer::~ScopedTimer() {
 Log *global_log = nullptr;
 
 
-string CubeToStr(const vector<int> &c) {
+string CubeToStr(const Cube &c) {
     string s;
-    for (int l : c) s.append(to_string(l) + " ");
+    for (Lit lit : c) s.append(to_string(ToSigned(lit)) + " ");
     return s;
 }
 
-
-void CompressVector(vector<int> &res, const vector<int> &v) {
+void CompressVector(vector<int> &res, const Cube &v) {
     int count = 0;
-    int tempi = 0;
-    for (int l : v) {
-        if (l > 0)
-            tempi = (tempi << 1) + 1;
-        else
-            tempi <<= 1;
+    int packed = 0;
+    for (size_t i = 0; i < v.size(); ++i) {
+        packed <<= 1;
+        if (!Sign(v[i])) packed += 1;
         count++;
-        if (count == 32 || l == v.back()) {
-            res.emplace_back(tempi);
-            tempi = 0;
+        if (count == 32 || i + 1 == v.size()) {
+            res.emplace_back(packed);
+            packed = 0;
             count = 0;
         }
     }
 }
 
-
-string CubeToStrShort(const vector<int> &c) {
-    vector<int> s;
-    CompressVector(s, c);
-    return CubeToStr(s);
+string CubeToStrShort(const Cube &c) {
+    vector<int> compressed;
+    CompressVector(compressed, c);
+    string s;
+    for (int value : compressed) s.append(to_string(value) + " ");
+    return s;
 }
 
 

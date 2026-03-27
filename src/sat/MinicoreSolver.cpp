@@ -18,28 +18,22 @@ bool MinicoreSolver::Solve() {
 
 
 bool MinicoreSolver::Solve(const Cube &assumption) {
-    m_assumptions.clear();
-    for (auto it : assumption) {
-        m_assumptions.emplace_back(GetLit(it));
-    }
+    m_assumptions = assumption;
     return Solve();
 }
 
 
 void MinicoreSolver::AddAssumption(const Cube &assumption) {
-    for (auto it : assumption) {
-        m_assumptions.emplace_back(GetLit(it));
-    }
+    m_assumptions.insert(m_assumptions.end(), assumption.begin(), assumption.end());
 }
 
 
 void MinicoreSolver::AddClause(const Cube &cls) {
-    vector<minicore::Lit> lit_cls;
-    for (int l : cls) {
-        lit_cls.emplace_back(GetLit(l));
-        if (abs(l) > m_maxId) m_maxId = abs(l) + 1;
+    for (Lit l : cls) {
+        if (VarOf(l) > m_maxId) m_maxId = VarOf(l) + 1;
+        while (static_cast<int>(VarOf(l)) >= nVars()) newVar();
     }
-    bool result = addClause(lit_cls);
+    bool result = addClause(cls);
 }
 
 
@@ -48,44 +42,44 @@ pair<Cube, Cube> MinicoreSolver::GetAssignment(bool prime) {
     Cube latches;
     inputs.reserve(m_model.GetNumInputs());
     latches.reserve(m_model.GetNumLatches());
-    for (int i : m_model.GetModelInputs()) {
-        if (value(i) == minicore::l_True) {
-            inputs.emplace_back(i);
-        } else if (value(i) == minicore::l_False) {
-            inputs.emplace_back(-i);
+    for (Var i : m_model.GetModelInputs()) {
+        if (value(static_cast<int>(i)) == minicore::l_True) {
+            inputs.emplace_back(MkLit(i));
+        } else if (value(static_cast<int>(i)) == minicore::l_False) {
+            inputs.emplace_back(~MkLit(i));
         }
     }
-    for (int i : m_model.GetModelLatches()) {
+    for (Var i : m_model.GetModelLatches()) {
         if (!prime) {
-            if (value(i) == minicore::l_True) {
-                latches.emplace_back(i);
-            } else if (value(i) == minicore::l_False) {
-                latches.emplace_back(-i);
+            if (value(static_cast<int>(i)) == minicore::l_True) {
+                latches.emplace_back(MkLit(i));
+            } else if (value(static_cast<int>(i)) == minicore::l_False) {
+                latches.emplace_back(~MkLit(i));
             }
         } else {
-            int p = m_model.GetPrime(i);
-            minicore::lbool val = value(abs(p));
-            if ((val == minicore::l_True && p > 0) || (val == minicore::l_False && p < 0)) {
-                latches.emplace_back(i);
-            } else if ((val == minicore::l_True && p < 0) || (val == minicore::l_False && p > 0)) {
-                latches.emplace_back(-i);
+            Lit p = m_model.LookupPrime(MkLit(i));
+            minicore::lbool val = value(static_cast<int>(VarOf(p)));
+            if ((val == minicore::l_True && !Sign(p)) || (val == minicore::l_False && Sign(p))) {
+                latches.emplace_back(MkLit(i));
+            } else if ((val == minicore::l_True && Sign(p)) || (val == minicore::l_False && !Sign(p))) {
+                latches.emplace_back(~MkLit(i));
             }
         }
     }
-    for (int i : m_model.GetInnards()) {
+    for (Var i : m_model.GetInnards()) {
         if (!prime) {
-            if (value(i) == minicore::l_True) {
-                latches.emplace_back(i);
-            } else if (value(i) == minicore::l_False) {
-                latches.emplace_back(-i);
+            if (value(static_cast<int>(i)) == minicore::l_True) {
+                latches.emplace_back(MkLit(i));
+            } else if (value(static_cast<int>(i)) == minicore::l_False) {
+                latches.emplace_back(~MkLit(i));
             }
         } else {
-            int p = m_model.GetPrime(i);
-            minicore::lbool val = value(abs(p));
-            if ((val == minicore::l_True && p > 0) || (val == minicore::l_False && p < 0)) {
-                latches.emplace_back(i);
-            } else if ((val == minicore::l_True && p < 0) || (val == minicore::l_False && p > 0)) {
-                latches.emplace_back(-i);
+            Lit p = m_model.LookupPrime(MkLit(i));
+            minicore::lbool val = value(static_cast<int>(VarOf(p)));
+            if ((val == minicore::l_True && !Sign(p)) || (val == minicore::l_False && Sign(p))) {
+                latches.emplace_back(MkLit(i));
+            } else if ((val == minicore::l_True && Sign(p)) || (val == minicore::l_False && !Sign(p))) {
+                latches.emplace_back(~MkLit(i));
             }
         }
     }
@@ -93,27 +87,21 @@ pair<Cube, Cube> MinicoreSolver::GetAssignment(bool prime) {
 }
 
 
-unordered_set<int> MinicoreSolver::GetConflict() {
-    unordered_set<int> conflict_set;
+unordered_set<Lit, LitHash> MinicoreSolver::GetConflict() {
+    unordered_set<Lit, LitHash> conflict_set;
     for (minicore::Lit l : conflict) {
-        int val = -GetLiteralId(l);
-        conflict_set.insert(val);
+        conflict_set.insert(~l);
     }
     return conflict_set;
 }
 
 
-inline int MinicoreSolver::GetLiteralId(const minicore::Lit &l) {
-    return sign(l) ? -var(l) : var(l);
-}
-
-
 void MinicoreSolver::AddTempClause(const Cube &cls) {
-    m_tempClause.clear();
-    for (int l : cls) {
-        m_tempClause.emplace_back(GetLit(l));
-        if (abs(l) > m_maxId) m_maxId = abs(l) + 1;
+    for (Lit l : cls) {
+        if (VarOf(l) > m_maxId) m_maxId = VarOf(l) + 1;
+        while (static_cast<int>(VarOf(l)) >= nVars()) newVar();
     }
+    m_tempClause = cls;
 }
 
 
@@ -127,15 +115,15 @@ void MinicoreSolver::ClearAssumption() {
 }
 
 
-void MinicoreSolver::PushAssumption(int a) {
-    m_assumptions.emplace_back(GetLit(a));
+void MinicoreSolver::PushAssumption(Lit a) {
+    m_assumptions.emplace_back(a);
 }
 
 
-int MinicoreSolver::PopAssumption() {
+Lit MinicoreSolver::PopAssumption() {
     minicore::Lit p = m_assumptions.back();
     m_assumptions.pop_back();
-    return GetLiteralId(p);
+    return p;
 }
 
 } // namespace car

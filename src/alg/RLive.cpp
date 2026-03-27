@@ -164,7 +164,7 @@ bool RLive::PruneDead(const Cube &s) {
 
 
 Cube RLive::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions) {
-    const unordered_set<int> &conflict = solver->GetConflict();
+    const unordered_set<Lit, LitHash> &conflict = solver->GetConflict();
     Cube res;
     for (auto a : assumptions) {
         if (conflict.find(a) != conflict.end())

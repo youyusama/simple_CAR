@@ -60,7 +60,7 @@ class BCAR : public IncrAlg {
 
         LitOrder() {}
 
-        bool operator()(const int &l1, const int &l2) const {
+        bool operator()(Lit l1, Lit l2) const {
             return (branching->PriorityOf(l1) > branching->PriorityOf(l2));
         }
     } m_litOrder;
@@ -70,7 +70,7 @@ class BCAR : public IncrAlg {
 
         explicit InnOrder(Model &model) : m(model) {}
 
-        bool operator()(const int &inn1, const int &inn2) const {
+        bool operator()(Lit inn1, Lit inn2) const {
             return (m.GetInnardslvl(inn1) > m.GetInnardslvl(inn2));
         }
     } m_innOrder;
@@ -82,11 +82,11 @@ class BCAR : public IncrAlg {
 
         bool operator()(const Cube &a, const Cube &b) const {
             float score_a = 0, score_b = 0;
-            for (int i = 0; i < a.size(); i++) {
+            for (size_t i = 0; i < a.size(); i++) {
                 score_a += branching->PriorityOf(a[i]);
             }
             score_a /= a.size();
-            for (int i = 0; i < b.size(); i++) {
+            for (size_t i = 0; i < b.size(); i++) {
                 score_b += branching->PriorityOf(b[i]);
             }
             score_b /= b.size();
@@ -108,7 +108,7 @@ class BCAR : public IncrAlg {
 
     inline void GetPrimed(Cube &p) {
         for (auto &x : p) {
-            x = m_model.GetPrime(x);
+            x = m_model.LookupPrime(x);
         }
     }
 

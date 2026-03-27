@@ -26,10 +26,10 @@ bool KissatSolver::Solve() {
 }
 
 void KissatSolver::AddClause(const Cube &cls) {
-    for (int l : cls) {
-        kissat_add(m_solver, l);
+    for (Lit l : cls) {
+        kissat_add(m_solver, ToSigned(l));
     }
-    if (abs(cls[0]) > m_maxId) {
+    if (AbsLit(cls[0]) > m_maxId) {
         m_maxId += m_maxId;
         kissat_reserve(m_solver, m_maxId);
     }

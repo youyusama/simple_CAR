@@ -78,11 +78,11 @@ class TernarySimulator {
     TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, Log &log);
     ~TernarySimulator() {};
 
-    bool SetVal(int id, Tbool v, int step);
+    bool SetVal(Var id, Tbool v, int step);
 
-    Tbool GetVal(int id, int step);
+    Tbool GetVal(Lit id, int step);
 
-    Tbool GetVal(int id, const vector<Tbool> &vmap);
+    Tbool GetVal(Lit id, const vector<Tbool> &vmap);
 
     void Simulate(int maxPreciseDepth);
 
@@ -92,9 +92,9 @@ class TernarySimulator {
 
     const vector<vector<Tbool>> &GetValues() { return m_values; };
 
-    const vector<vector<int>> &GetStates() { return m_states; };
+    const vector<Cube> &GetStates() { return m_states; };
 
-    const vector<vector<int>> &GetGateStates() { return m_gateStates; };
+    const vector<Cube> &GetGateStates() { return m_gateStates; };
 
   private:
     Log &m_log;
@@ -105,13 +105,13 @@ class TernarySimulator {
 
     void InitStepValues();
 
-    void PushState(int step, vector<int> &state);
+    void PushState(int step, Cube &state);
 
-    vector<vector<int>> m_states;
+    vector<Cube> m_states;
 
-    void PushGateState(int step, vector<int> &gatestate);
+    void PushGateState(int step, Cube &gatestate);
 
-    vector<vector<int>> m_gateStates;
+    vector<Cube> m_gateStates;
 
     int m_randomSeed;
 

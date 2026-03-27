@@ -6,56 +6,45 @@
 
 
 namespace car {
-
-int EquivalenceManager::Find(int a) {
-    int sign = (a > 0) ? 1 : -1;
-    int key = abs(a);
-
-    auto root_info = FindRootRecursive(key);
-    return root_info.first * root_info.second * sign;
+Lit EquivalenceManager::FindLit(Lit a) {
+    Lit root = FindRootRecursive(VarOf(a));
+    return Sign(a) ? ~root : root;
 }
 
 
-void EquivalenceManager::AddEquivalence(int a, int b) {
-    int root_a = Find(a);
-    int root_b = Find(b);
+void EquivalenceManager::AddEquivalence(Lit a, Lit b) {
+    Lit root_a = FindLit(a);
+    Lit root_b = FindLit(b);
     // alreadly equivalent
     if (root_a == root_b) return;
 
-    int key_a = abs(root_a);
-    int key_b = abs(root_b);
+    Var key_a = VarOf(root_a);
+    Var key_b = VarOf(root_b);
 
     // merge two groups
     if (key_a < key_b) {
-        if (b > 0)
-            m_equivalenceMap[key_b] = root_a;
-        else
-            m_equivalenceMap[key_b] = -root_a;
+        m_equivalenceMap[key_b] = Sign(b) ? ~root_a : root_a;
     } else {
-        if (a > 0)
-            m_equivalenceMap[key_a] = root_b;
-        else
-            m_equivalenceMap[key_a] = -root_b;
+        m_equivalenceMap[key_a] = Sign(a) ? ~root_b : root_b;
     }
 }
 
-
-pair<int, int> EquivalenceManager::FindRootRecursive(int key) {
+Lit EquivalenceManager::FindRootRecursive(Var key) {
     auto it = m_equivalenceMap.find(key);
     if (it == m_equivalenceMap.end()) {
-        return {key, 1};
+        return MkLit(key);
     }
 
-    int next_id = it->second;
-    int next_key = abs(next_id);
+    Lit next = it->second;
+    Var next_key = VarOf(next);
     assert(key != next_key);
-    int sign = (next_id > 0) ? 1 : -1;
 
-    auto root_info = FindRootRecursive(next_key);
+    Lit root = FindRootRecursive(next_key);
+    Lit result = Sign(next) ? ~root : root;
 
-    m_equivalenceMap[key] = root_info.first * root_info.second * sign;
+    m_equivalenceMap[key] = result;
 
-    return {root_info.first, root_info.second * sign};
+    return result;
 }
 
 
@@ -101,7 +90,8 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
           m_circuitGraph->numAnds, " gates, ", m_circuitGraph->numConstraints, " constraints.");
     LOG_L(m_log, 1, "COI Refined Model: ",
           m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
-    m_maxId = m_circuitGraph->numVar + 1;
+    m_cnfTrueVar = m_circuitGraph->numVar + 1;
+    m_maxId = m_cnfTrueVar;
 
     // try to find equivalences
     m_equivalenceManager = make_shared<EquivalenceManager>();
@@ -132,6 +122,9 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // initial state
     CollectInitialState();
 
+    // constraints
+    CollectConstraints();
+
     // prime variable mapping
     CollectNextValueMapping();
 
@@ -143,8 +136,11 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // transform to CNF
     CollectClauses();
 
-    // DAG CNF simplification
+    // DAG clause simplification on raw clauses
     SimplifyDAGClauses();
+
+    // lower raw clauses to CNF clauses
+    CollectCNFClauses();
 
     // update dependency by DAG CNF
     UpdateDependencyVecDAGCNF();
@@ -152,32 +148,9 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     // further Clause simplification
     SimplifyClauses();
 
-    // cout << "model latches:" << endl;
-    // for (auto l : m_circuitGraph->modelLatches)
-    //     cout << l << " ";
-
-    // cout << "model gates:" << endl;
-    // for (auto g : m_circuitGraph->modelGates)
-    //     cout << g << " ";
-
-    // cout << "model inputs:" << endl;
-    // for (auto i : m_circuitGraph->modelInputs)
-    //     cout << i << " ";
-    // cout << "property coi inputs:" << endl;
-    // for (auto i : m_circuitGraph->propertyCOIInputs)
-    //     cout << i << " ";
-
-    // cout << "clauses" << endl;
-    // for (auto c : m_clauses) {
-    //     for (auto l : c) {
-    //         cout << l << " ";
-    //     }
-    //     cout << endl;
-    // }
-
     LOG_L(m_log, 1, "Model reduced: ",
           m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
-    LOG_L(m_log, 1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
+    LOG_L(m_log, 1, "Transformed model: ", m_cnfClauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
 }
 
 
@@ -186,8 +159,8 @@ void Model::ApplyEquivalence() {
 
     // refine the model by equivalence
     for (auto it = m_circuitGraph->modelLatches.begin(); it != m_circuitGraph->modelLatches.end();) {
-        m_circuitGraph->latchResetMap[*it] = m_equivalenceManager->Find(m_circuitGraph->latchResetMap[*it]);
-        m_circuitGraph->latchNextMap[*it] = m_equivalenceManager->Find(m_circuitGraph->latchNextMap[*it]);
+        m_circuitGraph->latchResetMap[*it] = m_equivalenceManager->FindLit(m_circuitGraph->latchResetMap[*it]);
+        m_circuitGraph->latchNextMap[*it] = m_equivalenceManager->FindLit(m_circuitGraph->latchNextMap[*it]);
 
         if (m_equivalenceManager->HasEquivalence(*it)) {
             it = m_circuitGraph->modelLatches.erase(it);
@@ -199,41 +172,39 @@ void Model::ApplyEquivalence() {
             it = m_circuitGraph->modelGates.erase(it);
         } else {
             auto &gate = m_circuitGraph->gatesMap[*it];
-            for (int i = 0; i < gate.fanins.size(); i++) {
-                gate.fanins[i] = m_equivalenceManager->Find(gate.fanins[i]);
+            for (size_t i = 0; i < gate.fanins.size(); i++) {
+                gate.fanins[i] = m_equivalenceManager->FindLit(gate.fanins[i]);
             }
             it++;
         }
     }
-    for (int i = 0; i < m_circuitGraph->bad.size(); i++) {
-        m_circuitGraph->bad[i] = m_equivalenceManager->Find(m_circuitGraph->bad[i]);
+    for (size_t i = 0; i < m_circuitGraph->bad.size(); i++) {
+        m_circuitGraph->bad[i] = m_equivalenceManager->FindLit(m_circuitGraph->bad[i]);
     }
 
-    for (int i = 0; i < m_circuitGraph->constraints.size(); i++) {
-        m_circuitGraph->constraints[i] = m_equivalenceManager->Find(m_circuitGraph->constraints[i]);
+    for (size_t i = 0; i < m_circuitGraph->constraints.size(); i++) {
+        m_circuitGraph->constraints[i] = m_equivalenceManager->FindLit(m_circuitGraph->constraints[i]);
     }
     for (size_t i = 0; i < m_circuitGraph->fairness.size(); i++) {
-        m_circuitGraph->fairness[i] = m_equivalenceManager->Find(m_circuitGraph->fairness[i]);
+        m_circuitGraph->fairness[i] = m_equivalenceManager->FindLit(m_circuitGraph->fairness[i]);
     }
     for (size_t i = 0; i < m_circuitGraph->justice.size(); i++) {
         for (size_t j = 0; j < m_circuitGraph->justice[i].size(); j++) {
-            m_circuitGraph->justice[i][j] = m_equivalenceManager->Find(m_circuitGraph->justice[i][j]);
+            m_circuitGraph->justice[i][j] = m_equivalenceManager->FindLit(m_circuitGraph->justice[i][j]);
         }
     }
-
-    m_circuitGraph->trueId = m_equivalenceManager->Find(m_circuitGraph->trueId);
 
     m_circuitGraph->COIRefine();
 }
 
 
 void Model::UpdateDependencyMap() {
-    m_dependencyVec.assign(m_maxId + 1, vector<int>());
-    for (int i = m_circuitGraph->modelGates.size() - 1; i >= 0; i--) {
-        int g = m_circuitGraph->modelGates[i];
-        for (int fanin : m_circuitGraph->gatesMap[g].fanins) {
+    m_dependencyVec.assign(m_maxId + 1, vector<Var>());
+    for (int i = static_cast<int>(m_circuitGraph->modelGates.size()) - 1; i >= 0; i--) {
+        Var g = m_circuitGraph->modelGates[i];
+        for (Lit fanin : m_circuitGraph->gatesMap[g].fanins) {
             // dependency
-            m_dependencyVec[g].emplace_back(abs(fanin));
+            m_dependencyVec[g].emplace_back(VarOf(fanin));
         }
     }
 
@@ -252,10 +223,10 @@ void Model::UpdateDependencyMap() {
 
 
 void Model::UpdateDependencyVecDAGCNF() {
-    m_dependencyVec.assign(m_maxId + 1, vector<int>());
-    for (auto &c : m_clauses) {
+    m_dependencyVec.assign(m_maxId + 1, vector<Var>());
+    for (auto &c : m_cnfClauses) {
         for (size_t i = 0; i + 1 < c.size(); ++i) {
-            m_dependencyVec[abs(c.back())].emplace_back(abs(c[i]));
+            m_dependencyVec[VarOf(c.back())].emplace_back(VarOf(c[i]));
         }
     }
     for (auto &deps : m_dependencyVec) {
@@ -281,17 +252,26 @@ void Model::CollectInitialState() {
     m_initialState.clear();
     m_initialClauses.clear();
 
-    for (auto l : m_circuitGraph->modelLatches) {
-        int reset = m_circuitGraph->latchResetMap[l];
+    for (Var l : m_circuitGraph->modelLatches) {
+        Lit reset = m_circuitGraph->latchResetMap[l];
 
-        if (reset == TrueId()) {
-            m_initialState.push_back(l);
-        } else if (reset == -TrueId()) {
-            m_initialState.push_back(-l);
-        } else if (reset != l && IsAnd(reset)) {
-            m_initialClauses.emplace_back(Clause{l, -reset});
-            m_initialClauses.emplace_back(Clause{-l, reset});
+        if (reset == LIT_TRUE) {
+            m_initialState.push_back(MkLit(l));
+        } else if (reset == LIT_FALSE) {
+            m_initialState.push_back(~MkLit(l));
+        } else if (reset != MkLit(l) && IsAnd(reset)) {
+            m_initialClauses.emplace_back(ToCNFClause(Clause{MkLit(l), ~reset}));
+            m_initialClauses.emplace_back(ToCNFClause(Clause{~MkLit(l), reset}));
         }
+    }
+}
+
+
+void Model::CollectConstraints() {
+    m_constraints.clear();
+    m_constraints.reserve(m_circuitGraph->constraints.size());
+    for (Lit lit : m_circuitGraph->constraints) {
+        m_constraints.emplace_back(ToCNFLit(lit));
     }
 }
 
@@ -300,149 +280,145 @@ void Model::CollectNextValueMapping() {
     // reset
     m_maxId = m_circuitGraph->numVar + 1;
     m_primeMaps.clear();
-    m_primeMaps.push_back(unordered_map<int, int>());
+    m_primeMaps.push_back(unordered_map<Var, Lit, std::hash<Var>>());
 
-    unordered_map<int, int> &prime_map = m_primeMaps[0];
+    auto &prime_map = m_primeMaps[0];
 
-    for (auto l : m_circuitGraph->latches) {
-        int next = m_circuitGraph->latchNextMap[l];
-        prime_map[l] = next;
+    for (Var l : m_circuitGraph->latches) {
+        prime_map[l] = ToCNFLit(m_circuitGraph->latchNextMap[l]);
     }
 }
 
 
 void Model::CollectClauses() {
-    m_clauses.clear();
-    m_clauses.reserve(m_circuitGraph->modelGates.size() * 3 + 1);
+    m_rawClauses.clear();
+    m_rawClauses.reserve(m_circuitGraph->modelGates.size() * 3 + 1);
 
-    // true id first for the correctness of dag cnf simplifier,
-    // a more rubust way is needed in the future
-    m_clauses.emplace_back(Clause{TrueId()});
-
-    for (int g_id : m_circuitGraph->modelGates) {
+    for (Var g_id : m_circuitGraph->modelGates) {
         auto g = m_circuitGraph->gatesMap[g_id];
-        int fanout = g.fanout;
-        int fanin0 = g.fanins[0];
-        int fanin1 = g.fanins[1];
+        Lit fanout = MkLit(g.fanout);
+        Lit fanin0 = g.fanins[0];
+        Lit fanin1 = g.fanins[1];
         if (g.gateType == CircuitGate::GateType::AND) {
-            m_clauses.emplace_back(Clause{fanout, -fanin0, -fanin1});
-            m_clauses.emplace_back(Clause{-fanout, fanin0});
-            m_clauses.emplace_back(Clause{-fanout, fanin1});
+            m_rawClauses.emplace_back(Clause{fanout, ~fanin0, ~fanin1});
+            m_rawClauses.emplace_back(Clause{~fanout, fanin0});
+            m_rawClauses.emplace_back(Clause{~fanout, fanin1});
         } else if (g.gateType == CircuitGate::GateType::XOR) {
-            m_clauses.emplace_back(Clause{fanout, -fanin0, fanin1});
-            m_clauses.emplace_back(Clause{fanout, fanin0, -fanin1});
-            m_clauses.emplace_back(Clause{-fanout, fanin0, fanin1});
-            m_clauses.emplace_back(Clause{-fanout, -fanin0, -fanin1});
+            m_rawClauses.emplace_back(Clause{fanout, ~fanin0, fanin1});
+            m_rawClauses.emplace_back(Clause{fanout, fanin0, ~fanin1});
+            m_rawClauses.emplace_back(Clause{~fanout, fanin0, fanin1});
+            m_rawClauses.emplace_back(Clause{~fanout, ~fanin0, ~fanin1});
         } else if (g.gateType == CircuitGate::GateType::ITE) {
-            int fanin2 = g.fanins[2];
-            m_clauses.emplace_back(Clause{fanout, -fanin0, -fanin1});
-            m_clauses.emplace_back(Clause{fanout, fanin0, -fanin2});
-            m_clauses.emplace_back(Clause{-fanout, -fanin0, fanin1});
-            m_clauses.emplace_back(Clause{-fanout, fanin0, fanin2});
+            Lit fanin2 = g.fanins[2];
+            m_rawClauses.emplace_back(Clause{fanout, ~fanin0, ~fanin1});
+            m_rawClauses.emplace_back(Clause{fanout, fanin0, ~fanin2});
+            m_rawClauses.emplace_back(Clause{~fanout, ~fanin0, fanin1});
+            m_rawClauses.emplace_back(Clause{~fanout, fanin0, fanin2});
         }
     }
 }
 
 
-int Model::GetLatchReset(int latch) const {
-    int key = abs(latch);
-    auto it = m_circuitGraph->latchResetMap.find(key);
+void Model::CollectCNFClauses() {
+    m_cnfClauses.clear();
+    m_cnfClauses.reserve(m_rawClauses.size() + 1);
+    m_cnfClauses.emplace_back(Clause{MkLit(TrueId())});
+    for (const Clause &cls : m_rawClauses) {
+        m_cnfClauses.emplace_back(ToCNFClause(cls));
+    }
+}
+
+
+Lit Model::GetLatchResetLit(Var latch) const {
+    auto it = m_circuitGraph->latchResetMap.find(latch);
     assert(it != m_circuitGraph->latchResetMap.end());
-    int val = it->second;
-    return latch > 0 ? val : -val;
+    return it->second;
 }
 
-
-int Model::GetLatchNext(int latch) const {
-    int key = abs(latch);
-    auto it = m_circuitGraph->latchNextMap.find(key);
+Lit Model::GetLatchNextLit(Var latch) const {
+    auto it = m_circuitGraph->latchNextMap.find(latch);
     assert(it != m_circuitGraph->latchNextMap.end());
-    int val = it->second;
-    return latch > 0 ? val : -val;
+    return it->second;
 }
 
-
-void Model::SetLatchReset(int latch, int reset) {
-    int key = abs(latch);
-    int val = latch > 0 ? reset : -reset;
-    m_circuitGraph->latchResetMap[key] = val;
+void Model::SetLatchReset(Var latch, Lit reset) {
+    m_circuitGraph->latchResetMap[latch] = reset;
 }
 
-
-void Model::SetLatchNext(int latch, int next) {
-    int key = abs(latch);
-    int val = latch > 0 ? next : -next;
-    m_circuitGraph->latchNextMap[key] = val;
+void Model::SetLatchNext(Var latch, Lit next) {
+    m_circuitGraph->latchNextMap[latch] = next;
 }
 
-
-void Model::SetBad(int bad) {
+void Model::SetBad(Lit bad) {
     m_bad = bad;
 }
 
 
-int Model::NewInputVar() {
+Var Model::NewInputVar() {
     return m_circuitGraph->NewInputVar();
 }
 
-
-int Model::NewLatchVar() {
+Var Model::NewLatchVar() {
     return m_circuitGraph->NewLatchVar();
 }
 
 
-int Model::MakeAnd(int a, int b) {
-    if (a == TrueId()) return b;
-    if (b == TrueId()) return a;
-    if (a == -TrueId() || b == -TrueId()) return -TrueId();
+Lit Model::MakeAND(Lit a, Lit b) {
+    Lit lit_true = LIT_TRUE;
+    Lit lit_false = LIT_FALSE;
+    if (a == lit_true) return b;
+    if (b == lit_true) return a;
+    if (a == lit_false || b == lit_false) return lit_false;
     if (a == b) return a;
-    if (a == -b) return -TrueId();
-    return m_circuitGraph->NewAndGate(a, b);
+    if (a == ~b) return LIT_FALSE;
+    return MkLit(m_circuitGraph->NewAndGate(a, b));
 }
 
 
-int Model::MakeOr(int a, int b) {
-    return -MakeAnd(-a, -b);
+Lit Model::MakeOR(Lit a, Lit b) {
+    return ~MakeAND(~a, ~b);
 }
 
 
-int Model::MakeXor(int a, int b) {
-    int t1 = MakeAnd(a, -b);
-    int t2 = MakeAnd(-a, b);
-    return MakeOr(t1, t2);
+Lit Model::MakeXOR(Lit a, Lit b) {
+    Lit t1 = MakeAND(a, ~b);
+    Lit t2 = MakeAND(~a, b);
+    return MakeOR(t1, t2);
 }
 
 
-int Model::MakeXnor(int a, int b) {
-    return -MakeXor(a, b);
+Lit Model::MakeXNOR(Lit a, Lit b) {
+    return ~MakeXOR(a, b);
 }
 
 
-int Model::MakeIte(int i, int t, int e) {
-    int t1 = MakeAnd(i, t);
-    int t2 = MakeAnd(-i, e);
-    return MakeOr(t1, t2);
+Lit Model::MakeITE(Lit i, Lit t, Lit e) {
+    Lit t1 = MakeAND(i, t);
+    Lit t2 = MakeAND(~i, e);
+    return MakeOR(t1, t2);
 }
 
 
 void Model::Rebuild() {
     CollectInitialState();
+    CollectConstraints();
     CollectNextValueMapping();
     CollectClauses();
     SimplifyDAGClauses();
+    CollectCNFClauses();
     UpdateDependencyVecDAGCNF();
     SimplifyClauses();
 
     LOG_L(m_log, 1, "Model rebuilt: ",
           m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
-    LOG_L(m_log, 1, "Transformed model: ", m_clauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
+    LOG_L(m_log, 1, "Transformed model: ", m_cnfClauses.size(), " clauses, ", m_simpClauses.size(), " simplified clauses.");
 }
 
 
-int Model::BuildSingleFairness(const vector<int> &conds) {
+Lit Model::BuildSingleFairness(const Cube &conds) {
     if (conds.size() == 1) return conds[0];
 
-    vector<int> monitors;
+    vector<Var> monitors;
     monitors.reserve(conds.size());
     for (size_t i = 0; i < conds.size(); i++) {
         monitors.emplace_back(NewLatchVar());
@@ -450,23 +426,23 @@ int Model::BuildSingleFairness(const vector<int> &conds) {
 
     // trigger_i = cond_i || monitor_i
     // accept = trigger_0 && trigger_1 && ... && trigger_n
-    vector<int> triggers;
+    Cube triggers;
     triggers.reserve(conds.size());
-    int accept = TrueId();
+    Lit accept = LIT_TRUE;
     for (size_t i = 0; i < conds.size(); i++) {
-        int trigger = MakeOr(conds[i], monitors[i]);
+        Lit trigger = MakeOR(conds[i], MkLit(monitors[i]));
         triggers.emplace_back(trigger);
-        accept = MakeAnd(accept, trigger);
+        accept = MakeAND(accept, trigger);
     }
 
-    int inp = NewInputVar();
-    int reset = MakeOr(inp, accept);
+    Var inp = NewInputVar();
+    Lit reset = MakeOR(MkLit(inp), accept);
 
     // Init(monitor_i) = false
     // Next(monitor_i) = if (reset) then false else trigger_i
     for (size_t i = 0; i < conds.size(); i++) {
-        int next = MakeAnd(-reset, triggers[i]);
-        SetLatchReset(monitors[i], -TrueId());
+        Lit next = MakeAND(~reset, triggers[i]);
+        SetLatchReset(monitors[i], LIT_FALSE);
         SetLatchNext(monitors[i], next);
     }
 
@@ -474,24 +450,23 @@ int Model::BuildSingleFairness(const vector<int> &conds) {
 }
 
 
-int Model::BuildLiveness() {
+Lit Model::BuildLiveness() {
     assert(m_circuitGraph->justice.size() == 1);
 
-    vector<int> conds = m_circuitGraph->fairness;
-    const vector<int> &just = m_circuitGraph->justice[0];
+    Cube conds = m_circuitGraph->fairness;
+    const Cube &just = m_circuitGraph->justice[0];
     conds.insert(conds.end(), just.begin(), just.end());
 
-    int accept = BuildSingleFairness(conds);
-    return accept;
+    return BuildSingleFairness(conds);
 }
 
 
 Cube Model::GetCOIDomain(const Cube &c) {
     m_coiDomain.clear();
-    for (int v : c) {
-        int a = abs(v);
+    for (Lit lit : c) {
+        Var a = VarOf(lit);
         EnsureCOICache(a);
-        for (int d : m_coiCache[a]) {
+        for (Var d : m_coiCache[a]) {
             if (!m_coiVisited[d]) {
                 m_coiVisited[d] = 1;
                 m_coiDomain.emplace_back(d);
@@ -499,15 +474,27 @@ Cube Model::GetCOIDomain(const Cube &c) {
         }
     }
 
-    for (int v : m_coiDomain) m_coiVisited[v] = 0;
+    for (Var v : m_coiDomain) m_coiVisited[v] = 0;
 
-    Cube domain = m_coiDomain;
-    domain.emplace_back(abs(TrueId()));
+    Cube domain;
+    domain.reserve(m_coiDomain.size() + 1);
+    for (Var v : m_coiDomain) domain.emplace_back(MkLit(v));
+    domain.emplace_back(MkLit(TrueId()));
     return domain;
 }
 
 
-void Model::EnsureCOICache(int v) {
+Clause Model::ToCNFClause(const Clause &cls) const {
+    Clause out;
+    out.reserve(cls.size());
+    for (Lit lit : cls) {
+        out.emplace_back(ToCNFLit(lit));
+    }
+    return out;
+}
+
+
+void Model::EnsureCOICache(Var v) {
     if (m_coiCacheReady[v]) return;
 
     m_coiCacheReady[v] = 1;
@@ -518,9 +505,9 @@ void Model::EnsureCOICache(int v) {
     m_coiCacheVisited[v] = 1;
 
     for (size_t i = 0; i < m_coiCacheTodo.size(); ++i) {
-        int cur = m_coiCacheTodo[i];
+        Var cur = m_coiCacheTodo[i];
         m_coiCache[v].emplace_back(cur);
-        for (int d : m_dependencyVec[cur]) {
+        for (Var d : m_dependencyVec[cur]) {
             if (!m_coiCacheVisited[d]) {
                 m_coiCacheVisited[d] = 1;
                 m_coiCacheTodo.emplace_back(d);
@@ -528,36 +515,40 @@ void Model::EnsureCOICache(int v) {
         }
     }
 
-    for (int t : m_coiCache[v]) m_coiCacheVisited[t] = 0;
+    for (Var t : m_coiCache[v]) m_coiCacheVisited[t] = 0;
 }
 
 
-int Model::GetPrimeK(const int id, int k) {
+Lit Model::EnsurePrimeK(Lit id, int k) {
     if (k == 0) return id;
+    if (IsConstant(id)) return id;
     if (k >= m_primeMaps.size())
-        m_primeMaps.push_back(unordered_map<int, int>());
-    if (IsLatch(id)) return GetPrimeK(GetPrime(id), k - 1);
+        m_primeMaps.push_back(unordered_map<Var, Lit, std::hash<Var>>());
+    if (IsLatch(id)) return EnsurePrimeK(LookupPrime(id), k - 1);
 
-    unordered_map<int, int> &k_map = m_primeMaps[k - 1];
-    unordered_map<int, int>::iterator it = k_map.find(abs(id));
-    if (it != k_map.end())
-        return id > 0 ? it->second : -(it->second);
-    else {
-        auto res = k_map.insert(pair<int, int>(abs(id), GetNewId()));
-        return id > 0 ? res.first->second : -(res.first->second);
+    auto &k_map = m_primeMaps[k - 1];
+    auto it = k_map.find(VarOf(id));
+    Var prime_var = 0;
+    if (it != k_map.end()) {
+        prime_var = VarOf(it->second);
+    } else {
+        Lit prime_lit = MkLit(GetNewId());
+        auto res = k_map.insert(pair<Var, Lit>(VarOf(id), prime_lit));
+        prime_var = VarOf(res.first->second);
     }
+    return MkLit(prime_var, Sign(id));
 }
 
 
-int Model::InnardsLogiclvlDFS(int id) {
+int Model::InnardsLogiclvlDFS(Var id) {
     auto it = m_innardsLvl.find(id);
     if (it != m_innardsLvl.end())
         return it->second;
     int lvl = 0;
-    if (IsAnd(id)) {
+    if (m_circuitGraph->andsSet.find(id) != m_circuitGraph->andsSet.end()) {
         auto gate = m_circuitGraph->gatesMap[id];
         for (auto fanin : gate.fanins) {
-            int fanin_lvl = InnardsLogiclvlDFS(abs(fanin));
+            int fanin_lvl = InnardsLogiclvlDFS(VarOf(fanin));
             if (fanin_lvl + 1 > lvl)
                 lvl = fanin_lvl + 1;
         }
@@ -570,15 +561,15 @@ int Model::InnardsLogiclvlDFS(int id) {
 
 
 void Model::CollectInnards() {
-    for (int i = 0; i < m_circuitGraph->modelGates.size(); i++) {
-        int g = m_circuitGraph->modelGates[i];
+    for (size_t i = 0; i < m_circuitGraph->modelGates.size(); i++) {
+        Var g = m_circuitGraph->modelGates[i];
 
         // decide whether the gate is an innard
         bool is_innard = true;
-        for (int fanin : m_circuitGraph->gatesMap[g].fanins) {
+        for (Lit fanin : m_circuitGraph->gatesMap[g].fanins) {
             bool b = IsConstant(fanin) ||
                      IsLatch(fanin) ||
-                     m_innards.find(abs(fanin)) != m_innards.end();
+                     m_innards.find(VarOf(fanin)) != m_innards.end();
             is_innard &= b;
         }
 
@@ -589,33 +580,32 @@ void Model::CollectInnards() {
 
             // build a new gate
             CircuitGate gate(m_circuitGraph->gatesMap[g]);
-            if (GetPrime(g) == 0) {
-                m_primeMaps[0].insert(pair<int, int>(g, GetNewId()));
+            if (LookupPrime(MkLit(g)) == Lit{}) {
+                m_primeMaps[0].insert(pair<Var, Lit>(g, MkLit(GetNewId())));
             }
-            int p_fanout = GetPrime(g);
+            Var p_fanout = VarOf(LookupPrime(MkLit(g)));
             gate.fanout = p_fanout;
             assert(p_fanout > 0);
 
-            for (int i = 0; i < gate.fanins.size(); i++) {
-                int fanin = gate.fanins[i];
-                int p_fanin;
+            for (size_t i = 0; i < gate.fanins.size(); i++) {
+                Lit fanin = gate.fanins[i];
+                Lit p_fanin;
                 if (IsLatch(fanin)) {
-                    p_fanin = GetPrime(fanin);
+                    p_fanin = LookupPrime(fanin);
                 } else if (IsConstant(fanin)) {
                     if (IsTrue(fanin))
-                        p_fanin = TrueId();
+                        p_fanin = LIT_TRUE;
                     else
-                        p_fanin = -TrueId();
+                        p_fanin = LIT_FALSE;
                 } else if (IsAnd(fanin)) {
-                    assert(GetPrime(fanin) != 0);
-                    p_fanin = GetPrime(fanin);
+                    p_fanin = LookupPrime(fanin);
                 }
                 gate.fanins[i] = p_fanin;
             }
             m_circuitGraph->gatesMap[p_fanout] = gate;
         }
     }
-    for (int g_id : m_innards) m_circuitGraph->modelGates.emplace_back(GetPrime(g_id));
+    for (Var g_id : m_innards) m_circuitGraph->modelGates.emplace_back(VarOf(LookupPrime(MkLit(g_id))));
     m_innardsVec.assign(m_innards.begin(), m_innards.end());
     sort(m_innardsVec.begin(), m_innardsVec.end());
 }
@@ -623,45 +613,45 @@ void Model::CollectInnards() {
 
 void Model::SimplifyClauses() {
     std::shared_ptr<CaDiCaL::Solver> solver = std::make_shared<CaDiCaL::Solver>();
-    for (auto &c : m_clauses) {
-        solver->clause(c);
+    for (auto &c : m_cnfClauses) {
+        solver->clause(ToSignedVec(c));
     }
     // freeze variables
     for (auto v : m_circuitGraph->modelInputs) solver->freeze(v);
     for (auto v : m_circuitGraph->modelLatches) {
         solver->freeze(v);
-        solver->freeze(GetPrime(v));
+        solver->freeze(static_cast<int>(VarOf(LookupPrime(MkLit(v)))));
     }
     // freeze constraints
-    for (int i : m_circuitGraph->constraints) solver->freeze(i);
+    for (Lit i : m_circuitGraph->constraints) solver->freeze(static_cast<int>(VarOf(i)));
     if (m_settings.internalSignals) {
-        for (int i : m_innardsVec) {
+        for (Var i : m_innardsVec) {
             solver->freeze(i);
-            solver->freeze(GetPrime(i));
+            solver->freeze(static_cast<int>(VarOf(LookupPrime(MkLit(i)))));
         }
     }
     solver->freeze(TrueId());
-    solver->freeze(m_bad);
+    solver->freeze(static_cast<int>(VarOf(m_bad)));
 
     class CarClauseIterator : public CaDiCaL::ClauseIterator {
       public:
         ~CarClauseIterator() {}
         bool clause(const std::vector<int> &cls) {
-            m_simpClauses.emplace_back(cls);
+            m_simpClauses.emplace_back(FromSignedVec(cls));
             return true;
         }
-        vector<std::vector<int>> &GetClauses() {
+        vector<Clause> &GetClauses() {
             return m_simpClauses;
         }
 
       private:
-        vector<std::vector<int>> m_simpClauses;
+        vector<Clause> m_simpClauses;
     };
 
     CarClauseIterator it;
     solver->simplify();
     solver->traverse_clauses(it);
-    // cout << "clauses: " << m_clauses.size() << endl;
+    // cout << "clauses: " << m_cnfClauses.size() << endl;
     // cout << "simplified clauses: " << it.GetClauses().size() << endl;
     m_simpClauses = it.GetClauses();
 }
@@ -671,19 +661,19 @@ void Model::SimplifyDAGClauses() {
     for (auto v : m_circuitGraph->modelInputs) simplifier.FreezeVar(v);
     for (auto v : m_circuitGraph->modelLatches) {
         simplifier.FreezeVar(v);
-        simplifier.FreezeVar(GetPrime(v));
+        simplifier.FreezeVar(VarOf(LookupPrime(MkLit(v))));
     }
-    for (int i : m_circuitGraph->constraints) simplifier.FreezeVar(i);
+    for (Lit i : m_circuitGraph->constraints) simplifier.FreezeVar(VarOf(i));
     if (m_settings.internalSignals) {
-        for (int i : m_innardsVec) {
+        for (Var i : m_innardsVec) {
             simplifier.FreezeVar(i);
-            simplifier.FreezeVar(GetPrime(i));
+            simplifier.FreezeVar(VarOf(LookupPrime(MkLit(i))));
         }
     }
     simplifier.FreezeVar(TrueId());
-    simplifier.FreezeVar(m_bad);
+    simplifier.FreezeVar(VarOf(m_bad));
 
-    m_clauses = simplifier.Simplify(m_clauses, TrueId());
+    m_rawClauses = simplifier.Simplify(m_rawClauses);
 }
 
 
@@ -697,7 +687,7 @@ bool Model::SimplifyModelByTernarySimulation() {
     LOG_L(m_log, 1, "Simulation takes ", m_log.Tock(), " seconds.");
 
     // find equivalent latches
-    unordered_map<string, vector<int>> signatures_variables_map;
+    unordered_map<string, vector<Lit>> signatures_variables_map;
     EncodeStatesToSignatuers(simulator.GetStates(), signatures_variables_map);
     int eq_counter = 0;
 
@@ -709,15 +699,15 @@ bool Model::SimplifyModelByTernarySimulation() {
                 m_equivalenceManager->HasEquivalence(s.second[1])) continue;
 
             // get the var0 with the smallest id
-            vector<int> equal_vars(s.second);
-            sort(equal_vars.begin(), equal_vars.end(), Cmp);
+            vector<Lit> equal_vars(s.second);
+            sort(equal_vars.begin(), equal_vars.end());
 
             // equivalent var
-            int var0 = equal_vars[0];
+            Lit var0 = equal_vars[0];
 
             // let other vars equal to var0
-            for (int i = 1; i < equal_vars.size(); i++) {
-                int vari = equal_vars[i];
+            for (size_t i = 1; i < equal_vars.size(); i++) {
+                Lit vari = equal_vars[i];
                 eq_counter++;
                 m_equivalenceManager->AddEquivalence(var0, vari);
             }
@@ -726,7 +716,7 @@ bool Model::SimplifyModelByTernarySimulation() {
     LOG_L(m_log, 1, "Found ", eq_counter, " equivalent latches.");
 
     // find equivalent gates
-    unordered_map<string, vector<int>> signatures_gates_map;
+    unordered_map<string, vector<Lit>> signatures_gates_map;
     EncodeStatesToSignatuers(simulator.GetGateStates(), signatures_gates_map);
     eq_counter = 0;
 
@@ -738,15 +728,15 @@ bool Model::SimplifyModelByTernarySimulation() {
                 m_equivalenceManager->HasEquivalence(s.second[1])) continue;
 
             // get the var0 with the smallest id
-            vector<int> equal_vars(s.second);
-            sort(equal_vars.begin(), equal_vars.end(), Cmp);
+            vector<Lit> equal_vars(s.second);
+            sort(equal_vars.begin(), equal_vars.end());
 
             // equivalent var
-            int var0 = equal_vars[0];
+            Lit var0 = equal_vars[0];
 
             // let other vars equal to var0
-            for (int i = 1; i < equal_vars.size(); i++) {
-                int vari = equal_vars[i];
+            for (size_t i = 1; i < equal_vars.size(); i++) {
+                Lit vari = equal_vars[i];
                 eq_counter++;
                 m_equivalenceManager->AddEquivalence(var0, vari);
             }
@@ -779,8 +769,10 @@ void Model::SimplifyModelByRandomSimulation() {
     auto start_time = chrono::steady_clock::now();
 
     // find may equivalent latches
-    vector<int> eqcheck_latches = m_circuitGraph->modelLatches;
-    eqcheck_latches.emplace_back(TrueId());
+    Cube eqcheck_latches;
+    eqcheck_latches.reserve(m_circuitGraph->modelLatches.size());
+    for (Var v : m_circuitGraph->modelLatches) eqcheck_latches.emplace_back(MkLit(v));
+    eqcheck_latches.emplace_back(LIT_FALSE);
     EncodeStatesToN64Signatuers(simulation_values, eqcheck_latches, signatures_variables_map);
 
     // signatures to equivalent variables
@@ -792,13 +784,13 @@ void Model::SimplifyModelByRandomSimulation() {
 
         if (s.second.size() < 2) continue;
 
-        vector<int> may_equal_vars(s.second);
-        sort(may_equal_vars.begin(), may_equal_vars.end(), Cmp);
+        vector<Lit> may_equal_vars(s.second);
+        sort(may_equal_vars.begin(), may_equal_vars.end());
 
-        for (int i = 0; i < may_equal_vars.size() - 1; i++) {
+        for (size_t i = 0; i + 1 < may_equal_vars.size(); i++) {
             if (m_equivalenceManager->HasEquivalence(may_equal_vars[i])) continue;
 
-            for (int j = i + 1; j < may_equal_vars.size(); j++) {
+            for (size_t j = i + 1; j < may_equal_vars.size(); j++) {
                 if (m_equivalenceManager->HasEquivalence(may_equal_vars[j])) continue;
 
                 mayeq_counter++;
@@ -816,8 +808,10 @@ void Model::SimplifyModelByRandomSimulation() {
     if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
     // find may equivalent variables
     signatures_variables_map.clear();
-    vector<int> eqcheck_gates = m_circuitGraph->modelGates;
-    eqcheck_gates.emplace_back(TrueId());
+    Cube eqcheck_gates;
+    eqcheck_gates.reserve(m_circuitGraph->modelGates.size());
+    for (Var v : m_circuitGraph->modelGates) eqcheck_gates.emplace_back(MkLit(v));
+    eqcheck_gates.emplace_back(LIT_FALSE);
     EncodeStatesToN64Signatuers(simulation_values, eqcheck_gates, signatures_variables_map);
     mayeq_counter = 0;
     eq_counter = 0;
@@ -830,14 +824,14 @@ void Model::SimplifyModelByRandomSimulation() {
         }
         if (s.second.size() < 2) continue;
 
-        vector<int> may_equal_vars(s.second);
-        sort(may_equal_vars.begin(), may_equal_vars.end(), Cmp);
+        vector<Lit> may_equal_vars(s.second);
+        sort(may_equal_vars.begin(), may_equal_vars.end());
 
         if (may_equal_vars.size() <= 3) {
-            for (int i = 0; i + 1 < may_equal_vars.size(); i++) {
-                for (int j = i + 1; j < may_equal_vars.size(); j++) {
-                    int a = may_equal_vars[i];
-                    int b = may_equal_vars[j];
+            for (size_t i = 0; i + 1 < may_equal_vars.size(); i++) {
+                for (size_t j = i + 1; j < may_equal_vars.size(); j++) {
+                    Lit a = may_equal_vars[i];
+                    Lit b = may_equal_vars[j];
                     if (m_equivalenceManager->IsEquivalent(a, b)) {
                         continue;
                     }
@@ -850,11 +844,11 @@ void Model::SimplifyModelByRandomSimulation() {
             }
         } else {
             int k_rep = std::min<int>(3, may_equal_vars.size());
-            vector<int> reps(may_equal_vars.begin(), may_equal_vars.begin() + k_rep);
-            for (int i = k_rep; i < may_equal_vars.size(); i++) {
-                int v = may_equal_vars[i];
+            vector<Lit> reps(may_equal_vars.begin(), may_equal_vars.begin() + k_rep);
+            for (size_t i = k_rep; i < may_equal_vars.size(); i++) {
+                Lit v = may_equal_vars[i];
                 bool already_equiv = false;
-                for (int r : reps) {
+                for (Lit r : reps) {
                     if (m_equivalenceManager->IsEquivalent(r, v)) {
                         already_equiv = true;
                         break;
@@ -862,7 +856,7 @@ void Model::SimplifyModelByRandomSimulation() {
                 }
                 if (already_equiv) continue;
 
-                for (int r : reps) {
+                for (Lit r : reps) {
                     mayeq_counter++;
                     if (CheckGateEquivalenceBySAT(r, v)) {
                         eq_counter++;
@@ -880,14 +874,14 @@ void Model::SimplifyModelByRandomSimulation() {
 }
 
 
-void Model::EncodeStatesToSignatuers(const vector<vector<int>> &states, unordered_map<string, vector<int>> &signatures) {
+void Model::EncodeStatesToSignatuers(const vector<Cube> &states, unordered_map<string, vector<Lit>> &signatures) {
     // encode locations
-    unordered_map<int, vector<int>> signal_locations;
+    unordered_map<Lit, vector<int>, LitHash> signal_locations;
     for (int i = 0; i < states.size(); i++) {
         const auto &state = states[i];
         for (auto v : state) {
             signal_locations[v].emplace_back(i + 1);
-            signal_locations[-v].emplace_back(-i - 1);
+            signal_locations[~v].emplace_back(-i - 1);
         }
     }
     // remove incomplete locations
@@ -909,45 +903,49 @@ void Model::EncodeStatesToSignatuers(const vector<vector<int>> &states, unordere
 }
 
 
-void Model::EncodeStatesToN64Signatuers(const vector<vector<Tbool>> &values, const vector<int> &vars, VarMapN64 &signatures) {
+void Model::EncodeStatesToN64Signatuers(const vector<vector<Tbool>> &values, const Cube &vars, VarMapN64 &signatures) {
     assert(values.size() == 64 * NUM_CHUNKS);
 
-    for (auto l : vars) {
+    for (Lit lit : vars) {
         SignatureN64 signature;
         for (int i = 0; i < values.size(); i++) {
             const auto &vmapi = values[i];
             int j = i / 64;
             signature.chunks[j] = signature.chunks[j] << 1;
-            if (vmapi[l] == T_TRUE) {
+            Tbool value = vmapi[VarOf(lit)];
+            if (Sign(lit)) value = !value;
+            if (value == T_TRUE) {
                 signature.chunks[j] |= 1;
             }
         }
 
         SignatureN64 neg_signature = ~signature;
         if (signatures.find(signature) != signatures.end()) {
-            signatures[signature].emplace_back(l);
+            signatures[signature].emplace_back(lit);
         } else if (signatures.find(neg_signature) != signatures.end()) {
-            signatures[neg_signature].emplace_back(-l);
+            signatures[neg_signature].emplace_back(~lit);
         } else {
-            signatures[signature].emplace_back(l);
+            signatures[signature].emplace_back(lit);
         }
     }
 }
 
 
-bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
+bool Model::CheckLatchEquivalenceBySAT(Lit aLit, Lit bLit) {
     // initial step
-    if (m_circuitGraph->latchResetMap.find(abs(a)) == m_circuitGraph->latchResetMap.end())
+    if (m_circuitGraph->latchResetMap.find(VarOf(aLit)) == m_circuitGraph->latchResetMap.end())
         return false;
-    int init_a = (a > 0) ? m_circuitGraph->latchResetMap[a] : -m_circuitGraph->latchResetMap[-a];
-    if (b == TrueId() && init_a != TrueId()) {
+    Lit reset_a = m_circuitGraph->latchResetMap[VarOf(aLit)];
+    Lit init_a = Sign(aLit) ? ~reset_a : reset_a;
+    if (bLit == LIT_TRUE && init_a != LIT_TRUE) {
         return false;
-    } else if (b == -TrueId() && init_a != -TrueId()) {
+    } else if (bLit == LIT_FALSE && init_a != LIT_FALSE) {
         return false;
     } else {
-        if (m_circuitGraph->latchResetMap.find(abs(b)) == m_circuitGraph->latchResetMap.end())
+        if (m_circuitGraph->latchResetMap.find(VarOf(bLit)) == m_circuitGraph->latchResetMap.end())
             return false;
-        int init_b = (b > 0) ? m_circuitGraph->latchResetMap[b] : -m_circuitGraph->latchResetMap[-b];
+        Lit reset_b = m_circuitGraph->latchResetMap[VarOf(bLit)];
+        Lit init_b = Sign(bLit) ? ~reset_b : reset_b;
         if (init_a != init_b) return false;
     }
 
@@ -956,15 +954,16 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
         m_eqSolverUnsats > 1000) {
         m_eqSolverUnsats = 0;
         ApplyEquivalence();
-        // UpdateDependencyMap();
+        CollectConstraints();
         CollectNextValueMapping();
         CollectClauses();
         SimplifyDAGClauses();
+        CollectCNFClauses();
         UpdateDependencyVecDAGCNF();
 
         m_equivalenceSolver = make_unique<minicore::Solver>();
-        for (auto &c : m_clauses) {
-            m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec(c));
+        for (auto &c : m_cnfClauses) {
+            m_equivalenceSolver->addClause(c);
         }
         m_equivalenceSolver->solve_in_domain = true;
         // m_equivalenceSolver->verbosity = 1;
@@ -973,8 +972,8 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     // (a <-> b) -> (a' <-> b')
     // (a <-> b) & !(a' <-> b') is unsat
     // (a | !b) & (!a | b) & (a' | b') & (!a' | !b')
-    int a_prime = GetPrime(a);
-    int b_prime = GetPrime(b);
+    Lit a_prime = LookupPrime(aLit);
+    Lit b_prime = LookupPrime(bLit);
     {
         // only keep temp act var
         // need to be more robust in the future
@@ -982,20 +981,30 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
         std::fill(dom.begin() + 1, dom.end(), 0);
         m_equivalenceSolver->domainList().resize(1);
     }
-    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a, -b}));
-    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a, b}));
-    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a_prime, b_prime}));
-    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a_prime, -b_prime}));
+    {
+        Clause c1 = ToCNFClause(Clause{aLit, ~bLit});
+        Clause c2 = ToCNFClause(Clause{~aLit, bLit});
+        Clause c3 = ToCNFClause(Clause{a_prime, b_prime});
+        Clause c4 = ToCNFClause(Clause{~a_prime, ~b_prime});
+        m_equivalenceSolver->addTempClause(c1);
+        m_equivalenceSolver->addTempClause(c2);
+        m_equivalenceSolver->addTempClause(c3);
+        m_equivalenceSolver->addTempClause(c4);
+    }
 
-    Cube d = GetCOIDomain(Cube{abs(a), abs(b), abs(a_prime), abs(b_prime)});
+    Cube d = GetCOIDomain(Cube{MkLit(VarOf(aLit)),
+                               MkLit(VarOf(bLit)),
+                               MkLit(VarOf(a_prime)),
+                               MkLit(VarOf(b_prime))});
     {
         std::vector<char> &dom = m_equivalenceSolver->domainSet();
         std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
-        for (auto v : d) {
-            while (v >= m_equivalenceSolver->nVars()) m_equivalenceSolver->newVar();
-            if (!dom[v]) {
-                dom[v] = 1;
-                list.push_back(v);
+        for (Lit v : d) {
+            Var vv = VarOf(v);
+            while (static_cast<int>(vv) >= m_equivalenceSolver->nVars()) m_equivalenceSolver->newVar();
+            if (!dom[vv]) {
+                dom[vv] = 1;
+                list.push_back(vv);
             }
         }
     }
@@ -1004,29 +1013,32 @@ bool Model::CheckLatchEquivalenceBySAT(int a, int b) {
     bool unsat = (res == minicore::l_False);
 
     if (unsat) {
-        m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec({a, -b}));
-        m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec({-a, b}));
+        Clause c1 = ToCNFClause(Clause{aLit, ~bLit});
+        Clause c2 = ToCNFClause(Clause{~aLit, bLit});
+        m_equivalenceSolver->addClause(c1);
+        m_equivalenceSolver->addClause(c2);
         m_eqSolverUnsats++;
     }
     return unsat;
 }
 
 
-bool Model::CheckGateEquivalenceBySAT(int a, int b) {
+bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
     if (m_equivalenceSolver == nullptr ||
         m_eqSolverUnsats > 1000) {
         m_eqSolverUnsats = 0;
         ApplyEquivalence();
-        // UpdateDependencyMap();
+        CollectConstraints();
         CollectNextValueMapping();
         CollectClauses();
         SimplifyDAGClauses();
+        CollectCNFClauses();
         UpdateDependencyVecDAGCNF();
 
         m_equivalenceSolver = make_unique<minicore::Solver>();
         m_equivalenceSolver->setRestartLimit(1);
-        for (auto &c : m_clauses) {
-            m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec(c));
+        for (auto &c : m_cnfClauses) {
+            m_equivalenceSolver->addClause(c);
         }
         m_equivalenceSolver->solve_in_domain = true;
     }
@@ -1041,18 +1053,23 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
         std::fill(dom.begin() + 1, dom.end(), 0);
         m_equivalenceSolver->domainList().resize(1);
     }
-    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({a, b}));
-    m_equivalenceSolver->addTempClause(m_equivalenceSolver->intVec2LitVec({-a, -b}));
+    {
+        Clause c1 = ToCNFClause(Clause{aLit, bLit});
+        Clause c2 = ToCNFClause(Clause{~aLit, ~bLit});
+        m_equivalenceSolver->addTempClause(c1);
+        m_equivalenceSolver->addTempClause(c2);
+    }
 
-    Cube d = GetCOIDomain(Cube{abs(a), abs(b)});
+    Cube d = GetCOIDomain(Cube{MkLit(VarOf(aLit)), MkLit(VarOf(bLit))});
     {
         std::vector<char> &dom = m_equivalenceSolver->domainSet();
         std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
-        for (auto v : d) {
-            while (v >= m_equivalenceSolver->nVars()) m_equivalenceSolver->newVar();
-            if (!dom[v]) {
-                dom[v] = 1;
-                list.push_back(v);
+        for (Lit v : d) {
+            Var vv = VarOf(v);
+            while (static_cast<int>(vv) >= m_equivalenceSolver->nVars()) m_equivalenceSolver->newVar();
+            if (!dom[vv]) {
+                dom[vv] = 1;
+                list.push_back(vv);
             }
         }
     }
@@ -1061,8 +1078,10 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
     bool unsat = (res == minicore::l_False);
 
     if (unsat) {
-        m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec({a, -b}));
-        m_equivalenceSolver->addClause(m_equivalenceSolver->intVec2LitVec({-a, b}));
+        Clause c1 = ToCNFClause(Clause{aLit, ~bLit});
+        Clause c2 = ToCNFClause(Clause{~aLit, bLit});
+        m_equivalenceSolver->addClause(c1);
+        m_equivalenceSolver->addClause(c2);
         m_eqSolverUnsats++;
     }
     return unsat;
@@ -1070,42 +1089,48 @@ bool Model::CheckGateEquivalenceBySAT(int a, int b) {
 
 
 int Model::KLivenessIncrement() {
-    int latch = NewLatchVar();
-    int q = m_bad;
+    Var latch = NewLatchVar();
+    Lit q = m_bad;
     // Init(k) = false
     // Next(k) = q ? true : k
-    int init = -TrueId();
-    int next = MakeIte(q, TrueId(), latch);
+    Lit init = LIT_FALSE;
+    Lit next = MakeITE(q, LIT_TRUE, MkLit(latch));
     SetLatchReset(latch, init);
     SetLatchNext(latch, next);
     // q_k = q & k
-    m_bad = MakeAnd(q, latch);
+    m_bad = MakeAND(q, MkLit(latch));
 
     m_kliveStep++;
 
     // store signals
     m_kliveSignals.resize(m_kliveStep + 1);
-    m_kliveSignals[m_kliveStep] = latch;
+    m_kliveSignals[m_kliveStep] = MkLit(latch);
 
     // get clauses
     m_kliveTransClauses.resize(m_kliveStep + 1);
     vector<Clause> k_clauses;
     // and gate
-    k_clauses.emplace_back(Clause{m_bad, -q, -latch});
-    k_clauses.emplace_back(Clause{-m_bad, q});
-    k_clauses.emplace_back(Clause{-m_bad, latch});
+    k_clauses.emplace_back(Clause{m_bad, ~q, ~MkLit(latch)});
+    k_clauses.emplace_back(Clause{~m_bad, q});
+    k_clauses.emplace_back(Clause{~m_bad, MkLit(latch)});
     // Ite gate
-    k_clauses.emplace_back(Clause{next, -q, -TrueId()});
-    k_clauses.emplace_back(Clause{next, q, -latch});
-    k_clauses.emplace_back(Clause{-next, -q, TrueId()});
-    k_clauses.emplace_back(Clause{-next, q, latch});
-    m_kliveTransClauses[m_kliveStep] = k_clauses;
+    k_clauses.emplace_back(Clause{next, ~q, LIT_FALSE});
+    k_clauses.emplace_back(Clause{next, q, ~MkLit(latch)});
+    k_clauses.emplace_back(Clause{~next, ~q, LIT_TRUE});
+    k_clauses.emplace_back(Clause{~next, q, MkLit(latch)});
+    vector<Clause> k_cnf_clauses;
+    k_cnf_clauses.reserve(k_clauses.size());
+    for (const Clause &cls : k_clauses) {
+        k_cnf_clauses.emplace_back(ToCNFClause(cls));
+    }
+    m_kliveTransClauses[m_kliveStep] = k_cnf_clauses;
 
     // rebuild manually
-    m_initialState.emplace_back(-latch);
-    m_primeMaps[0][latch] = next;
-    m_clauses.insert(m_clauses.end(), k_clauses.begin(), k_clauses.end());
-    m_simpClauses.insert(m_simpClauses.end(), k_clauses.begin(), k_clauses.end());
+    m_initialState.emplace_back(~MkLit(latch));
+    m_primeMaps[0][latch] = ToCNFLit(next);
+    m_rawClauses.insert(m_rawClauses.end(), k_clauses.begin(), k_clauses.end());
+    m_cnfClauses.insert(m_cnfClauses.end(), k_cnf_clauses.begin(), k_cnf_clauses.end());
+    m_simpClauses.insert(m_simpClauses.end(), k_cnf_clauses.begin(), k_cnf_clauses.end());
     return m_kliveStep;
 }
 

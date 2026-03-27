@@ -1,6 +1,7 @@
 #ifndef LOG_H
 #define LOG_H
 
+#include "CarTypes.h"
 #include "Settings.h"
 #include "signal.h"
 #include <assert.h>
@@ -14,11 +15,11 @@
 
 namespace car {
 
-string CubeToStr(const vector<int> &c);
+string CubeToStr(const Cube &c);
 
-void CompressVector(vector<int> &res, const vector<int> &v);
+void CompressVector(vector<int> &res, const Cube &v);
 
-string CubeToStrShort(const vector<int> &c);
+string CubeToStrShort(const Cube &c);
 
 void SignalHandler(int signum);
 

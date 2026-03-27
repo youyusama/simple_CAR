@@ -5,6 +5,7 @@ extern "C" {
 #include "aiger.h"
 }
 
+#include "CarTypes.h"
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -18,13 +19,6 @@ using namespace std;
 
 namespace car {
 
-inline bool Cmp(int a, int b) {
-    if (abs(a) != abs(b))
-        return abs(a) < abs(b);
-    else
-        return a < b;
-}
-
 void AigerDeleter(aiger *aig);
 
 struct CircuitGate {
@@ -33,7 +27,7 @@ struct CircuitGate {
                     ITE };
     CircuitGate() {};
 
-    CircuitGate(GateType gateType, int fanout, const vector<int> &fanins) {
+    CircuitGate(GateType gateType, Var fanout, const vector<Lit> &fanins) {
         this->gateType = gateType;
         this->fanout = fanout;
         this->fanins = fanins;
@@ -46,8 +40,8 @@ struct CircuitGate {
     }
 
     GateType gateType;
-    int fanout;
-    vector<int> fanins;
+    Var fanout;
+    vector<Lit> fanins;
 };
 
 
@@ -68,49 +62,46 @@ class CircuitGraph {
     unsigned numFairness;
 
     // variables for tranverse
-    vector<int> inputs;
-    vector<int> latches;
-    vector<int> outputs;
-    vector<int> ands;
-    vector<int> bad;
-    vector<int> constraints;
-    vector<vector<int>> justice;
-    vector<int> fairness;
+    vector<Var> inputs;
+    vector<Var> latches;
+    Cube outputs;
+    vector<Var> ands;
+    Cube bad;
+    Cube constraints;
+    vector<Cube> justice;
+    Cube fairness;
 
     // variables for query
-    unordered_set<int> inputsSet;
-    unordered_set<int> latchesSet;
-    unordered_set<int> andsSet;
+    unordered_set<Var> inputsSet;
+    unordered_set<Var> latchesSet;
+    unordered_set<Var> andsSet;
 
     // latch maps
-    unordered_map<int, int> latchNextMap;
-    unordered_map<int, int> latchResetMap;
-
-    // ture id
-    int trueId;
+    unordered_map<Var, Lit> latchNextMap;
+    unordered_map<Var, Lit> latchResetMap;
 
     // refine the COI of property & constraints, get new model inputs, latches, and gates
     void COIRefine();
 
-    int NewModelVar();
+    Var NewModelVar();
 
-    int NewInputVar();
+    Var NewInputVar();
 
-    int NewLatchVar();
+    Var NewLatchVar();
 
-    void SetLatchResetNext(int latch, int reset, int next);
+    void SetLatchResetNext(Var latch, Lit reset, Lit next);
 
-    int NewAndGate(int a, int b);
+    Var NewAndGate(Lit a, Lit b);
 
     // variables really matter
-    vector<int> modelInputs;
-    vector<int> modelLatches;
-    vector<int> modelGates;
+    vector<Var> modelInputs;
+    vector<Var> modelLatches;
+    vector<Var> modelGates;
 
     // inputs matter for property (but not for transition relation)
-    vector<int> propertyCOIInputs;
+    vector<Var> propertyCOIInputs;
 
-    unordered_map<int, CircuitGate> gatesMap; // gates in the COI of property & constraints & transition relation
+    unordered_map<Var, CircuitGate> gatesMap; // gates in the COI of property & constraints & transition relation
 
   private:
     bool TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits);
@@ -118,21 +109,6 @@ class CircuitGraph {
     bool TryMakeITEGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits);
 
     bool MakeAndGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits);
-
-    inline int GetCarId(const unsigned lit) {
-        if (lit == 0)
-            return -trueId;
-        else if (lit == 1)
-            return trueId;
-        return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
-    }
-
-    inline unsigned GetAigerLit(const int carId) {
-        if (carId > 0)
-            return carId << 1;
-        else
-            return (-carId << 1) + 1;
-    }
 };
 
 } // namespace car

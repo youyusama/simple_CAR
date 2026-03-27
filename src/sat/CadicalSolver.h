@@ -18,13 +18,13 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
     pair<Cube, Cube> GetAssignment(bool prime) override;
-    unordered_set<int> GetConflict() override;
-    inline int GetNewVar() override {
+    unordered_set<Lit, LitHash> GetConflict() override;
+    inline Var GetNewVar() override {
         return ++m_maxId;
     }
     void AddTempClause(const Cube &cls) override;
     void ReleaseTempClause() override;
-    inline Tbool GetModel(int id) override {
+    inline Tbool GetModel(Var id) override {
         if (val(id) > 0)
             return T_TRUE;
         else {
@@ -33,14 +33,14 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
         }
     }
     void ClearAssumption() override;
-    void PushAssumption(int a) override;
-    int PopAssumption() override;
+    void PushAssumption(Lit a) override;
+    Lit PopAssumption() override;
 
   protected:
     Model &m_model;
-    int m_maxId;
-    Cube m_assumptions;
-    Cube m_tempClause;
+    Var m_maxId;
+    vector<Lit> m_assumptions;
+    vector<Lit> m_tempClause;
 };
 
 } // namespace car

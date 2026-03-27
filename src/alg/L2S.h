@@ -30,11 +30,11 @@ class L2S : public BaseAlg {
     Log &m_log;
     std::unique_ptr<BaseAlg> m_checker;
     int m_save;
-    std::vector<int> m_statecopy;
-    std::vector<int> m_origInputs;
-    std::vector<int> m_origLatches;
-    std::unordered_set<int> m_origInputSet;
-    std::unordered_set<int> m_origLatchSet;
+    std::vector<Var> m_latchCopy;
+    std::vector<Var> m_origInputs;
+    std::vector<Var> m_origLatches;
+    std::unordered_set<Var> m_origInputSet;
+    std::unordered_set<Var> m_origLatchSet;
 };
 
 } // namespace car

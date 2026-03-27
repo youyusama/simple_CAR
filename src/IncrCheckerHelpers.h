@@ -23,9 +23,10 @@ class Branching {
     void Decay();
     void Decay(const Cube &uc, int gap);
 
-    inline float PriorityOf(int lit) {
-        if (abs(lit) >= m_counts.size()) return 0;
-        return m_counts[abs(lit)];
+    inline float PriorityOf(Lit lit) {
+        Var lit_var = VarOf(lit);
+        if (lit_var >= m_counts.size()) return 0;
+        return m_counts[lit_var];
     }
 
   private:
@@ -34,84 +35,6 @@ class Branching {
     int m_mini;
     std::vector<float> m_counts;
 };
-
-
-static bool CubeComp(const Cube &c1, const Cube &c2) {
-    if (c1.size() != c2.size()) return c1.size() < c2.size();
-    for (size_t i = 0; i < c1.size(); i++) {
-        int v1 = c1[i], v2 = c2[i];
-        if (abs(v1) != abs(v2))
-            return abs(v1) < abs(v2);
-        else if (v1 != v2)
-            return v1 > v2;
-    }
-    return false;
-}
-
-
-struct CubeHash {
-    size_t operator()(const vector<int> &cb) const noexcept {
-        size_t seed = cb.size();
-        for (int i : cb) {
-            seed ^= i + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        }
-        return seed;
-    }
-};
-
-class LitSet {
-  public:
-    LitSet() = default;
-
-    void NewSet(const Cube &c) {
-        Clear();
-        for (int lit : c) {
-            Insert(lit);
-        }
-    }
-
-    void Insert(int lit) {
-        assert(lit != 0);
-        std::size_t i = Idx(lit);
-        if (i >= m_has.size()) m_has.resize(i + 1, 0);
-        if (!m_has[i]) {
-            m_set.push_back(lit);
-            m_has[i] = 1;
-        }
-    }
-
-    bool Has(int lit) const {
-        assert(lit != 0);
-        std::size_t i = Idx(lit);
-        return i < m_has.size() && m_has[i];
-    }
-
-    void Clear() {
-        for (int l : m_set) m_has[Idx(l)] = 0;
-        m_set.clear();
-    }
-
-    int Size() const { return static_cast<int>(m_set.size()); }
-
-  private:
-    static std::size_t Idx(int lit) {
-        assert(lit != 0);
-        unsigned v = static_cast<unsigned>(lit > 0 ? lit : -lit);
-        return (static_cast<std::size_t>(v) << 1) | (lit < 0 ? 1u : 0u);
-    }
-
-    std::vector<int> m_set;
-    std::vector<uint8_t> m_has;
-};
-
-
-inline bool SubsumeSet(const Cube &a, const LitSet &b) {
-    if (a.size() > static_cast<size_t>(b.Size())) return false;
-    for (int lit : a) {
-        if (!b.Has(lit)) return false;
-    }
-    return true;
-}
 
 struct ForestNode {
     ForestNode() = default;
@@ -230,8 +153,6 @@ class OverSequenceSet {
         m_invariantLevel = 0;
         m_blockCounter.emplace_back(0);
         m_insertCounter.emplace_back(0);
-        m_tmpLitOffset = m_model.NumVar();
-        m_tmpLitFlags.assign(static_cast<size_t>(m_tmpLitOffset * 2 + 1), 0);
     }
 
     void SetInvariantLevel(int lvl) { m_invariantLevel = lvl; }
@@ -261,19 +182,12 @@ class OverSequenceSet {
 
     bool Imply(const Cube &a, const Cube &b);
 
-    void EnsureTmpLitCapacity(const Cube &latches);
-    void TmpLitSetInsert(int lit);
-    bool TmpLitSetHas(int lit) const;
-    void ClearTmpLitSet();
-
     Model &m_model;
     vector<shared_ptr<FrameSet>> m_sequence;
     vector<int> m_blockCounter;
     vector<int> m_insertCounter;
     int m_invariantLevel;
-    vector<uint8_t> m_tmpLitFlags;
-    vector<size_t> m_tmpLitList;
-    int m_tmpLitOffset = 0;
+    LitSet m_tmpLitSet;
     static constexpr int K_CLEANUP_THRESHOLD = 128;
 };
 

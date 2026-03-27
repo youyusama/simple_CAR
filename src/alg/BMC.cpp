@@ -49,13 +49,13 @@ std::vector<std::pair<Cube, Cube>> BMC::GetCexTrace() {
     for (int k = 0; k <= m_k; k++) {
         Cube inputs;
         for (auto i : m_model.GetModelInputs()) {
-            auto ip = m_model.GetPrimeK(i, k);
-            inputs.emplace_back(m_solver->GetModel(ip) == T_TRUE ? i : -i);
+            Lit ip = m_model.EnsurePrimeK(MkLit(i), k);
+            inputs.emplace_back(m_solver->GetModel(VarOf(ip)) == T_TRUE ? MkLit(i) : ~MkLit(i));
         }
         Cube latches;
         for (auto l : m_model.GetModelLatches()) {
-            auto lp = m_model.GetPrimeK(l, k);
-            latches.emplace_back(m_solver->GetModel(lp) == T_TRUE ? l : -l);
+            Lit lp = m_model.EnsurePrimeK(MkLit(l), k);
+            latches.emplace_back(m_solver->GetModel(VarOf(lp)) == T_TRUE ? MkLit(l) : ~MkLit(l));
         }
         trace.emplace_back(pair<Cube, Cube>(inputs, latches));
     }
@@ -84,7 +84,7 @@ bool BMC::Check() {
         }
 
         // assume( bad^k & cons^k )
-        int k_bad = GetBadK(m_k);
+        Lit k_bad = GetBadK(m_k);
         Cube assumptions;
         assumptions.push_back(k_bad);
         for (auto c : GetConstraintsK(m_k)) {
@@ -108,8 +108,8 @@ bool BMC::Check() {
         // & !bad^k
         {
             [[maybe_unused]] auto clause_scope = m_log.Section("Add_Prop_Cls");
-            m_solver->AddClause({-k_bad});
-            LOG_L(m_log, 3, "Add Clause: ", -k_bad);
+            m_solver->AddClause({~k_bad});
+            LOG_L(m_log, 3, "Add Clause: ", ~k_bad);
         }
         m_k++;
         if (m_maxK != -1 && m_k > m_maxK) return false;
@@ -152,9 +152,9 @@ bool BMC::CheckNonIncremental() {
                 }
             }
 
-            int k_bad = GetBadK(m_k);
+            Lit k_bad = GetBadK(m_k);
 
-            bad_clause.push_back({k_bad});
+            bad_clause.push_back(k_bad);
             // m_Solver->AddClause({k_bad});
             LOG_L(m_log, 3, "Add Clause: ", k_bad);
 
@@ -167,7 +167,7 @@ bool BMC::CheckNonIncremental() {
                 }
             }
 
-            Clause cl({-k_bad}); // store bad^k for
+            Clause cl{~k_bad}; // store bad^k for
             m_clauses.emplace_back(cl);
 
             m_k++;
@@ -209,23 +209,23 @@ void BMC::GetClausesK(int mK, vector<Clause> &clauses) {
     for (int i = 0; i < original_clauses.size(); ++i) {
         Clause &ori = original_clauses[i];
         Clause cls_k;
-        for (int v : ori) {
-            cls_k.push_back(m_model.GetPrimeK(v, mK));
+        for (Lit v : ori) {
+            cls_k.push_back(m_model.EnsurePrimeK(v, mK));
         }
         clauses.push_back(cls_k);
     }
 }
 
 
-int BMC::GetBadK(int mK) {
-    return m_model.GetPrimeK(m_model.GetBad(), mK);
+Lit BMC::GetBadK(int mK) {
+    return m_model.EnsurePrimeK(m_model.GetBad(), mK);
 }
 
 
-vector<int> BMC::GetConstraintsK(int mK) {
-    vector<int> res;
-    for (auto c : m_model.GetConstraints()) {
-        res.push_back(m_model.GetPrimeK(c, mK));
+Cube BMC::GetConstraintsK(int mK) {
+    Cube res;
+    for (Lit c : m_model.GetConstraints()) {
+        res.push_back(m_model.EnsurePrimeK(c, mK));
     }
     return res;
 }
@@ -256,8 +256,8 @@ void BMC::OutputCounterExample() {
     cex_file << endl;
     for (int j = 0; j <= m_k; j++) {
         for (int i = 0; i < m_model.GetNumInputs(); i++) {
-            int input_id = m_model.GetPrimeK(i + 1, j);
-            cex_file << ((m_solver->GetModel(input_id) == T_TRUE) ? "1" : "0");
+            Lit input_id = m_model.EnsurePrimeK(MkLit(static_cast<Var>(i + 1)), j);
+            cex_file << ((m_solver->GetModel(VarOf(input_id)) == T_TRUE) ? "1" : "0");
         }
         cex_file << endl;
     }

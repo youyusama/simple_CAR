@@ -4,18 +4,18 @@
 namespace car {
 CadicalSolver::CadicalSolver(Model &m) : m_model(m) {
     m_maxId = m_model.NumVar() + 1; // reserve variable numbers for one step reachability check
-    m_tempClause = Cube();
+    m_tempClause.clear();
 }
 
 CadicalSolver::~CadicalSolver() {}
 
 bool CadicalSolver::Solve() {
     for (auto it : m_assumptions) {
-        assume(it);
+        assume(ToSigned(it));
     }
     if (m_tempClause.size() > 0) {
-        for (int l : m_tempClause) {
-            constrain(l);
+        for (Lit l : m_tempClause) {
+            constrain(ToSigned(l));
         }
         constrain(0);
     }
@@ -31,8 +31,7 @@ bool CadicalSolver::Solve() {
 
 bool CadicalSolver::Solve(const Cube &assumption) {
     m_assumptions.clear();
-    m_assumptions.resize(assumption.size());
-    std::copy(assumption.begin(), assumption.end(), m_assumptions.begin());
+    m_assumptions = assumption;
     return Solve();
 }
 
@@ -45,9 +44,9 @@ void CadicalSolver::AddAssumption(const Cube &assumption) {
 
 
 void CadicalSolver::AddClause(const Cube &cls) {
-    for (int l : cls)
-        if (abs(l) > m_maxId) m_maxId = abs(l) + 1;
-    clause(cls);
+    for (Lit l : cls)
+        if (VarOf(l) > m_maxId) m_maxId = VarOf(l) + 1;
+    clause(ToSignedVec(cls));
 }
 
 
@@ -56,46 +55,46 @@ pair<Cube, Cube> CadicalSolver::GetAssignment(bool prime) {
     Cube latches;
     inputs.reserve(m_model.GetNumInputs());
     latches.reserve(m_model.GetNumLatches());
-    for (int i : m_model.GetModelInputs()) {
-        if (val(i) > 0) {
-            inputs.emplace_back(i);
+    for (Var i : m_model.GetModelInputs()) {
+        if (val(static_cast<int>(i)) > 0) {
+            inputs.emplace_back(MkLit(i));
         } else {
-            assert(val(i) < 0);
-            inputs.emplace_back(-i);
+            assert(val(static_cast<int>(i)) < 0);
+            inputs.emplace_back(~MkLit(i));
         }
     }
-    for (int i : m_model.GetModelLatches()) {
+    for (Var i : m_model.GetModelLatches()) {
         if (!prime) {
-            if (val(i) > 0) {
-                latches.emplace_back(i);
+            if (val(static_cast<int>(i)) > 0) {
+                latches.emplace_back(MkLit(i));
             } else {
-                assert(val(i) < 0);
-                latches.emplace_back(-i);
+                assert(val(static_cast<int>(i)) < 0);
+                latches.emplace_back(~MkLit(i));
             }
         } else {
-            int p = m_model.GetPrime(i);
-            if ((val(p) > 0 && p > 0) || (val(p) < 0 && p < 0)) {
-                latches.emplace_back(i);
+            Lit p = m_model.LookupPrime(MkLit(i));
+            if ((val(ToSigned(p)) > 0 && !Sign(p)) || (val(ToSigned(p)) < 0 && Sign(p))) {
+                latches.emplace_back(MkLit(i));
             } else {
-                latches.emplace_back(-i);
+                latches.emplace_back(~MkLit(i));
             }
         }
     }
-    for (int i : m_model.GetInnards()) {
+    for (Var i : m_model.GetInnards()) {
         if (!prime) {
-            if (val(i) > 0) {
-                latches.emplace_back(i);
+            if (val(static_cast<int>(i)) > 0) {
+                latches.emplace_back(MkLit(i));
             } else {
-                assert(val(i) < 0);
-                latches.emplace_back(-i);
+                assert(val(static_cast<int>(i)) < 0);
+                latches.emplace_back(~MkLit(i));
             }
         } else {
-            int p = m_model.GetPrime(i);
-            if ((val(p) > 0 && p > 0) || (val(p) < 0 && p < 0)) {
-                latches.emplace_back(i);
+            Lit p = m_model.LookupPrime(MkLit(i));
+            if ((val(ToSigned(p)) > 0 && !Sign(p)) || (val(ToSigned(p)) < 0 && Sign(p))) {
+                latches.emplace_back(MkLit(i));
             } else {
-                assert(val(p) < 0);
-                latches.emplace_back(-i);
+                assert(val(ToSigned(p)) < 0);
+                latches.emplace_back(~MkLit(i));
             }
         }
     }
@@ -103,10 +102,10 @@ pair<Cube, Cube> CadicalSolver::GetAssignment(bool prime) {
 }
 
 
-unordered_set<int> CadicalSolver::GetConflict() {
-    unordered_set<int> conflict_set;
+unordered_set<Lit, LitHash> CadicalSolver::GetConflict() {
+    unordered_set<Lit, LitHash> conflict_set;
     for (auto v : m_assumptions) {
-        if (failed(v)) {
+        if (failed(ToSigned(v))) {
             conflict_set.insert(v);
         }
     }
@@ -114,7 +113,11 @@ unordered_set<int> CadicalSolver::GetConflict() {
 }
 
 void CadicalSolver::AddTempClause(const Cube &cls) {
-    m_tempClause = cls;
+    m_tempClause.clear();
+    m_tempClause.reserve(cls.size());
+    for (Lit lit : cls) {
+        m_tempClause.emplace_back(lit);
+    }
 }
 
 
@@ -128,13 +131,13 @@ void CadicalSolver::ClearAssumption() {
 }
 
 
-void CadicalSolver::PushAssumption(int a) {
+void CadicalSolver::PushAssumption(Lit a) {
     m_assumptions.push_back(a);
 }
 
 
-int CadicalSolver::PopAssumption() {
-    int p = m_assumptions.back();
+Lit CadicalSolver::PopAssumption() {
+    Lit p = m_assumptions.back();
     m_assumptions.pop_back();
     return p;
 }

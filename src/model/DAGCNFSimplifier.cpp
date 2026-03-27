@@ -2,66 +2,25 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstdlib>
 #include <queue>
 #include <unordered_set>
 
 namespace car {
-using Clause = DAGCNFSimplifier::Clause;
 
-// Mark a variable as frozen so it won't be eliminated.
-void DAGCNFSimplifier::FreezeVar(int var) {
-    if (var < 0) {
-        var = -var;
+void DAGCNFSimplifier::FreezeVar(Var var) {
+    if (var != 0) {
+        m_frozen.insert(var);
     }
-    m_frozen.insert(var);
 }
 
-// Run the full DAG CNF simplification pipeline and return simplified clauses.
-std::vector<Clause> DAGCNFSimplifier::Simplify(const std::vector<Clause> &dagClauses, int trueId) {
-    const int true_id_abs = std::abs(trueId);
-    std::vector<Clause> internal;
-    internal.reserve(dagClauses.size());
-    for (const auto &cls : dagClauses) {
-        Clause conv;
-        conv.reserve(cls.size());
-        for (int lit : cls) {
-            int v = std::abs(lit);
-            if (v == true_id_abs) {
-                conv.push_back(lit == trueId ? 0 : 1);
-                continue;
-            }
-            int ilit = (v << 1) | (lit < 0);
-            conv.push_back(ilit);
-        }
-        internal.emplace_back(std::move(conv));
-    }
-    Reset(internal);
-    // Pipeline: const-prop, bounded variable elimination, then subsumption.
+std::vector<Clause> DAGCNFSimplifier::Simplify(const std::vector<Clause> &dagClauses) {
+    Reset(dagClauses);
     ConstSimplify();
     BveSimplify();
     SubsumeSimplify();
-    std::vector<Clause> out = Finalize();
-    for (auto &cls : out) {
-        for (int &lit : cls) {
-            if (lit == 0) {
-                lit = trueId;
-            } else if (lit == 1) {
-                lit = -trueId;
-            } else {
-                int v = lit >> 1;
-                bool neg = (lit & 1) != 0;
-                lit = neg ? -v : v;
-            }
-        }
-    }
-
-    out.insert(out.begin(), Clause{trueId});
-
-    return out;
+    return Finalize();
 }
 
-// Initialize internal state from input clauses and seed the Clause database.
 void DAGCNFSimplifier::Reset(const std::vector<Clause> &dagClauses) {
     m_occurEnabled = false;
     m_maxVar = 0;
@@ -70,43 +29,41 @@ void DAGCNFSimplifier::Reset(const std::vector<Clause> &dagClauses) {
     m_occurs.clear();
 
     for (const auto &cls : dagClauses) {
-        for (int lit : cls) {
-            int v = LitVar(lit);
-            if (v > m_maxVar) {
-                m_maxVar = v;
+        for (Lit lit : cls) {
+            Var lit_var = VarOf(lit);
+            if (lit_var > m_maxVar) {
+                m_maxVar = lit_var;
             }
         }
     }
 
-    m_values.assign(m_maxVar + 1, 0);
-    m_headClauses.assign((m_maxVar + 1) * 2, std::vector<int>());
+    m_values.assign(static_cast<size_t>(m_maxVar) + 1, 0);
+    m_headClauses.assign((static_cast<size_t>(m_maxVar) + 1) * 2, std::vector<int>());
 
     for (const auto &cls : dagClauses) {
         AddRel(cls);
     }
 }
 
-// Build occurrence lists for non-head literals to speed up elimination/subsumption.
 void DAGCNFSimplifier::EnableOccur() {
     if (m_occurEnabled) {
         return;
     }
     m_occurEnabled = true;
-    m_occurs.assign((m_maxVar + 1) * 2, Occur{});
+    m_occurs.assign((static_cast<size_t>(m_maxVar) + 1) * 2, Occur{});
 
-    for (int v = 1; v <= m_maxVar; ++v) {
-        int lit_pos = VarPosLit(v);
-        int lit_neg = VarNegLit(v);
-        const auto &pos = m_headClauses[lit_pos];
-        const auto &neg = m_headClauses[lit_neg];
-        // Only index non-head literals; head literal is the DAG node itself.
+    for (Var v = 1; v <= m_maxVar; ++v) {
+        Lit lit_pos = MkLit(v);
+        Lit lit_neg = MkLit(v, true);
+        const auto &pos = m_headClauses[lit_pos.x];
+        const auto &neg = m_headClauses[lit_neg.x];
         for (int cls_id : pos) {
             if (m_clauseDb[cls_id].removed) {
                 continue;
             }
-            int head_var = LitVar(m_clauseDb[cls_id].lits.back());
-            for (int lit : m_clauseDb[cls_id].lits) {
-                if (LitVar(lit) != head_var) {
+            Var head_var = VarOf(m_clauseDb[cls_id].lits.back());
+            for (Lit lit : m_clauseDb[cls_id].lits) {
+                if (VarOf(lit) != head_var) {
                     OccurAdd(lit, cls_id);
                 }
             }
@@ -115,9 +72,9 @@ void DAGCNFSimplifier::EnableOccur() {
             if (m_clauseDb[cls_id].removed) {
                 continue;
             }
-            int head_var = LitVar(m_clauseDb[cls_id].lits.back());
-            for (int lit : m_clauseDb[cls_id].lits) {
-                if (LitVar(lit) != head_var) {
+            Var head_var = VarOf(m_clauseDb[cls_id].lits.back());
+            for (Lit lit : m_clauseDb[cls_id].lits) {
+                if (VarOf(lit) != head_var) {
                     OccurAdd(lit, cls_id);
                 }
             }
@@ -125,63 +82,55 @@ void DAGCNFSimplifier::EnableOccur() {
     }
 }
 
-// Drop occurrence lists to save memory and avoid stale indices.
 void DAGCNFSimplifier::DisableOccur() {
     m_occurEnabled = false;
     m_occurs.clear();
 }
 
-// Insert a Clause into the database, applying ordering and unit propagation.
 void DAGCNFSimplifier::AddRel(Clause rel) {
     assert(!rel.empty());
 
-    std::sort(rel.begin(), rel.end(), LitLess);
+    std::sort(rel.begin(), rel.end());
 
     if (!TryOrderedSimplify(rel)) {
         return;
     }
-
     if (rel.empty()) {
         return;
     }
 
-    int head_lit = rel.back();
+    Lit head_lit = rel.back();
     if (rel.size() == 1) {
-        // Unit Clause fixes the variable value early.
         SetLitValue(head_lit);
     }
 
     int rel_id = static_cast<int>(m_clauseDb.size());
     m_clauseDb.push_back(ClauseEntry{rel, false});
-    m_headClauses[head_lit].push_back(rel_id);
+    m_headClauses[head_lit.x].push_back(rel_id);
 
     if (m_occurEnabled) {
-        int head_var = LitVar(head_lit);
-        for (int lit : rel) {
-            if (LitVar(lit) != head_var) {
+        Var head_var = VarOf(head_lit);
+        for (Lit lit : rel) {
+            if (VarOf(lit) != head_var) {
                 OccurAdd(lit, rel_id);
             }
         }
     }
 }
 
-// Remove one Clause and update indices/occurrence lists.
 void DAGCNFSimplifier::RemoveRel(int clauseId) {
-    if (clauseId < 0 || clauseId >= static_cast<int>(m_clauseDb.size())) {
-        return;
-    }
-    if (m_clauseDb[clauseId].removed) {
+    if (clauseId < 0 || clauseId >= static_cast<int>(m_clauseDb.size()) || m_clauseDb[clauseId].removed) {
         return;
     }
 
-    int head_lit = m_clauseDb[clauseId].lits.back();
-    auto &list = m_headClauses[head_lit];
+    Lit head_lit = m_clauseDb[clauseId].lits.back();
+    auto &list = m_headClauses[head_lit.x];
     list.erase(std::remove(list.begin(), list.end(), clauseId), list.end());
 
     if (m_occurEnabled) {
-        int head_var = LitVar(head_lit);
-        for (int lit : m_clauseDb[clauseId].lits) {
-            if (LitVar(lit) != head_var) {
+        Var head_var = VarOf(head_lit);
+        for (Lit lit : m_clauseDb[clauseId].lits) {
+            if (VarOf(lit) != head_var) {
                 OccurDel(lit, clauseId);
             }
         }
@@ -189,7 +138,6 @@ void DAGCNFSimplifier::RemoveRel(int clauseId) {
     m_clauseDb[clauseId].removed = true;
 }
 
-// Remove a batch of clauses, deduplicating ids first.
 void DAGCNFSimplifier::RemoveRels(const std::vector<int> &clauseIds) {
     std::unordered_set<int> unique(clauseIds.begin(), clauseIds.end());
     for (int id : unique) {
@@ -197,21 +145,20 @@ void DAGCNFSimplifier::RemoveRels(const std::vector<int> &clauseIds) {
     }
 }
 
-// Remove all clauses whose head is the given variable.
-void DAGCNFSimplifier::RemoveNode(int var) {
-    int lit_pos = VarPosLit(var);
-    int lit_neg = VarNegLit(var);
-    auto &pos = m_headClauses[lit_pos];
-    auto &neg = m_headClauses[lit_neg];
+void DAGCNFSimplifier::RemoveNode(Var var_id) {
+    Lit lit_pos = MkLit(var_id);
+    Lit lit_neg = MkLit(var_id, true);
+    auto &pos = m_headClauses[lit_pos.x];
+    auto &neg = m_headClauses[lit_neg.x];
 
     for (int cls_id : pos) {
         if (m_clauseDb[cls_id].removed) {
             continue;
         }
         if (m_occurEnabled) {
-            int head_var = LitVar(m_clauseDb[cls_id].lits.back());
-            for (int lit : m_clauseDb[cls_id].lits) {
-                if (LitVar(lit) != head_var) {
+            Var head_var = VarOf(m_clauseDb[cls_id].lits.back());
+            for (Lit lit : m_clauseDb[cls_id].lits) {
+                if (VarOf(lit) != head_var) {
                     OccurDel(lit, cls_id);
                 }
             }
@@ -223,9 +170,9 @@ void DAGCNFSimplifier::RemoveNode(int var) {
             continue;
         }
         if (m_occurEnabled) {
-            int head_var = LitVar(m_clauseDb[cls_id].lits.back());
-            for (int lit : m_clauseDb[cls_id].lits) {
-                if (LitVar(lit) != head_var) {
+            Var head_var = VarOf(m_clauseDb[cls_id].lits.back());
+            for (Lit lit : m_clauseDb[cls_id].lits) {
+                if (VarOf(lit) != head_var) {
                     OccurDel(lit, cls_id);
                 }
             }
@@ -236,97 +183,65 @@ void DAGCNFSimplifier::RemoveNode(int var) {
     neg.clear();
 }
 
-// Collect all Clause ids whose head literal is var or -var.
-std::vector<int> DAGCNFSimplifier::VarRels(int var) const {
+std::vector<int> DAGCNFSimplifier::VarRels(Var var_id) const {
     std::vector<int> res;
-    int lit_pos = VarPosLit(var);
-    int lit_neg = VarNegLit(var);
-    const auto &pos = m_headClauses[lit_pos];
-    const auto &neg = m_headClauses[lit_neg];
+    Lit lit_pos = MkLit(var_id);
+    Lit lit_neg = MkLit(var_id, true);
+    const auto &pos = m_headClauses[lit_pos.x];
+    const auto &neg = m_headClauses[lit_neg.x];
     res.reserve(pos.size() + neg.size());
     res.insert(res.end(), pos.begin(), pos.end());
     res.insert(res.end(), neg.begin(), neg.end());
     return res;
 }
 
-// Read the current assignment value of a literal.
-int8_t DAGCNFSimplifier::LitValue(int lit) const {
-    int var = LitVar(lit);
-    if (var == 0) {
-        return (lit == 0) ? 1 : static_cast<int8_t>(-1);
+int8_t DAGCNFSimplifier::LitValue(Lit lit) const {
+    if (IsConstTrue(lit)) {
+        return static_cast<int8_t>(1);
     }
-    if (var < 0 || var >= static_cast<int>(m_values.size())) {
+    if (IsConstFalse(lit)) {
+        return static_cast<int8_t>(-1);
+    }
+
+    Var lit_var = VarOf(lit);
+    if (lit_var >= m_values.size()) {
         return 0;
     }
-    int8_t val = m_values[var];
+    int8_t val = m_values[lit_var];
     if (val == 0) {
         return 0;
     }
-    return ((lit & 1) == 0) ? val : static_cast<int8_t>(-val);
+    return Sign(lit) ? static_cast<int8_t>(-val) : val;
 }
 
-// Fix a literal's variable to a value, detecting conflicts.
-void DAGCNFSimplifier::SetLitValue(int lit) {
-    int var = LitVar(lit);
-    if (var == 0) {
+void DAGCNFSimplifier::SetLitValue(Lit lit) {
+    if (IsConst(lit)) {
         return;
     }
-    int8_t next = ((lit & 1) == 0) ? 1 : -1;
-    if (m_values[var] == -next) {
-        // Clause already unsat; ignore.
+    Var lit_var = VarOf(lit);
+    int8_t next = Sign(lit) ? static_cast<int8_t>(-1) : static_cast<int8_t>(1);
+    if (m_values[lit_var] == -next) {
+        return;
     }
-    m_values[var] = next;
+    m_values[lit_var] = next;
 }
 
-// Check whether a variable has a fixed value.
-bool DAGCNFSimplifier::IsVarAssigned(int var) const {
-    if (var < 0 || var >= static_cast<int>(m_values.size())) {
+bool DAGCNFSimplifier::IsVarAssigned(Var var_id) const {
+    if (var_id >= m_values.size()) {
         return false;
     }
-    return m_values[var] != 0;
+    return m_values[var_id] != 0;
 }
 
-// Return the literal implied by a fixed variable assignment.
-int DAGCNFSimplifier::AssignedLit(int var) const {
-    int8_t val = m_values[var];
-    return val > 0 ? VarPosLit(var) : VarNegLit(var);
+Lit DAGCNFSimplifier::AssignedLit(Var var_id) const {
+    return (m_values[var_id] > 0) ? MkLit(var_id) : MkLit(var_id, true);
 }
 
-// Sort literals by variable id, then polarity.
-bool DAGCNFSimplifier::LitLess(int a, int b) {
-    int av = LitVar(a);
-    int bv = LitVar(b);
-    if (av != bv) {
-        return av < bv;
-    }
-    return a < b;
-}
-
-// Extract variable id from a literal.
-int DAGCNFSimplifier::LitVar(int lit) {
-    return lit >> 1;
-}
-
-// Flip literal polarity.
-int DAGCNFSimplifier::LitNeg(int lit) {
-    return lit ^ 1;
-}
-
-int DAGCNFSimplifier::VarPosLit(int var) {
-    return var << 1;
-}
-
-int DAGCNFSimplifier::VarNegLit(int var) {
-    return (var << 1) | 1;
-}
-
-// Simplify a sorted Clause with current assignments and tautology checks.
 bool DAGCNFSimplifier::TryOrderedSimplify(Clause &cls) const {
     Clause res;
     res.reserve(cls.size());
-    for (int lit : cls) {
+    for (Lit lit : cls) {
         int8_t lv = LitValue(lit);
-        // Clause is satisfied or becomes tautology -> drop.
         if (lv > 0) {
             return false;
         }
@@ -337,7 +252,7 @@ bool DAGCNFSimplifier::TryOrderedSimplify(Clause &cls) const {
             if (lit == res.back()) {
                 continue;
             }
-            if (lit == LitNeg(res.back())) {
+            if (lit == ~res.back()) {
                 return false;
             }
         }
@@ -348,12 +263,10 @@ bool DAGCNFSimplifier::TryOrderedSimplify(Clause &cls) const {
     return true;
 }
 
-// Build a resolvent of two sorted clauses on the given pivot.
 bool DAGCNFSimplifier::TryOrderedResolvent(const Clause &a,
                                            const Clause &b,
-                                           int pivotVar,
+                                           Var pivotVar,
                                            Clause &out) const {
-    // Both clauses are sorted; merge while skipping the pivot.
     const Clause *x = &a;
     const Clause *y = &b;
     if (a.size() > b.size()) {
@@ -366,16 +279,16 @@ bool DAGCNFSimplifier::TryOrderedResolvent(const Clause &a,
     size_t i = 0;
     size_t j = 0;
     while (i < x->size()) {
-        int lit = (*x)[i];
-        if (LitVar(lit) == pivotVar) {
+        Lit lit = (*x)[i];
+        if (VarOf(lit) == pivotVar) {
             ++i;
             continue;
         }
-        while (j < y->size() && LitVar((*y)[j]) < LitVar(lit)) {
+        while (j < y->size() && VarOf((*y)[j]) < VarOf(lit)) {
             ++j;
         }
-        if (j < y->size() && LitVar((*y)[j]) == LitVar(lit)) {
-            if (lit == LitNeg((*y)[j])) {
+        if (j < y->size() && VarOf((*y)[j]) == VarOf(lit)) {
+            if (lit == ~(*y)[j]) {
                 return false;
             }
         } else {
@@ -384,37 +297,36 @@ bool DAGCNFSimplifier::TryOrderedResolvent(const Clause &a,
         ++i;
     }
 
-    for (int lit : *y) {
-        if (LitVar(lit) != pivotVar) {
+    for (Lit lit : *y) {
+        if (VarOf(lit) != pivotVar) {
             out.push_back(lit);
         }
     }
     return true;
 }
 
-// Check subsumption allowing at most one differing literal by variable.
 bool DAGCNFSimplifier::TryOrderedSubsumeExceptOne(const Clause &a,
                                                   const Clause &b,
                                                   bool &subsume,
                                                   bool &diffFound,
-                                                  int &diff) {
+                                                  Lit &diff) {
     subsume = false;
     diffFound = false;
-    diff = 0;
+    diff = Lit{};
     if (a.size() > b.size()) {
         return false;
     }
     size_t j = 0;
     for (size_t i = 0; i < a.size(); ++i) {
-        int av = LitVar(a[i]);
-        while (j < b.size() && LitVar(b[j]) < av) {
+        Var av = VarOf(a[i]);
+        while (j < b.size() && VarOf(b[j]) < av) {
             ++j;
         }
         if (j == b.size()) {
             return false;
         }
         if (a[i] != b[j]) {
-            if (!diffFound && LitVar(b[j]) == av) {
+            if (!diffFound && VarOf(b[j]) == av) {
                 diffFound = true;
                 diff = a[i];
             } else {
@@ -426,49 +338,41 @@ bool DAGCNFSimplifier::TryOrderedSubsumeExceptOne(const Clause &a,
     return subsume || diffFound;
 }
 
-// Add a Clause id to a literal's occurrence list.
-void DAGCNFSimplifier::OccurAdd(int lit, int clauseId) {
+void DAGCNFSimplifier::OccurAdd(Lit lit, int clauseId) {
     if (!m_occurEnabled) {
         return;
     }
-    Occur &o = m_occurs[lit];
+    Occur &o = m_occurs[lit.x];
     o.occur.push_back(clauseId);
     o.size++;
 }
 
-// Lazily remove a Clause id from a literal's occurrence list.
-void DAGCNFSimplifier::OccurDel(int lit, int clauseId) {
+void DAGCNFSimplifier::OccurDel(Lit lit, int clauseId) {
     (void)clauseId;
     if (!m_occurEnabled) {
         return;
     }
-    Occur &o = m_occurs[lit];
+    Occur &o = m_occurs[lit.x];
     if (o.size > 0) {
         o.size--;
     }
     o.dirty = true;
 }
 
-// Return the current occurrence count for a literal.
-size_t DAGCNFSimplifier::OccurNum(int lit) const {
-    if (!m_occurEnabled) {
-        return 0;
-    }
-    return m_occurs[lit].size;
+size_t DAGCNFSimplifier::OccurNum(Lit lit) const {
+    return m_occurEnabled ? m_occurs[lit.x].size : 0;
 }
 
-// Get the cleaned occurrence list for a literal.
-const std::vector<int> &DAGCNFSimplifier::OccurGet(int lit) {
+const std::vector<int> &DAGCNFSimplifier::OccurGet(Lit lit) {
     OccurClean(lit);
-    return m_occurs[lit].occur;
+    return m_occurs[lit.x].occur;
 }
 
-// Drop removed Clause ids from a literal's occurrence list.
-void DAGCNFSimplifier::OccurClean(int lit) {
+void DAGCNFSimplifier::OccurClean(Lit lit) {
     if (!m_occurEnabled) {
         return;
     }
-    Occur &o = m_occurs[lit];
+    Occur &o = m_occurs[lit.x];
     if (!o.dirty) {
         return;
     }
@@ -481,10 +385,9 @@ void DAGCNFSimplifier::OccurClean(int lit) {
     o.dirty = false;
 }
 
-// Generate resolvents between two Clause-id sets within a size limit.
 bool DAGCNFSimplifier::TryResolvent(const std::vector<int> &pcnf,
                                     const std::vector<int> &ncnf,
-                                    int pivotVar,
+                                    Var pivotVar,
                                     size_t limit,
                                     std::vector<Clause> &out) {
     out.clear();
@@ -508,29 +411,27 @@ bool DAGCNFSimplifier::TryResolvent(const std::vector<int> &pcnf,
     return true;
 }
 
-// Try bounded variable elimination for a single variable.
-void DAGCNFSimplifier::Eliminate(int var) {
-    if (m_frozen.count(var) != 0) {
+void DAGCNFSimplifier::Eliminate(Var var_id) {
+    if (m_frozen.count(var_id) != 0) {
         return;
     }
-    // Cost guard prevents blow-up of resolvents.
-    int lv = VarPosLit(var);
-    int lnv = VarNegLit(var);
+    Lit lv = MkLit(var_id);
+    Lit lnv = MkLit(var_id, true);
     int ocost = static_cast<int>(OccurNum(lv) + OccurNum(lnv) +
-                                 m_headClauses[lv].size() + m_headClauses[lnv].size());
+                                 m_headClauses[lv.x].size() + m_headClauses[lnv.x].size());
     if (ocost == 0 || ocost > 2000) {
         return;
     }
 
-    std::vector<int> pos = m_headClauses[lv];
-    std::vector<int> neg = m_headClauses[lnv];
+    std::vector<int> pos = m_headClauses[lv.x];
+    std::vector<int> neg = m_headClauses[lnv.x];
 
     int ncost = 0;
     std::vector<int> opos = OccurGet(lv);
     std::vector<int> oneg = OccurGet(lnv);
 
     std::vector<Clause> respn;
-    if (!TryResolvent(pos, oneg, var, static_cast<size_t>(ocost - ncost), respn)) {
+    if (!TryResolvent(pos, oneg, var_id, static_cast<size_t>(ocost - ncost), respn)) {
         return;
     }
     ncost += static_cast<int>(respn.size());
@@ -539,7 +440,7 @@ void DAGCNFSimplifier::Eliminate(int var) {
     }
 
     std::vector<Clause> resnp;
-    if (!TryResolvent(neg, opos, var, static_cast<size_t>(ocost - ncost), resnp)) {
+    if (!TryResolvent(neg, opos, var_id, static_cast<size_t>(ocost - ncost), resnp)) {
         return;
     }
     ncost += static_cast<int>(resnp.size());
@@ -553,20 +454,19 @@ void DAGCNFSimplifier::Eliminate(int var) {
 
     opos.insert(opos.end(), oneg.begin(), oneg.end());
     RemoveRels(opos);
-    RemoveNode(var);
+    RemoveNode(var_id);
 
     for (auto &r : res) {
         AddRel(r);
     }
 }
 
-// Run bounded variable elimination in increasing occurrence order.
 void DAGCNFSimplifier::BveSimplify() {
     EnableOccur();
 
     struct Entry {
         int cost;
-        int var;
+        Var var;
     };
     struct EntryCmp {
         bool operator()(const Entry &a, const Entry &b) const {
@@ -575,24 +475,20 @@ void DAGCNFSimplifier::BveSimplify() {
     };
 
     std::priority_queue<Entry, std::vector<Entry>, EntryCmp> heap;
-    std::vector<bool> popped(m_maxVar + 1, false);
-    // Process vars from low occurrence to high occurrence.
-    for (int v = 1; v <= m_maxVar; ++v) {
-        int cost = static_cast<int>(OccurNum(VarPosLit(v)) + OccurNum(VarNegLit(v)));
+    std::vector<bool> popped(static_cast<size_t>(m_maxVar) + 1, false);
+    for (Var v = 1; v <= m_maxVar; ++v) {
+        int cost = static_cast<int>(OccurNum(MkLit(v)) + OccurNum(MkLit(v, true)));
         heap.push(Entry{cost, v});
     }
 
     while (!heap.empty()) {
         Entry entry = heap.top();
         heap.pop();
-        int v = entry.var;
-        if (v < 0 || v > m_maxVar) {
+        Var v = entry.var;
+        if (v > m_maxVar || popped[v]) {
             continue;
         }
-        if (popped[v]) {
-            continue;
-        }
-        int cost = static_cast<int>(OccurNum(VarPosLit(v)) + OccurNum(VarNegLit(v)));
+        int cost = static_cast<int>(OccurNum(MkLit(v)) + OccurNum(MkLit(v, true)));
         if (cost != entry.cost) {
             heap.push(Entry{cost, v});
             continue;
@@ -602,9 +498,8 @@ void DAGCNFSimplifier::BveSimplify() {
     }
 }
 
-// Simplify all clauses headed by a variable under current assignments.
-void DAGCNFSimplifier::ConstSimplifyVar(int var) {
-    std::vector<int> cls_ids = VarRels(var);
+void DAGCNFSimplifier::ConstSimplifyVar(Var var_id) {
+    std::vector<int> cls_ids = VarRels(var_id);
     std::vector<int> removed;
 
     for (int id : cls_ids) {
@@ -617,8 +512,8 @@ void DAGCNFSimplifier::ConstSimplifyVar(int var) {
             continue;
         }
         assert(!cls.empty());
-        int head_var = LitVar(cls.back());
-        if (head_var != var) {
+        Var head_var = VarOf(cls.back());
+        if (head_var != var_id) {
             removed.push_back(id);
         } else if (m_clauseDb[id].lits.size() != cls.size()) {
             AddRel(cls);
@@ -627,14 +522,13 @@ void DAGCNFSimplifier::ConstSimplifyVar(int var) {
     RemoveRels(removed);
 }
 
-// Apply constant propagation and remove fixed nodes.
 void DAGCNFSimplifier::ConstSimplify() {
     DisableOccur();
-    for (int v = 1; v <= m_maxVar; ++v) {
+    for (Var v = 1; v <= m_maxVar; ++v) {
         ConstSimplifyVar(v);
     }
 
-    for (int v = 1; v <= m_maxVar; ++v) {
+    for (Var v = 1; v <= m_maxVar; ++v) {
         if (!IsVarAssigned(v)) {
             continue;
         }
@@ -645,24 +539,19 @@ void DAGCNFSimplifier::ConstSimplify() {
     }
 }
 
-// Check one Clause for subsumption or self-subsumption against nearby candidates.
 void DAGCNFSimplifier::ClauseSubsumeCheck(int clauseId) {
-    if (clauseId < 0 || clauseId >= static_cast<int>(m_clauseDb.size())) {
-        return;
-    }
-    if (m_clauseDb[clauseId].removed) {
+    if (clauseId < 0 || clauseId >= static_cast<int>(m_clauseDb.size()) || m_clauseDb[clauseId].removed) {
         return;
     }
 
     Clause &ci = m_clauseDb[clauseId].lits;
     assert(!ci.empty());
-    // Use a low-cost literal to limit candidate comparisons.
-    int best_lit = ci.front();
+    Lit best_lit = ci.front();
     size_t best_cost = static_cast<size_t>(-1);
 
-    for (int lit : ci) {
-        size_t cost = OccurNum(lit) + OccurNum(LitNeg(lit)) +
-                      m_headClauses[lit].size() + m_headClauses[LitNeg(lit)].size();
+    for (Lit lit : ci) {
+        size_t cost = OccurNum(lit) + OccurNum(~lit) +
+                      m_headClauses[lit.x].size() + m_headClauses[(~lit).x].size();
         if (cost < best_cost) {
             best_cost = cost;
             best_lit = lit;
@@ -670,30 +559,27 @@ void DAGCNFSimplifier::ClauseSubsumeCheck(int clauseId) {
     }
 
     std::vector<int> occurs = OccurGet(best_lit);
-    const auto &occ_neg = OccurGet(LitNeg(best_lit));
+    const auto &occ_neg = OccurGet(~best_lit);
     occurs.insert(occurs.end(), occ_neg.begin(), occ_neg.end());
-    const auto &head_pos = m_headClauses[best_lit];
-    const auto &head_neg = m_headClauses[LitNeg(best_lit)];
+    const auto &head_pos = m_headClauses[best_lit.x];
+    const auto &head_neg = m_headClauses[(~best_lit).x];
     occurs.insert(occurs.end(), head_pos.begin(), head_pos.end());
     occurs.insert(occurs.end(), head_neg.begin(), head_neg.end());
 
     for (int cj_id : occurs) {
-        if (cj_id < 0 || cj_id >= static_cast<int>(m_clauseDb.size())) {
-            continue;
-        }
-        if (m_clauseDb[cj_id].removed || cj_id == clauseId) {
+        if (cj_id < 0 || cj_id >= static_cast<int>(m_clauseDb.size()) || m_clauseDb[cj_id].removed || cj_id == clauseId) {
             continue;
         }
         Clause &cj = m_clauseDb[cj_id].lits;
         bool subsume = false;
         bool diff_found = false;
-        int diff = 0;
+        Lit diff{};
         if (!TryOrderedSubsumeExceptOne(ci, cj, subsume, diff_found, diff)) {
             continue;
         }
         if (subsume) {
-            int head_lit = m_clauseDb[cj_id].lits.back();
-            auto &list = m_headClauses[head_lit];
+            Lit head_lit = m_clauseDb[cj_id].lits.back();
+            auto &list = m_headClauses[head_lit.x];
             list.erase(std::remove(list.begin(), list.end(), cj_id), list.end());
             m_clauseDb[cj_id].removed = true;
             continue;
@@ -701,46 +587,42 @@ void DAGCNFSimplifier::ClauseSubsumeCheck(int clauseId) {
         if (!diff_found) {
             continue;
         }
-        int d = diff;
-        int ci_head = m_clauseDb[clauseId].lits.back();
-        int cj_head = m_clauseDb[cj_id].lits.back();
+
+        Lit ci_head = m_clauseDb[clauseId].lits.back();
+        Lit cj_head = m_clauseDb[cj_id].lits.back();
         if (ci.size() == cj.size()) {
-            if (LitVar(d) == LitVar(ci_head)) {
-                int head_ci = m_clauseDb[clauseId].lits.back();
-                auto &list_ci = m_headClauses[head_ci];
+            if (VarOf(diff) == VarOf(ci_head)) {
+                auto &list_ci = m_headClauses[ci_head.x];
                 list_ci.erase(std::remove(list_ci.begin(), list_ci.end(), clauseId), list_ci.end());
-                int head_cj = m_clauseDb[cj_id].lits.back();
-                auto &list_cj = m_headClauses[head_cj];
+                auto &list_cj = m_headClauses[cj_head.x];
                 list_cj.erase(std::remove(list_cj.begin(), list_cj.end(), cj_id), list_cj.end());
                 m_clauseDb[clauseId].removed = true;
                 m_clauseDb[cj_id].removed = true;
                 return;
             }
-            ci.erase(std::remove(ci.begin(), ci.end(), d), ci.end());
-            int head_cj = m_clauseDb[cj_id].lits.back();
-            auto &list_cj = m_headClauses[head_cj];
+            ci.erase(std::remove(ci.begin(), ci.end(), diff), ci.end());
+            auto &list_cj = m_headClauses[cj_head.x];
             list_cj.erase(std::remove(list_cj.begin(), list_cj.end(), cj_id), list_cj.end());
             m_clauseDb[cj_id].removed = true;
-        } else if (LitVar(d) == LitVar(cj_head)) {
-            auto &list_cj = m_headClauses[cj_head];
+        } else if (VarOf(diff) == VarOf(cj_head)) {
+            auto &list_cj = m_headClauses[cj_head.x];
             list_cj.erase(std::remove(list_cj.begin(), list_cj.end(), cj_id), list_cj.end());
             m_clauseDb[cj_id].removed = true;
         } else {
-            int nd = LitNeg(d);
+            Lit nd = ~diff;
             cj.erase(std::remove(cj.begin(), cj.end(), nd), cj.end());
         }
     }
 }
 
-// Run subsumption-based simplification over all clauses.
 void DAGCNFSimplifier::SubsumeSimplify() {
     EnableOccur();
-    for (int v = 1; v <= m_maxVar; ++v) {
-        std::vector<int> pos = m_headClauses[VarPosLit(v)];
+    for (Var v = 1; v <= m_maxVar; ++v) {
+        std::vector<int> pos = m_headClauses[MkLit(v).x];
         for (int cls : pos) {
             ClauseSubsumeCheck(cls);
         }
-        std::vector<int> neg = m_headClauses[VarNegLit(v)];
+        std::vector<int> neg = m_headClauses[MkLit(v, true).x];
         for (int cls : neg) {
             ClauseSubsumeCheck(cls);
         }
@@ -757,10 +639,9 @@ void DAGCNFSimplifier::SubsumeSimplify() {
     }
 }
 
-// Simplify a set of clauses by pairwise subsumption rules.
 std::vector<Clause> DAGCNFSimplifier::ClauseSubsumeSimplify(std::vector<Clause> clauses) {
     for (auto &cls : clauses) {
-        std::sort(cls.begin(), cls.end(), LitLess);
+        std::sort(cls.begin(), cls.end());
         cls.erase(std::unique(cls.begin(), cls.end()), cls.end());
     }
     std::sort(clauses.begin(), clauses.end(),
@@ -782,7 +663,7 @@ std::vector<Clause> DAGCNFSimplifier::ClauseSubsumeSimplify(std::vector<Clause> 
             assert(!clauses[j].empty());
             bool subsume = false;
             bool diff_found = false;
-            int diff = 0;
+            Lit diff{};
             if (!TryOrderedSubsumeExceptOne(clauses[i], clauses[j], subsume, diff_found, diff)) {
                 continue;
             }
@@ -793,14 +674,13 @@ std::vector<Clause> DAGCNFSimplifier::ClauseSubsumeSimplify(std::vector<Clause> 
             if (!diff_found) {
                 continue;
             }
-            int d = diff;
             if (clauses[i].size() == clauses[j].size()) {
                 update = true;
-                clauses[i].erase(std::remove(clauses[i].begin(), clauses[i].end(), d),
+                clauses[i].erase(std::remove(clauses[i].begin(), clauses[i].end(), diff),
                                  clauses[i].end());
                 removed[j] = true;
             } else {
-                int nd = LitNeg(d);
+                Lit nd = ~diff;
                 clauses[j].erase(std::remove(clauses[j].begin(), clauses[j].end(), nd),
                                  clauses[j].end());
             }
@@ -821,19 +701,17 @@ std::vector<Clause> DAGCNFSimplifier::ClauseSubsumeSimplify(std::vector<Clause> 
     return res;
 }
 
-// Reconstruct the simplified Clause list from the database.
 std::vector<Clause> DAGCNFSimplifier::Finalize() const {
     std::vector<Clause> res;
-    for (int v = 1; v <= m_maxVar; ++v) {
+    for (Var v = 1; v <= m_maxVar; ++v) {
         if (m_frozen.count(v) != 0 && IsVarAssigned(v)) {
-            // Preserve fixed values for frozen vars.
             res.push_back(Clause{AssignedLit(v)});
             continue;
         }
-        int lit_pos = VarPosLit(v);
-        int lit_neg = VarNegLit(v);
-        const auto &pos = m_headClauses[lit_pos];
-        const auto &neg = m_headClauses[lit_neg];
+        Lit lit_pos = MkLit(v);
+        Lit lit_neg = MkLit(v, true);
+        const auto &pos = m_headClauses[lit_pos.x];
+        const auto &neg = m_headClauses[lit_neg.x];
         for (int cls_id : pos) {
             if (!m_clauseDb[cls_id].removed) {
                 res.push_back(m_clauseDb[cls_id].lits);

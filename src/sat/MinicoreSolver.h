@@ -18,13 +18,13 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
     pair<Cube, Cube> GetAssignment(bool prime) override;
-    unordered_set<int> GetConflict() override;
-    inline int GetNewVar() override {
+    unordered_set<Lit, LitHash> GetConflict() override;
+    inline Var GetNewVar() override {
         return ++m_maxId;
     }
     void AddTempClause(const Cube &cls) override;
     void ReleaseTempClause() override;
-    inline Tbool GetModel(int id) override {
+    inline Tbool GetModel(Var id) override {
         if (value(id) == minicore::l_True)
             return T_TRUE;
         else if (value(id) == minicore::l_False)
@@ -33,19 +33,22 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
             return T_UNDEF;
     }
     void ClearAssumption() override;
-    void PushAssumption(int a) override;
-    int PopAssumption() override;
+    void PushAssumption(Lit a) override;
+    Lit PopAssumption() override;
 
   protected:
-    inline int GetLiteralId(const minicore::Lit &l);
     inline minicore::Lit GetLit(int id) {
-        minicore::Var var = abs(id);
-        while (var >= nVars()) newVar();
-        return ((id > 0) ? minicore::mkLit(var) : ~minicore::mkLit(var));
+        Var lit_var = AbsLit(id);
+        while (static_cast<int>(lit_var) >= nVars()) newVar();
+        return FromSigned(id);
     };
+    inline minicore::Lit GetLit(Lit lit) {
+        while (static_cast<int>(VarOf(lit)) >= nVars()) newVar();
+        return lit;
+    }
 
     Model &m_model;
-    int m_maxId;
+    Var m_maxId;
     vector<minicore::Lit> m_assumptions;
     vector<minicore::Lit> m_tempClause;
 };

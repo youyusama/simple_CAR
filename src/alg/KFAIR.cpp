@@ -114,9 +114,9 @@ bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
     if (states.size() <= 1 || klive_step < 1) return false;
 
     // Build a set of k-liveness latch variables for quick filtering.
-    std::unordered_set<int> live_set;
+    std::unordered_set<Var> live_set;
     for (int i = 1; i <= klive_step; i++)
-        live_set.emplace(abs(m_model.GetKLiveSignal(i)));
+        live_set.emplace(VarOf(m_model.GetKLiveSignal(i)));
 
     // Track indices where the k-counter value changes and store the trimmed trace
     // (state without k-liveness latch literals).
@@ -129,9 +129,9 @@ bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
         int k_counter = 0;
         Cube s_trim;
         s_trim.reserve(states[i].size());
-        for (int lit : states[i]) {
-            if (live_set.count(abs(lit))) {
-                if (lit > 0) k_counter++;
+        for (Lit lit : states[i]) {
+            if (live_set.count(VarOf(lit))) {
+                if (!Sign(lit)) k_counter++;
             } else {
                 s_trim.emplace_back(lit);
             }

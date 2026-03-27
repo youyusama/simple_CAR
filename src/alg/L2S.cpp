@@ -2,8 +2,8 @@
 
 #include "BCAR.h"
 #include "BMC.h"
-#include "IC3.h"
 #include "FCAR.h"
+#include "IC3.h"
 
 namespace car {
 
@@ -68,49 +68,49 @@ void L2S::Translate() {
     m_origLatches = m_model.GetModelLatches();
     m_origInputSet.clear();
     m_origLatchSet.clear();
-    for (int v : m_origInputs) m_origInputSet.emplace(abs(v));
-    for (int v : m_origLatches) m_origLatchSet.emplace(abs(v));
+    for (Var v : m_origInputs) m_origInputSet.emplace(v);
+    for (Var v : m_origLatches) m_origLatchSet.emplace(v);
 
     // save = input
     m_save = m_model.NewInputVar();
 
-    std::vector<int> latches = m_origLatches;
-    m_statecopy.clear();
-    m_statecopy.reserve(latches.size());
+    std::vector<Var> latches = m_origLatches;
+    m_latchCopy.clear();
+    m_latchCopy.reserve(latches.size());
 
-    for (int v : latches) {
-        int nv = m_model.NewLatchVar();
-        m_statecopy.emplace_back(nv);
+    for (Var v : latches) {
+        Var nv = m_model.NewLatchVar();
+        m_latchCopy.emplace_back(nv);
 
         // Init(nv) = Init(v)
         // Next(nv) = if (save) then v else nv
-        int init = m_model.GetLatchReset(v);
-        int next = m_model.MakeIte(m_save, v, nv);
+        Lit init = m_model.GetLatchResetLit(v);
+        Lit next = m_model.MakeITE(MkLit(m_save), MkLit(v), MkLit(nv));
         m_model.SetLatchReset(nv, init);
         m_model.SetLatchNext(nv, next);
     }
 
     // Init(triggered) = false
     // Next(triggered) = justice | ( !save & triggered)
-    int justice = m_model.GetBad();
-    int triggered = m_model.NewLatchVar();
-    int next_triggered = m_model.MakeOr(justice, m_model.MakeAnd(-m_save, triggered));
-    m_model.SetLatchReset(triggered, -m_model.TrueId());
+    Lit justice = m_model.GetBad();
+    Var triggered = m_model.NewLatchVar();
+    Lit next_triggered = m_model.MakeOR(justice, m_model.MakeAND(~MkLit(m_save), MkLit(triggered)));
+    m_model.SetLatchReset(triggered, LIT_FALSE);
     m_model.SetLatchNext(triggered, next_triggered);
 
     // equality = Next(v_i) <-> Next(nv_i) & ...
-    int equality = m_model.TrueId();
+    Lit equality = LIT_TRUE;
     for (size_t i = 0; i < latches.size(); i++) {
-        int v = latches[i];
-        int nv = m_statecopy[i];
-        int next_v = m_model.GetLatchNext(v);
-        int next_nv = m_model.GetLatchNext(nv);
-        int iff = m_model.MakeXnor(next_v, next_nv);
-        equality = m_model.MakeAnd(equality, iff);
+        Var v = latches[i];
+        Var nv = m_latchCopy[i];
+        Lit next_v = m_model.GetLatchNextLit(v);
+        Lit next_nv = m_model.GetLatchNextLit(nv);
+        Lit iff = m_model.MakeXNOR(next_v, next_nv);
+        equality = m_model.MakeAND(equality, iff);
     }
 
     // bad = equality && triggered
-    int bad = m_model.MakeAnd(equality, next_triggered);
+    Lit bad = m_model.MakeAND(equality, next_triggered);
 
     m_model.SetBad(bad);
     m_model.Rebuild();

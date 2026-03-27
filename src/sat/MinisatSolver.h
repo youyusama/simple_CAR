@@ -18,13 +18,13 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
     pair<Cube, Cube> GetAssignment(bool prime) override;
-    unordered_set<int> GetConflict() override;
-    inline int GetNewVar() override {
+    unordered_set<Lit, LitHash> GetConflict() override;
+    inline Var GetNewVar() override {
         return ++m_maxId;
     }
     void AddTempClause(const Cube &cls) override;
     void ReleaseTempClause() override;
-    inline Tbool GetModel(int id) override {
+    inline Tbool GetModel(Var id) override {
         if (model[id] == Minisat::l_True)
             return T_TRUE;
         else if (model[id] == Minisat::l_False) {
@@ -34,21 +34,27 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
         }
     }
     void ClearAssumption() override;
-    void PushAssumption(int a) override;
-    int PopAssumption() override;
+    void PushAssumption(Lit a) override;
+    Lit PopAssumption() override;
 
   protected:
-    inline int GetLiteralId(const Minisat::Lit &l);
+    inline Lit GetLiteral(const Minisat::Lit &l);
     inline Minisat::Lit GetLit(int id) {
-        int var = abs(id);
-        while (var >= nVars()) newVar();
-        return ((id > 0) ? Minisat::mkLit(var) : ~Minisat::mkLit(var));
+        Var lit_var = AbsLit(id);
+        while (static_cast<int>(lit_var) >= nVars()) newVar();
+        Minisat::Var solver_var = static_cast<Minisat::Var>(lit_var);
+        return ((id > 0) ? Minisat::mkLit(solver_var) : ~Minisat::mkLit(solver_var));
     };
+    inline Minisat::Lit GetLit(Lit lit) {
+        while (static_cast<int>(VarOf(lit)) >= nVars()) newVar();
+        Minisat::Var solver_var = static_cast<Minisat::Var>(VarOf(lit));
+        return Sign(lit) ? ~Minisat::mkLit(solver_var) : Minisat::mkLit(solver_var);
+    }
 
     Model &m_model;
-    int m_maxId;
+    Var m_maxId;
     Minisat::vec<Minisat::Lit> m_assumptions;
-    int m_tempVar;
+    Var m_tempVar{0};
 };
 
 } // namespace car

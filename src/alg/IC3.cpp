@@ -98,12 +98,12 @@ bool IC3::ImmediateSatisfiable() {
         sat = slv->Solve(Cube{});
         if (sat) {
             Cube inputs_bad;
-            for (int i : m_model.GetPropertyCOIInputs()) {
-                int i_p = m_model.GetPrimeK(i, 1);
-                if (slv->GetModel(i_p) == T_TRUE)
-                    inputs_bad.push_back(i);
-                else if (slv->GetModel(i_p) == T_FALSE)
-                    inputs_bad.push_back(-i);
+            for (Var i : m_model.GetPropertyCOIInputs()) {
+                Lit i_p = m_model.EnsurePrimeK(MkLit(i), 1);
+                if (slv->GetModel(VarOf(i_p)) == T_TRUE)
+                    inputs_bad.push_back(MkLit(i));
+                else if (slv->GetModel(VarOf(i_p)) == T_FALSE)
+                    inputs_bad.push_back(~MkLit(i));
             }
             shared_ptr<State> bad_state(new State(nullptr, inputs_bad, Cube(), 0));
             auto p = slv->GetAssignment(false);
@@ -230,7 +230,7 @@ void IC3::Init() {
     auto &init_slv = m_transSolvers[0];
     // F_0 is defined as exactly the initial states.
     for (const auto &lit : m_initialStateSet) {
-        auto lemma = Clause{-lit};
+        auto lemma = Clause{~lit};
         init_slv->AddUC(lemma);
     }
 
@@ -457,7 +457,7 @@ void IC3::PrintALLStats() const {
 
 
 Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime) {
-    unordered_set<int> conflict_set = solver->GetConflict();
+    unordered_set<Lit, LitHash> conflict_set = solver->GetConflict();
     Cube core;
     if (!prime) {
         for (const auto &lit : fallbackCube) {
@@ -468,7 +468,7 @@ Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallback
         return core;
     } else {
         for (const auto &lit : fallbackCube) {
-            int lit_p = m_model.GetPrimeK(lit, 1);
+            Lit lit_p = m_model.EnsurePrimeK(lit, 1);
             if (conflict_set.count(lit_p)) {
                 core.push_back(lit);
             }
@@ -496,11 +496,11 @@ shared_ptr<State> IC3::EnumerateStartState() {
             // start state is the predecessor of a bad state
             Cube inputs_prime;
             for (int i : m_model.GetPropertyCOIInputs()) {
-                int i_p = m_model.GetPrimeK(i, 1);
-                if (m_startSolver->GetModel(i_p) == T_TRUE)
+                Lit i_p = m_model.EnsurePrimeK(MkLit(i), 1);
+                if (m_startSolver->GetModel(VarOf(i_p)) == T_TRUE)
                     inputs_prime.push_back(i_p);
-                else if (m_startSolver->GetModel(i_p) == T_FALSE)
-                    inputs_prime.push_back(-i_p);
+                else if (m_startSolver->GetModel(VarOf(i_p)) == T_FALSE)
+                    inputs_prime.push_back(~i_p);
             }
 
             // (p) & input & T & input' & T' -> (bad' & c' & c)
@@ -509,11 +509,11 @@ shared_ptr<State> IC3::EnumerateStartState() {
 
             // (!bad' | !c' | !c)
             Clause cls;
-            cls.push_back(-m_model.GetPrimeK(m_model.GetBad(), 1));
+            cls.push_back(~m_model.EnsurePrimeK(m_model.GetBad(), 1));
             for (auto cons : m_model.GetConstraints())
-                cls.push_back(-m_model.GetPrimeK(cons, 1));
+                cls.push_back(~m_model.EnsurePrimeK(cons, 1));
             for (auto cons : m_model.GetConstraints())
-                cls.push_back(-cons);
+                cls.push_back(~cons);
             m_badLiftSolver->AddTempClause(cls);
 
             int gen_tried = 0;
@@ -548,11 +548,11 @@ shared_ptr<State> IC3::EnumerateStartState() {
 
             Cube inputs_bad;
             for (int i : m_model.GetPropertyCOIInputs()) {
-                int i_p = m_model.GetPrimeK(i, 1);
-                if (m_startSolver->GetModel(i_p) == T_TRUE)
-                    inputs_bad.push_back(i);
-                else if (m_startSolver->GetModel(i_p) == T_FALSE)
-                    inputs_bad.push_back(-i);
+                Lit i_p = m_model.EnsurePrimeK(MkLit(i), 1);
+                if (m_startSolver->GetModel(VarOf(i_p)) == T_TRUE)
+                    inputs_bad.push_back(MkLit(i));
+                else if (m_startSolver->GetModel(VarOf(i_p)) == T_FALSE)
+                    inputs_bad.push_back(~MkLit(i));
             }
             shared_ptr<State> bad_state(new State(nullptr, inputs_bad, Cube(), 0));
             shared_ptr<State> bad_pred_state(new State(bad_state, p.first, p.second, 0));
@@ -566,11 +566,11 @@ shared_ptr<State> IC3::EnumerateStartState() {
 
             // (!bad | !c)
             Clause cls;
-            cls.push_back(-m_model.GetBad());
+            cls.push_back(~m_model.GetBad());
             for (auto cons : m_model.GetConstraints())
-                cls.push_back(-cons);
-            for (auto l : m_shoalsLabels) cls.push_back(-l);
-            for (auto l : m_wallsLabels) cls.push_back(-l);
+                cls.push_back(~cons);
+            for (auto l : m_shoalsLabels) cls.push_back(~l);
+            for (auto l : m_wallsLabels) cls.push_back(~l);
             m_badLiftSolver->AddTempClause(cls);
             LOG_L(m_log, 3, "lift assume: ", CubeToStr(cls));
 
@@ -725,7 +725,7 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     Clause cls;
     cls.reserve(cb.size());
     for (const auto &lit : cb) {
-        cls.push_back(-lit);
+        cls.push_back(~lit);
     }
     slv->AddTempClause(cls);
     Cube assumption(cb);
@@ -737,7 +737,7 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     return result;
 }
 
-bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &triedLits) {
+bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<Lit> &triedLits) {
     LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
@@ -785,8 +785,8 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<int> &triedLi
         } else {
             ctgs = 0;
             Cube join_cube;
-            for (int i = 0; i < downCube.size(); i++) {
-                if (binary_search(ctg_cube.begin(), ctg_cube.end(), downCube[i], Cmp)) {
+            for (size_t i = 0; i < downCube.size(); i++) {
+                if (binary_search(ctg_cube.begin(), ctg_cube.end(), downCube[i])) {
                     join_cube.push_back(downCube[i]);
                 } else if (triedLits.count(downCube[i])) {
                     return false;
@@ -804,7 +804,7 @@ bool IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
 
     vector<Cube> blockers;
     Cube blocker;
-    set<int> tried_lits;
+    set<Lit> tried_lits;
 
     if (m_settings.referSkipping && frameLvl > 0) {
         m_lfm.GetBlockers(cb, frameLvl, blockers);
@@ -825,7 +825,7 @@ bool IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
     // Iterate backwards to handle the shrinking Cube size gracefully.
     for (int i = cb.size() - 1; i >= 0; --i) {
         if (cb.size() < 3) break;
-        int lit_to_drop = cb[i];
+        Lit lit_to_drop = cb[i];
 
         // If we have already tried and failed to drop this literal, skip.
         if (tried_lits.count(lit_to_drop)) {
@@ -850,7 +850,7 @@ bool IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
             tried_lits.insert(lit_to_drop);
         }
     }
-    sort(cb.begin(), cb.end(), Cmp);
+    sort(cb.begin(), cb.end());
     if (cb.size() > blocker.size() && frameLvl != 0) {
         return false;
     } else {
@@ -865,10 +865,10 @@ void IC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const
     Clause succ_negation_clause;
     succ_negation_clause.reserve(successorState->latches.size());
     for (const auto &lit : successorState->latches) {
-        succ_negation_clause.push_back(-m_model.GetPrimeK(lit, 1));
+        succ_negation_clause.push_back(~m_model.EnsurePrimeK(lit, 1));
     }
     for (auto cons : m_model.GetConstraints()) {
-        succ_negation_clause.push_back(-cons);
+        succ_negation_clause.push_back(~cons);
     }
     m_liftSolver->AddTempClause(succ_negation_clause);
     m_liftSolver->SetTempDomainCOI(succ_negation_clause);
@@ -900,7 +900,7 @@ void IC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const
 
 bool IC3::InitiationCheck(const Cube &cb) {
     for (const auto &lit : cb) {
-        if (m_initialStateSet.count(-lit)) {
+        if (m_initialStateSet.count(~lit)) {
             return true; // Disjoint (UNSAT), check passes.
         }
     }
@@ -1114,15 +1114,15 @@ void IC3::OutputWitness() {
     auto &eq_map = m_model.GetEquivalenceMap();
     vector<unsigned> eq_lits;
     for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
-        if (itr->first == m_model.TrueId() || itr->second == m_model.TrueId()) {
-            unsigned true_eq_lit = m_model.GetAigerLit(itr->second);
+        if (IsConst(itr->second)) {
+            unsigned true_eq_lit = ToAigerLit(itr->second);
             eq_lits.emplace_back(true_eq_lit);
             continue;
         }
-        assert(abs(itr->first) <= witness_aig->maxvar);
-        assert(abs(itr->second) <= witness_aig->maxvar);
-        unsigned l1 = m_model.GetAigerLit(itr->first);
-        unsigned l2 = m_model.GetAigerLit(itr->second);
+        assert(itr->first <= witness_aig->maxvar);
+        assert(VarOf(itr->second) <= witness_aig->maxvar);
+        unsigned l1 = ToAigerLit(MkLit(itr->first));
+        unsigned l2 = ToAigerLit(itr->second);
         eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
         eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
     }
@@ -1142,7 +1142,7 @@ void IC3::OutputWitness() {
 
     // prove on lvl 0
     if (m_invariantLevel == 0 || empty_inv) {
-        unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
+        unsigned bad_lit = ToAigerLit(m_model.GetBad());
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
         if (eq_lits.size() > 0) {
@@ -1185,13 +1185,13 @@ void IC3::OutputWitness() {
     vector<unsigned> inv_lits;
     for (auto it = ind_inv.begin(); it != ind_inv.end(); it++) {
         vector<unsigned> cube_lits;
-        for (int l : *it) cube_lits.push_back(l > 0 ? (2 * l) : (2 * -l + 1));
+        for (Lit l : *it) cube_lits.push_back(ToAigerLit(l));
         unsigned cls = AddCubeToAndGates(witness_aig, cube_lits) ^ 1;
         inv_lits.push_back(cls);
     }
     unsigned inv = AddCubeToAndGates(witness_aig, inv_lits);
 
-    unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
+    unsigned bad_lit = ToAigerLit(m_model.GetBad());
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = AddCubeToAndGates(witness_aig, {p, inv});
 

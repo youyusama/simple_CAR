@@ -98,13 +98,13 @@ class IC3 : public IncrAlg {
 
     bool Generalize(Cube &cb, int frameLvl, int recLvl = 0);
 
-    bool Down(Cube &c, int frameLvl, int recLvl, const set<int> &triedLits);
+    bool Down(Cube &c, int frameLvl, int recLvl, const set<Lit> &triedLits);
 
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 
     inline void GetPrimed(Cube &p) {
         for (auto &x : p) {
-            x = m_model.GetPrimeK(x, 1);
+            x = m_model.EnsurePrimeK(x, 1);
         }
     }
     string FramesInfo() const;
@@ -114,7 +114,7 @@ class IC3 : public IncrAlg {
 
         LitOrder() {}
 
-        bool operator()(const int &l1, const int &l2) const {
+        bool operator()(Lit l1, Lit l2) const {
             return (branching->PriorityOf(l1) > branching->PriorityOf(l2));
         }
     } m_litOrder;
@@ -126,7 +126,7 @@ class IC3 : public IncrAlg {
 
         bool operator()(const Cube &a, const Cube &b) const {
             float score_a = 0, score_b = 0;
-            for (int i = 0; i < a.size(); i++) {
+            for (size_t i = 0; i < a.size(); i++) {
                 score_a += branching->PriorityOf(a[i]);
                 score_b += branching->PriorityOf(b[i]);
             }
@@ -175,7 +175,7 @@ class IC3 : public IncrAlg {
     shared_ptr<SATSolver> m_liftSolver;
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badLiftSolver;
-    unordered_set<int> m_initialStateSet;
+    unordered_set<Lit, LitHash> m_initialStateSet;
     LemmaForestManager m_lfm;
     shared_ptr<State> m_initialState;
     shared_ptr<State> m_cexStart;

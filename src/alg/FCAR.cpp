@@ -253,8 +253,8 @@ void FCAR::Init() {
     m_restart.reset(new Restart(m_settings));
 
     // initialize frame 0
-    for (int l : m_initialState->latches) {
-        auto uc = {-l};
+    for (Lit l : m_initialState->latches) {
+        Cube uc{~l};
         m_transSolvers[0]->AddUC(uc);
         m_overSequence->Insert(uc, 0);
 
@@ -361,11 +361,11 @@ shared_ptr<State> FCAR::EnumerateStartState() {
             // start state is the predecessor of a bad state
             Cube inputs_prime;
             for (int i : m_model.GetPropertyCOIInputs()) {
-                int i_p = m_model.GetPrimeK(i, 1);
-                if (m_startSolver->GetModel(i_p) == T_TRUE)
+                Lit i_p = m_model.EnsurePrimeK(MkLit(i), 1);
+                if (m_startSolver->GetModel(VarOf(i_p)) == T_TRUE)
                     inputs_prime.push_back(i_p);
-                else if (m_startSolver->GetModel(i_p) == T_FALSE)
-                    inputs_prime.push_back(-i_p);
+                else if (m_startSolver->GetModel(VarOf(i_p)) == T_FALSE)
+                    inputs_prime.push_back(~i_p);
             }
 
             // (p) & input & T & input' & T' -> (bad' & c' & c)
@@ -374,11 +374,11 @@ shared_ptr<State> FCAR::EnumerateStartState() {
 
             // (!bad' | !c' | !c)
             Clause cls;
-            cls.push_back(-m_model.GetPrimeK(m_model.GetBad(), 1));
+            cls.push_back(~m_model.EnsurePrimeK(m_model.GetBad(), 1));
             for (auto cons : m_model.GetConstraints())
-                cls.push_back(-m_model.GetPrimeK(cons, 1));
+                cls.push_back(~m_model.EnsurePrimeK(cons, 1));
             for (auto cons : m_model.GetConstraints())
-                cls.push_back(-cons);
+                cls.push_back(~cons);
             m_badLiftSolver->AddTempClause(cls);
 
             int gen_tried = 0;
@@ -413,11 +413,11 @@ shared_ptr<State> FCAR::EnumerateStartState() {
 
             Cube inputs_bad;
             for (int i : m_model.GetPropertyCOIInputs()) {
-                int i_p = m_model.GetPrimeK(i, 1);
-                if (m_startSolver->GetModel(i_p) == T_TRUE)
-                    inputs_bad.push_back(i);
-                else if (m_startSolver->GetModel(i_p) == T_FALSE)
-                    inputs_bad.push_back(-i);
+                Lit i_p = m_model.EnsurePrimeK(MkLit(i), 1);
+                if (m_startSolver->GetModel(VarOf(i_p)) == T_TRUE)
+                    inputs_bad.push_back(MkLit(i));
+                else if (m_startSolver->GetModel(VarOf(i_p)) == T_FALSE)
+                    inputs_bad.push_back(~MkLit(i));
             }
             shared_ptr<State> bad_state(new State(nullptr, inputs_bad, Cube(), 0));
             shared_ptr<State> bad_pred_state(new State(bad_state, p.first, p.second, 0));
@@ -431,11 +431,11 @@ shared_ptr<State> FCAR::EnumerateStartState() {
 
             // (!bad | !c)
             Clause cls;
-            cls.push_back(-m_model.GetBad());
+            cls.push_back(~m_model.GetBad());
             for (auto cons : m_model.GetConstraints())
-                cls.push_back(-cons);
-            for (auto l : m_shoalsLabels) cls.push_back(-l);
-            for (auto l : m_wallsLabels) cls.push_back(-l);
+                cls.push_back(~cons);
+            for (auto l : m_shoalsLabels) cls.push_back(~l);
+            for (auto l : m_wallsLabels) cls.push_back(~l);
             m_badLiftSolver->AddTempClause(cls);
             LOG_L(m_log, 3, "lift assume: ", CubeToStr(cls));
 
@@ -521,10 +521,11 @@ bool FCAR::IsInvariant(int frameLevel) {
 void FCAR::AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f) {
     Cube cls;
     for (const Cube &frame_cube : *f) {
-        int flag = m_invSolver->GetNewVar();
-        cls.push_back(flag);
-        for (int i = 0; i < frame_cube.size(); i++) {
-            m_invSolver->AddClause(Cube{-flag, frame_cube[i]});
+        Var flag = m_invSolver->GetNewVar();
+        Lit flag_lit = MkLit(flag);
+        cls.push_back(flag_lit);
+        for (size_t i = 0; i < frame_cube.size(); i++) {
+            m_invSolver->AddClause(Cube{~flag_lit, frame_cube[i]});
         }
     }
     m_invSolver->AddClause(cls);
@@ -537,16 +538,17 @@ void FCAR::AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f) {
 // @output:
 // ================================================================================
 void FCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
-    int flag = m_invSolver->GetNewVar();
+    Var flag = m_invSolver->GetNewVar();
+    Lit flag_lit = MkLit(flag);
     for (const Cube &frame_cube : *f) {
         Cube cls;
-        for (int i = 0; i < frame_cube.size(); i++) {
-            cls.push_back(-frame_cube[i]);
+        for (size_t i = 0; i < frame_cube.size(); i++) {
+            cls.push_back(~frame_cube[i]);
         }
-        cls.push_back(-flag);
+        cls.push_back(~flag_lit);
         m_invSolver->AddClause(cls);
     }
-    m_invSolver->AddAssumption(Cube{flag});
+    m_invSolver->AddAssumption(Cube{flag_lit});
 }
 
 
@@ -563,9 +565,9 @@ void FCAR::GeneralizePredecessor(pair<Cube, Cube> &s, shared_ptr<State> t) {
     Clause cls;
     cls.reserve(t->latches.size());
     for (auto l : t->latches) {
-        cls.emplace_back(m_model.GetPrime(-l));
+        cls.emplace_back(m_model.LookupPrime(~l));
     }
-    for (auto cons : m_model.GetConstraints()) cls.push_back(-cons);
+    for (auto cons : m_model.GetConstraints()) cls.push_back(~cons);
     m_liftSolver->AddTempClause(cls);
     m_liftSolver->SetTempDomainCOI(cls);
     int gen_tried = 0;
@@ -607,7 +609,7 @@ void FCAR::GeneralizePredecessor(pair<Cube, Cube> &s, shared_ptr<State> t) {
 // ================================================================================
 bool FCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
     [[maybe_unused]] auto setup_scope = m_log.Section("FC_Gen_Set");
-    unordered_set<int> required_lits;
+    unordered_set<Lit, LitHash> required_lits;
 
     vector<Cube> uc_blockers;
     m_overSequence->GetBlockers(uc, frameLvl, uc_blockers);
@@ -642,7 +644,7 @@ bool FCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
         }
     }
     setup_scope = m_log.Section("FC_Gen_Post");
-    sort(uc.begin(), uc.end(), Cmp);
+    sort(uc.begin(), uc.end());
     if (uc.size() > uc_blocker.size() && frameLvl != 0) {
         return false;
     } else {
@@ -731,7 +733,7 @@ bool FCAR::DownHasFailed(const Cube &s, const vector<Cube> &failedCtses) {
     for (auto f : failedCtses) {
         // if f->s , return true
         if (f.size() > s.size()) continue;
-        if (includes(s.begin(), s.end(), f.begin(), f.end(), Cmp)) return true;
+        if (includes(s.begin(), s.end(), f.begin(), f.end())) return true;
     }
     return false;
 }
@@ -760,11 +762,11 @@ bool FCAR::ImmediateSatisfiable() {
         if (sat) {
             Cube inputs_bad;
             for (int i : m_model.GetPropertyCOIInputs()) {
-                int i_p = m_model.GetPrimeK(i, 1);
-                if (slv->GetModel(i_p) == T_TRUE)
-                    inputs_bad.push_back(i);
-                else if (slv->GetModel(i_p) == T_FALSE)
-                    inputs_bad.push_back(-i);
+                Lit i_p = m_model.EnsurePrimeK(MkLit(i), 1);
+                if (slv->GetModel(VarOf(i_p)) == T_TRUE)
+                    inputs_bad.push_back(MkLit(i));
+                else if (slv->GetModel(VarOf(i_p)) == T_FALSE)
+                    inputs_bad.push_back(~MkLit(i));
             }
             shared_ptr<State> bad_state(new State(nullptr, inputs_bad, Cube(), 0));
             auto p = slv->GetAssignment(false);
@@ -818,7 +820,7 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
         OrderAssumption(uc);
 
         // Generalization
-        unordered_set<int> required_lits;
+        unordered_set<Lit, LitHash> required_lits;
         for (int i = uc.size() - 1; i >= 0; i--) {
             if (uc.size() < 3) break;
             if (required_lits.find(uc.at(i)) != required_lits.end()) continue;
@@ -841,7 +843,7 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
                 required_lits.emplace(uc.at(i));
             }
         }
-        sort(uc.begin(), uc.end(), Cmp);
+        sort(uc.begin(), uc.end());
         LOG_L(m_log, 2, "Get UC: ", CubeToStr(uc));
         if (m_searchFromInitSucc) {
             AddUnsatisfiableCore(uc, 1);
@@ -899,10 +901,10 @@ pair<Cube, Cube> FCAR::GetInputAndState(int lvl) {
 
 Cube FCAR::GetUnsatCore(int lvl, const Cube &state) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UCore");
-    const unordered_set<int> &conflict = m_transSolvers[lvl]->GetConflict();
+    const unordered_set<Lit, LitHash> &conflict = m_transSolvers[lvl]->GetConflict();
     Cube res;
     for (auto l : state) {
-        int p = m_model.GetPrime(l);
+        Lit p = m_model.LookupPrime(l);
         if (conflict.find(p) != conflict.end())
             res.emplace_back(l);
     }
@@ -912,7 +914,7 @@ Cube FCAR::GetUnsatCore(int lvl, const Cube &state) {
 
 Cube FCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UAssump");
-    const unordered_set<int> &conflict = solver->GetConflict();
+    const unordered_set<Lit, LitHash> &conflict = solver->GetConflict();
     Cube res;
     for (auto a : assumptions) {
         if (conflict.find(a) != conflict.end())
@@ -950,7 +952,7 @@ void FCAR::BuildCEXTrace() {
         auto p = slv->GetAssignment(true);
         bool included = includes(p.second.begin(), p.second.end(),
                                  m_cexTrace[i + 1].second.begin(),
-                                 m_cexTrace[i + 1].second.end(), Cmp);
+                                 m_cexTrace[i + 1].second.end());
         assert(included);
         m_cexTrace[i + 1].second = p.second;
     }
@@ -992,7 +994,7 @@ void FCAR::KLiveIncr() {
     for (auto cls : k_clauses) m_badLiftSolver->AddClause(cls);
 
     // add init
-    m_transSolvers[0]->AddClause({-m_model.GetKLiveSignal(k_step)});
+    m_transSolvers[0]->AddClause({~m_model.GetKLiveSignal(k_step)});
 
     // start solver will be reset
 }
@@ -1005,7 +1007,7 @@ bool FCAR::IsInitStateImplyBad() {
     slv->AddTrans();
     slv->AddConstraints();
     Cube assumptions = m_customInit;
-    assumptions.push_back(-m_model.GetBad());
+    assumptions.push_back(~m_model.GetBad());
     bool sat = slv->Solve(assumptions);
     return !sat;
 }
@@ -1081,15 +1083,15 @@ void FCAR::OutputWitness() {
     auto &eq_map = m_model.GetEquivalenceMap();
     vector<unsigned> eq_lits;
     for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
-        if (itr->first == m_model.TrueId() || itr->second == m_model.TrueId()) {
-            unsigned true_eq_lit = m_model.GetAigerLit(itr->second);
+        if (IsConst(itr->second)) {
+            unsigned true_eq_lit = ToAigerLit(itr->second);
             eq_lits.emplace_back(true_eq_lit);
             continue;
         }
-        assert(abs(itr->first) <= witness_aig->maxvar);
-        assert(abs(itr->second) <= witness_aig->maxvar);
-        unsigned l1 = m_model.GetAigerLit(itr->first);
-        unsigned l2 = m_model.GetAigerLit(itr->second);
+        assert(itr->first <= witness_aig->maxvar);
+        assert(VarOf(itr->second) <= witness_aig->maxvar);
+        unsigned l1 = ToAigerLit(MkLit(itr->first));
+        unsigned l2 = ToAigerLit(itr->second);
         eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
         eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
     }
@@ -1101,7 +1103,7 @@ void FCAR::OutputWitness() {
 
     // prove on lvl 0
     if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
-        unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
+        unsigned bad_lit = ToAigerLit(m_model.GetBad());
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
         if (eq_lits.size() > 0) {
@@ -1134,7 +1136,7 @@ void FCAR::OutputWitness() {
         vector<unsigned> frame_i_lits;
         for (const Cube &frame_cube : *frame_i) {
             vector<unsigned> cube_j;
-            for (int l : frame_cube) cube_j.push_back(l > 0 ? (2 * l) : (2 * -l + 1));
+            for (Lit l : frame_cube) cube_j.push_back(ToAigerLit(l));
             unsigned c_j = AddCubeToAndGates(witness_aig, cube_j) ^ 1;
             frame_i_lits.push_back(c_j);
         }
@@ -1142,7 +1144,7 @@ void FCAR::OutputWitness() {
         inv_lits.push_back(o_i ^ 1);
     }
     unsigned inv = AddCubeToAndGates(witness_aig, inv_lits) ^ 1;
-    unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
+    unsigned bad_lit = ToAigerLit(m_model.GetBad());
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = AddCubeToAndGates(witness_aig, {p, inv});
 

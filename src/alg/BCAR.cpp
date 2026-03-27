@@ -305,7 +305,7 @@ void BCAR::InitializeStartSolver() {
     m_startSolver->AddTrans();
     m_startSolver->AddConstraints();
     if (!m_customInit.empty()) {
-        for (int lit : m_customInit) {
+        for (Lit lit : m_customInit) {
             m_startSolver->AddClause({lit});
         }
         if (!m_initStateImplyBad) m_startSolver->AddBad();
@@ -447,7 +447,7 @@ void BCAR::OverSequenceRefine(int lvl) {
     shared_ptr<SATSolver> refine_solver = make_shared<SATSolver>(m_model, m_settings.solver);
     refine_solver->AddConstraints();
     if (!m_customInit.empty()) {
-        for (int lit : m_customInit) refine_solver->AddClause({lit});
+        for (Lit lit : m_customInit) refine_solver->AddClause({lit});
     } else {
         for (auto l : m_model.GetInitialState()) refine_solver->AddClause({l});
         refine_solver->AddInitialClauses();
@@ -471,7 +471,7 @@ void BCAR::OverSequenceRefine(int lvl) {
         for (int i = 0; i <= lvl; i++)
             AddUnsatisfiableCore(uc, i);
         Clause cls;
-        for (auto ci : uc) cls.emplace_back(-ci);
+        for (auto ci : uc) cls.emplace_back(~ci);
         refine_solver->AddClause(cls);
     }
 }
@@ -520,10 +520,11 @@ bool BCAR::IsInvariant(int frameLevel) {
 void BCAR::AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f) {
     Cube cls;
     for (const Cube &frame_cube : *f) {
-        int flag = m_invSolver->GetNewVar();
-        cls.push_back(flag);
-        for (int i = 0; i < frame_cube.size(); i++) {
-            m_invSolver->AddClause(Cube{-flag, frame_cube[i]});
+        Var flag = m_invSolver->GetNewVar();
+        Lit flag_lit = MkLit(flag);
+        cls.push_back(flag_lit);
+        for (size_t i = 0; i < frame_cube.size(); i++) {
+            m_invSolver->AddClause(Cube{~flag_lit, frame_cube[i]});
         }
     }
     m_invSolver->AddClause(cls);
@@ -536,16 +537,17 @@ void BCAR::AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f) {
 // @output:
 // ================================================================================
 void BCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
-    int flag = m_invSolver->GetNewVar();
+    Var flag = m_invSolver->GetNewVar();
+    Lit flag_lit = MkLit(flag);
     for (const Cube &frame_cube : *f) {
         Cube cls;
-        for (int i = 0; i < frame_cube.size(); i++) {
-            cls.push_back(-frame_cube[i]);
+        for (size_t i = 0; i < frame_cube.size(); i++) {
+            cls.push_back(~frame_cube[i]);
         }
-        cls.push_back(-flag);
+        cls.push_back(~flag_lit);
         m_invSolver->AddClause(cls);
     }
-    m_invSolver->AddAssumption(Cube{flag});
+    m_invSolver->AddAssumption(Cube{flag_lit});
 }
 
 
@@ -556,7 +558,7 @@ void BCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
 // ================================================================================
 bool BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
     [[maybe_unused]] auto gen_scope = m_log.Section("FC_Gen");
-    unordered_set<int> required_lits;
+    unordered_set<Lit, LitHash> required_lits;
 
     vector<Cube> uc_blockers;
     m_overSequence->GetBlockers(uc, frameLvl, uc_blockers);
@@ -587,7 +589,7 @@ bool BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
             required_lits.emplace(uc[i]);
         }
     }
-    sort(uc.begin(), uc.end(), Cmp);
+    sort(uc.begin(), uc.end());
     if (uc.size() > uc_blocker.size() && frameLvl != 0) {
         return false;
     } else
@@ -664,7 +666,7 @@ bool BCAR::DownHasFailed(const Cube &s, const vector<Cube> &failedCtses) {
     for (auto f : failedCtses) {
         // if f->s , return true
         if (f.size() > s.size()) continue;
-        if (includes(s.begin(), s.end(), f.begin(), f.end(), Cmp)) return true;
+        if (includes(s.begin(), s.end(), f.begin(), f.end())) return true;
     }
     return false;
 }
@@ -694,7 +696,7 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
         LOG_L(m_log, 2, "Result >>> UNSAT <<<");
         auto uc = GetUnsatAssumption(m_badSolver, assumption);
         // Generalization
-        unordered_set<int> required_lits;
+        unordered_set<Lit, LitHash> required_lits;
         for (int i = uc.size() - 1; i >= 0; i--) {
             if (uc.size() < 3) break;
             if (required_lits.find(uc[i]) != required_lits.end()) continue;
@@ -716,7 +718,7 @@ bool BCAR::CheckBad(shared_ptr<State> s) {
                 required_lits.emplace(uc[i]);
             }
         }
-        sort(uc.begin(), uc.end(), Cmp);
+        sort(uc.begin(), uc.end());
         LOG_L(m_log, 2, "Get UC:", CubeToStr(uc));
         m_branching->Update(uc);
         AddUnsatisfiableCore(uc, 0);
@@ -733,7 +735,7 @@ bool BCAR::IsReachable(int lvl, const Cube &assumption, const string &label) {
 
 
 Cube BCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions) {
-    const unordered_set<int> &conflict = solver->GetConflict();
+    const unordered_set<Lit, LitHash> &conflict = solver->GetConflict();
     Cube res;
 
     for (auto a : assumptions) {
@@ -741,7 +743,7 @@ Cube BCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumpti
             res.emplace_back(a);
     }
 
-    sort(res.begin(), res.end(), Cmp);
+    sort(res.begin(), res.end());
     return res;
 }
 
@@ -839,15 +841,15 @@ void BCAR::OutputWitness() {
     auto &eq_map = m_model.GetEquivalenceMap();
     vector<unsigned> eq_lits;
     for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
-        if (itr->first == m_model.TrueId() || itr->second == m_model.TrueId()) {
-            unsigned true_eq_lit = m_model.GetAigerLit(itr->second);
+        if (IsConst(itr->second)) {
+            unsigned true_eq_lit = ToAigerLit(itr->second);
             eq_lits.emplace_back(true_eq_lit);
             continue;
         }
-        assert(abs(itr->first) < witness_aig->maxvar);
-        assert(abs(itr->second) < witness_aig->maxvar);
-        unsigned l1 = m_model.GetAigerLit(itr->first);
-        unsigned l2 = m_model.GetAigerLit(itr->second);
+        assert(itr->first < witness_aig->maxvar);
+        assert(VarOf(itr->second) < witness_aig->maxvar);
+        unsigned l1 = ToAigerLit(MkLit(itr->first));
+        unsigned l2 = ToAigerLit(itr->second);
         eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
         eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
     }
@@ -859,7 +861,7 @@ void BCAR::OutputWitness() {
 
     // prove on lvl 0
     if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
-        unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
+        unsigned bad_lit = ToAigerLit(m_model.GetBad());
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
         if (eq_lits.size() > 0) {
@@ -892,7 +894,7 @@ void BCAR::OutputWitness() {
         vector<unsigned> frame_i_lits;
         for (const Cube &frame_cube : *frame_i) {
             vector<unsigned> cube_j;
-            for (int l : frame_cube) cube_j.push_back(l > 0 ? (2 * l) : (2 * -l + 1));
+            for (Lit l : frame_cube) cube_j.push_back(ToAigerLit(l));
             unsigned c_j = AddCubeToAndGates(witness_aig, cube_j) ^ 1;
             frame_i_lits.push_back(c_j);
         }
@@ -900,7 +902,7 @@ void BCAR::OutputWitness() {
         inv_lits.push_back(o_i ^ 1);
     }
     unsigned inv = AddCubeToAndGates(witness_aig, inv_lits);
-    unsigned bad_lit = m_model.GetAigerLit(m_model.GetBad());
+    unsigned bad_lit = ToAigerLit(m_model.GetBad());
     unsigned p = aiger_not(bad_lit);
     unsigned p_prime = AddCubeToAndGates(witness_aig, {p, inv});
 
