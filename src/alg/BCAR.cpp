@@ -362,6 +362,7 @@ bool BCAR::AddUnsatisfiableCore(const Cube &uc, int frameLevel) {
 
     Cube puc(uc);
     GetPrimed(puc);
+
     if (frameLevel >= m_transSolvers.size()) {
         m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
         m_transSolvers.back()->AddTrans();
@@ -615,7 +616,7 @@ bool BCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
             return false;
         }
 
-        auto p = m_transSolvers[frameLvl]->GetAssignment(false);
+        auto p = m_transSolvers[frameLvl]->GetAssignment(true);
         shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
         if (DownHasFailed(cts->latches, failedCtses)) return false;
 
@@ -632,7 +633,7 @@ bool BCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
 bool BCAR::CTSBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int ctsCount) {
     if (ctsCount >= m_settings.ctgMaxBlocks) return false;
 
-    LOG_L(m_log, 3, "Try cts:", CubeToStr(cts->latches));
+    LOG_L(m_log, 3, "Try cts:", CubeToStr(cts->latches), "on frame: ", frameLvl);
     Cube cts_ass(cts->latches);
     OrderAssumption(cts_ass);
 
@@ -646,7 +647,7 @@ bool BCAR::CTSBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube
             PropagateUp(uc_cts, frameLvl + 1);
             return true;
         } else {
-            auto p = m_transSolvers[frameLvl]->GetAssignment(false);
+            auto p = m_transSolvers[frameLvl]->GetAssignment(true);
             shared_ptr<State> post_cts(new State(nullptr, p.first, p.second, 0));
             if (DownHasFailed(post_cts->latches, failedCtses)) return false;
 

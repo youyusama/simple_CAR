@@ -426,7 +426,7 @@ IC3::ALLProveStatus IC3::ActiveProve(int targetLemmaId) {
         auto ctp_solver = m_transSolvers[ctp_level - 1];
         if (IsInductive(ctp_cube, ctp_solver)) {
             auto ctp_core = GetAndValidateCore(ctp_solver, ctp_cube);
-            if (Generalize(ctp_core, ctp_level, 0)) {
+            if (Generalize(ctp_core, ctp_level - 1, 0)) {
                 m_branching->Update(ctp_core);
             }
             int ctp_lemma_id = AddLemma(ctp_core, ctp_level);
@@ -693,8 +693,8 @@ bool IC3::HandleObligations(set<Obligation> &obligations) {
             if (Generalize(uc, ob.level)) {
                 m_branching->Update(uc);
             }
-            int lemma_id = AddLemma(uc, ob.level, true);
-            size_t push_level = PropagateUp(lemma_id, ob.level);
+            int lemma_id = AddLemma(uc, ob.level + 1, true);
+            size_t push_level = PropagateUp(lemma_id, ob.level + 1);
 
             if (push_level <= m_k) {
                 LOG_L(m_log, 2, "Creating new obligation for same state at higher level ", push_level);
@@ -780,8 +780,8 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<Lit> &triedLi
             if (Generalize(ctg_core, frameLvl - 1, recLvl + 1)) {
                 m_branching->Update(ctg_core);
             }
-            int ctg_lemma_id = AddLemma(ctg_core, frameLvl - 1);
-            PropagateUp(ctg_lemma_id, frameLvl - 1);
+            int ctg_lemma_id = AddLemma(ctg_core, frameLvl);
+            PropagateUp(ctg_lemma_id, frameLvl);
         } else {
             ctgs = 0;
             Cube join_cube;
@@ -970,9 +970,7 @@ bool IC3::Propagate(int lemmaId, int lvl) {
 int IC3::PropagateUp(int LemmaId, int startLevel) {
     int lvl = startLevel;
     while (lvl <= m_k) {
-        if (Propagate(LemmaId, lvl))
-            m_branching->Update(m_lfm.CubeOf(LemmaId));
-        else
+        if (!m_lfm.Alive(LemmaId) || !Propagate(LemmaId, lvl))
             break;
         lvl++;
     }
@@ -1077,7 +1075,15 @@ void IC3::OutputWitness() {
     string out_path = m_settings.witnessOutputDir + aig_name + ".w.aig";
     aiger *model_aig = m_model.GetAiger().get();
 
-    if (m_invariantLevel == 0 && m_model.GetEquivalenceMap().size() == 0) {
+    bool empty_inv = true;
+    for (int i = m_invariantLevel; i <= m_k + 1; i++) {
+        if (!m_lfm.BorderEmpty(i)) {
+            empty_inv = false;
+            break;
+        }
+    }
+
+    if (empty_inv && m_model.GetEquivalenceMap().size() == 0) {
         aiger_open_and_write_to_file(model_aig, out_path.c_str());
         return;
     }
@@ -1132,16 +1138,8 @@ void IC3::OutputWitness() {
         eq_cons = AddCubeToAndGates(witness_aig, eq_lits);
     }
 
-    bool empty_inv = true;
-    for (int i = m_invariantLevel; i <= m_k + 1; i++) {
-        if (!m_lfm.BorderEmpty(i)) {
-            empty_inv = false;
-            break;
-        }
-    }
-
     // prove on lvl 0
-    if (m_invariantLevel == 0 || empty_inv) {
+    if (empty_inv) {
         unsigned bad_lit = ToAigerLit(m_model.GetBad());
         unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
@@ -1157,8 +1155,20 @@ void IC3::OutputWitness() {
             assert(false);
         }
 
+        if (const char *err = aiger_check(witness_aig)) {
+            std::cerr << "invalid witness aig: " << err << std::endl;
+            return;
+        }
+
         aiger_reencode(witness_aig);
-        aiger_open_and_write_to_file(witness_aig, out_path.c_str());
+        if (!aiger_open_and_write_to_file(witness_aig, out_path.c_str())) {
+            if (const char *err = aiger_error(witness_aig)) {
+                std::cerr << "aiger write error: " << err << std::endl;
+            } else {
+                std::cerr << "aiger write error: failed to write '" << out_path << "'" << std::endl;
+            }
+            return;
+        }
         return;
     }
 
