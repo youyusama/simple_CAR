@@ -842,11 +842,6 @@ void BCAR::OutputWitness() {
     auto &eq_map = m_model.GetEquivalenceMap();
     vector<unsigned> eq_lits;
     for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
-        if (IsConst(itr->second)) {
-            unsigned true_eq_lit = ToAigerLit(itr->second);
-            eq_lits.emplace_back(true_eq_lit);
-            continue;
-        }
         assert(itr->first < witness_aig->maxvar);
         assert(VarOf(itr->second) < witness_aig->maxvar);
         unsigned l1 = ToAigerLit(MkLit(itr->first));
@@ -860,10 +855,17 @@ void BCAR::OutputWitness() {
         eq_cons = AddCubeToAndGates(witness_aig, eq_lits);
     }
 
+    unsigned bad_lit;
+    if (model_aig->num_bad == 1) {
+        bad_lit = model_aig->bad[0].lit;
+    } else if (model_aig->num_outputs == 1) {
+        bad_lit = model_aig->outputs[0].lit;
+    } else
+        assert(false);
+    unsigned p = aiger_not(bad_lit);
+
     // prove on lvl 0
     if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
-        unsigned bad_lit = ToAigerLit(m_model.GetBad());
-        unsigned p = aiger_not(bad_lit);
         unsigned p_prime = p;
         if (eq_lits.size() > 0) {
             p_prime = AddCubeToAndGates(witness_aig, {p, eq_cons});
@@ -903,8 +905,6 @@ void BCAR::OutputWitness() {
         inv_lits.push_back(o_i ^ 1);
     }
     unsigned inv = AddCubeToAndGates(witness_aig, inv_lits);
-    unsigned bad_lit = ToAigerLit(m_model.GetBad());
-    unsigned p = aiger_not(bad_lit);
     unsigned p_prime = AddCubeToAndGates(witness_aig, {p, inv});
 
     if (eq_lits.size() > 0) {
