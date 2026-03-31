@@ -292,7 +292,7 @@ void Model::CollectNextValueMapping() {
 
 void Model::CollectClauses() {
     m_rawClauses.clear();
-    m_rawClauses.reserve(m_circuitGraph->modelGates.size() * 3 + 1);
+    m_rawClauses.reserve(m_circuitGraph->modelGates.size() * 4);
 
     for (Var g_id : m_circuitGraph->modelGates) {
         auto g = m_circuitGraph->gatesMap[g_id];
@@ -933,21 +933,24 @@ void Model::EncodeStatesToN64Signatuers(const vector<vector<Tbool>> &values, con
 
 bool Model::CheckLatchEquivalenceBySAT(Lit aLit, Lit bLit) {
     // initial step
-    if (m_circuitGraph->latchResetMap.find(VarOf(aLit)) == m_circuitGraph->latchResetMap.end())
-        return false;
-    Lit reset_a = m_circuitGraph->latchResetMap[VarOf(aLit)];
-    Lit init_a = Sign(aLit) ? ~reset_a : reset_a;
-    if (bLit == LIT_TRUE && init_a != LIT_TRUE) {
-        return false;
-    } else if (bLit == LIT_FALSE && init_a != LIT_FALSE) {
-        return false;
-    } else {
+    Lit init_a, init_b;
+    if (IsConst(aLit))
+        init_a = aLit;
+    else {
+        if (m_circuitGraph->latchResetMap.find(VarOf(aLit)) == m_circuitGraph->latchResetMap.end())
+            return false;
+        Lit reset_a = m_circuitGraph->latchResetMap[VarOf(aLit)];
+        init_a = Sign(aLit) ? ~reset_a : reset_a;
+    }
+    if (IsConst(bLit))
+        init_b = bLit;
+    else {
         if (m_circuitGraph->latchResetMap.find(VarOf(bLit)) == m_circuitGraph->latchResetMap.end())
             return false;
         Lit reset_b = m_circuitGraph->latchResetMap[VarOf(bLit)];
-        Lit init_b = Sign(bLit) ? ~reset_b : reset_b;
-        if (init_a != init_b) return false;
+        init_b = Sign(bLit) ? ~reset_b : reset_b;
     }
+    if (init_a != init_b) return false;
 
     // inductive step
     if (m_equivalenceSolver == nullptr ||
@@ -963,17 +966,22 @@ bool Model::CheckLatchEquivalenceBySAT(Lit aLit, Lit bLit) {
 
         m_equivalenceSolver = make_unique<minicore::Solver>();
         for (auto &c : m_cnfClauses) {
+            for (auto l : c) {
+                Var v = VarOf(l);
+                while (static_cast<int>(v) >= m_equivalenceSolver->nVars())
+                    m_equivalenceSolver->newVar();
+            }
             m_equivalenceSolver->addClause(c);
         }
-        m_equivalenceSolver->solve_in_domain = true;
+        m_equivalenceSolver->setSolveInDomain(true);
         // m_equivalenceSolver->verbosity = 1;
     }
 
     // (a <-> b) -> (a' <-> b')
     // (a <-> b) & !(a' <-> b') is unsat
     // (a | !b) & (!a | b) & (a' | b') & (!a' | !b')
-    Lit a_prime = LookupPrime(aLit);
-    Lit b_prime = LookupPrime(bLit);
+    Lit a_prime = IsConst(aLit) ? aLit : LookupPrime(aLit);
+    Lit b_prime = IsConst(bLit) ? bLit : LookupPrime(bLit);
     {
         // only keep temp act var
         // need to be more robust in the future
@@ -992,16 +1000,12 @@ bool Model::CheckLatchEquivalenceBySAT(Lit aLit, Lit bLit) {
         m_equivalenceSolver->addTempClause(c4);
     }
 
-    Cube d = GetCOIDomain(Cube{MkLit(VarOf(aLit)),
-                               MkLit(VarOf(bLit)),
-                               MkLit(VarOf(a_prime)),
-                               MkLit(VarOf(b_prime))});
+    Cube d = GetCOIDomain(Cube{aLit, bLit, a_prime, b_prime});
     {
         std::vector<char> &dom = m_equivalenceSolver->domainSet();
         std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
         for (Lit v : d) {
             Var vv = VarOf(v);
-            while (static_cast<int>(vv) >= m_equivalenceSolver->nVars()) m_equivalenceSolver->newVar();
             if (!dom[vv]) {
                 dom[vv] = 1;
                 list.push_back(vv);
@@ -1038,9 +1042,14 @@ bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
         m_equivalenceSolver = make_unique<minicore::Solver>();
         m_equivalenceSolver->setRestartLimit(1);
         for (auto &c : m_cnfClauses) {
+            for (auto l : c) {
+                Var v = VarOf(l);
+                while (static_cast<int>(v) >= m_equivalenceSolver->nVars())
+                    m_equivalenceSolver->newVar();
+            }
             m_equivalenceSolver->addClause(c);
         }
-        m_equivalenceSolver->solve_in_domain = true;
+        m_equivalenceSolver->setSolveInDomain(true);
     }
 
     // (a <-> b)
@@ -1060,13 +1069,12 @@ bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
         m_equivalenceSolver->addTempClause(c2);
     }
 
-    Cube d = GetCOIDomain(Cube{MkLit(VarOf(aLit)), MkLit(VarOf(bLit))});
+    Cube d = GetCOIDomain(Cube{aLit, bLit});
     {
         std::vector<char> &dom = m_equivalenceSolver->domainSet();
         std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
         for (Lit v : d) {
             Var vv = VarOf(v);
-            while (static_cast<int>(vv) >= m_equivalenceSolver->nVars()) m_equivalenceSolver->newVar();
             if (!dom[vv]) {
                 dom[vv] = 1;
                 list.push_back(vv);

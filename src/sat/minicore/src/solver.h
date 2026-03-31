@@ -74,6 +74,7 @@ class Solver {
     int nVars() const;          // The current number of variables.
     void printStats() const;    // Print some current statistics to standard output.
     void printResult() const;   // Print sat result.
+    void printModel() const;    // Print model in DIMACS style.
     void printHead() const;     // Print head.
     void printProgress() const; // Print progress.
 
@@ -84,7 +85,6 @@ class Solver {
 
     // Extra results: (read-only member variable)
     //
-    std::vector<lbool> model;                  // If problem is satisfiable, this vector contains the model (if any).
     std::unordered_set<Lit, LitHash> conflict; // If problem is unsatisfiable (possibly under assumptions),
                                                // this vector represent the final conflict clause expressed in the assumptions.
 

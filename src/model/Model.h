@@ -48,6 +48,12 @@ class EquivalenceManager {
 
     const unordered_map<Var, Lit, std::hash<Var>> &GetEquivalenceMap() const { return m_equivalenceMap; }
 
+    void PrintEquivalenceMap() {
+        for (const auto &it : m_equivalenceMap) {
+            cout << it.first << " -> " << it.second << endl;
+        }
+    }
+
   private:
     unordered_map<Var, Lit, std::hash<Var>> m_equivalenceMap;
 

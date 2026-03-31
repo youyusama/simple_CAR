@@ -1,11 +1,11 @@
 #ifndef CAR_TYPES_H
 #define CAR_TYPES_H
 
-#include <cassert>
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
-#include <cstring>
 #include <cstdint>
+#include <cstring>
 #include <ostream>
 #include <type_traits>
 #include <vector>
@@ -165,6 +165,11 @@ inline SignedVec ToSignedVec(const Cube &cube) {
     out.reserve(cube.size());
     for (Lit lit : cube) out.emplace_back(ToSigned(lit));
     return out;
+}
+
+inline std::ostream &operator<<(std::ostream &os, const Cube &cb) {
+    for (auto &l : cb) os << l << " ";
+    return os;
 }
 
 inline Cube FromSignedVec(const SignedVec &cube) {

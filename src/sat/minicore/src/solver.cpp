@@ -53,7 +53,17 @@ void Solver::reset() {
         // temp clause
         temp_cls_activated = false;
         removeTempLearnt();
+        // temp cls act var
+        while (assigns[temp_cls_act_var] != l_Undef) {
+            Var x = var(trail.back());
+            assigns[x] = l_Undef;
+            polarity[x] = sign(trail.back());
+            trail.pop_back();
+        }
+        qhead = trail.size();
+        trail_lim.resize(0);
     }
+    assert(assigns[temp_cls_act_var] == l_Undef);
 
     // solve in domain
     if (solve_in_domain) solve_in_domain_runtime_flag = false;
@@ -951,6 +961,7 @@ lbool Solver::solve_() {
     if (verbosity >= 1) {
         printStats();
         printResult();
+        // if (status == l_True) printModel();
     }
 
     return status;
@@ -1025,7 +1036,7 @@ void Solver::printStats() const {
     std::cout << "===============================================================================\n";
     double cpu_time = cpuTime();
     double mem_used = memUsedPeak();
-    std::cout << "restarts              : " << starts << "\n";
+    std::cout << "starts                : " << starts << "\n";
 
     std::cout << "conflicts             : "
               << std::left << std::setw(12) << conflicts
@@ -1066,6 +1077,20 @@ void Solver::printResult() const {
     else
         std::cout << "unknow";
     std::cout << std::endl;
+}
+
+void Solver::printModel() const {
+    if (last_result_ != l_True) return;
+
+    std::cout << "v";
+    for (Var v = 1; v < nVars(); ++v) {
+        if (assigns[v] == l_True) {
+            std::cout << " " << v;
+        } else if (assigns[v] == l_False) {
+            std::cout << " -" << v;
+        }
+    }
+    std::cout << " 0\n";
 }
 
 void Solver::printHead() const {
