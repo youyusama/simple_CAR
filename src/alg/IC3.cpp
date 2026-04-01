@@ -1205,7 +1205,7 @@ void IC3::OutputWitness() {
     unsigned p_prime = AddCubeToAndGates(witness_aig, {p, inv});
 
     if (eq_lits.size() > 0) {
-        p_prime = AddCubeToAndGates(witness_aig, {p, eq_cons});
+        p_prime = AddCubeToAndGates(witness_aig, {p_prime, eq_cons});
     }
 
     if (model_aig->num_bad == 1) {
