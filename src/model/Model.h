@@ -226,6 +226,7 @@ class Model {
     void Rebuild();
     Var NewInputVar();
     Var NewLatchVar();
+    Var GetNewVar() { return ++m_maxId; }
     Lit MakeAND(Lit a, Lit b);
     Lit MakeOR(Lit a, Lit b);
     Lit MakeXOR(Lit a, Lit b);
@@ -274,8 +275,6 @@ class Model {
     bool CheckGateEquivalenceBySAT(Lit a, Lit b);
 
     void EnsureCOICache(Var v);
-
-    inline Var GetNewId() { return ++m_maxId; };
 
     inline Lit ToCNFLit(Lit lit) const {
         if (!IsConst(lit)) return lit;

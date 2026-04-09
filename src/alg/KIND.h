@@ -1,0 +1,97 @@
+#ifndef KIND_H
+#define KIND_H
+
+#include "BaseAlg.h"
+#include "IncrCheckerHelpers.h"
+#include "Log.h"
+#include "SATSolver.h"
+
+#include <memory>
+#include <unordered_map>
+
+namespace car {
+
+class KIND : public BaseAlg {
+  public:
+    KIND(Settings settings,
+         Model &model,
+         Log &log);
+
+    CheckResult Run() override;
+    void Witness() override;
+    std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
+
+  private:
+    struct DiffKey {
+        int i;
+        int j;
+        Var latch;
+
+        bool operator==(const DiffKey &other) const {
+            return i == other.i && j == other.j && latch == other.latch;
+        }
+    };
+
+    struct DiffKeyHash {
+        size_t operator()(const DiffKey &key) const {
+            size_t h1 = std::hash<int>{}(key.i);
+            size_t h2 = std::hash<int>{}(key.j);
+            size_t h3 = std::hash<Var>{}(key.latch);
+            return h1 ^ (h2 << 1) ^ (h3 << 2);
+        }
+    };
+
+    enum class AuxMode {
+        Induction,
+        Forward
+    };
+
+    void Init();
+    void InitBaseSolver();
+    void InitAuxSolver();
+
+    CheckResult Check();
+    CheckResult CheckNonIncremental();
+    bool CheckBaseCase();
+    bool CheckInductiveStep();
+    bool CheckForwardCondition();
+    bool CheckBaseCaseNonIncremental(int k);
+    bool CheckInductiveStepNonIncremental(int k);
+    bool CheckForwardConditionNonIncremental(int k);
+
+    void AdvanceBaseToNextK();
+    void AdvanceInductionToNextK();
+    void AdvanceForwardToNextK();
+
+    void AddClausesK(std::shared_ptr<SATSolver> solver, int k);
+    void AddConstraintsK(std::shared_ptr<SATSolver> solver, int k);
+    void AddInitial(std::shared_ptr<SATSolver> solver);
+    void AddUniqueConstraintsK(std::shared_ptr<SATSolver> solver, int k);
+    void AddStateDisequality(std::shared_ptr<SATSolver> solver, int i, int j);
+    Var GetDiffVar(int i, int j, Var latch);
+
+    void GetClausesK(int k, std::vector<Clause> &clauses);
+    Lit GetBadK(int k);
+    Cube GetConstraintsK(int k);
+
+    void OutputCounterExample();
+
+    Settings m_settings;
+    Log &m_log;
+    Model &m_model;
+    int m_k;
+    int m_maxK;
+    int m_baseAddedTransitions;
+    int m_auxAddedTransitions;
+    int m_auxAddedUniqueLevel;
+    CheckResult m_checkResult;
+    AuxMode m_auxMode;
+    std::shared_ptr<SATSolver> m_baseSolver;
+    std::shared_ptr<SATSolver> m_auxSolver;
+    std::shared_ptr<SATSolver> m_cexSolver;
+    std::unordered_map<DiffKey, Var, DiffKeyHash> m_diffVars;
+};
+
+} // namespace car
+
+#endif

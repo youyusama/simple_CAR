@@ -21,6 +21,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"fcar", MCAlgorithm::FCAR},
                 {"bcar", MCAlgorithm::BCAR},
                 {"bmc", MCAlgorithm::BMC},
+                {"kind", MCAlgorithm::KIND},
                 {"ic3", MCAlgorithm::IC3},
                 {"l2s", MCAlgorithm::L2S},
                 {"klive", MCAlgorithm::KLIVE},
@@ -67,6 +68,10 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("--bmc_cnf_k", settings.bmcCnfK,
                    "Target unrolling depth k for generated BMC DIMACS CNF")
         ->default_val(-1);
+
+    app.add_flag("--f_uniq", settings.fUniq,
+                 "Use forward-condition complete BMC with unique-state constraints")
+        ->default_val(false);
 
     app.add_option("--step", settings.bmcStep, "Performs BMC by unrolling k steps in a single batch")
         ->default_val(1);
@@ -169,6 +174,10 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
             if (settings.bmcCnfK != -1) {
                 throw CLI::ValidationError("--bmc_cnf_k", "requires '--bmc_cnf'");
             }
+        }
+
+        if (settings.fUniq && settings.alg != MCAlgorithm::KIND) {
+            throw CLI::ValidationError("--f_uniq", "requires '-a kind'");
         }
 
         return true;

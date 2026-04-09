@@ -11,6 +11,7 @@ namespace car {
 enum class MCAlgorithm { FCAR,
                          BCAR,
                          BMC,
+                         KIND,
                          IC3,
                          L2S,
                          KLIVE,
@@ -37,6 +38,7 @@ struct Settings {
     bool bmcCnf = false;
     string bmcCnfDir = "";
     int bmcCnfK = -1;
+    bool fUniq = false;
     bool dt = true;
     int branching = 1;
     int randomSeed = 0;

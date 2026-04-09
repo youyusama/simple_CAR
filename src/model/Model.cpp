@@ -532,7 +532,7 @@ Lit Model::EnsurePrimeK(Lit id, int k) {
     if (it != k_map.end()) {
         prime_var = VarOf(it->second);
     } else {
-        Lit prime_lit = MkLit(GetNewId());
+        Lit prime_lit = MkLit(GetNewVar());
         auto res = k_map.insert(pair<Var, Lit>(VarOf(id), prime_lit));
         prime_var = VarOf(res.first->second);
     }
@@ -581,7 +581,7 @@ void Model::CollectInnards() {
             // build a new gate
             CircuitGate gate(m_circuitGraph->gatesMap[g]);
             if (LookupPrime(MkLit(g)) == Lit{}) {
-                m_primeMaps[0].insert(pair<Var, Lit>(g, MkLit(GetNewId())));
+                m_primeMaps[0].insert(pair<Var, Lit>(g, MkLit(GetNewVar())));
             }
             Var p_fanout = VarOf(LookupPrime(MkLit(g)));
             gate.fanout = p_fanout;
