@@ -16,7 +16,8 @@ KIND::KIND(Settings settings,
                        m_auxAddedTransitions(0),
                        m_auxAddedUniqueLevel(-1),
                        m_checkResult(CheckResult::Unknown),
-                       m_auxMode(m_settings.fUniq ? AuxMode::Forward : AuxMode::Induction) {
+                       m_auxMode(m_settings.fUniq ? AuxMode::Forward : AuxMode::Induction),
+                       m_useUnrollingCache(false) {
     State::num_inputs = model.GetNumInputs();
     State::num_latches = model.GetNumLatches();
     global_log = &m_log;
@@ -71,6 +72,7 @@ void KIND::Init() {
     m_baseAddedTransitions = 0;
     m_auxAddedTransitions = 0;
     m_auxAddedUniqueLevel = -1;
+    m_useUnrollingCache = false;
     m_cexSolver.reset();
     m_diffVars.clear();
 }
@@ -89,6 +91,7 @@ void KIND::InitAuxSolver() {
 
 CheckResult KIND::Check() {
     [[maybe_unused]] auto check_scope = m_log.Section("KIND_Check");
+    m_useUnrollingCache = false;
     InitBaseSolver();
     InitAuxSolver();
 
@@ -123,6 +126,7 @@ CheckResult KIND::Check() {
 
 CheckResult KIND::CheckNonIncremental() {
     [[maybe_unused]] auto check_scope = m_log.Section("KIND_CheckNonInc");
+    m_useUnrollingCache = true;
 
     while (true) {
         LOG_L(m_log, 1, "KIND Bound: ", m_k);
@@ -253,8 +257,17 @@ void KIND::AdvanceForwardToNextK() {
 }
 
 void KIND::AddClausesK(std::shared_ptr<SATSolver> solver, int k) {
-    std::vector<Clause> clauses;
-    GetClausesK(k, clauses);
+    if (!m_useUnrollingCache) {
+        std::vector<Clause> clauses;
+        GetClausesK(k, clauses);
+        for (const Clause &clause : clauses) {
+            solver->AddClause(clause);
+            LOG_L(m_log, 3, "Add Clause: ", CubeToStr(clause));
+        }
+        return;
+    }
+
+    const std::vector<Clause> &clauses = GetClausesKCached(k);
     for (const Clause &clause : clauses) {
         solver->AddClause(clause);
         LOG_L(m_log, 3, "Add Clause: ", CubeToStr(clause));
@@ -262,7 +275,16 @@ void KIND::AddClausesK(std::shared_ptr<SATSolver> solver, int k) {
 }
 
 void KIND::AddConstraintsK(std::shared_ptr<SATSolver> solver, int k) {
-    for (Lit c : GetConstraintsK(k)) {
+    if (!m_useUnrollingCache) {
+        Cube constraints = GetConstraintsK(k);
+        for (Lit c : constraints) {
+            solver->AddClause({c});
+            LOG_L(m_log, 3, "Add Clause: ", c);
+        }
+        return;
+    }
+
+    for (Lit c : GetConstraintsKCached(k)) {
         solver->AddClause({c});
         LOG_L(m_log, 3, "Add Clause: ", c);
     }
@@ -333,6 +355,34 @@ Var KIND::GetDiffVar(int i, int j, Var latch) {
     Var diff_var = m_model.GetNewVar();
     m_diffVars.emplace(key, diff_var);
     return diff_var;
+}
+
+const std::vector<Clause> &KIND::GetClausesKCached(int k) {
+    if (k >= static_cast<int>(m_transitionClausesCache.size())) {
+        m_transitionClausesCache.resize(k + 1);
+        m_transitionClausesReady.resize(k + 1, 0);
+    }
+
+    if (!m_transitionClausesReady[k]) {
+        GetClausesK(k, m_transitionClausesCache[k]);
+        m_transitionClausesReady[k] = 1;
+    }
+
+    return m_transitionClausesCache[k];
+}
+
+const Cube &KIND::GetConstraintsKCached(int k) {
+    if (k >= static_cast<int>(m_constraintsCache.size())) {
+        m_constraintsCache.resize(k + 1);
+        m_constraintsReady.resize(k + 1, 0);
+    }
+
+    if (!m_constraintsReady[k]) {
+        m_constraintsCache[k] = GetConstraintsK(k);
+        m_constraintsReady[k] = 1;
+    }
+
+    return m_constraintsCache[k];
 }
 
 void KIND::GetClausesK(int k, std::vector<Clause> &clauses) {

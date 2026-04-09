@@ -70,6 +70,8 @@ class KIND : public BaseAlg {
     void AddStateDisequality(std::shared_ptr<SATSolver> solver, int i, int j);
     Var GetDiffVar(int i, int j, Var latch);
 
+    const std::vector<Clause> &GetClausesKCached(int k);
+    const Cube &GetConstraintsKCached(int k);
     void GetClausesK(int k, std::vector<Clause> &clauses);
     Lit GetBadK(int k);
     Cube GetConstraintsK(int k);
@@ -86,10 +88,15 @@ class KIND : public BaseAlg {
     int m_auxAddedUniqueLevel;
     CheckResult m_checkResult;
     AuxMode m_auxMode;
+    bool m_useUnrollingCache;
     std::shared_ptr<SATSolver> m_baseSolver;
     std::shared_ptr<SATSolver> m_auxSolver;
     std::shared_ptr<SATSolver> m_cexSolver;
     std::unordered_map<DiffKey, Var, DiffKeyHash> m_diffVars;
+    std::vector<std::vector<Clause>> m_transitionClausesCache;
+    std::vector<char> m_transitionClausesReady;
+    std::vector<Cube> m_constraintsCache;
+    std::vector<char> m_constraintsReady;
 };
 
 } // namespace car
