@@ -34,6 +34,9 @@ struct Settings {
     int shoalUnroll = 1;
     bool rlivePruneDead = false;
     int bmcK = -1;
+    bool bmcCnf = false;
+    string bmcCnfDir = "";
+    int bmcCnfK = -1;
     bool dt = true;
     int branching = 1;
     int randomSeed = 0;

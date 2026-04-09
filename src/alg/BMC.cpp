@@ -1,6 +1,12 @@
 #include "BMC.h"
 
+#include <cstdlib>
+#include <filesystem>
+#include <stdexcept>
+
 namespace car {
+
+namespace fs = std::filesystem;
 
 BMC::BMC(Settings settings,
          Model &model,
@@ -20,6 +26,12 @@ BMC::BMC(Settings settings,
 
 CheckResult BMC::Run() {
     signal(SIGINT, SignalHandler);
+    if (m_settings.bmcCnf) {
+        CNFGen();
+        m_log.PrintCustomStatistics();
+        std::exit(EXIT_SUCCESS);
+    }
+
     if (m_settings.solver == MCSATSolver::kissat) {
         if (CheckNonIncremental()) {
             m_checkResult = CheckResult::Unsafe;
@@ -61,6 +73,43 @@ std::vector<std::pair<Cube, Cube>> BMC::GetCexTrace() {
     }
 
     return trace;
+}
+
+
+void BMC::CNFGen() {
+    [[maybe_unused]] auto cnf_scope = m_log.Section("BMC_CNFGen");
+    const int target_k = m_settings.bmcCnfK;
+    LOG_L(m_log, 1, "Generate BMC CNF at bound: ", target_k);
+
+    vector<Clause> clauses;
+
+    for (Lit lit : m_model.GetInitialState()) {
+        clauses.push_back(Clause{lit});
+    }
+    for (const Clause &clause : m_model.GetInitialClauses()) {
+        clauses.push_back(clause);
+    }
+
+    for (int i = 0; i <= target_k; ++i) {
+        GetClausesK(i, clauses);
+    }
+
+    for (int i = 0; i <= target_k; ++i) {
+        for (Lit constraint : GetConstraintsK(i)) {
+            clauses.push_back(Clause{constraint});
+        }
+    }
+
+    clauses.push_back(Clause{GetBadK(target_k)});
+
+    const string cnf_path = GetCNFPath(target_k);
+    fs::path out_dir = fs::path(cnf_path).parent_path();
+    if (!out_dir.empty()) {
+        fs::create_directories(out_dir);
+    }
+
+    WriteDimacs(clauses, cnf_path);
+    LOG_L(m_log, 0, "BMC CNF written to ", cnf_path);
 }
 
 
@@ -192,6 +241,60 @@ bool BMC::CheckNonIncremental() {
 }
 
 
+string BMC::GetCNFPath(int k) const {
+    const fs::path aig_path(m_settings.aigFilePath);
+    const string file_name = aig_path.stem().string() + ".bmc_k" + std::to_string(k) + ".cnf";
+    return (fs::path(m_settings.bmcCnfDir) / file_name).string();
+}
+
+
+void BMC::WriteDimacs(const vector<Clause> &clauses, const string &path) const {
+    vector<SignedVec> dimacs_clauses;
+    dimacs_clauses.reserve(clauses.size());
+
+    Var max_var = 0;
+    for (const Clause &clause : clauses) {
+        bool clause_is_true = false;
+        SignedVec dimacs_clause;
+        dimacs_clause.reserve(clause.size());
+
+        for (Lit lit : clause) {
+            if (IsConstTrue(lit)) {
+                clause_is_true = true;
+                break;
+            }
+            if (IsConstFalse(lit)) {
+                continue;
+            }
+
+            dimacs_clause.push_back(ToSigned(lit));
+            max_var = std::max(max_var, VarOf(lit));
+        }
+
+        if (!clause_is_true) {
+            dimacs_clauses.push_back(std::move(dimacs_clause));
+        }
+    }
+
+    std::ofstream cnf_file(path);
+    if (!cnf_file.is_open()) {
+        throw std::runtime_error("failed to open CNF output file: " + path);
+    }
+
+    cnf_file << "c simpleCAR BMC CNF" << std::endl;
+    cnf_file << "c source " << m_settings.aigFilePath << std::endl;
+    cnf_file << "c k " << m_settings.bmcCnfK << std::endl;
+    cnf_file << "p cnf " << max_var << " " << dimacs_clauses.size() << std::endl;
+
+    for (const SignedVec &clause : dimacs_clauses) {
+        for (int lit : clause) {
+            cnf_file << lit << " ";
+        }
+        cnf_file << "0" << std::endl;
+    }
+}
+
+
 void BMC::Init() {
     [[maybe_unused]] auto init_scope = m_log.Section("BMC_Init");
     m_solver = make_shared<SATSolver>(m_model, m_settings.solver);
@@ -204,28 +307,28 @@ void BMC::Init() {
 }
 
 
-void BMC::GetClausesK(int mK, vector<Clause> &clauses) {
+void BMC::GetClausesK(int k, vector<Clause> &clauses) {
     auto &original_clauses = m_model.GetSimpClauses();
     for (int i = 0; i < original_clauses.size(); ++i) {
         Clause &ori = original_clauses[i];
         Clause cls_k;
         for (Lit v : ori) {
-            cls_k.push_back(m_model.EnsurePrimeK(v, mK));
+            cls_k.push_back(m_model.EnsurePrimeK(v, k));
         }
         clauses.push_back(cls_k);
     }
 }
 
 
-Lit BMC::GetBadK(int mK) {
-    return m_model.EnsurePrimeK(m_model.GetBad(), mK);
+Lit BMC::GetBadK(int k) {
+    return m_model.EnsurePrimeK(m_model.GetBad(), k);
 }
 
 
-Cube BMC::GetConstraintsK(int mK) {
+Cube BMC::GetConstraintsK(int k) {
     Cube res;
     for (Lit c : m_model.GetConstraints()) {
-        res.push_back(m_model.EnsurePrimeK(c, mK));
+        res.push_back(m_model.EnsurePrimeK(c, k));
     }
     return res;
 }

@@ -57,6 +57,17 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("-k", settings.bmcK, "BMC bound")
         ->default_val(-1);
 
+    app.add_flag("--bmc_cnf", settings.bmcCnf,
+                 "Only generate the DIMACS CNF for one BMC instance")
+        ->default_val(false);
+
+    app.add_option("--bmc_cnf_dir", settings.bmcCnfDir,
+                   "Output directory for generated BMC DIMACS CNF files");
+
+    app.add_option("--bmc_cnf_k", settings.bmcCnfK,
+                   "Target unrolling depth k for generated BMC DIMACS CNF")
+        ->default_val(-1);
+
     app.add_option("--step", settings.bmcStep, "Performs BMC by unrolling k steps in a single batch")
         ->default_val(1);
 
@@ -138,6 +149,28 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
 
     try {
         app.parse(argc, argv);
+
+        if (settings.bmcCnf) {
+            if (settings.alg != MCAlgorithm::BMC) {
+                throw CLI::ValidationError("--bmc_cnf", "requires '-a bmc'");
+            }
+            if (settings.bmcCnfDir.empty()) {
+                throw CLI::ValidationError("--bmc_cnf_dir",
+                                           "must be set when '--bmc_cnf' is enabled");
+            }
+            if (settings.bmcCnfK < 0) {
+                throw CLI::ValidationError("--bmc_cnf_k",
+                                           "must be a non-negative integer when '--bmc_cnf' is enabled");
+            }
+        } else {
+            if (!settings.bmcCnfDir.empty()) {
+                throw CLI::ValidationError("--bmc_cnf_dir", "requires '--bmc_cnf'");
+            }
+            if (settings.bmcCnfK != -1) {
+                throw CLI::ValidationError("--bmc_cnf_k", "requires '--bmc_cnf'");
+            }
+        }
+
         return true;
     } catch (const CLI::ParseError &e) {
         app.exit(e);

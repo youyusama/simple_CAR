@@ -21,6 +21,9 @@ class BMC : public BaseAlg {
   private:
     bool Check();
     bool CheckNonIncremental();
+    void CNFGen();
+    string GetCNFPath(int k) const;
+    void WriteDimacs(const vector<Clause> &clauses, const string &path) const;
     Settings m_settings;
     Log &m_log;
     Model &m_model;
@@ -36,9 +39,9 @@ class BMC : public BaseAlg {
     CheckResult m_checkResult;
     void Init();
     void OutputCounterExample();
-    void GetClausesK(int mK, vector<Clause> &clauses);
-    Lit GetBadK(int mK);
-    Cube GetConstraintsK(int mK);
+    void GetClausesK(int k, vector<Clause> &clauses);
+    Lit GetBadK(int k);
+    Cube GetConstraintsK(int k);
 };
 
 } // namespace car
