@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace car {
 
@@ -41,6 +42,23 @@ class KIND : public BaseAlg {
         }
     };
 
+    struct StatePairKey {
+        int i;
+        int j;
+
+        bool operator==(const StatePairKey &other) const {
+            return i == other.i && j == other.j;
+        }
+    };
+
+    struct StatePairKeyHash {
+        size_t operator()(const StatePairKey &key) const {
+            size_t h1 = std::hash<int>{}(key.i);
+            size_t h2 = std::hash<int>{}(key.j);
+            return h1 ^ (h2 << 1);
+        }
+    };
+
     enum class AuxMode {
         Induction,
         Forward
@@ -68,6 +86,10 @@ class KIND : public BaseAlg {
     void AddInitial(std::shared_ptr<SATSolver> solver);
     void AddUniqueConstraintsK(std::shared_ptr<SATSolver> solver, int k);
     void AddStateDisequality(std::shared_ptr<SATSolver> solver, int i, int j);
+    void AddStateDisequalities(std::shared_ptr<SATSolver> solver,
+                               const std::vector<StatePairKey> &pairs);
+    void ReplayBlockedPairsNonIncremental(std::shared_ptr<SATSolver> solver, int k);
+    std::vector<StatePairKey> FindEqualStatePairs(const std::shared_ptr<SATSolver> &solver, int k) const;
     Var GetDiffVar(int i, int j, Var latch);
 
     const std::vector<Clause> &GetClausesKCached(int k);
@@ -97,6 +119,7 @@ class KIND : public BaseAlg {
     std::vector<char> m_transitionClausesReady;
     std::vector<Cube> m_constraintsCache;
     std::vector<char> m_constraintsReady;
+    std::unordered_set<StatePairKey, StatePairKeyHash> m_nonIncIndBlockedPairs;
 };
 
 } // namespace car

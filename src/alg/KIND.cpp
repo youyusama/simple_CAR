@@ -75,6 +75,7 @@ void KIND::Init() {
     m_useUnrollingCache = false;
     m_cexSolver.reset();
     m_diffVars.clear();
+    m_nonIncIndBlockedPairs.clear();
 }
 
 void KIND::InitBaseSolver() {
@@ -178,6 +179,13 @@ bool KIND::CheckInductiveStep() {
         return true;
     }
 
+    std::vector<StatePairKey> equal_pairs = FindEqualStatePairs(m_auxSolver, m_k);
+    LOG_L(m_log, 2, "Inductive step SAT, equal state pairs found: ", equal_pairs.size());
+    if (!equal_pairs.empty()) {
+        AddStateDisequalities(m_auxSolver, equal_pairs);
+        LOG_L(m_log, 2, "Added lazy simple-path constraints: ", equal_pairs.size());
+    }
+
     m_auxSolver->AddClause({~k_bad});
     LOG_L(m_log, 3, "Add Clause: ", ~k_bad);
     return false;
@@ -222,8 +230,27 @@ bool KIND::CheckInductiveStepNonIncremental(int k) {
         solver->AddClause({~GetBadK(i)});
     }
     solver->AddClause({GetBadK(k)});
+    ReplayBlockedPairsNonIncremental(solver, k);
 
-    return !solver->Solve();
+    bool sat = solver->Solve();
+    if (!sat) {
+        return true;
+    }
+
+    std::vector<StatePairKey> equal_pairs = FindEqualStatePairs(solver, k);
+    std::vector<StatePairKey> new_pairs;
+    new_pairs.reserve(equal_pairs.size());
+    for (const StatePairKey &pair : equal_pairs) {
+        if (m_nonIncIndBlockedPairs.insert(pair).second) {
+            new_pairs.push_back(pair);
+        }
+    }
+
+    LOG_L(m_log, 2, "Non-incremental inductive step SAT, equal state pairs found: ", equal_pairs.size());
+    if (!new_pairs.empty()) {
+        LOG_L(m_log, 2, "Stored lazy simple-path constraints for future rebuilds: ", new_pairs.size());
+    }
+    return false;
 }
 
 bool KIND::CheckForwardConditionNonIncremental(int k) {
@@ -339,6 +366,48 @@ void KIND::AddStateDisequality(std::shared_ptr<SATSolver> solver, int i, int j) 
     }
 
     solver->AddClause(diff_clause);
+}
+
+void KIND::AddStateDisequalities(std::shared_ptr<SATSolver> solver,
+                                 const std::vector<StatePairKey> &pairs) {
+    for (const StatePairKey &pair : pairs) {
+        AddStateDisequality(solver, pair.i, pair.j);
+    }
+}
+
+void KIND::ReplayBlockedPairsNonIncremental(std::shared_ptr<SATSolver> solver, int k) {
+    size_t replayed = 0;
+    for (const StatePairKey &pair : m_nonIncIndBlockedPairs) {
+        if (pair.j <= k) {
+            AddStateDisequality(solver, pair.i, pair.j);
+            ++replayed;
+        }
+    }
+    LOG_L(m_log, 2, "Replayed blocked non-incremental state pairs: ", replayed);
+}
+
+std::vector<KIND::StatePairKey> KIND::FindEqualStatePairs(const std::shared_ptr<SATSolver> &solver, int k) const {
+    std::vector<StatePairKey> pairs;
+    auto &latches = m_model.GetModelLatches();
+
+    for (int i = 0; i < k; ++i) {
+        for (int j = i + 1; j <= k; ++j) {
+            bool equal = true;
+            for (Var latch : latches) {
+                Lit li = m_model.EnsurePrimeK(MkLit(latch), i);
+                Lit lj = m_model.EnsurePrimeK(MkLit(latch), j);
+                if (solver->GetModel(VarOf(li)) != solver->GetModel(VarOf(lj))) {
+                    equal = false;
+                    break;
+                }
+            }
+            if (equal) {
+                pairs.push_back(StatePairKey{i, j});
+            }
+        }
+    }
+
+    return pairs;
 }
 
 Var KIND::GetDiffVar(int i, int j, Var latch) {
