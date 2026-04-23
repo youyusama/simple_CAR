@@ -59,32 +59,23 @@ class KIND : public BaseAlg {
         }
     };
 
-    enum class AuxMode {
-        Induction,
-        Forward
-    };
-
     void Init();
     void InitBaseSolver();
-    void InitAuxSolver();
+    void InitIndSolver();
 
     CheckResult Check();
     CheckResult CheckNonIncremental();
     bool CheckBaseCase();
     bool CheckInductiveStep();
-    bool CheckForwardCondition();
     bool CheckBaseCaseNonIncremental(int k);
     bool CheckInductiveStepNonIncremental(int k);
-    bool CheckForwardConditionNonIncremental(int k);
 
     void AdvanceBaseToNextK();
-    void AdvanceInductionToNextK();
-    void AdvanceForwardToNextK();
+    void AdvanceIndSolverToNextK();
 
     void AddClausesK(std::shared_ptr<SATSolver> solver, int k);
     void AddConstraintsK(std::shared_ptr<SATSolver> solver, int k);
     void AddInitial(std::shared_ptr<SATSolver> solver);
-    void AddUniqueConstraintsK(std::shared_ptr<SATSolver> solver, int k);
     void AddStateDisequality(std::shared_ptr<SATSolver> solver, int i, int j);
     void AddStateDisequalities(std::shared_ptr<SATSolver> solver,
                                const std::vector<StatePairKey> &pairs);
@@ -106,13 +97,11 @@ class KIND : public BaseAlg {
     int m_k;
     int m_maxK;
     int m_baseAddedTransitions;
-    int m_auxAddedTransitions;
-    int m_auxAddedUniqueLevel;
+    int m_indAddedTransitions;
     CheckResult m_checkResult;
-    AuxMode m_auxMode;
     bool m_useUnrollingCache;
     std::shared_ptr<SATSolver> m_baseSolver;
-    std::shared_ptr<SATSolver> m_auxSolver;
+    std::shared_ptr<SATSolver> m_indSolver;
     std::shared_ptr<SATSolver> m_cexSolver;
     std::unordered_map<DiffKey, Var, DiffKeyHash> m_diffVars;
     std::vector<std::vector<Clause>> m_transitionClausesCache;

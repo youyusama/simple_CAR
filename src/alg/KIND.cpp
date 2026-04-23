@@ -13,10 +13,8 @@ KIND::KIND(Settings settings,
                        m_k(0),
                        m_maxK(settings.bmcK),
                        m_baseAddedTransitions(0),
-                       m_auxAddedTransitions(0),
-                       m_auxAddedUniqueLevel(-1),
+                       m_indAddedTransitions(0),
                        m_checkResult(CheckResult::Unknown),
-                       m_auxMode(m_settings.fUniq ? AuxMode::Forward : AuxMode::Induction),
                        m_useUnrollingCache(false) {
     State::num_inputs = model.GetNumInputs();
     State::num_latches = model.GetNumLatches();
@@ -70,8 +68,7 @@ void KIND::Init() {
     m_k = 0;
     m_checkResult = CheckResult::Unknown;
     m_baseAddedTransitions = 0;
-    m_auxAddedTransitions = 0;
-    m_auxAddedUniqueLevel = -1;
+    m_indAddedTransitions = 0;
     m_useUnrollingCache = false;
     m_cexSolver.reset();
     m_diffVars.clear();
@@ -83,37 +80,28 @@ void KIND::InitBaseSolver() {
     AddInitial(m_baseSolver);
 }
 
-void KIND::InitAuxSolver() {
-    m_auxSolver = std::make_shared<SATSolver>(m_model, m_settings.solver);
-    if (m_auxMode == AuxMode::Forward) {
-        AddInitial(m_auxSolver);
-    }
+void KIND::InitIndSolver() {
+    m_indSolver = std::make_shared<SATSolver>(m_model, m_settings.solver);
 }
 
 CheckResult KIND::Check() {
     [[maybe_unused]] auto check_scope = m_log.Section("KIND_Check");
     m_useUnrollingCache = false;
     InitBaseSolver();
-    InitAuxSolver();
+    InitIndSolver();
 
     while (true) {
         LOG_L(m_log, 1, "KIND Bound: ", m_k);
 
         AdvanceBaseToNextK();
-        if (m_auxMode == AuxMode::Forward) {
-            AdvanceForwardToNextK();
-        } else {
-            AdvanceInductionToNextK();
-        }
+        AdvanceIndSolverToNextK();
 
         if (CheckBaseCase()) {
             return CheckResult::Unsafe;
         }
 
-        bool aux_safe = (m_auxMode == AuxMode::Forward)
-                            ? CheckForwardCondition()
-                            : CheckInductiveStep();
-        if (aux_safe) {
+        bool ind_safe = CheckInductiveStep();
+        if (ind_safe) {
             return CheckResult::Safe;
         }
 
@@ -136,10 +124,8 @@ CheckResult KIND::CheckNonIncremental() {
             return CheckResult::Unsafe;
         }
 
-        bool aux_safe = (m_auxMode == AuxMode::Forward)
-                            ? CheckForwardConditionNonIncremental(m_k)
-                            : CheckInductiveStepNonIncremental(m_k);
-        if (aux_safe) {
+        bool ind_safe = CheckInductiveStepNonIncremental(m_k);
+        if (ind_safe) {
             return CheckResult::Safe;
         }
 
@@ -170,32 +156,25 @@ bool KIND::CheckBaseCase() {
 
 bool KIND::CheckInductiveStep() {
     [[maybe_unused]] auto ind_scope = m_log.Section("KIND_Ind");
-    AddConstraintsK(m_auxSolver, m_k);
+    AddConstraintsK(m_indSolver, m_k);
 
     Lit k_bad = GetBadK(m_k);
     LOG_L(m_log, 3, "Assumption: ", k_bad);
-    bool sat = m_auxSolver->Solve(Cube{k_bad});
+    bool sat = m_indSolver->Solve(Cube{k_bad});
     if (!sat) {
         return true;
     }
 
-    std::vector<StatePairKey> equal_pairs = FindEqualStatePairs(m_auxSolver, m_k);
+    std::vector<StatePairKey> equal_pairs = FindEqualStatePairs(m_indSolver, m_k);
     LOG_L(m_log, 2, "Inductive step SAT, equal state pairs found: ", equal_pairs.size());
     if (!equal_pairs.empty()) {
-        AddStateDisequalities(m_auxSolver, equal_pairs);
+        AddStateDisequalities(m_indSolver, equal_pairs);
         LOG_L(m_log, 2, "Added lazy simple-path constraints: ", equal_pairs.size());
     }
 
-    m_auxSolver->AddClause({~k_bad});
+    m_indSolver->AddClause({~k_bad});
     LOG_L(m_log, 3, "Add Clause: ", ~k_bad);
     return false;
-}
-
-bool KIND::CheckForwardCondition() {
-    [[maybe_unused]] auto fwd_scope = m_log.Section("KIND_Fwd");
-    AddConstraintsK(m_auxSolver, m_k);
-    AddUniqueConstraintsK(m_auxSolver, m_k);
-    return !m_auxSolver->Solve();
 }
 
 bool KIND::CheckBaseCaseNonIncremental(int k) {
@@ -253,34 +232,14 @@ bool KIND::CheckInductiveStepNonIncremental(int k) {
     return false;
 }
 
-bool KIND::CheckForwardConditionNonIncremental(int k) {
-    [[maybe_unused]] auto fwd_scope = m_log.Section("KIND_FwdNonInc");
-    auto solver = std::make_shared<SATSolver>(m_model, m_settings.solver);
-    AddInitial(solver);
-    for (int i = 0; i <= k; ++i) {
-        AddClausesK(solver, i);
-    }
-    for (int i = 0; i <= k; ++i) {
-        AddConstraintsK(solver, i);
-    }
-    AddUniqueConstraintsK(solver, k);
-
-    return !solver->Solve();
-}
-
 void KIND::AdvanceBaseToNextK() {
     AddClausesK(m_baseSolver, m_baseAddedTransitions);
     ++m_baseAddedTransitions;
 }
 
-void KIND::AdvanceInductionToNextK() {
-    AddClausesK(m_auxSolver, m_auxAddedTransitions);
-    ++m_auxAddedTransitions;
-}
-
-void KIND::AdvanceForwardToNextK() {
-    AddClausesK(m_auxSolver, m_auxAddedTransitions);
-    ++m_auxAddedTransitions;
+void KIND::AdvanceIndSolverToNextK() {
+    AddClausesK(m_indSolver, m_indAddedTransitions);
+    ++m_indAddedTransitions;
 }
 
 void KIND::AddClausesK(std::shared_ptr<SATSolver> solver, int k) {
@@ -322,24 +281,6 @@ void KIND::AddInitial(std::shared_ptr<SATSolver> solver) {
         solver->AddClause({lit});
     }
     solver->AddInitialClauses();
-}
-
-void KIND::AddUniqueConstraintsK(std::shared_ptr<SATSolver> solver, int k) {
-    if (m_auxMode == AuxMode::Forward && solver == m_auxSolver) {
-        for (int level = m_auxAddedUniqueLevel + 1; level <= k; ++level) {
-            for (int i = 0; i < level; ++i) {
-                AddStateDisequality(solver, i, level);
-            }
-            m_auxAddedUniqueLevel = level;
-        }
-        return;
-    }
-
-    for (int j = 0; j <= k; ++j) {
-        for (int i = 0; i < j; ++i) {
-            AddStateDisequality(solver, i, j);
-        }
-    }
 }
 
 void KIND::AddStateDisequality(std::shared_ptr<SATSolver> solver, int i, int j) {
