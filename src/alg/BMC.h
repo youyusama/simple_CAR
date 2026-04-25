@@ -15,7 +15,6 @@ class BMC : public BaseAlg {
         Log &log);
 
     CheckResult Run() override;
-    void Witness() override;
     std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
 
   private:
@@ -38,7 +37,6 @@ class BMC : public BaseAlg {
 
     CheckResult m_checkResult;
     void Init();
-    void OutputCounterExample();
     void GetClausesK(int k, vector<Clause> &clauses);
     Lit GetBadK(int k);
     Cube GetConstraintsK(int k);

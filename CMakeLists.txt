@@ -79,6 +79,7 @@ set(SRCS
     src/model/DAGCNFSimplifier.cpp
     src/Settings.cpp
     src/Log.cpp
+    src/WitnessBuilder.cpp
     src/alg/BCAR.cpp
     src/alg/FCAR.cpp
     src/alg/BMC.cpp

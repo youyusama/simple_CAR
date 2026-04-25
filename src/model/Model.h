@@ -30,6 +30,14 @@ using namespace std;
 
 namespace car {
 
+class WitnessBuilder;
+
+struct EquivalenceWitness {
+    std::vector<Clause> equivalence_clauses;
+    std::vector<Cube> reached_state_cubes;
+    bool has_reached_state_region{false};
+};
+
 class EquivalenceManager {
   public:
     EquivalenceManager() {}
@@ -149,12 +157,13 @@ class Model {
     }
 
     inline shared_ptr<aiger> GetAiger() { return m_aiger; }
+    inline shared_ptr<const aiger> GetAiger() const { return m_aiger; }
 
     inline CircuitGraph *GetCircuitGraph() { return m_circuitGraph.get(); }
     inline const CircuitGraph *GetCircuitGraph() const { return m_circuitGraph.get(); }
 
-    inline int GetNumInputs() { return m_circuitGraph->numInputs; }
-    inline int GetNumLatches() { return m_circuitGraph->numLatches; }
+    inline int GetNumInputs() const { return m_circuitGraph->numInputs; }
+    inline int GetNumLatches() const { return m_circuitGraph->numLatches; }
     inline Cube &GetInitialState() { return m_initialState; }
 
     inline vector<Var> &GetModelInputs() { return m_circuitGraph->modelInputs; }
@@ -218,6 +227,8 @@ class Model {
         return m_equivalenceManager->GetEquivalenceMap();
     }
 
+    void RefineWitnessPropertyLit(WitnessBuilder &builder);
+
     Lit GetLatchResetLit(Var latch) const;
     Lit GetLatchNextLit(Var latch) const;
     void SetLatchReset(Var latch, Lit reset);
@@ -234,6 +245,8 @@ class Model {
     Lit MakeITE(Lit i, Lit t, Lit e);
 
   private:
+    void SetTsimReachedStateCubes(const std::vector<Cube> &cubes);
+
     void ApplyEquivalence();
 
     void UpdateDependencyMap();
@@ -276,6 +289,14 @@ class Model {
 
     void EnsureCOICache(Var v);
 
+    void BuildEquivalenceWitness();
+
+    void BuildEquivalenceClauses(std::vector<Clause> &out);
+
+    void NormalizeReachedStateRegion(EquivalenceWitness &witness);
+
+    const EquivalenceWitness &GetEquivalenceWitness();
+
     inline Lit ToCNFLit(Lit lit) const {
         if (!IsConst(lit)) return lit;
         return IsConstTrue(lit) ? MkLit(m_cnfTrueVar) : ~MkLit(m_cnfTrueVar);
@@ -316,6 +337,9 @@ class Model {
 
     unique_ptr<minicore::Solver> m_equivalenceSolver;
     int m_eqSolverUnsats{0};
+
+    EquivalenceWitness m_equivalenceWitness;
+    bool m_equivalenceWitnessReady{false};
 
     unordered_set<Var> m_innards;
     vector<Var> m_innardsVec;

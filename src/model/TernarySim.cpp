@@ -167,7 +167,7 @@ void TernarySimulator::Simulate(int maxPreciseDepth) {
         m_gateStates.emplace_back();
         PushGateState(m_step, m_gateStates[m_step]);
 
-        if (m_states.back().size() == 1) {
+        if (m_states.back().empty()) {
             LOG_L(m_log, 2, "All X states, terminating simulation");
             break;
         }
@@ -235,8 +235,6 @@ void TernarySimulator::PushState(int step, Cube &state) {
         else if (vmap[latch_id] == T_FALSE)
             state.emplace_back(~MkLit(latch_id));
     }
-    // append true to find constants
-    state.emplace_back(LIT_TRUE);
 }
 
 
@@ -249,8 +247,6 @@ void TernarySimulator::PushGateState(int step, Cube &gatestate) {
         else if (vmap[gate_id] == T_FALSE)
             gatestate.emplace_back(~MkLit(gate_id));
     }
-    // append true to find constants
-    gatestate.emplace_back(LIT_TRUE);
 }
 
 

@@ -72,10 +72,6 @@ CheckResult RLive::Run() {
     return CheckResult::Safe;
 }
 
-void RLive::Witness() {
-    LOG_L(m_log, 1, "rlive witness generation is not implemented.");
-}
-
 std::vector<std::pair<Cube, Cube>> RLive::GetCexTrace() {
     return {};
 }

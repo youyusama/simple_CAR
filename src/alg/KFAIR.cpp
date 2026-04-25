@@ -78,10 +78,6 @@ CheckResult KFAIR::Run() {
     }
 }
 
-void KFAIR::Witness() {
-    LOG_L(m_log, 1, "KFAIR witness generation is not implemented.");
-}
-
 std::vector<std::pair<Cube, Cube>> KFAIR::GetCexTrace() {
     return {};
 }

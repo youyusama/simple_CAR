@@ -18,7 +18,6 @@ class L2S : public BaseAlg {
         Log &log);
 
     CheckResult Run() override;
-    void Witness() override;
     std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
 
   private:

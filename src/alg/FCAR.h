@@ -18,7 +18,8 @@ class FCAR : public IncrAlg {
          Model &model,
          Log &log);
     CheckResult Run() override;
-    void Witness() override;
+    bool SupportsWitness() const override { return true; }
+    void RefineWitnessPropertyLit(WitnessBuilder &builder) const override;
 
     void SetInit(const Cube &c) override { m_customInit = c; }
     void SetSearchFromInitSucc(bool b) override { m_searchFromInitSucc = b; }
@@ -127,13 +128,6 @@ class FCAR : public IncrAlg {
     bool IsReachable(int lvl, const Cube &assumption, const string &label);
 
     shared_ptr<State> EnumerateStartState();
-
-    void OutputWitness();
-
-    void OutputCounterExample();
-
-    unsigned AddCubeToAndGates(aiger *circuit, vector<unsigned> cb);
-
     bool CheckInit(shared_ptr<State> s);
 
     void AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f);

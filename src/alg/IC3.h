@@ -37,7 +37,8 @@ class IC3 : public IncrAlg {
     ~IC3();
 
     CheckResult Run() override;
-    void Witness() override;
+    bool SupportsWitness() const override { return true; }
+    void RefineWitnessPropertyLit(WitnessBuilder &builder) const override;
 
     void SetInit(const Cube &c) override { m_customInit = c; }
     void SetSearchFromInitSucc(bool b) override { m_searchFromInitSucc = b; }
@@ -152,10 +153,6 @@ class IC3 : public IncrAlg {
     int PropagateUp(int lemmaId, int startLevel);
 
     shared_ptr<State> EnumerateStartState();
-
-    unsigned AddCubeToAndGates(aiger *circuit, vector<unsigned> cb);
-    void OutputWitness();
-    void OutputCounterExample();
 
 
     Cube GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime);

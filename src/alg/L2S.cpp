@@ -32,14 +32,6 @@ CheckResult L2S::Run() {
     return m_checker->Run();
 }
 
-
-void L2S::Witness() {
-
-
-    LOG_L(m_log, 0, "L2S witness output is not implemented yet.");
-}
-
-
 std::vector<std::pair<Cube, Cube>> L2S::GetCexTrace() {
 
     return {};

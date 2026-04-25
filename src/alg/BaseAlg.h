@@ -8,6 +8,8 @@
 
 namespace car {
 
+class WitnessBuilder;
+
 enum class CheckResult { Safe,
                          Unsafe,
                          Unknown };
@@ -15,8 +17,9 @@ enum class CheckResult { Safe,
 class BaseAlg {
   public:
     virtual CheckResult Run() = 0;
-    virtual void Witness() = 0;
     virtual std::vector<std::pair<Cube, Cube>> GetCexTrace() = 0;
+    virtual bool SupportsWitness() const { return false; }
+    virtual void RefineWitnessPropertyLit(WitnessBuilder &) const {}
     virtual ~BaseAlg() = default;
 };
 

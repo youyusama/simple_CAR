@@ -10,6 +10,7 @@
 #include "Log.h"
 #include "Model.h"
 #include "RLive.h"
+#include "WitnessBuilder.h"
 #include <iostream>
 #include <memory>
 
@@ -62,8 +63,22 @@ CheckResult SimpleCAR::Prove() {
 
     CheckResult res = m_checker->Run();
 
-    if (!m_settings.witnessOutputDir.empty())
-        m_checker->Witness();
+    if (!m_settings.witnessOutputDir.empty()) {
+        const aiger *model_aig = m_model->GetAiger().get();
+        WitnessBuilder witness_builder(m_settings, *m_log, model_aig);
+        if (res == CheckResult::Safe && m_checker->SupportsWitness()) {
+            witness_builder.BeginWitness();
+            m_model->RefineWitnessPropertyLit(witness_builder);
+            m_checker->RefineWitnessPropertyLit(witness_builder);
+            if (!witness_builder.WriteWitness()) {
+                LOG_L(*m_log, 1, "Failed to write safe witness.");
+            }
+        } else if (res == CheckResult::Unsafe) {
+            if (!witness_builder.WriteCounterexample(m_checker->GetCexTrace())) {
+                LOG_L(*m_log, 1, "Failed to write counterexample witness.");
+            }
+        }
+    }
 
     m_log->PrintTotalTime();
     switch (res) {

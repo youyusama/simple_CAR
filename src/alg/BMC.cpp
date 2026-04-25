@@ -46,13 +46,6 @@ CheckResult BMC::Run() {
     return m_checkResult;
 }
 
-void BMC::Witness() {
-    if (m_checkResult == CheckResult::Unsafe) {
-        OutputCounterExample();
-    }
-}
-
-
 std::vector<std::pair<Cube, Cube>> BMC::GetCexTrace() {
     assert(m_checkResult == CheckResult::Unsafe);
     std::vector<std::pair<Cube, Cube>> trace;
@@ -333,41 +326,5 @@ Cube BMC::GetConstraintsK(int k) {
     return res;
 }
 
-
-void BMC::OutputCounterExample() {
-    // get outputfile
-    auto start_index = m_settings.aigFilePath.find_last_of("/\\");
-    if (start_index == string::npos) {
-        start_index = 0;
-    } else {
-        start_index++;
-    }
-    auto end_index = m_settings.aigFilePath.find_last_of(".");
-    assert(end_index != string::npos);
-    string aig_name = m_settings.aigFilePath.substr(start_index, end_index - start_index);
-    string cex_path = m_settings.witnessOutputDir + aig_name + ".cex";
-    std::ofstream cex_file;
-    cex_file.open(cex_path);
-
-    cex_file << "1" << endl
-            << "b0" << endl;
-
-    for (int i = 0; i < m_model.GetNumLatches(); i++) {
-        int latch_id = m_model.GetNumInputs() + i + 1;
-        cex_file << ((m_solver->GetModel(latch_id) == T_TRUE) ? "1" : "0");
-    }
-    cex_file << endl;
-    for (int j = 0; j <= m_k; j++) {
-        for (int i = 0; i < m_model.GetNumInputs(); i++) {
-            Lit input_id = m_model.EnsurePrimeK(MkLit(static_cast<Var>(i + 1)), j);
-            cex_file << ((m_solver->GetModel(VarOf(input_id)) == T_TRUE) ? "1" : "0");
-        }
-        cex_file << endl;
-    }
-
-    cex_file << "." << endl;
-    cex_file.close();
-    return;
-}
 
 } // namespace car

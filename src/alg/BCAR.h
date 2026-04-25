@@ -20,7 +20,8 @@ class BCAR : public IncrAlg {
          Model &model,
          Log &log);
     CheckResult Run() override;
-    void Witness() override;
+    bool SupportsWitness() const override { return true; }
+    void RefineWitnessPropertyLit(WitnessBuilder &builder) const override;
 
     void SetInit(const Cube &c) override { m_customInit = c; }
     void SetSearchFromInitSucc(bool b) override { /*bcar originally search from init succ*/ }
@@ -123,13 +124,6 @@ class BCAR : public IncrAlg {
     bool Propagate(const Cube &c, int lvl);
 
     int PropagateUp(const Cube &c, int lvl);
-
-    void OutputWitness();
-
-    void OutputCounterExample();
-
-    unsigned AddCubeToAndGates(aiger *circuit, vector<unsigned> cb);
-
     bool CheckBad(shared_ptr<State> s);
 
     void AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f);

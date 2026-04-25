@@ -1,4 +1,5 @@
 #include "IC3.h"
+#include "WitnessBuilder.h"
 #include <algorithm>
 #include <iostream>
 #include <set>
@@ -41,19 +42,8 @@ std::vector<std::pair<Cube, Cube>> IC3::GetCexTrace() {
     std::vector<std::pair<Cube, Cube>> trace;
     if (!m_cexStart) return trace;
 
-    vector<shared_ptr<State>> path;
     for (auto cur = m_cexStart; cur != nullptr; cur = cur->preState) {
-        path.emplace_back(cur);
-    }
-    reverse(path.begin(), path.end());
-
-    trace.reserve(path.size());
-    for (size_t i = 0; i < path.size(); ++i) {
-        Cube inputs;
-        if (i > 0) {
-            inputs = path[i]->inputs;
-        }
-        trace.emplace_back(path[i]->latches, std::move(inputs));
+        trace.emplace_back(cur->inputs, cur->latches);
     }
     return trace;
 }
@@ -61,13 +51,13 @@ std::vector<std::pair<Cube, Cube>> IC3::GetCexTrace() {
 FrameList IC3::GetInv() {
     FrameList inv;
     if (m_invariantLevel <= 0) return inv;
-    for (int i = 0; i < m_invariantLevel && i < static_cast<int>(m_transSolvers.size()); ++i) {
-        Frame f;
+    Frame f;
+    for (int i = m_invariantLevel; i <= m_k + 1; ++i) {
         for (const Cube &cb : m_lfm.BorderCubes(i)) {
             f.emplace_back(cb);
         }
-        inv.emplace_back(std::move(f));
     }
+    inv.emplace_back(std::move(f));
     return inv;
 }
 
@@ -1014,223 +1004,21 @@ bool IC3::PropagateFrame() {
 }
 
 
-void IC3::OutputCounterExample() {
-    // get outputfile
-    auto start_index = m_settings.aigFilePath.find_last_of("/\\");
-    if (start_index == string::npos) {
-        start_index = 0;
-    } else {
-        start_index++;
-    }
-    auto end_index = m_settings.aigFilePath.find_last_of(".");
-    assert(end_index != string::npos);
-    string aig_name = m_settings.aigFilePath.substr(start_index, end_index - start_index);
-    string cex_path = m_settings.witnessOutputDir + aig_name + ".cex";
-    cout << cex_path << endl;
-    std::ofstream cex_file;
-    cex_file.open(cex_path);
-
-    assert(m_cexStart != nullptr);
-
-    cex_file << "1" << endl
-             << "b0" << endl;
-
-    shared_ptr<State> state = m_cexStart;
-    cex_file << state->GetLatchesString() << endl;
-    cex_file << state->GetInputsString() << endl;
-    while (state->preState != nullptr) {
-        state = state->preState;
-        cex_file << state->GetInputsString() << endl;
-    }
-
-    cex_file << "." << endl;
-    cex_file.close();
-}
-
-
-unsigned IC3::AddCubeToAndGates(aiger *circuit, vector<unsigned> cb) {
-    assert(cb.size() > 0);
-    unsigned res = cb[0];
-    assert(res / 2 <= circuit->maxvar);
-    for (unsigned i = 1; i < cb.size(); i++) {
-        assert(cb[i] / 2 <= circuit->maxvar);
-        unsigned new_gate = (circuit->maxvar + 1) * 2;
-        aiger_add_and(circuit, new_gate, res, cb[i]);
-        res = new_gate;
-    }
-    return res;
-}
-
-void IC3::OutputWitness() {
-    // get outputfile
-    auto start_index = m_settings.aigFilePath.find_last_of("/");
-    if (start_index == string::npos) {
-        start_index = 0;
-    } else {
-        start_index++;
-    }
-    auto end_index = m_settings.aigFilePath.find_last_of(".");
-    assert(end_index != string::npos);
-    string aig_name = m_settings.aigFilePath.substr(start_index, end_index - start_index);
-    string out_path = m_settings.witnessOutputDir + aig_name + ".w.aig";
-    aiger *model_aig = m_model.GetAiger().get();
-
-    bool empty_inv = true;
-    for (int i = m_invariantLevel; i <= m_k + 1; i++) {
-        if (!m_lfm.BorderEmpty(i)) {
-            empty_inv = false;
-            break;
-        }
-    }
-
-    if (empty_inv && m_model.GetEquivalenceMap().size() == 0) {
-        aiger_open_and_write_to_file(model_aig, out_path.c_str());
-        return;
-    }
-
-    shared_ptr<aiger> witness_aig_ptr(aiger_init(), AigerDeleter);
-    aiger *witness_aig = witness_aig_ptr.get();
-    // copy inputs
-    for (unsigned i = 0; i < model_aig->num_inputs; i++) {
-        aiger_symbol &input = model_aig->inputs[i];
-        aiger_add_input(witness_aig, input.lit, input.name);
-    }
-    // copy latches
-    for (unsigned i = 0; i < model_aig->num_latches; i++) {
-        aiger_symbol &latch = model_aig->latches[i];
-        aiger_add_latch(witness_aig, latch.lit, latch.next, latch.name);
-        aiger_add_reset(witness_aig, latch.lit, latch.reset);
-    }
-    // copy and gates
-    for (unsigned i = 0; i < model_aig->num_ands; i++) {
-        aiger_and &gate = model_aig->ands[i];
-        aiger_add_and(witness_aig, gate.lhs, gate.rhs0, gate.rhs1);
-    }
-    // copy constraints
-    for (unsigned i = 0; i < model_aig->num_constraints; i++) {
-        aiger_symbol &cons = model_aig->constraints[i];
-        aiger_add_constraint(witness_aig, cons.lit, cons.name);
-    }
-
-    assert(model_aig->maxvar == witness_aig->maxvar);
-
-    // add equivalence
-    // (l1 <-> l2) & (l1 <-> l3) & ( ... ) & l_true
-    // ! ( !l1 & l2 ) & ! ( l1 & !l2 )
-    auto &eq_map = m_model.GetEquivalenceMap();
-    vector<unsigned> eq_lits;
-    for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
-        assert(itr->first <= witness_aig->maxvar);
-        assert(VarOf(itr->second) <= witness_aig->maxvar);
-        unsigned l1 = ToAigerLit(MkLit(itr->first));
-        unsigned l2 = ToAigerLit(itr->second);
-        eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
-        eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
-    }
-
-    unsigned eq_cons;
-    if (eq_lits.size() > 0) {
-        eq_cons = AddCubeToAndGates(witness_aig, eq_lits);
-    }
-
-    unsigned bad_lit;
-    if (model_aig->num_bad == 1) {
-        bad_lit = model_aig->bad[0].lit;
-    } else if (model_aig->num_outputs == 1) {
-        bad_lit = model_aig->outputs[0].lit;
-    } else
-        assert(false);
-    unsigned p = aiger_not(bad_lit);
-
-    // prove on lvl 0
-    if (empty_inv) {
-        unsigned p_prime = p;
-        if (eq_lits.size() > 0) {
-            p_prime = AddCubeToAndGates(witness_aig, {p, eq_cons});
-        }
-
-        if (model_aig->num_bad == 1) {
-            aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);
-        } else if (model_aig->num_outputs == 1) {
-            aiger_add_output(witness_aig, aiger_not(p_prime), model_aig->outputs[0].name);
-        } else {
-            assert(false);
-        }
-
-        if (const char *err = aiger_check(witness_aig)) {
-            std::cerr << "invalid witness aig: " << err << std::endl;
-            return;
-        }
-
-        aiger_reencode(witness_aig);
-        if (!aiger_open_and_write_to_file(witness_aig, out_path.c_str())) {
-            if (const char *err = aiger_error(witness_aig)) {
-                std::cerr << "aiger write error: " << err << std::endl;
-            } else {
-                std::cerr << "aiger write error: failed to write '" << out_path << "'" << std::endl;
-            }
-            return;
-        }
-        return;
-    }
-
-    // P' = P & invariant
-    // P' = !bad & ( O_0 | O_1 | ... | O_i )
-    //             !( !O_0 & !O_1 & ...  & !O_i )
-    //                 O_i = c_1 & c_2 & ... & c_j
-    //                       c_j = !( l_1 & l_2 & .. & l_k )
-
-    // P' = P & invariant
-    // P' = !bad & F_{i+1}
-    //             F_{i+1} = c_1 & c_2 & ... & c_j
-    //                       c_j = !( l_1 & l_2 & .. & l_k )
-
+void IC3::RefineWitnessPropertyLit(WitnessBuilder &builder) const {
     std::set<Cube, bool (*)(const Cube &, const Cube &)> ind_inv(CubeComp);
-
-    for (int i = m_invariantLevel; i <= m_k + 1; i++) {
+    for (int i = m_invariantLevel; i <= m_k + 1; ++i) {
         for (const Cube &cb : m_lfm.BorderCubes(i)) {
             ind_inv.insert(cb);
         }
     }
-    assert(!ind_inv.empty());
 
-    vector<unsigned> inv_lits;
-    for (auto it = ind_inv.begin(); it != ind_inv.end(); it++) {
-        vector<unsigned> cube_lits;
-        for (Lit l : *it) cube_lits.push_back(ToAigerLit(l));
-        unsigned cls = AddCubeToAndGates(witness_aig, cube_lits) ^ 1;
-        inv_lits.push_back(cls);
+    std::vector<unsigned> clause_terms;
+    clause_terms.reserve(ind_inv.size());
+    for (const Cube &cube : ind_inv) {
+        clause_terms.push_back(builder.Negate(builder.BuildCube(cube)));
     }
-    unsigned inv = AddCubeToAndGates(witness_aig, inv_lits);
-    unsigned p_prime = AddCubeToAndGates(witness_aig, {p, inv});
-
-    if (eq_lits.size() > 0) {
-        p_prime = AddCubeToAndGates(witness_aig, {p_prime, eq_cons});
-    }
-
-    if (model_aig->num_bad == 1) {
-        aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);
-    } else if (model_aig->num_outputs == 1) {
-        aiger_add_output(witness_aig, aiger_not(p_prime), model_aig->outputs[0].name);
-    } else {
-        assert(false);
-    }
-
-    aiger_reencode(witness_aig);
-    aiger_open_and_write_to_file(witness_aig, out_path.c_str());
-}
-
-
-void IC3::Witness() {
-    if (m_checkResult == CheckResult::Unsafe) {
-        LOG_L(m_log, 2, "Generating counterexample.");
-        OutputCounterExample();
-    } else if (m_checkResult == CheckResult::Safe) {
-        LOG_L(m_log, 2, "Generating proof.");
-        OutputWitness();
-    } else {
-        LOG_L(m_log, 2, "Unknown check result.");
-    }
+    unsigned invariant_lit = clause_terms.empty() ? builder.TrueLit() : builder.BuildAnd(clause_terms);
+    builder.SetPropertyLit(builder.BuildAnd({builder.GetPropertyLit(), invariant_lit}));
 }
 
 } // namespace car

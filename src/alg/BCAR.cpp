@@ -1,4 +1,5 @@
 #include "BCAR.h"
+#include "WitnessBuilder.h"
 #include <stack>
 #include <string>
 
@@ -28,12 +29,25 @@ CheckResult BCAR::Run() {
     return m_checkResult;
 }
 
-void BCAR::Witness() {
-    if (m_checkResult == CheckResult::Safe) {
-        OutputWitness();
-    } else if (m_checkResult == CheckResult::Unsafe) {
-        OutputCounterExample();
+void BCAR::RefineWitnessPropertyLit(WitnessBuilder &builder) const {
+    std::vector<unsigned> frame_terms;
+    if (m_overSequence) {
+        int lvl = m_overSequence->GetInvariantLevel();
+        if (lvl >= 0) {
+            frame_terms.reserve(static_cast<size_t>(lvl) + 1);
+            for (int i = 0; i <= lvl; ++i) {
+                Frame frame = m_overSequence->FrameSetToFrame(*m_overSequence->GetFrame(i));
+                std::vector<unsigned> cube_terms;
+                cube_terms.reserve(frame.size());
+                for (const Cube &cube : frame) {
+                    cube_terms.push_back(builder.BuildCube(cube));
+                }
+                frame_terms.push_back(builder.BuildOr(cube_terms));
+            }
+        }
     }
+    unsigned invariant_lit = frame_terms.empty() ? builder.TrueLit() : builder.BuildAnd(frame_terms);
+    builder.SetPropertyLit(builder.BuildAnd({builder.GetPropertyLit(), invariant_lit}));
 }
 
 
@@ -749,25 +763,6 @@ Cube BCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumpti
 }
 
 
-// ================================================================================
-// @brief: add the Cube as and gates to the aiger model
-// @input:
-// @output:
-// ================================================================================
-unsigned BCAR::AddCubeToAndGates(aiger *circuit, vector<unsigned> cb) {
-    assert(cb.size() > 0);
-    unsigned res = cb[0];
-    assert(res / 2 <= circuit->maxvar);
-    for (unsigned i = 1; i < cb.size(); i++) {
-        assert(cb[i] / 2 <= circuit->maxvar);
-        unsigned new_gate = (circuit->maxvar + 1) * 2;
-        aiger_add_and(circuit, new_gate, res, cb[i]);
-        res = new_gate;
-    }
-    return res;
-}
-
-
 bool BCAR::Propagate(const Cube &c, int lvl) {
     [[maybe_unused]] auto prop_scope = m_log.Section("FC_Prop");
     bool result = !IsReachable(lvl, c, "SAT_BC_Prop");
@@ -791,172 +786,4 @@ int BCAR::PropagateUp(const Cube &c, int lvl) {
 }
 
 
-void BCAR::OutputWitness() {
-    [[maybe_unused]] auto wit_scope = m_log.Section("FC_Witness");
-    // get outputfile
-    auto start_index = m_settings.aigFilePath.find_last_of("/");
-    if (start_index == string::npos) {
-        start_index = 0;
-    } else {
-        start_index++;
-    }
-    auto end_index = m_settings.aigFilePath.find_last_of(".");
-    assert(end_index != string::npos);
-    string aig_name = m_settings.aigFilePath.substr(start_index, end_index - start_index);
-    string out_path = m_settings.witnessOutputDir + aig_name + ".w.aig";
-    aiger *model_aig = m_model.GetAiger().get();
-
-    if (m_overSequence->GetInvariantLevel() < 0 && m_model.GetEquivalenceMap().size() == 0) {
-        aiger_open_and_write_to_file(model_aig, out_path.c_str());
-        return;
-    }
-
-    shared_ptr<aiger> witness_aig_ptr(aiger_init(), AigerDeleter);
-    aiger *witness_aig = witness_aig_ptr.get();
-    // copy inputs
-    for (unsigned i = 0; i < model_aig->num_inputs; i++) {
-        aiger_symbol &input = model_aig->inputs[i];
-        aiger_add_input(witness_aig, input.lit, input.name);
-    }
-    // copy latches
-    for (unsigned i = 0; i < model_aig->num_latches; i++) {
-        aiger_symbol &latch = model_aig->latches[i];
-        aiger_add_latch(witness_aig, latch.lit, latch.next, latch.name);
-        aiger_add_reset(witness_aig, latch.lit, latch.reset);
-    }
-    // copy and gates
-    for (unsigned i = 0; i < model_aig->num_ands; i++) {
-        aiger_and &gate = model_aig->ands[i];
-        aiger_add_and(witness_aig, gate.lhs, gate.rhs0, gate.rhs1);
-    }
-    // copy constraints
-    for (unsigned i = 0; i < model_aig->num_constraints; i++) {
-        aiger_symbol &cons = model_aig->constraints[i];
-        aiger_add_constraint(witness_aig, cons.lit, cons.name);
-    }
-
-    assert(model_aig->maxvar == witness_aig->maxvar);
-
-    // add equivalence
-    // (l1 <-> l2) & (l1 <-> l3) & ( ... )
-    auto &eq_map = m_model.GetEquivalenceMap();
-    vector<unsigned> eq_lits;
-    for (auto itr = eq_map.begin(); itr != eq_map.end(); itr++) {
-        assert(itr->first < witness_aig->maxvar);
-        assert(VarOf(itr->second) < witness_aig->maxvar);
-        unsigned l1 = ToAigerLit(MkLit(itr->first));
-        unsigned l2 = ToAigerLit(itr->second);
-        eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1, l2 ^ 1}) ^ 1);
-        eq_lits.emplace_back(AddCubeToAndGates(witness_aig, {l1 ^ 1, l2}) ^ 1);
-    }
-
-    unsigned eq_cons;
-    if (eq_lits.size() > 0) {
-        eq_cons = AddCubeToAndGates(witness_aig, eq_lits);
-    }
-
-    unsigned bad_lit;
-    if (model_aig->num_bad == 1) {
-        bad_lit = model_aig->bad[0].lit;
-    } else if (model_aig->num_outputs == 1) {
-        bad_lit = model_aig->outputs[0].lit;
-    } else
-        assert(false);
-    unsigned p = aiger_not(bad_lit);
-
-    // prove on lvl 0
-    if (m_overSequence == nullptr || m_overSequence->GetInvariantLevel() < 0) {
-        unsigned p_prime = p;
-        if (eq_lits.size() > 0) {
-            p_prime = AddCubeToAndGates(witness_aig, {p, eq_cons});
-        }
-
-        if (model_aig->num_bad == 1) {
-            aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);
-        } else if (model_aig->num_outputs == 1) {
-            aiger_add_output(witness_aig, aiger_not(p_prime), model_aig->outputs[0].name);
-        } else {
-            assert(false);
-        }
-
-        aiger_reencode(witness_aig);
-        aiger_open_and_write_to_file(witness_aig, out_path.c_str());
-        return;
-    }
-    unsigned lvl_i = m_overSequence->GetInvariantLevel();
-
-    // P' = P & invariant
-    // P' = !bad & !( O_0 | O_1 | ... | O_i )
-    //             ( !O_0 & !O_1 & ...  & !O_i )
-    //                 O_i = c_1 & c_2 & ... & c_j
-    //                       c_j = !( l_1 & l_2 & .. & l_k )
-
-    vector<unsigned> inv_lits;
-    for (unsigned i = 0; i <= lvl_i; i++) {
-        shared_ptr<OverSequenceSet::FrameSet> frame_i = m_overSequence->GetFrame(i);
-        vector<unsigned> frame_i_lits;
-        for (const Cube &frame_cube : *frame_i) {
-            vector<unsigned> cube_j;
-            for (Lit l : frame_cube) cube_j.push_back(ToAigerLit(l));
-            unsigned c_j = AddCubeToAndGates(witness_aig, cube_j) ^ 1;
-            frame_i_lits.push_back(c_j);
-        }
-        unsigned o_i = AddCubeToAndGates(witness_aig, frame_i_lits);
-        inv_lits.push_back(o_i ^ 1);
-    }
-    unsigned inv = AddCubeToAndGates(witness_aig, inv_lits);
-    unsigned p_prime = AddCubeToAndGates(witness_aig, {p, inv});
-
-    if (eq_lits.size() > 0) {
-        p_prime = AddCubeToAndGates(witness_aig, {p_prime, eq_cons});
-    }
-
-    if (model_aig->num_bad == 1) {
-        aiger_add_bad(witness_aig, aiger_not(p_prime), model_aig->bad[0].name);
-    } else if (model_aig->num_outputs == 1) {
-        aiger_add_output(witness_aig, aiger_not(p_prime), model_aig->outputs[0].name);
-    } else {
-        assert(false);
-    }
-
-    aiger_reencode(witness_aig);
-    aiger_open_and_write_to_file(witness_aig, out_path.c_str());
-}
-
-
-void BCAR::OutputCounterExample() {
-    // get outputfile
-    auto start_index = m_settings.aigFilePath.find_last_of("/\\");
-    if (start_index == string::npos) {
-        start_index = 0;
-    } else {
-        start_index++;
-    }
-    auto end_index = m_settings.aigFilePath.find_last_of(".");
-    assert(end_index != string::npos);
-    string aig_name = m_settings.aigFilePath.substr(start_index, end_index - start_index);
-    string cex_path = m_settings.witnessOutputDir + aig_name + ".cex";
-    std::ofstream cex_file;
-    cex_file.open(cex_path);
-
-    assert(m_lastState != nullptr);
-
-    cex_file << "1" << endl
-             << "b0" << endl;
-
-    vector<shared_ptr<State>> trace;
-    shared_ptr<State> state = m_lastState;
-    while (state != nullptr) {
-        trace.push_back(state);
-        state = state->preState;
-    }
-    reverse(trace.begin(), trace.end());
-    cex_file << trace[0]->GetLatchesString() << endl;
-
-    for (int i = 1; i < trace.size(); i++) {
-        cex_file << trace[i]->GetInputsString() << endl;
-    }
-    cex_file << "." << endl;
-    cex_file.close();
-}
 } // namespace car

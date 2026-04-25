@@ -1,5 +1,6 @@
 #include "Model.h"
 #include "DAGCNFSimplifier.h"
+#include "WitnessBuilder.h"
 #include <bitset>
 
 #include "cadical/src/cadical.hpp"
@@ -154,6 +155,47 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
 }
 
 
+void Model::SetTsimReachedStateCubes(const std::vector<Cube> &cubes) {
+    m_equivalenceWitness = EquivalenceWitness();
+    m_equivalenceWitness.has_reached_state_region = true;
+    m_equivalenceWitness.reached_state_cubes = cubes;
+    m_equivalenceWitnessReady = false;
+}
+
+
+const EquivalenceWitness &Model::GetEquivalenceWitness() {
+    if (!m_equivalenceWitnessReady) {
+        BuildEquivalenceWitness();
+    }
+    return m_equivalenceWitness;
+}
+
+
+void Model::RefineWitnessPropertyLit(WitnessBuilder &builder) {
+    const EquivalenceWitness &witness = GetEquivalenceWitness();
+
+    // Cons_pre := (& eq_clauses) & (| reached_state_cubes)
+    std::vector<unsigned> preprocess_terms;
+    preprocess_terms.reserve(witness.equivalence_clauses.size() + 1);
+    for (const Clause &clause : witness.equivalence_clauses) {
+        preprocess_terms.push_back(builder.BuildClause(clause));
+    }
+    if (witness.has_reached_state_region) {
+        std::vector<unsigned> state_terms;
+        state_terms.reserve(witness.reached_state_cubes.size());
+        for (const Cube &cube : witness.reached_state_cubes) {
+            state_terms.push_back(builder.BuildCube(cube));
+        }
+        preprocess_terms.push_back(builder.BuildOr(state_terms));
+    }
+
+    // P := P & Cons_pre
+    unsigned preprocess_lit = builder.BuildAnd(preprocess_terms);
+    LOG_L(m_log, 1, "Preprocess lit: ", preprocess_lit);
+    builder.SetPropertyLit(builder.BuildAnd({builder.GetPropertyLit(), preprocess_lit}));
+}
+
+
 void Model::ApplyEquivalence() {
     if (m_equivalenceManager->Size() == 0) return;
 
@@ -195,6 +237,47 @@ void Model::ApplyEquivalence() {
     }
 
     m_circuitGraph->COIRefine();
+}
+
+
+void Model::BuildEquivalenceClauses(std::vector<Clause> &out) {
+    out.clear();
+    const auto &eq_map = m_equivalenceManager->GetEquivalenceMap();
+    out.reserve(eq_map.size() * 2);
+    for (const auto &entry : eq_map) {
+        Lit lhs = MkLit(entry.first);
+        Lit rhs = m_equivalenceManager->FindLit(lhs);
+        if (rhs == lhs) continue;
+        out.push_back(Clause{lhs, ~rhs});
+        out.push_back(Clause{~lhs, rhs});
+    }
+}
+
+void Model::NormalizeReachedStateRegion(EquivalenceWitness &witness) {
+    if (!witness.has_reached_state_region) return;
+
+    for (Cube &cube : witness.reached_state_cubes) {
+        LitSet cube_set;
+        cube_set.NewSet(cube);
+
+        Cube reduced;
+        reduced.reserve(cube.size());
+        for (Lit lit : cube) {
+            Lit representative = m_equivalenceManager->FindLit(lit);
+            if (representative != lit && cube_set.Has(representative)) {
+                continue;
+            }
+            reduced.push_back(lit);
+        }
+        cube.swap(reduced);
+    }
+}
+
+
+void Model::BuildEquivalenceWitness() {
+    BuildEquivalenceClauses(m_equivalenceWitness.equivalence_clauses);
+    NormalizeReachedStateRegion(m_equivalenceWitness);
+    m_equivalenceWitnessReady = true;
 }
 
 
@@ -685,10 +768,13 @@ bool Model::SimplifyModelByTernarySimulation() {
     simulator.Simulate(250);
     if (!simulator.IsCycleReached()) return false;
     LOG_L(m_log, 1, "Simulation takes ", m_log.Tock(), " seconds.");
+    SetTsimReachedStateCubes(simulator.GetStates());
 
     // find equivalent latches
+    vector<Cube> latch_states = simulator.GetStates();
+    for (Cube &state : latch_states) state.emplace_back(LIT_TRUE);
     unordered_map<string, vector<Lit>> signatures_variables_map;
-    EncodeStatesToSignatuers(simulator.GetStates(), signatures_variables_map);
+    EncodeStatesToSignatuers(latch_states, signatures_variables_map);
     int eq_counter = 0;
 
     // signatures to equivalent latches
@@ -716,8 +802,10 @@ bool Model::SimplifyModelByTernarySimulation() {
     LOG_L(m_log, 1, "Found ", eq_counter, " equivalent latches.");
 
     // find equivalent gates
+    vector<Cube> gate_states = simulator.GetGateStates();
+    for (Cube &state : gate_states) state.emplace_back(LIT_TRUE);
     unordered_map<string, vector<Lit>> signatures_gates_map;
-    EncodeStatesToSignatuers(simulator.GetGateStates(), signatures_gates_map);
+    EncodeStatesToSignatuers(gate_states, signatures_gates_map);
     eq_counter = 0;
 
     // signatures to equivalent latches
