@@ -16,6 +16,12 @@ namespace car {
 
 class Log;
 
+struct EquivalenceWitness {
+    std::vector<Clause> equivalence_clauses;
+    std::vector<Cube> reached_state_cubes;
+    bool has_reached_state_region{false};
+};
+
 class WitnessBuilder {
   public:
     WitnessBuilder(const Settings &settings, Log &log, const aiger *model_aig);
@@ -37,6 +43,9 @@ class WitnessBuilder {
     unsigned BuildAnd(const std::vector<unsigned> &lits);
     unsigned BuildOr(const std::vector<unsigned> &lits);
 
+    void RegisterEquivalenceWitness(const EquivalenceWitness &witness);
+    void BuildKInductionWitness(int safeK);
+
     static std::shared_ptr<aiger> CloneBaseAig(const aiger *src);
 
   private:
@@ -53,6 +62,8 @@ class WitnessBuilder {
     unsigned m_propertyLit{0};
     int m_numInputs{0};
     int m_numLatches{0};
+    EquivalenceWitness m_equivalenceWitness;
+    bool m_hasEquivalenceWitness{false};
 };
 
 } // namespace car

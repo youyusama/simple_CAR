@@ -10,6 +10,7 @@ extern "C" {
 #include "Log.h"
 #include "Settings.h"
 #include "TernarySim.h"
+#include "WitnessBuilder.h"
 #include "minicore/src/solver.h"
 #include <algorithm>
 #include <assert.h>
@@ -29,14 +30,6 @@ extern "C" {
 using namespace std;
 
 namespace car {
-
-class WitnessBuilder;
-
-struct EquivalenceWitness {
-    std::vector<Clause> equivalence_clauses;
-    std::vector<Cube> reached_state_cubes;
-    bool has_reached_state_region{false};
-};
 
 class EquivalenceManager {
   public:

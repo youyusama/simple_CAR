@@ -173,6 +173,7 @@ const EquivalenceWitness &Model::GetEquivalenceWitness() {
 
 void Model::RefineWitnessPropertyLit(WitnessBuilder &builder) {
     const EquivalenceWitness &witness = GetEquivalenceWitness();
+    builder.RegisterEquivalenceWitness(witness);
 
     // Cons_pre := (& eq_clauses) & (| reached_state_cubes)
     std::vector<unsigned> preprocess_terms;

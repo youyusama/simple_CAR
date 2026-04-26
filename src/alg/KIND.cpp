@@ -1,5 +1,6 @@
 #include "KIND.h"
 
+#include <algorithm>
 #include <csignal>
 #include <fstream>
 
@@ -14,6 +15,7 @@ KIND::KIND(Settings settings,
                        m_maxK(settings.bmcK),
                        m_baseAddedTransitions(0),
                        m_indAddedTransitions(0),
+                       m_safeK(1),
                        m_checkResult(CheckResult::Unknown),
                        m_useUnrollingCache(false) {
     State::num_inputs = model.GetNumInputs();
@@ -60,6 +62,7 @@ std::vector<std::pair<Cube, Cube>> KIND::GetCexTrace() {
 
 void KIND::Init() {
     m_k = 0;
+    m_safeK = 1;
     m_checkResult = CheckResult::Unknown;
     m_baseAddedTransitions = 0;
     m_indAddedTransitions = 0;
@@ -96,6 +99,7 @@ CheckResult KIND::Check() {
 
         bool ind_safe = CheckInductiveStep();
         if (ind_safe) {
+            m_safeK = std::max(1, m_k);
             return CheckResult::Safe;
         }
 
@@ -120,6 +124,7 @@ CheckResult KIND::CheckNonIncremental() {
 
         bool ind_safe = CheckInductiveStepNonIncremental(m_k);
         if (ind_safe) {
+            m_safeK = std::max(1, m_k);
             return CheckResult::Safe;
         }
 
@@ -159,11 +164,15 @@ bool KIND::CheckInductiveStep() {
         return true;
     }
 
-    std::vector<StatePairKey> equal_pairs = FindEqualStatePairs(m_indSolver, m_k);
-    LOG_L(m_log, 2, "Inductive step SAT, equal state pairs found: ", equal_pairs.size());
-    if (!equal_pairs.empty()) {
-        AddStateDisequalities(m_indSolver, equal_pairs);
-        LOG_L(m_log, 2, "Added lazy simple-path constraints: ", equal_pairs.size());
+    if (m_settings.witnessOutputDir.empty()) {
+        std::vector<StatePairKey> equal_pairs = FindEqualStatePairs(m_indSolver, m_k);
+        LOG_L(m_log, 2, "Inductive step SAT, equal state pairs found: ", equal_pairs.size());
+        if (!equal_pairs.empty()) {
+            AddStateDisequalities(m_indSolver, equal_pairs);
+            LOG_L(m_log, 2, "Added lazy simple-path constraints: ", equal_pairs.size());
+        }
+    } else {
+        LOG_L(m_log, 2, "KIND witness mode: lazy simple-path constraints disabled.");
     }
 
     m_indSolver->AddClause({~k_bad});
@@ -210,20 +219,29 @@ bool KIND::CheckInductiveStepNonIncremental(int k) {
         return true;
     }
 
-    std::vector<StatePairKey> equal_pairs = FindEqualStatePairs(solver, k);
-    std::vector<StatePairKey> new_pairs;
-    new_pairs.reserve(equal_pairs.size());
-    for (const StatePairKey &pair : equal_pairs) {
-        if (m_nonIncIndBlockedPairs.insert(pair).second) {
-            new_pairs.push_back(pair);
+    if (m_settings.witnessOutputDir.empty()) {
+        std::vector<StatePairKey> equal_pairs = FindEqualStatePairs(solver, k);
+        std::vector<StatePairKey> new_pairs;
+        new_pairs.reserve(equal_pairs.size());
+        for (const StatePairKey &pair : equal_pairs) {
+            if (m_nonIncIndBlockedPairs.insert(pair).second) {
+                new_pairs.push_back(pair);
+            }
         }
-    }
 
-    LOG_L(m_log, 2, "Non-incremental inductive step SAT, equal state pairs found: ", equal_pairs.size());
-    if (!new_pairs.empty()) {
-        LOG_L(m_log, 2, "Stored lazy simple-path constraints for future rebuilds: ", new_pairs.size());
+        LOG_L(m_log, 2, "Non-incremental inductive step SAT, equal state pairs found: ", equal_pairs.size());
+        if (!new_pairs.empty()) {
+            LOG_L(m_log, 2, "Stored lazy simple-path constraints for future rebuilds: ", new_pairs.size());
+        }
+    } else {
+        LOG_L(m_log, 2, "KIND witness mode: lazy simple-path constraints disabled.");
     }
     return false;
+}
+
+void KIND::RefineWitnessPropertyLit(WitnessBuilder &builder) const {
+    assert(m_checkResult == CheckResult::Safe);
+    builder.BuildKInductionWitness(m_safeK);
 }
 
 void KIND::AdvanceBaseToNextK() {

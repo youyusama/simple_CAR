@@ -2,8 +2,13 @@
 
 #include "Log.h"
 
+#include <algorithm>
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace car {
 
@@ -20,6 +25,128 @@ unsigned GetBadLit(const aiger *model_aig) {
     }
     assert(false);
     return 0;
+}
+
+class FoldedAigBuilder {
+  public:
+    explicit FoldedAigBuilder()
+        : aig_ptr(aiger_init(), AigerDeleter),
+          aig(aig_ptr.get()) {}
+
+    unsigned TrueLit() const { return ToAigerLit(LIT_TRUE); }
+    unsigned FalseLit() const { return ToAigerLit(LIT_FALSE); }
+    unsigned Negate(unsigned lit) const { return lit ^ 1U; }
+
+    unsigned AddInput(const std::string &name) {
+        unsigned lit = NewLit();
+        aiger_add_input(aig, lit, name.empty() ? nullptr : name.c_str());
+        return lit;
+    }
+
+    unsigned AddLatch(const std::string &name) {
+        unsigned lit = NewLit();
+        latch_indices[lit] = latches.size();
+        latches.push_back(PendingLatch{lit, lit, lit, name});
+        return lit;
+    }
+
+    void SetLatchNext(unsigned latch, unsigned next) {
+        auto it = latch_indices.find(latch);
+        assert(it != latch_indices.end());
+        latches[it->second].next = next;
+    }
+
+    void SetLatchReset(unsigned latch, unsigned reset) {
+        auto it = latch_indices.find(latch);
+        assert(it != latch_indices.end());
+        latches[it->second].reset = reset;
+    }
+
+    unsigned BuildAnd(unsigned a, unsigned b) {
+        if (a == TrueLit()) return b;
+        if (b == TrueLit()) return a;
+        if (a == FalseLit() || b == FalseLit()) return FalseLit();
+        if (a == b) return a;
+        if (a == Negate(b)) return FalseLit();
+        unsigned lhs = NewLit();
+        aiger_add_and(aig, lhs, a, b);
+        return lhs;
+    }
+
+    unsigned BuildAnd(const std::vector<unsigned> &lits) {
+        if (lits.empty()) return TrueLit();
+        unsigned result = lits.front();
+        for (size_t i = 1; i < lits.size(); ++i) {
+            result = BuildAnd(result, lits[i]);
+        }
+        return result;
+    }
+
+    unsigned BuildOr(unsigned a, unsigned b) {
+        return Negate(BuildAnd(Negate(a), Negate(b)));
+    }
+
+    unsigned BuildOr(const std::vector<unsigned> &lits) {
+        if (lits.empty()) return FalseLit();
+        unsigned result = lits.front();
+        for (size_t i = 1; i < lits.size(); ++i) {
+            result = BuildOr(result, lits[i]);
+        }
+        return result;
+    }
+
+    unsigned BuildXor(unsigned a, unsigned b) {
+        unsigned t1 = BuildAnd(a, Negate(b));
+        unsigned t2 = BuildAnd(Negate(a), b);
+        return BuildOr(t1, t2);
+    }
+
+    unsigned BuildXnor(unsigned a, unsigned b) {
+        return Negate(BuildXor(a, b));
+    }
+
+    unsigned BuildImp(unsigned a, unsigned b) {
+        return BuildOr(Negate(a), b);
+    }
+
+    void FlushLatches() {
+        for (const PendingLatch &latch : latches) {
+            aiger_add_latch(aig, latch.lit, latch.next,
+                            latch.name.empty() ? nullptr : latch.name.c_str());
+            aiger_add_reset(aig, latch.lit, latch.reset);
+        }
+    }
+
+    std::shared_ptr<aiger> aig_ptr;
+    aiger *aig{nullptr};
+
+  private:
+    struct PendingLatch {
+        unsigned lit;
+        unsigned next;
+        unsigned reset;
+        std::string name;
+    };
+
+    unsigned NewLit() {
+        ++max_var;
+        return max_var * 2U;
+    }
+
+    unsigned max_var{0};
+    std::vector<PendingLatch> latches;
+    std::unordered_map<unsigned, size_t> latch_indices;
+};
+
+std::string SymbolName(const aiger_symbol &symbol,
+                       const std::string &prefix,
+                       int time) {
+    std::string name = symbol.name ? symbol.name : prefix + std::to_string(symbol.lit / 2U);
+    return name + "@" + std::to_string(time);
+}
+
+std::string OriginalLitSymbol(unsigned lit) {
+    return "= " + std::to_string(lit);
 }
 
 } // namespace
@@ -113,6 +240,243 @@ unsigned WitnessBuilder::BuildOr(const std::vector<unsigned> &lits) {
         negated.push_back(Negate(lit));
     }
     return Negate(BuildAnd(negated));
+}
+
+void WitnessBuilder::RegisterEquivalenceWitness(const EquivalenceWitness &witness) {
+    m_equivalenceWitness = witness;
+    m_hasEquivalenceWitness = true;
+}
+
+void WitnessBuilder::BuildKInductionWitness(int safeK) {
+    assert(m_modelAig != nullptr);
+    const int n = std::max(1, safeK);
+
+    FoldedAigBuilder folded;
+
+    // Build a folded copy of the original AIG over the time window [0, n-1].
+    // Time n-1 is the live frontier; earlier input copies are stored as latches.
+    std::unordered_map<unsigned, unsigned> input_index;
+    std::unordered_map<unsigned, unsigned> latch_index;
+    for (unsigned i = 0; i < m_modelAig->num_inputs; ++i) {
+        input_index[m_modelAig->inputs[i].lit] = i;
+    }
+    for (unsigned i = 0; i < m_modelAig->num_latches; ++i) {
+        latch_index[m_modelAig->latches[i].lit] = i;
+    }
+
+    std::vector<std::vector<unsigned>> inputs_at(static_cast<size_t>(n));
+    std::vector<std::vector<unsigned>> latches_at(static_cast<size_t>(n));
+    std::vector<std::unordered_map<unsigned, unsigned>> clone_memo(static_cast<size_t>(n));
+
+    // X^{n-1} are real inputs. X^0..X^{n-2} and all L^0..L^{n-1}
+    // are folded-state latches.
+    for (int t = 0; t < n; ++t) {
+        inputs_at[t].resize(m_modelAig->num_inputs);
+        for (unsigned i = 0; i < m_modelAig->num_inputs; ++i) {
+            const aiger_symbol &input = m_modelAig->inputs[i];
+            if (t == n - 1) {
+                inputs_at[t][i] = folded.AddInput(OriginalLitSymbol(input.lit));
+            } else {
+                inputs_at[t][i] = folded.AddLatch(SymbolName(input, "hist_input", t));
+            }
+        }
+
+        latches_at[t].resize(m_modelAig->num_latches);
+        for (unsigned i = 0; i < m_modelAig->num_latches; ++i) {
+            const aiger_symbol &latch = m_modelAig->latches[i];
+            const std::string name = (t == n - 1) ? OriginalLitSymbol(latch.lit)
+                                                  : SymbolName(latch, "latch", t);
+            latches_at[t][i] = folded.AddLatch(name);
+        }
+    }
+
+    std::vector<unsigned> valid(static_cast<size_t>(n));
+    for (int t = 0; t < n; ++t) {
+        valid[t] = folded.AddLatch("kind_valid@" + std::to_string(t));
+    }
+
+    // Substitute original literals into time t:
+    // input x -> X^t, latch l -> L^t, gate g -> recursively cloned g^t.
+    std::function<unsigned(unsigned, int)> clone_lit_at = [&](unsigned lit, int t) -> unsigned {
+        if (lit == folded.FalseLit() || lit == folded.TrueLit()) return lit;
+
+        const bool sign = (lit & 1U) != 0;
+        const unsigned stripped = lit & ~1U;
+        auto &memo = clone_memo[t];
+        auto memo_it = memo.find(stripped);
+        unsigned cloned = 0;
+        if (memo_it != memo.end()) {
+            cloned = memo_it->second;
+        } else {
+            auto input_it = input_index.find(stripped);
+            if (input_it != input_index.end()) {
+                cloned = inputs_at[t][input_it->second];
+            } else {
+                auto latch_it = latch_index.find(stripped);
+                if (latch_it != latch_index.end()) {
+                    cloned = latches_at[t][latch_it->second];
+                } else if (aiger_and *gate = aiger_is_and(m_modelAig, stripped)) {
+                    unsigned rhs0 = clone_lit_at(gate->rhs0, t);
+                    unsigned rhs1 = clone_lit_at(gate->rhs1, t);
+                    cloned = folded.BuildAnd(rhs0, rhs1);
+                } else {
+                    assert(false && "literal is not defined in source AIG");
+                    cloned = folded.FalseLit();
+                }
+            }
+            memo.emplace(stripped, cloned);
+        }
+        return sign ? folded.Negate(cloned) : cloned;
+    };
+
+    auto clone_car_lit_at = [&](Lit lit, int t) {
+        return clone_lit_at(ToAigerLit(lit), t);
+    };
+
+    auto build_cube_at = [&](const Cube &cube, int t) {
+        std::vector<unsigned> lits;
+        lits.reserve(cube.size());
+        for (Lit lit : cube) {
+            lits.push_back(clone_car_lit_at(lit, t));
+        }
+        return folded.BuildAnd(lits);
+    };
+
+    auto build_clause_at = [&](const Clause &clause, int t) {
+        std::vector<unsigned> lits;
+        lits.reserve(clause.size());
+        for (Lit lit : clause) {
+            lits.push_back(clone_car_lit_at(lit, t));
+        }
+        return folded.BuildOr(lits);
+    };
+
+    auto build_preprocess_at = [&](int t) {
+        if (!m_hasEquivalenceWitness) return folded.TrueLit();
+
+        // Cons_pre^t := (& equivalence_clauses^t) & (| reached_state_cubes^t).
+        // This brings Model preprocessing/equivalence assumptions back to
+        // the original AIG variable space, following the certifaiger style.
+        std::vector<unsigned> terms;
+        terms.reserve(m_equivalenceWitness.equivalence_clauses.size() + 1);
+        for (const Clause &clause : m_equivalenceWitness.equivalence_clauses) {
+            terms.push_back(build_clause_at(clause, t));
+        }
+
+        if (m_equivalenceWitness.has_reached_state_region) {
+            std::vector<unsigned> state_terms;
+            state_terms.reserve(m_equivalenceWitness.reached_state_cubes.size());
+            for (const Cube &cube : m_equivalenceWitness.reached_state_cubes) {
+                state_terms.push_back(build_cube_at(cube, t));
+            }
+            terms.push_back(folded.BuildOr(state_terms));
+        }
+
+        return folded.BuildAnd(terms);
+    };
+
+    auto build_constraints_at = [&](int t) {
+        // C^t := conjunction of original AIGER constraints at time t.
+        std::vector<unsigned> terms;
+        terms.reserve(m_modelAig->num_constraints);
+        for (unsigned i = 0; i < m_modelAig->num_constraints; ++i) {
+            terms.push_back(clone_lit_at(m_modelAig->constraints[i].lit, t));
+        }
+        return folded.BuildAnd(terms);
+    };
+
+    auto build_reset_state_at = [&](int t) {
+        // R_state^t := &_{l with deterministic reset} (L_l^t <-> reset_l^t).
+        // AIGER reset equal to the latch literal denotes nondeterministic init.
+        std::vector<unsigned> terms;
+        terms.reserve(m_modelAig->num_latches);
+        for (unsigned i = 0; i < m_modelAig->num_latches; ++i) {
+            const aiger_symbol &latch = m_modelAig->latches[i];
+            if (latch.reset == latch.lit) continue;
+            unsigned reset = clone_lit_at(latch.reset, t);
+            terms.push_back(folded.BuildXnor(latches_at[t][i], reset));
+        }
+        return folded.BuildAnd(terms);
+    };
+
+    // Shift-register transition:
+    //   next(X^t) = X^{t+1}, t < n-1
+    //   next(L^t) = L^{t+1}, t < n-1
+    //   next(L^{n-1}) = F(X^{n-1}, L^{n-1})
+    //   next(b^t) = b^{t+1}, next(b^{n-1}) = true
+    for (int t = 0; t < n; ++t) {
+        for (unsigned i = 0; i < m_modelAig->num_inputs; ++i) {
+            if (t < n - 1) {
+                folded.SetLatchReset(inputs_at[t][i], inputs_at[t][i]);
+                folded.SetLatchNext(inputs_at[t][i], inputs_at[t + 1][i]);
+            }
+        }
+
+        for (unsigned i = 0; i < m_modelAig->num_latches; ++i) {
+            const aiger_symbol &latch = m_modelAig->latches[i];
+            unsigned latch_copy = latches_at[t][i];
+            if (t == n - 1) {
+                unsigned reset = (latch.reset == latch.lit) ? latch_copy : clone_lit_at(latch.reset, t);
+                folded.SetLatchReset(latch_copy, reset);
+                folded.SetLatchNext(latch_copy, clone_lit_at(latch.next, t));
+            } else {
+                folded.SetLatchReset(latch_copy, latch_copy);
+                folded.SetLatchNext(latch_copy, latches_at[t + 1][i]);
+            }
+        }
+
+        folded.SetLatchReset(valid[t], t == n - 1 ? folded.TrueLit() : folded.FalseLit());
+        folded.SetLatchNext(valid[t], t == n - 1 ? folded.TrueLit() : valid[t + 1]);
+    }
+
+    unsigned bad = GetBadLit(m_modelAig);
+    std::vector<unsigned> property_terms;
+    property_terms.reserve(static_cast<size_t>(5 * n));
+
+    // p0: monotonicity of validity bits, &_{t=0}^{n-2} (b^t -> b^{t+1}).
+    for (int t = 0; t < n - 1; ++t) {
+        property_terms.push_back(folded.BuildImp(valid[t], valid[t + 1]));
+    }
+
+    // p1: stored-history transition legality,
+    // &_{t=0}^{n-2} (b^t -> &_{l} (L_l^{t+1} <-> F_l(X^t, L^t))).
+    for (int t = 0; t < n - 1; ++t) {
+        std::vector<unsigned> trans_terms;
+        trans_terms.reserve(m_modelAig->num_latches);
+        for (unsigned i = 0; i < m_modelAig->num_latches; ++i) {
+            unsigned next = clone_lit_at(m_modelAig->latches[i].next, t);
+            trans_terms.push_back(folded.BuildXnor(latches_at[t + 1][i], next));
+        }
+        property_terms.push_back(folded.BuildImp(valid[t], folded.BuildAnd(trans_terms)));
+    }
+
+    // p2: safety plus preprocessing bridge for every valid time:
+    // &_{t=0}^{n-1} (b^t -> (!Bad^t & Cons_pre^t)).
+    // p_constraints: &_{t=0}^{n-1} (b^t -> C^t).
+    for (int t = 0; t < n; ++t) {
+        unsigned safe = folded.BuildAnd(folded.Negate(clone_lit_at(bad, t)), build_preprocess_at(t));
+        property_terms.push_back(folded.BuildImp(valid[t], safe));
+        property_terms.push_back(folded.BuildImp(valid[t], build_constraints_at(t)));
+    }
+
+    // p3: initialization boundary legality,
+    // &_{t=1}^{n-1} ((!b^{t-1} & b^t) -> R_state^t).
+    for (int t = 1; t < n; ++t) {
+        unsigned boundary = folded.BuildAnd(folded.Negate(valid[t - 1]), valid[t]);
+        property_terms.push_back(folded.BuildImp(boundary, build_reset_state_at(t)));
+    }
+
+    // p4: the newest frame must exist, b^{n-1}.
+    property_terms.push_back(valid[n - 1]);
+    unsigned property = folded.BuildAnd(property_terms);
+
+    folded.FlushLatches();
+
+    m_witnessAigPtr = folded.aig_ptr;
+    m_witnessAig = m_witnessAigPtr.get();
+    m_propertyLit = property;
+    m_numInputs = static_cast<int>(m_witnessAig->num_inputs);
+    m_numLatches = static_cast<int>(m_witnessAig->num_latches);
 }
 
 

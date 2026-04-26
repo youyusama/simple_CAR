@@ -20,6 +20,8 @@ class KIND : public BaseAlg {
 
     CheckResult Run() override;
     std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
+    bool SupportsWitness() const override { return true; }
+    void RefineWitnessPropertyLit(WitnessBuilder &builder) const override;
 
   private:
     struct DiffKey {
@@ -95,6 +97,7 @@ class KIND : public BaseAlg {
     int m_maxK;
     int m_baseAddedTransitions;
     int m_indAddedTransitions;
+    int m_safeK;
     CheckResult m_checkResult;
     bool m_useUnrollingCache;
     std::shared_ptr<SATSolver> m_baseSolver;
