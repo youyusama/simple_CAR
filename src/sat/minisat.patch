@@ -1,3 +1,24 @@
+diff --git a/minisat/core/Solver.cc b/minisat/core/Solver.cc
+index 0b4f77a..6175cb4 100644
+--- a/minisat/core/Solver.cc
++++ b/minisat/core/Solver.cc
+@@ -992,11 +992,11 @@ void Solver::printStats() const
+ {
+     double cpu_time = cpuTime();
+     double mem_used = memUsedPeak();
+-    printf("restarts              : %"PRIu64"\n", starts);
+-    printf("conflicts             : %-12"PRIu64"   (%.0f /sec)\n", conflicts   , conflicts   /cpu_time);
+-    printf("decisions             : %-12"PRIu64"   (%4.2f %% random) (%.0f /sec)\n", decisions, (float)rnd_decisions*100 / (float)decisions, decisions   /cpu_time);
+-    printf("propagations          : %-12"PRIu64"   (%.0f /sec)\n", propagations, propagations/cpu_time);
+-    printf("conflict literals     : %-12"PRIu64"   (%4.2f %% deleted)\n", tot_literals, (max_literals - tot_literals)*100 / (double)max_literals);
++    printf("restarts              : %" PRIu64 "\n", starts);
++    printf("conflicts             : %-12" PRIu64 "   (%.0f /sec)\n", conflicts   , conflicts   /cpu_time);
++    printf("decisions             : %-12" PRIu64 "   (%4.2f %% random) (%.0f /sec)\n", decisions, (float)rnd_decisions*100 / (float)decisions, decisions   /cpu_time);
++    printf("propagations          : %-12" PRIu64 "   (%.0f /sec)\n", propagations, propagations/cpu_time);
++    printf("conflict literals     : %-12" PRIu64 "   (%4.2f %% deleted)\n", tot_literals, (max_literals - tot_literals)*100 / (double)max_literals);
+     if (mem_used != 0) printf("Memory used           : %.2f MB\n", mem_used);
+     printf("CPU time              : %g s\n", cpu_time);
+ }
 diff --git a/minisat/core/SolverTypes.h b/minisat/core/SolverTypes.h
 index b52b63f..d217d61 100644
 --- a/minisat/core/SolverTypes.h
@@ -19,6 +40,29 @@ index b52b63f..d217d61 100644
  inline  Lit  mkLit     (Var var, bool sign) { Lit p; p.x = var + var + (int)sign; return p; }
  inline  Lit  operator ~(Lit p)              { Lit q; q.x = p.x ^ 1; return q; }
  inline  Lit  operator ^(Lit p, bool b)      { Lit q; q.x = p.x ^ (unsigned int)b; return q; }
+diff --git a/minisat/utils/Options.h b/minisat/utils/Options.h
+index 4e71a18..7d2e83a 100644
+--- a/minisat/utils/Options.h
++++ b/minisat/utils/Options.h
+@@ -282,15 +282,15 @@ class Int64Option : public Option
+         if (range.begin == INT64_MIN)
+             fprintf(stderr, "imin");
+         else
+-            fprintf(stderr, "%4"PRIi64, range.begin);
++            fprintf(stderr, "%4" PRIi64, range.begin);
+ 
+         fprintf(stderr, " .. ");
+         if (range.end == INT64_MAX)
+             fprintf(stderr, "imax");
+         else
+-            fprintf(stderr, "%4"PRIi64, range.end);
++            fprintf(stderr, "%4" PRIi64, range.end);
+ 
+-        fprintf(stderr, "] (default: %"PRIi64")\n", value);
++        fprintf(stderr, "] (default: %" PRIi64 ")\n", value);
+         if (verbose){
+             fprintf(stderr, "\n        %s\n", description);
+             fprintf(stderr, "\n");
 diff --git a/minisat/utils/System.cc b/minisat/utils/System.cc
 index 0906b81..04ef2f4 100644
 --- a/minisat/utils/System.cc
