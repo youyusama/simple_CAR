@@ -4,3 +4,6 @@
 [submodule "src/sat/kissat"]
 	path = src/sat/kissat
 	url = https://github.com/arminbiere/kissat.git
+[submodule "src/model/aiger"]
+	path = src/model/aiger
+	url = https://github.com/arminbiere/aiger.git

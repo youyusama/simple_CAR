@@ -58,6 +58,7 @@ endif()
 set(DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/model
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/model/aiger
     ${CMAKE_CURRENT_SOURCE_DIR}/src/alg
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sat
 )
@@ -72,7 +73,7 @@ set(MINICORE_CLI_SRCS
 )
 
 set(SRCS
-    src/model/aiger.c
+    src/model/aiger/aiger.c
     src/model/CircuitGraph.cpp
     src/model/TernarySim.cpp
     src/model/SATSim.cpp
