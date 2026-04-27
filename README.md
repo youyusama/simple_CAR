@@ -20,6 +20,6 @@ usage:
 
 `python btorasaig.py <simpleCAR> [OPTIONS] -w <output_dir> <btor2_file>`
 
-The `.cexb` file in `output_dir\` is the witness file for btor2sim.
+The `.cexb` file in `output_dir` is the witness file for btor2sim.
 
-'btor2asaig.py' would create a `.aig` file in the same directory as the input btor2 file.
+`btorasaig.py` creates temporary `.aig` and `.cex` files under `/tmp/simplecar` and removes them when it exits.

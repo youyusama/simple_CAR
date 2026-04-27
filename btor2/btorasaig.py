@@ -3,25 +3,48 @@
 import subprocess
 import sys
 import os
+import tempfile
+import atexit
+import shutil
 
 script_path = os.path.abspath(__file__)
 script_directory = os.path.dirname(script_path)
 btor2aig_path = script_directory + "/deps/btor2tools/build/bin/btor2aiger"
 verbose = True
+temp_dirs = []
 
 
-def modify_input_file(filepath):
+def cleanup_temp_dirs():
+    for path in temp_dirs:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+atexit.register(cleanup_temp_dirs)
+
+
+def make_simplecar_run_dir():
+    base_dir = "/tmp/simplecar"
+    os.makedirs(base_dir, exist_ok=True)
+    temp_dir = tempfile.mkdtemp(prefix="btor2_", dir=base_dir)
+    temp_dirs.append(temp_dir)
+    return temp_dir
+
+
+def modify_input_file(filepath, temp_dir):
     if verbose:
         print(f"Modifying input file: {filepath}")
-    btor2aiger_cmd = btor2aig_path + " " + filepath + " -a > " + filepath + ".aig"
+    input_file_name = os.path.basename(filepath)
+    tmp_path = os.path.join(temp_dir, input_file_name + ".aig")
     try:
-        subprocess.run(btor2aiger_cmd, shell=True)
+        with open(tmp_path, "w") as aig_file:
+            subprocess.run([btor2aig_path, filepath, "-a"], stdout=aig_file, check=True)
     except Exception as e:
         print(f"Error modifying input file: {e}")
-    return filepath + ".aig"
+        raise
+    return tmp_path
 
 
-def modify_output_file(check_result, input_filepath, output_dir):
+def modify_output_file(check_result, input_filepath, witness_dir, output_dir):
     check_result = check_result.split("\n")[-1].strip()
 
     # Check simplecar Result
@@ -32,7 +55,7 @@ def modify_output_file(check_result, input_filepath, output_dir):
 
     # Read btor2 input info
     input_file_name = input_filepath.split("/")[-1]
-    aig_cex_filepath = output_dir + input_file_name + ".cex"
+    aig_cex_filepath = os.path.join(witness_dir, input_file_name + ".cex")
     if verbose:
         print(f"Modifying output file: {aig_cex_filepath}")
 
@@ -92,7 +115,7 @@ def modify_output_file(check_result, input_filepath, output_dir):
                     state_index += sorts_dict[int(l[2])]
                 state_id += 1
 
-    btor2_cex_filepath = output_dir + input_file_name + ".cexb"
+    btor2_cex_filepath = os.path.join(output_dir, input_file_name + ".cexb")
 
     # for key in input_dict:
     #     print(
@@ -163,7 +186,9 @@ def main():
     simplecar_args = sys.argv[2:]
 
     input_file = None
-    output_file = None
+    output_dir = None
+    witness_dir = None
+    temp_dir = make_simplecar_run_dir()
     simplecar_command_args = [simplecar_executable]
 
     # Parse arguments to find input and output files
@@ -172,8 +197,9 @@ def main():
         arg = simplecar_args[i]
         if arg == "-w" and i + 1 < len(simplecar_args):
             output_dir = simplecar_args[i + 1]
+            witness_dir = temp_dir
             simplecar_command_args.append(arg)
-            simplecar_command_args.append(output_dir)
+            simplecar_command_args.append(os.path.join(witness_dir, ""))
             i += 2
         elif not arg.startswith("-") and os.path.exists(arg):
             input_file = arg
@@ -191,7 +217,7 @@ def main():
         sys.exit(1)
 
     # Modify the input file
-    input_file_aig = modify_input_file(input_file)
+    input_file_aig = modify_input_file(input_file, temp_dir)
 
     # Call the simplecar executable with the original arguments
     simplecar_command_args.append(input_file_aig)
@@ -222,7 +248,7 @@ def main():
         sys.exit(1)
 
     # Modify the output file after simplecar finishes
-    modify_output_file(simplecar_result, input_file, output_dir)
+    modify_output_file(simplecar_result, input_file, witness_dir, output_dir)
 
 
 if __name__ == "__main__":

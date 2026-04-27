@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
+
 step() {
   echo
   echo "==> $*"
@@ -10,6 +13,8 @@ run() {
   "$@" > /dev/null
 }
 
+cd "$SCRIPT_DIR"
+
 rm -rf deps
 mkdir deps
 
@@ -17,7 +22,7 @@ step "Cloning btor2tools"
 run git clone https://github.com/hwmcc/btor2tools.git deps/btor2tools
 
 step "Patching btor2aiger.cpp"
-cp btor2aiger.cpp deps/btor2tools/src/btor2aiger.cpp
+run git -C deps/btor2tools apply "$SCRIPT_DIR/btor2tools.patch"
 
 cd deps/btor2tools/
 
@@ -30,6 +35,6 @@ run ./configure.sh --btor2aiger
 cd build/
 
 step "[Btor2tools] Building btor2tools"
-run make -j"$(nproc)"
+run make -j"$JOBS"
 
 cd ../../..

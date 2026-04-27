@@ -74,6 +74,9 @@ bld/
 [Uu]nsafe/
 frame_vis/
 
+__pycache__/
+*.pyc
+
 build/
 release/
 deps/
