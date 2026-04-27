@@ -1,4 +1,6 @@
-# build
+# SimpleCAR
+
+## build
 
 `./setup.sh`
 
@@ -10,7 +12,7 @@
 
 `make -j`
 
-### [optional] btor2
+## [optional] btor2
 
 `cd btor2`
 
