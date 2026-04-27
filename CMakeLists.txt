@@ -75,6 +75,7 @@ set(SRCS
     src/model/aiger.c
     src/model/CircuitGraph.cpp
     src/model/TernarySim.cpp
+    src/model/SATSim.cpp
     src/model/Model.cpp
     src/model/DAGCNFSimplifier.cpp
     src/Settings.cpp

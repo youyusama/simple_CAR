@@ -62,43 +62,20 @@ class EquivalenceManager {
 };
 
 
-template <int N>
-struct SimulationSignature {
-    std::array<uint64_t, N> chunks;
+using DynamicSignature = std::vector<uint64_t>;
 
-    SimulationSignature() {
-        chunks.fill(0);
-    }
-
-    bool operator==(const SimulationSignature<N> &other) const {
-        return chunks == other.chunks;
-    }
-
-    SimulationSignature<N> operator~() const {
-        SimulationSignature<N> result;
-        for (int i = 0; i < N; i++) {
-            result.chunks[i] = ~chunks[i];
-        }
-        return result;
-    }
-};
-
-
-template <int N>
-struct SimulationSignatureHash {
-    std::size_t operator()(const SimulationSignature<N> &s) const {
+struct DynamicSignatureHash {
+    std::size_t operator()(const DynamicSignature &s) const {
         std::size_t h = 0;
         std::hash<uint64_t> hasher;
-        for (const auto &chunk : s.chunks) {
+        for (uint64_t chunk : s) {
             h ^= hasher(chunk) + 0x9e3779b9 + (h << 6) + (h >> 2);
         }
         return h;
     }
 };
 
-constexpr size_t NUM_CHUNKS = 128;
-using SignatureN64 = SimulationSignature<NUM_CHUNKS>;
-using VarMapN64 = std::unordered_map<SignatureN64, std::vector<Lit>, SimulationSignatureHash<NUM_CHUNKS>>;
+using DynamicSignatureMap = std::unordered_map<DynamicSignature, std::vector<Lit>, DynamicSignatureHash>;
 
 class Model;
 
@@ -272,11 +249,15 @@ class Model {
 
     void SimplifyModelByRandomSimulation();
 
-    void EncodeStatesToSignatuers(const vector<Cube> &states, unordered_map<string, vector<Lit>> &signatures);
+    void SimplifyModelBySATSimulation();
 
-    void EncodeStatesToN64Signatuers(const vector<vector<Tbool>> &values, const Cube &vars, VarMapN64 &signatures);
+    void EncodeStatesToSignatures(const vector<Cube> &states, DynamicSignatureMap &signatures);
+
+    void EncodeTernaryValuesToBitSignatures(const vector<vector<Tbool>> &values, const Cube &vars, DynamicSignatureMap &signatures);
 
     bool CheckLatchEquivalenceBySAT(Lit a, Lit b);
+
+    bool CheckLatchEquivalenceBySATSimulation(Lit a, Lit b);
 
     bool CheckGateEquivalenceBySAT(Lit a, Lit b);
 

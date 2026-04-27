@@ -1,5 +1,6 @@
 #include "Model.h"
 #include "DAGCNFSimplifier.h"
+#include "SATSim.h"
 #include "WitnessBuilder.h"
 #include <bitset>
 
@@ -105,6 +106,8 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
         SimplifyModelByTernarySimulation();
     } else if (m_settings.eq == 3) {
         SimplifyModelByRandomSimulation();
+    } else if (m_settings.eq == 4) {
+        SimplifyModelBySATSimulation();
     }
 
     // apply the equivalences to the circuit graph
@@ -773,9 +776,8 @@ bool Model::SimplifyModelByTernarySimulation() {
 
     // find equivalent latches
     vector<Cube> latch_states = simulator.GetStates();
-    for (Cube &state : latch_states) state.emplace_back(LIT_TRUE);
-    unordered_map<string, vector<Lit>> signatures_variables_map;
-    EncodeStatesToSignatuers(latch_states, signatures_variables_map);
+    DynamicSignatureMap signatures_variables_map;
+    EncodeStatesToSignatures(latch_states, signatures_variables_map);
     int eq_counter = 0;
 
     // signatures to equivalent latches
@@ -804,9 +806,8 @@ bool Model::SimplifyModelByTernarySimulation() {
 
     // find equivalent gates
     vector<Cube> gate_states = simulator.GetGateStates();
-    for (Cube &state : gate_states) state.emplace_back(LIT_TRUE);
-    unordered_map<string, vector<Lit>> signatures_gates_map;
-    EncodeStatesToSignatuers(gate_states, signatures_gates_map);
+    DynamicSignatureMap signatures_gates_map;
+    EncodeStatesToSignatures(gate_states, signatures_gates_map);
     eq_counter = 0;
 
     // signatures to equivalent latches
@@ -844,7 +845,8 @@ void Model::SimplifyModelByRandomSimulation() {
     m_log.Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
     vector<vector<Tbool>> simulation_values;
-    for (int i = 0; i < NUM_CHUNKS; i++) {
+    constexpr int RANDOM_SIM_ROUNDS = 128;
+    for (int i = 0; i < RANDOM_SIM_ROUNDS; i++) {
         simulator.SimulateRandom(64);
         for (auto &values : simulator.GetValues()) {
             simulation_values.emplace_back(values);
@@ -852,7 +854,7 @@ void Model::SimplifyModelByRandomSimulation() {
     }
     LOG_L(m_log, 1, "Simulation takes ", m_log.Tock(), " seconds.");
 
-    VarMapN64 signatures_variables_map;
+    DynamicSignatureMap signatures_variables_map;
     int mayeq_counter = 0;
     int eq_counter = 0;
     auto start_time = chrono::steady_clock::now();
@@ -861,8 +863,7 @@ void Model::SimplifyModelByRandomSimulation() {
     Cube eqcheck_latches;
     eqcheck_latches.reserve(m_circuitGraph->modelLatches.size());
     for (Var v : m_circuitGraph->modelLatches) eqcheck_latches.emplace_back(MkLit(v));
-    eqcheck_latches.emplace_back(LIT_FALSE);
-    EncodeStatesToN64Signatuers(simulation_values, eqcheck_latches, signatures_variables_map);
+    EncodeTernaryValuesToBitSignatures(simulation_values, eqcheck_latches, signatures_variables_map);
 
     // signatures to equivalent variables
     for (auto &s : signatures_variables_map) {
@@ -900,8 +901,7 @@ void Model::SimplifyModelByRandomSimulation() {
     Cube eqcheck_gates;
     eqcheck_gates.reserve(m_circuitGraph->modelGates.size());
     for (Var v : m_circuitGraph->modelGates) eqcheck_gates.emplace_back(MkLit(v));
-    eqcheck_gates.emplace_back(LIT_FALSE);
-    EncodeStatesToN64Signatuers(simulation_values, eqcheck_gates, signatures_variables_map);
+    EncodeTernaryValuesToBitSignatures(simulation_values, eqcheck_gates, signatures_variables_map);
     mayeq_counter = 0;
     eq_counter = 0;
 
@@ -963,52 +963,84 @@ void Model::SimplifyModelByRandomSimulation() {
 }
 
 
-void Model::EncodeStatesToSignatuers(const vector<Cube> &states, unordered_map<string, vector<Lit>> &signatures) {
-    // encode locations
-    unordered_map<Lit, vector<int>, LitHash> signal_locations;
-    for (int i = 0; i < states.size(); i++) {
-        const auto &state = states[i];
-        for (auto v : state) {
-            signal_locations[v].emplace_back(i + 1);
-            signal_locations[~v].emplace_back(-i - 1);
+void Model::SimplifyModelBySATSimulation() {
+    LOG_L(m_log, 1, "Simplify model by SAT-based latch simulation.");
+    if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
+
+    CollectConstraints();
+    CollectNextValueMapping();
+    CollectClauses();
+    CollectCNFClauses();
+
+    auto start_time = chrono::steady_clock::now();
+    m_log.Tick();
+    SATSimulator simulator(m_circuitGraph, m_cnfClauses, m_constraints, TrueId());
+    vector<vector<Tbool>> samples = simulator.InitSimulation(64);
+    vector<vector<Tbool>> transition_samples = simulator.TransitionSimulation(samples, 640);
+    samples.insert(samples.end(), transition_samples.begin(), transition_samples.end());
+    LOG_L(m_log, 1, "SAT simulation generated ", samples.size(), " latch samples in ", m_log.Tock(), " seconds.");
+    if (samples.empty()) return;
+
+    Cube eqcheck_latches;
+    eqcheck_latches.reserve(m_circuitGraph->modelLatches.size());
+    for (Var v : m_circuitGraph->modelLatches) eqcheck_latches.emplace_back(MkLit(v));
+
+    DynamicSignatureMap signatures_variables_map;
+    EncodeTernaryValuesToBitSignatures(samples, eqcheck_latches, signatures_variables_map);
+
+    int mayeq_counter = 0;
+    int eq_counter = 0;
+
+    for (auto &s : signatures_variables_map) {
+        if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
+            LOG_L(m_log, 1, "SAT-based equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
+            break;
+        }
+        if (s.second.size() < 2) continue;
+
+        vector<Lit> may_equal_vars(s.second);
+        sort(may_equal_vars.begin(), may_equal_vars.end());
+        const int check_limit = std::min<int>(16, std::max<int>(1, 10000 / static_cast<int>(may_equal_vars.size())));
+
+        for (size_t i = 0; i < may_equal_vars.size(); ++i) {
+            Lit v = may_equal_vars[i];
+            if (m_equivalenceManager->HasEquivalence(v)) continue;
+
+            int checked = 0;
+            for (size_t j = 0; j < i && checked < check_limit; ++j) {
+                Lit r = may_equal_vars[j];
+                if (m_equivalenceManager->IsEquivalent(r, v)) break;
+                if (m_equivalenceManager->HasEquivalence(r) && !m_equivalenceManager->IsEquivalent(r, v)) continue;
+
+                mayeq_counter++;
+                checked++;
+                if (CheckLatchEquivalenceBySATSimulation(v, r)) {
+                    eq_counter++;
+                    m_equivalenceManager->AddEquivalence(v, r);
+                    break;
+                }
+            }
         }
     }
-    // remove incomplete locations
-    for (auto it = signal_locations.begin(); it != signal_locations.end();) {
-        if (it->second.size() < states.size()) {
-            it = signal_locations.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    // locations to signatures
-    for (auto &l : signal_locations) {
-        stringstream ss;
-        for (int i : l.second) {
-            ss << i;
-        }
-        signatures[ss.str()].emplace_back(l.first);
-    }
+
+    LOG_L(m_log, 1, "Found ", eq_counter, "/", mayeq_counter, " SAT-simulated equivalent latches.");
+    if (mayeq_counter > 0)
+        LOG_L(m_log, 1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
 }
 
 
-void Model::EncodeStatesToN64Signatuers(const vector<vector<Tbool>> &values, const Cube &vars, VarMapN64 &signatures) {
-    assert(values.size() == 64 * NUM_CHUNKS);
+void Model::EncodeStatesToSignatures(const vector<Cube> &states, DynamicSignatureMap &signatures) {
+    const size_t num_bits = states.size();
+    if (num_bits == 0) return;
+    const size_t num_chunks = (num_bits + 63) / 64;
+    const size_t last_bits = num_bits % 64;
+    const uint64_t last_mask = (last_bits == 0) ? UINT64_MAX : ((uint64_t{1} << last_bits) - 1);
 
-    for (Lit lit : vars) {
-        SignatureN64 signature;
-        for (int i = 0; i < values.size(); i++) {
-            const auto &vmapi = values[i];
-            int j = i / 64;
-            signature.chunks[j] = signature.chunks[j] << 1;
-            Tbool value = vmapi[VarOf(lit)];
-            if (Sign(lit)) value = !value;
-            if (value == T_TRUE) {
-                signature.chunks[j] |= 1;
-            }
-        }
+    auto insert_signature = [&](Lit lit, const DynamicSignature &signature) {
+        DynamicSignature neg_signature(signature);
+        for (uint64_t &chunk : neg_signature) chunk = ~chunk;
+        neg_signature.back() &= last_mask;
 
-        SignatureN64 neg_signature = ~signature;
         if (signatures.find(signature) != signatures.end()) {
             signatures[signature].emplace_back(lit);
         } else if (signatures.find(neg_signature) != signatures.end()) {
@@ -1016,7 +1048,84 @@ void Model::EncodeStatesToN64Signatuers(const vector<vector<Tbool>> &values, con
         } else {
             signatures[signature].emplace_back(lit);
         }
+    };
+
+    vector<Var> vars;
+    unordered_map<Var, DynamicSignature> var_signatures;
+    unordered_map<Var, size_t> known_counts;
+
+    for (size_t i = 0; i < states.size(); ++i) {
+        for (Lit lit : states[i]) {
+            Var var = VarOf(lit);
+
+            auto it = var_signatures.find(var);
+            if (it == var_signatures.end()) {
+                auto inserted = var_signatures.emplace(var, DynamicSignature(num_chunks, 0));
+                it = inserted.first;
+                known_counts[var] = 0;
+                vars.emplace_back(var);
+            }
+
+            known_counts[var]++;
+            if (!Sign(lit)) it->second[i / 64] |= (uint64_t{1} << (i % 64));
+        }
     }
+
+    for (Var var : vars) {
+        if (known_counts[var] == num_bits) insert_signature(MkLit(var), var_signatures[var]);
+    }
+    insert_signature(LIT_FALSE, DynamicSignature(num_chunks, 0));
+}
+
+
+void Model::EncodeTernaryValuesToBitSignatures(const vector<vector<Tbool>> &values, const Cube &vars, DynamicSignatureMap &signatures) {
+    const size_t num_bits = values.size();
+    if (num_bits == 0) return;
+    const size_t num_chunks = (num_bits + 63) / 64;
+    const size_t last_bits = num_bits % 64;
+    const uint64_t last_mask = (last_bits == 0) ? UINT64_MAX : ((uint64_t{1} << last_bits) - 1);
+
+    auto insert_signature = [&](Lit lit, const DynamicSignature &signature) {
+        DynamicSignature neg_signature(signature);
+        for (uint64_t &chunk : neg_signature) chunk = ~chunk;
+        neg_signature.back() &= last_mask;
+
+        if (signatures.find(signature) != signatures.end()) {
+            signatures[signature].emplace_back(lit);
+        } else if (signatures.find(neg_signature) != signatures.end()) {
+            signatures[neg_signature].emplace_back(~lit);
+        } else {
+            signatures[signature].emplace_back(lit);
+        }
+    };
+
+    for (Lit lit : vars) {
+        if (IsConst(lit)) continue;
+
+        DynamicSignature signature(num_chunks, 0);
+        bool known = true;
+        for (size_t i = 0; i < values.size(); ++i) {
+            const auto &vmap = values[i];
+            if (VarOf(lit) >= vmap.size()) {
+                known = false;
+                break;
+            }
+            Tbool value = vmap[VarOf(lit)];
+            if (Sign(lit)) value = !value;
+            if (value == T_TRUE)
+                signature[i / 64] |= (uint64_t{1} << (i % 64));
+            else if (value == T_FALSE)
+                continue;
+            else {
+                known = false;
+                break;
+            }
+        }
+        if (!known) continue;
+
+        insert_signature(lit, signature);
+    }
+    insert_signature(LIT_FALSE, DynamicSignature(num_chunks, 0));
 }
 
 
@@ -1113,6 +1222,53 @@ bool Model::CheckLatchEquivalenceBySAT(Lit aLit, Lit bLit) {
         m_eqSolverUnsats++;
     }
     return unsat;
+}
+
+
+bool Model::CheckLatchEquivalenceBySATSimulation(Lit aLit, Lit bLit) {
+    auto add_base = [&](minicore::Solver &solver, bool init) {
+        solver.setRestartLimit(10);
+        while (static_cast<int>(m_maxId) >= solver.nVars()) solver.newVar();
+        for (const Clause &c : m_cnfClauses) solver.addClause(c);
+        for (Lit c : m_constraints) solver.addClause(Clause{c});
+        if (!init) return;
+
+        for (Var latch : m_circuitGraph->modelLatches) {
+            Lit latch_lit = MkLit(latch);
+            Lit reset = m_circuitGraph->latchResetMap[latch];
+            if (reset == latch_lit) continue;
+            if (reset == LIT_FALSE) {
+                solver.addClause(Clause{~latch_lit});
+            } else if (reset == LIT_TRUE) {
+                solver.addClause(Clause{latch_lit});
+            } else {
+                solver.addClause(ToCNFClause(Clause{latch_lit, ~reset}));
+                solver.addClause(ToCNFClause(Clause{~latch_lit, reset}));
+            }
+        }
+    };
+
+    {
+        minicore::Solver init_solver;
+        add_base(init_solver, true);
+        init_solver.addClause(ToCNFClause(Clause{aLit, bLit}));
+        init_solver.addClause(ToCNFClause(Clause{~aLit, ~bLit}));
+        minicore::lbool res = init_solver.solve();
+        if (res != minicore::l_False) return false;
+    }
+
+    Lit a_prime = IsConst(aLit) ? aLit : LookupPrime(aLit);
+    Lit b_prime = IsConst(bLit) ? bLit : LookupPrime(bLit);
+    {
+        minicore::Solver ind_solver;
+        add_base(ind_solver, false);
+        ind_solver.addClause(ToCNFClause(Clause{aLit, ~bLit}));
+        ind_solver.addClause(ToCNFClause(Clause{~aLit, bLit}));
+        ind_solver.addClause(ToCNFClause(Clause{a_prime, b_prime}));
+        ind_solver.addClause(ToCNFClause(Clause{~a_prime, ~b_prime}));
+        minicore::lbool res = ind_solver.solve();
+        return res == minicore::l_False;
+    }
 }
 
 

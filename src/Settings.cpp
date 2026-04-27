@@ -136,10 +136,11 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                    "equivalent variable checking ( 0: none,\n\
                     1 : combination of 2 and 3,\n\
                     2 : ternary simulation,\n\
-                    3 : random simulation) ")
+                    3 : random simulation,\n\
+                    4 : SAT-based latch simulation) ")
         ->default_val(2);
 
-    app.add_option("--eq_timeout", settings.eqTimeout, "equivalent variable checking timeout for random simulation (in seconds)")
+    app.add_option("--eq_timeout", settings.eqTimeout, "equivalent variable checking timeout for SAT-backed equivalence checks (in seconds)")
         ->default_val(600);
 
     app.add_flag("--bp", settings.searchFromBadPred, "search from bad predecessor")
