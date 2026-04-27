@@ -1,24 +1,6 @@
 # build
 
-`git submodule update --init --recursive`
-
-### build cadical
-
-`cd simple_CAR/src/sat/cadical/`
-
-`./configure --competition && make`
-
-`cd ../../../..`
-
-### build kissat
-
-`cd simple_CAR/src/sat/kissat/`
-
-`./configure --competition && make`
-
-`cd ../../../..`
-
-### build simple_CAR
+`./setup.sh`
 
 `mkdir build`
 

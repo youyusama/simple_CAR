@@ -7,3 +7,6 @@
 [submodule "src/model/aiger"]
 	path = src/model/aiger
 	url = https://github.com/arminbiere/aiger.git
+[submodule "src/sat/minisat"]
+	path = src/sat/minisat
+	url = https://github.com/niklasso/minisat.git
