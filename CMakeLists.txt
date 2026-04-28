@@ -61,6 +61,7 @@ set(DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/model/aiger
     ${CMAKE_CURRENT_SOURCE_DIR}/src/alg
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sat
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/minisat
 )
 
 set(MINICORE_LIB_SRCS
@@ -96,10 +97,10 @@ set(SRCS
     src/main.cpp
     # minisat
     src/sat/MinisatSolver.cpp
-    src/sat/minisat/core/Solver.cc
-    src/sat/minisat/simp/SimpSolver.cc
-    src/sat/minisat/utils/Options.cc
-    src/sat/minisat/utils/System.cc
+    src/sat/minisat/minisat/core/Solver.cc
+    src/sat/minisat/minisat/simp/SimpSolver.cc
+    src/sat/minisat/minisat/utils/Options.cc
+    src/sat/minisat/minisat/utils/System.cc
     # minicore
     src/sat/MinicoreSolver.cpp
 )
