@@ -1361,19 +1361,7 @@ bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
         m_gateEqSolver->setRestartLimit(1);
         m_gateEqSolver->newVarUntil(static_cast<minicore::Var>(m_maxId));
         for (const Clause &c : m_cnfClauses) m_gateEqSolver->addClause(c);
-        for (Lit c : m_constraints) m_gateEqSolver->addClause(Clause{c});
         m_gateEqSolver->setSolveInDomain(true);
-
-        Cube constraints_domain = GetCOIDomain(m_constraints);
-        std::vector<char> &dom = m_gateEqSolver->domainSet();
-        std::vector<minicore::Var> &list = m_gateEqSolver->domainList();
-        for (Lit v : constraints_domain) {
-            Var vv = VarOf(v);
-            if (!dom[vv]) {
-                dom[vv] = 1;
-                list.push_back(vv);
-            }
-        }
     }
 
     // (a <-> b)
