@@ -46,14 +46,23 @@ pair<Cube, Cube> MinicoreSolver::GetAssignment(bool prime) {
             inputs.emplace_back(~MkLit(i));
         }
     }
-    for (Var i : m_model.GetModelLatches()) {
-        if (!prime) {
+    if (!prime) {
+        for (Var i : m_model.GetModelLatches()) {
             if (value(static_cast<int>(i)) == minicore::l_True) {
                 latches.emplace_back(MkLit(i));
             } else if (value(static_cast<int>(i)) == minicore::l_False) {
                 latches.emplace_back(~MkLit(i));
             }
-        } else {
+        }
+        for (Var i : m_model.GetInnards()) {
+            if (value(static_cast<int>(i)) == minicore::l_True) {
+                latches.emplace_back(MkLit(i));
+            } else if (value(static_cast<int>(i)) == minicore::l_False) {
+                latches.emplace_back(~MkLit(i));
+            }
+        }
+    } else {
+        for (Var i : m_model.GetModelLatches()) {
             Lit p = m_model.LookupPrime(MkLit(i));
             minicore::lbool val = value(static_cast<int>(VarOf(p)));
             if ((val == minicore::l_True && !Sign(p)) || (val == minicore::l_False && Sign(p))) {
@@ -62,15 +71,7 @@ pair<Cube, Cube> MinicoreSolver::GetAssignment(bool prime) {
                 latches.emplace_back(~MkLit(i));
             }
         }
-    }
-    for (Var i : m_model.GetInnards()) {
-        if (!prime) {
-            if (value(static_cast<int>(i)) == minicore::l_True) {
-                latches.emplace_back(MkLit(i));
-            } else if (value(static_cast<int>(i)) == minicore::l_False) {
-                latches.emplace_back(~MkLit(i));
-            }
-        } else {
+        for (Var i : m_model.GetInnards()) {
             Lit p = m_model.LookupPrime(MkLit(i));
             minicore::lbool val = value(static_cast<int>(VarOf(p)));
             if ((val == minicore::l_True && !Sign(p)) || (val == minicore::l_False && Sign(p))) {
@@ -94,10 +95,11 @@ unordered_set<Lit, LitHash> MinicoreSolver::GetConflict() {
 
 
 void MinicoreSolver::AddTempClause(const Cube &cls) {
+#ifndef NDEBUG
     for (Lit l : cls) {
-        if (VarOf(l) > m_maxId) m_maxId = VarOf(l) + 1;
-        while (static_cast<int>(VarOf(l)) >= nVars()) newVar();
+        assert(static_cast<int>(VarOf(l)) < nVars());
     }
+#endif
     m_tempClause = cls;
 }
 
