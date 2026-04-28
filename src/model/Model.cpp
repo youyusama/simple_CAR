@@ -87,11 +87,24 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
         exit(0);
     }
 
+    EliminateGateResets();
+
+    // property to check
+    if (num_bad == 1) {
+        m_bad = m_circuitGraph->bad[0];
+        m_propKind = PropKind::Safety;
+    } else if (num_justice == 1) {
+        // liveness extraction
+        m_bad = BuildLiveness();
+        m_propKind = PropKind::Liveness;
+    }
+
     LOG_L(m_log, 1, "Model initialized: ",
           m_circuitGraph->numInputs, " inputs, ", m_circuitGraph->numLatches, " latches, ",
           m_circuitGraph->numAnds, " gates, ", m_circuitGraph->numConstraints, " constraints.");
     LOG_L(m_log, 1, "COI Refined Model: ",
           m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
+
     m_cnfTrueVar = m_circuitGraph->numVar + 1;
     m_maxId = m_cnfTrueVar;
 
@@ -100,7 +113,6 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     if (m_settings.eq == 1) {
         SimplifyModelByTernarySimulation();
         ApplyEquivalence();
-        UpdateDependencyMap();
         SimplifyModelByRandomSimulation();
     } else if (m_settings.eq == 2) {
         SimplifyModelByTernarySimulation();
@@ -112,16 +124,6 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
 
     // apply the equivalences to the circuit graph
     ApplyEquivalence();
-
-    // property to check
-    if (num_bad == 1) {
-        m_bad = m_circuitGraph->bad[0];
-        m_propKind = PropKind::Safety;
-    } else if (num_justice == 1) {
-        // liveness extraction
-        m_bad = BuildLiveness();
-        m_propKind = PropKind::Liveness;
-    }
 
     // initial state
     CollectInitialState();
@@ -241,6 +243,7 @@ void Model::ApplyEquivalence() {
     }
 
     m_circuitGraph->COIRefine();
+    m_circuitGraph->CollectPropertyCOIInputs();
 }
 
 
@@ -285,27 +288,31 @@ void Model::BuildEquivalenceWitness() {
 }
 
 
-void Model::UpdateDependencyMap() {
-    m_dependencyVec.assign(m_maxId + 1, vector<Var>());
-    for (int i = static_cast<int>(m_circuitGraph->modelGates.size()) - 1; i >= 0; i--) {
-        Var g = m_circuitGraph->modelGates[i];
-        for (Lit fanin : m_circuitGraph->gatesMap[g].fanins) {
-            // dependency
-            m_dependencyVec[g].emplace_back(VarOf(fanin));
+void Model::EliminateGateResets() {
+    Var init_latch = VAR_UNDEF;
+    vector<Var> latches = m_circuitGraph->modelLatches;
+
+    for (Var latch : latches) {
+        Lit reset = m_circuitGraph->latchResetMap[latch];
+        if (IsConst(reset) || reset == MkLit(latch)) continue;
+
+        if (init_latch == VAR_UNDEF) {
+            init_latch = NewLatchVar();
+            SetLatchReset(init_latch, LIT_TRUE);
+            SetLatchNext(init_latch, LIT_FALSE);
         }
+
+        Lit init_eq = MakeXNOR(MkLit(latch), reset);
+        Lit init_constraint = MakeOR(~MkLit(init_latch), init_eq);
+        m_circuitGraph->constraints.emplace_back(init_constraint);
+        m_circuitGraph->numConstraints++;
+        SetLatchReset(latch, MkLit(latch));
     }
 
-    m_coiCache.clear();
-    m_coiCacheReady.clear();
-    m_coiVisited.clear();
-    m_coiCacheVisited.clear();
-    m_coiDomain.clear();
-    m_coiCacheTodo.clear();
-
-    m_coiCache.resize(m_maxId + 1);
-    m_coiCacheReady.assign(m_maxId + 1, 0);
-    m_coiVisited.assign(m_maxId + 1, 0);
-    m_coiCacheVisited.assign(m_maxId + 1, 0);
+    if (init_latch != VAR_UNDEF) {
+        m_circuitGraph->COIRefine();
+        m_circuitGraph->CollectPropertyCOIInputs();
+    }
 }
 
 
@@ -337,7 +344,6 @@ void Model::UpdateDependencyVecDAGCNF() {
 
 void Model::CollectInitialState() {
     m_initialState.clear();
-    m_initialClauses.clear();
 
     for (Var l : m_circuitGraph->modelLatches) {
         Lit reset = m_circuitGraph->latchResetMap[l];
@@ -346,9 +352,6 @@ void Model::CollectInitialState() {
             m_initialState.push_back(MkLit(l));
         } else if (reset == LIT_FALSE) {
             m_initialState.push_back(~MkLit(l));
-        } else if (reset != MkLit(l) && IsAnd(reset)) {
-            m_initialClauses.emplace_back(ToCNFClause(Clause{MkLit(l), ~reset}));
-            m_initialClauses.emplace_back(ToCNFClause(Clause{~MkLit(l), reset}));
         }
     }
 }

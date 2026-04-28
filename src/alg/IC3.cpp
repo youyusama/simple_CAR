@@ -71,7 +71,6 @@ bool IC3::ImmediateSatisfiable() {
     auto slv = make_unique<SATSolver>(m_model, MCSATSolver::cadical);
     slv->AddTrans();
     slv->AddConstraints();
-    slv->AddInitialClauses();
     for (auto i : m_model.GetInitialState()) {
         slv->AddClause(Cube{i});
     }

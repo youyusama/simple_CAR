@@ -292,7 +292,6 @@ void KIND::AddInitial(std::shared_ptr<SATSolver> solver) {
     for (Lit lit : m_model.GetInitialState()) {
         solver->AddClause({lit});
     }
-    solver->AddInitialClauses();
 }
 
 void KIND::AddStateDisequality(std::shared_ptr<SATSolver> solver, int i, int j) {

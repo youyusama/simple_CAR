@@ -327,7 +327,6 @@ void BCAR::InitializeStartSolver() {
         for (auto l : m_model.GetInitialState()) {
             m_startSolver->AddClause({l});
         }
-        m_startSolver->AddInitialClauses();
     }
     // liveness: T = T & (W <-> W')
     //           T = T & C'
@@ -465,7 +464,6 @@ void BCAR::OverSequenceRefine(int lvl) {
         for (Lit lit : m_customInit) refine_solver->AddClause({lit});
     } else {
         for (auto l : m_model.GetInitialState()) refine_solver->AddClause({l});
-        refine_solver->AddInitialClauses();
     }
     refine_solver->AddInvAsClauseK(GetInv(), false, 0);
 

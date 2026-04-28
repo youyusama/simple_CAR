@@ -64,6 +64,8 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
     unordered_set<unsigned> coi_lits;
     for (int i = 0; i < aig->num_latches; i++)
         coi_lits.emplace(aiger_strip(aig->latches[i].next));
+    for (int i = 0; i < aig->num_latches; i++)
+        coi_lits.emplace(aiger_strip(aig->latches[i].reset));
     for (int i = 0; i < aig->num_constraints; i++)
         coi_lits.emplace(aiger_strip(aig->constraints[i].lit));
     for (int i = 0; i < aig->num_outputs; i++)
@@ -97,8 +99,12 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
     modelLatches = latches;
     modelGates = ands;
     COIRefine();
+    CollectPropertyCOIInputs();
+}
 
-    // get property coi inputs
+
+void CircuitGraph::CollectPropertyCOIInputs() {
+    propertyCOIInputs.clear();
     unordered_set<Var> coi_ids;
     for (Lit id : constraints)
         coi_ids.emplace(VarOf(id));
@@ -166,6 +172,12 @@ void CircuitGraph::COIRefine() {
             if (coi_ids.find(next_var) == coi_ids.end()) {
                 coi_ids.emplace(next_var);
                 todo_stack.emplace_back(next_var);
+            }
+            Lit reset = latchResetMap[id];
+            Var reset_var = VarOf(reset);
+            if (!IsConst(reset) && reset != MkLit(id) && coi_ids.find(reset_var) == coi_ids.end()) {
+                coi_ids.emplace(reset_var);
+                todo_stack.emplace_back(reset_var);
             }
         }
     }

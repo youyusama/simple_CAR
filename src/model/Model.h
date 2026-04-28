@@ -162,8 +162,6 @@ class Model {
 
     vector<Clause> &GetSimpClauses() { return m_simpClauses; }
 
-    vector<Clause> &GetInitialClauses() { return m_initialClauses; }
-
     const Cube &GetConstraints() { return m_constraints; };
 
     inline bool IsInnard(int id) {
@@ -219,7 +217,7 @@ class Model {
 
     void ApplyEquivalence();
 
-    void UpdateDependencyMap();
+    void EliminateGateResets();
 
     void UpdateDependencyVecDAGCNF();
 
@@ -293,7 +291,6 @@ class Model {
     vector<Clause> m_rawClauses;
     vector<Clause> m_cnfClauses; // CNF, e.g. (a|b|c) * (-a|c)
     vector<Clause> m_simpClauses;
-    vector<Clause> m_initialClauses;
 
     vector<unordered_map<Var, Lit, std::hash<Var>>> m_primeMaps;
     unordered_map<int, vector<int>> m_preValueOfLatchMap;

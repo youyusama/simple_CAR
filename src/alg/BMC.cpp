@@ -79,9 +79,6 @@ void BMC::CNFGen() {
     for (Lit lit : m_model.GetInitialState()) {
         clauses.push_back(Clause{lit});
     }
-    for (const Clause &clause : m_model.GetInitialClauses()) {
-        clauses.push_back(clause);
-    }
 
     for (int i = 0; i <= target_k; ++i) {
         GetClausesK(i, clauses);
@@ -173,8 +170,8 @@ bool BMC::CheckNonIncremental() {
             [[maybe_unused]] auto clause_scope = m_log.Section("Add_Init_Cls");
             for (int i = 0; i < m_clauses.size(); ++i) {
                 m_solver->AddClause(m_clauses[i]);
-                LOG_L(m_log, 
-                    3, "Add Clause: ", CubeToStr(m_clauses[i]));
+                LOG_L(m_log,
+                      3, "Add Clause: ", CubeToStr(m_clauses[i]));
             }
         }
         bad_clause.clear();
@@ -296,7 +293,6 @@ void BMC::Init() {
     for (auto l : m_model.GetInitialState()) {
         m_solver->AddClause({l});
     }
-    m_solver->AddInitialClauses();
 }
 
 

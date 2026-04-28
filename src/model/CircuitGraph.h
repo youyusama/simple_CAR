@@ -83,6 +83,8 @@ class CircuitGraph {
     // refine the COI of property & constraints, get new model inputs, latches, and gates
     void COIRefine();
 
+    void CollectPropertyCOIInputs();
+
     Var NewModelVar();
 
     Var NewInputVar();

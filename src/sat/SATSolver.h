@@ -117,8 +117,6 @@ class SATSolver {
                                      const std::vector<Cube> &dead,
                                      int shoalUnroll = 1);
 
-    void AddInitialClauses();
-
     void AddUC(const Cube &uc);
 
     void AddProperty();

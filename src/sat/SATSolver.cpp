@@ -379,20 +379,6 @@ Cube SATSolver::AddShoalConstraintsAsLabels(const std::vector<FrameList> &shoals
 }
 
 
-// ================================================================================
-// @brief: add initial constraints on gate intialized latches
-// @input:
-// @output:
-// ================================================================================
-void SATSolver::AddInitialClauses() {
-    vector<Clause> &clauses = m_model.GetInitialClauses();
-    for (auto &c : clauses) {
-        AddClause(c);
-        SetDomainCOI(c);
-    }
-}
-
-
 void SATSolver::AddUC(const Cube &uc) {
     Clause cls;
     cls.reserve(uc.size());
