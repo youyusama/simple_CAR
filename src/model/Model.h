@@ -255,7 +255,17 @@ class Model {
 
     bool CheckLatchEquivalenceBySAT(Lit a, Lit b);
 
-    bool CheckLatchEquivalenceBySATSimulation(Lit a, Lit b);
+    void ResetLatchEquivalenceSolvers();
+
+    void EnsureLatchEqBaseSolver();
+
+    void EnsureLatchEqIndSolver();
+
+    bool CheckLatchEquivalenceBase(Lit a, Lit b);
+
+    bool CheckLatchEquivalenceInd(Lit a, Lit b);
+
+    bool TryGetConstInit(Lit lit, Lit &out) const;
 
     bool CheckGateEquivalenceBySAT(Lit a, Lit b);
 
@@ -306,8 +316,10 @@ class Model {
 
     shared_ptr<EquivalenceManager> m_equivalenceManager;
 
-    unique_ptr<minicore::Solver> m_equivalenceSolver;
-    int m_eqSolverUnsats{0};
+    unique_ptr<minicore::Solver> m_gateEqSolver;
+    bool m_hasResetGateInit{false};
+    unique_ptr<minicore::Solver> m_latchEqBaseSolver;
+    unique_ptr<minicore::Solver> m_latchEqIndSolver;
 
     EquivalenceWitness m_equivalenceWitness;
     bool m_equivalenceWitnessReady{false};

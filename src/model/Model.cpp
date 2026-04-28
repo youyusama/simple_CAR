@@ -310,6 +310,7 @@ void Model::EliminateGateResets() {
     }
 
     if (init_latch != VAR_UNDEF) {
+        m_hasResetGateInit = true;
         m_circuitGraph->COIRefine();
         m_circuitGraph->CollectPropertyCOIInputs();
     }
@@ -349,9 +350,9 @@ void Model::CollectInitialState() {
         Lit reset = m_circuitGraph->latchResetMap[l];
 
         if (reset == LIT_TRUE) {
-            m_initialState.push_back(MkLit(l));
+            m_initialState.push_back(ToCNFLit(MkLit(l)));
         } else if (reset == LIT_FALSE) {
-            m_initialState.push_back(~MkLit(l));
+            m_initialState.push_back(ToCNFLit(~MkLit(l)));
         }
     }
 }
@@ -843,7 +844,7 @@ bool Model::SimplifyModelByTernarySimulation() {
 
 void Model::SimplifyModelByRandomSimulation() {
     LOG_L(m_log, 1, "Simplify model by random simulation.");
-    if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
+    if (m_gateEqSolver != nullptr) m_gateEqSolver = nullptr;
 
     m_log.Tick();
     TernarySimulator simulator(m_circuitGraph, m_log);
@@ -867,6 +868,8 @@ void Model::SimplifyModelByRandomSimulation() {
     eqcheck_latches.reserve(m_circuitGraph->modelLatches.size());
     for (Var v : m_circuitGraph->modelLatches) eqcheck_latches.emplace_back(MkLit(v));
     EncodeTernaryValuesToBitSignatures(simulation_values, eqcheck_latches, signatures_variables_map);
+
+    ResetLatchEquivalenceSolvers();
 
     // signatures to equivalent variables
     for (auto &s : signatures_variables_map) {
@@ -898,7 +901,7 @@ void Model::SimplifyModelByRandomSimulation() {
     if (mayeq_counter > 0)
         LOG_L(m_log, 1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
 
-    if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
+    if (m_gateEqSolver != nullptr) m_gateEqSolver = nullptr;
     // find may equivalent variables
     signatures_variables_map.clear();
     Cube eqcheck_gates;
@@ -962,22 +965,26 @@ void Model::SimplifyModelByRandomSimulation() {
     LOG_L(m_log, 1, "Found ", eq_counter, "/", mayeq_counter, " equivalent gates.");
     if (mayeq_counter > 0)
         LOG_L(m_log, 1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
-    if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
+    if (m_gateEqSolver != nullptr) m_gateEqSolver = nullptr;
 }
 
 
 void Model::SimplifyModelBySATSimulation() {
     LOG_L(m_log, 1, "Simplify model by SAT-based latch simulation.");
-    if (m_equivalenceSolver != nullptr) m_equivalenceSolver = nullptr;
+    if (m_gateEqSolver != nullptr) m_gateEqSolver = nullptr;
+    ResetLatchEquivalenceSolvers();
 
+    CollectInitialState();
     CollectConstraints();
     CollectNextValueMapping();
     CollectClauses();
+    SimplifyDAGClauses();
     CollectCNFClauses();
+    UpdateDependencyVecDAGCNF();
 
     auto start_time = chrono::steady_clock::now();
     m_log.Tick();
-    SATSimulator simulator(m_circuitGraph, m_cnfClauses, m_constraints, TrueId());
+    SATSimulator simulator(m_circuitGraph, m_cnfClauses, m_constraints, m_initialState, TrueId());
     vector<vector<Tbool>> samples = simulator.InitSimulation(64);
     vector<vector<Tbool>> transition_samples = simulator.TransitionSimulation(samples, 640);
     samples.insert(samples.end(), transition_samples.begin(), transition_samples.end());
@@ -993,6 +1000,8 @@ void Model::SimplifyModelBySATSimulation() {
 
     int mayeq_counter = 0;
     int eq_counter = 0;
+
+    ResetLatchEquivalenceSolvers();
 
     for (auto &s : signatures_variables_map) {
         if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
@@ -1017,7 +1026,7 @@ void Model::SimplifyModelBySATSimulation() {
 
                 mayeq_counter++;
                 checked++;
-                if (CheckLatchEquivalenceBySATSimulation(v, r)) {
+                if (CheckLatchEquivalenceBySAT(v, r)) {
                     eq_counter++;
                     m_equivalenceManager->AddEquivalence(v, r);
                     break;
@@ -1132,31 +1141,55 @@ void Model::EncodeTernaryValuesToBitSignatures(const vector<vector<Tbool>> &valu
 }
 
 
-bool Model::CheckLatchEquivalenceBySAT(Lit aLit, Lit bLit) {
-    // initial step
-    Lit init_a, init_b;
-    if (IsConst(aLit))
-        init_a = aLit;
-    else {
-        if (m_circuitGraph->latchResetMap.find(VarOf(aLit)) == m_circuitGraph->latchResetMap.end())
-            return false;
-        Lit reset_a = m_circuitGraph->latchResetMap[VarOf(aLit)];
-        init_a = Sign(aLit) ? ~reset_a : reset_a;
+bool Model::TryGetConstInit(Lit lit, Lit &out) const {
+    if (IsConst(lit)) {
+        out = lit;
+        return true;
     }
-    if (IsConst(bLit))
-        init_b = bLit;
-    else {
-        if (m_circuitGraph->latchResetMap.find(VarOf(bLit)) == m_circuitGraph->latchResetMap.end())
-            return false;
-        Lit reset_b = m_circuitGraph->latchResetMap[VarOf(bLit)];
-        init_b = Sign(bLit) ? ~reset_b : reset_b;
-    }
-    if (init_a != init_b) return false;
 
-    // inductive step
-    if (m_equivalenceSolver == nullptr ||
-        m_eqSolverUnsats > 1000) {
-        m_eqSolverUnsats = 0;
+    auto it = m_circuitGraph->latchResetMap.find(VarOf(lit));
+    if (it == m_circuitGraph->latchResetMap.end()) return false;
+
+    Lit reset = it->second;
+    if (reset != LIT_TRUE && reset != LIT_FALSE) return false;
+
+    out = Sign(lit) ? ~reset : reset;
+    return true;
+}
+
+
+void Model::ResetLatchEquivalenceSolvers() {
+    m_latchEqBaseSolver = nullptr;
+    m_latchEqIndSolver = nullptr;
+}
+
+
+void Model::EnsureLatchEqBaseSolver() {
+    if (m_latchEqBaseSolver != nullptr) return;
+
+    if (m_cnfClauses.empty()) {
+        CollectInitialState();
+        CollectConstraints();
+        CollectNextValueMapping();
+        CollectClauses();
+        SimplifyDAGClauses();
+        CollectCNFClauses();
+        UpdateDependencyVecDAGCNF();
+    }
+
+    m_latchEqBaseSolver = make_unique<minicore::Solver>();
+    m_latchEqBaseSolver->setRestartLimit(1);
+    m_latchEqBaseSolver->newVarUntil(static_cast<minicore::Var>(m_maxId));
+    for (const Clause &c : m_cnfClauses) m_latchEqBaseSolver->addClause(c);
+    for (Lit c : m_constraints) m_latchEqBaseSolver->addClause(Clause{c});
+    for (Lit lit : m_initialState) m_latchEqBaseSolver->addClause(Clause{lit});
+}
+
+
+void Model::EnsureLatchEqIndSolver() {
+    if (m_latchEqIndSolver != nullptr) return;
+
+    if (m_cnfClauses.empty()) {
         ApplyEquivalence();
         CollectConstraints();
         CollectNextValueMapping();
@@ -1164,47 +1197,75 @@ bool Model::CheckLatchEquivalenceBySAT(Lit aLit, Lit bLit) {
         SimplifyDAGClauses();
         CollectCNFClauses();
         UpdateDependencyVecDAGCNF();
-
-        m_equivalenceSolver = make_unique<minicore::Solver>();
-        for (auto &c : m_cnfClauses) {
-            for (auto l : c) {
-                Var v = VarOf(l);
-                while (static_cast<int>(v) >= m_equivalenceSolver->nVars())
-                    m_equivalenceSolver->newVar();
-            }
-            m_equivalenceSolver->addClause(c);
-        }
-        m_equivalenceSolver->setSolveInDomain(true);
-        // m_equivalenceSolver->verbosity = 1;
     }
 
-    // (a <-> b) -> (a' <-> b')
-    // (a <-> b) & !(a' <-> b') is unsat
-    // (a | !b) & (!a | b) & (a' | b') & (!a' | !b')
+    m_latchEqIndSolver = make_unique<minicore::Solver>();
+    m_latchEqIndSolver->setRestartLimit(1);
+    m_latchEqIndSolver->newVarUntil(static_cast<minicore::Var>(m_maxId));
+    for (const Clause &c : m_cnfClauses) m_latchEqIndSolver->addClause(c);
+    for (Lit c : m_constraints) m_latchEqIndSolver->addClause(Clause{c});
+    m_latchEqIndSolver->setSolveInDomain(true);
+
+    Cube constraints_domain = GetCOIDomain(m_constraints);
+    std::vector<char> &dom = m_latchEqIndSolver->domainSet();
+    std::vector<minicore::Var> &list = m_latchEqIndSolver->domainList();
+    for (Lit v : constraints_domain) {
+        Var vv = VarOf(v);
+        if (!dom[vv]) {
+            dom[vv] = 1;
+            list.push_back(vv);
+        }
+    }
+}
+
+
+bool Model::CheckLatchEquivalenceBase(Lit aLit, Lit bLit) {
+    Lit init_a, init_b;
+    bool has_init_a = TryGetConstInit(aLit, init_a);
+    bool has_init_b = TryGetConstInit(bLit, init_b);
+
+    if (has_init_a && has_init_b) return init_a == init_b;
+    if (!m_hasResetGateInit) return false;
+
+    EnsureLatchEqBaseSolver();
+    Clause c1 = ToCNFClause(Clause{aLit, bLit});
+    Clause c2 = ToCNFClause(Clause{~aLit, ~bLit});
+    m_latchEqBaseSolver->addTempClause(c1);
+    m_latchEqBaseSolver->addTempClause(c2);
+
+    minicore::lbool res = m_latchEqBaseSolver->solve();
+    return res == minicore::l_False;
+}
+
+
+bool Model::CheckLatchEquivalenceInd(Lit aLit, Lit bLit) {
+    EnsureLatchEqIndSolver();
+    std::vector<char> &dom = m_latchEqIndSolver->domainSet();
+    std::vector<minicore::Var> &list = m_latchEqIndSolver->domainList();
+    size_t base_domain_size = list.size();
+
+    auto restore_domain = [&]() {
+        for (size_t i = base_domain_size; i < list.size(); ++i) {
+            dom[list[i]] = 0;
+        }
+        list.resize(base_domain_size);
+    };
+
     Lit a_prime = IsConst(aLit) ? aLit : LookupPrime(aLit);
     Lit b_prime = IsConst(bLit) ? bLit : LookupPrime(bLit);
-    {
-        // only keep temp act var
-        // need to be more robust in the future
-        std::vector<char> &dom = m_equivalenceSolver->domainSet();
-        std::fill(dom.begin() + 1, dom.end(), 0);
-        m_equivalenceSolver->domainList().resize(1);
-    }
     {
         Clause c1 = ToCNFClause(Clause{aLit, ~bLit});
         Clause c2 = ToCNFClause(Clause{~aLit, bLit});
         Clause c3 = ToCNFClause(Clause{a_prime, b_prime});
         Clause c4 = ToCNFClause(Clause{~a_prime, ~b_prime});
-        m_equivalenceSolver->addTempClause(c1);
-        m_equivalenceSolver->addTempClause(c2);
-        m_equivalenceSolver->addTempClause(c3);
-        m_equivalenceSolver->addTempClause(c4);
+        m_latchEqIndSolver->addTempClause(c1);
+        m_latchEqIndSolver->addTempClause(c2);
+        m_latchEqIndSolver->addTempClause(c3);
+        m_latchEqIndSolver->addTempClause(c4);
     }
 
     Cube d = GetCOIDomain(Cube{aLit, bLit, a_prime, b_prime});
     {
-        std::vector<char> &dom = m_equivalenceSolver->domainSet();
-        std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
         for (Lit v : d) {
             Var vv = VarOf(v);
             if (!dom[vv]) {
@@ -1214,113 +1275,81 @@ bool Model::CheckLatchEquivalenceBySAT(Lit aLit, Lit bLit) {
         }
     }
 
-    minicore::lbool res = m_equivalenceSolver->solve();
+    minicore::lbool res = m_latchEqIndSolver->solve();
     bool unsat = (res == minicore::l_False);
+    restore_domain();
 
     if (unsat) {
         Clause c1 = ToCNFClause(Clause{aLit, ~bLit});
         Clause c2 = ToCNFClause(Clause{~aLit, bLit});
-        m_equivalenceSolver->addClause(c1);
-        m_equivalenceSolver->addClause(c2);
-        m_eqSolverUnsats++;
+        m_latchEqIndSolver->addClause(c1);
+        m_latchEqIndSolver->addClause(c2);
     }
     return unsat;
 }
 
 
-bool Model::CheckLatchEquivalenceBySATSimulation(Lit aLit, Lit bLit) {
-    auto add_base = [&](minicore::Solver &solver, bool init) {
-        solver.setRestartLimit(10);
-        while (static_cast<int>(m_maxId) >= solver.nVars()) solver.newVar();
-        for (const Clause &c : m_cnfClauses) solver.addClause(c);
-        for (Lit c : m_constraints) solver.addClause(Clause{c});
-        if (!init) return;
-
-        for (Var latch : m_circuitGraph->modelLatches) {
-            Lit latch_lit = MkLit(latch);
-            Lit reset = m_circuitGraph->latchResetMap[latch];
-            if (reset == latch_lit) continue;
-            if (reset == LIT_FALSE) {
-                solver.addClause(Clause{~latch_lit});
-            } else if (reset == LIT_TRUE) {
-                solver.addClause(Clause{latch_lit});
-            } else {
-                solver.addClause(ToCNFClause(Clause{latch_lit, ~reset}));
-                solver.addClause(ToCNFClause(Clause{~latch_lit, reset}));
-            }
-        }
-    };
-
-    {
-        minicore::Solver init_solver;
-        add_base(init_solver, true);
-        init_solver.addClause(ToCNFClause(Clause{aLit, bLit}));
-        init_solver.addClause(ToCNFClause(Clause{~aLit, ~bLit}));
-        minicore::lbool res = init_solver.solve();
-        if (res != minicore::l_False) return false;
-    }
-
-    Lit a_prime = IsConst(aLit) ? aLit : LookupPrime(aLit);
-    Lit b_prime = IsConst(bLit) ? bLit : LookupPrime(bLit);
-    {
-        minicore::Solver ind_solver;
-        add_base(ind_solver, false);
-        ind_solver.addClause(ToCNFClause(Clause{aLit, ~bLit}));
-        ind_solver.addClause(ToCNFClause(Clause{~aLit, bLit}));
-        ind_solver.addClause(ToCNFClause(Clause{a_prime, b_prime}));
-        ind_solver.addClause(ToCNFClause(Clause{~a_prime, ~b_prime}));
-        minicore::lbool res = ind_solver.solve();
-        return res == minicore::l_False;
-    }
+bool Model::CheckLatchEquivalenceBySAT(Lit aLit, Lit bLit) {
+    if (!CheckLatchEquivalenceBase(aLit, bLit)) return false;
+    return CheckLatchEquivalenceInd(aLit, bLit);
 }
 
 
 bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
-    if (m_equivalenceSolver == nullptr ||
-        m_eqSolverUnsats > 1000) {
-        m_eqSolverUnsats = 0;
-        ApplyEquivalence();
-        CollectConstraints();
-        CollectNextValueMapping();
-        CollectClauses();
-        SimplifyDAGClauses();
-        CollectCNFClauses();
-        UpdateDependencyVecDAGCNF();
-
-        m_equivalenceSolver = make_unique<minicore::Solver>();
-        m_equivalenceSolver->setRestartLimit(1);
-        for (auto &c : m_cnfClauses) {
-            for (auto l : c) {
-                Var v = VarOf(l);
-                while (static_cast<int>(v) >= m_equivalenceSolver->nVars())
-                    m_equivalenceSolver->newVar();
-            }
-            m_equivalenceSolver->addClause(c);
+    if (m_gateEqSolver == nullptr) {
+        if (m_cnfClauses.empty()) {
+            ApplyEquivalence();
+            CollectConstraints();
+            CollectNextValueMapping();
+            CollectClauses();
+            SimplifyDAGClauses();
+            CollectCNFClauses();
+            UpdateDependencyVecDAGCNF();
         }
-        m_equivalenceSolver->setSolveInDomain(true);
+
+        m_gateEqSolver = make_unique<minicore::Solver>();
+        m_gateEqSolver->setRestartLimit(1);
+        m_gateEqSolver->newVarUntil(static_cast<minicore::Var>(m_maxId));
+        for (const Clause &c : m_cnfClauses) m_gateEqSolver->addClause(c);
+        for (Lit c : m_constraints) m_gateEqSolver->addClause(Clause{c});
+        m_gateEqSolver->setSolveInDomain(true);
+
+        Cube constraints_domain = GetCOIDomain(m_constraints);
+        std::vector<char> &dom = m_gateEqSolver->domainSet();
+        std::vector<minicore::Var> &list = m_gateEqSolver->domainList();
+        for (Lit v : constraints_domain) {
+            Var vv = VarOf(v);
+            if (!dom[vv]) {
+                dom[vv] = 1;
+                list.push_back(vv);
+            }
+        }
     }
 
     // (a <-> b)
     // !(a <-> b) is unsat
     // ((a & !b) | (b & !a))
     // (a | b) & (!a | !b)
-    {
-        // only keep temp act var
-        std::vector<char> &dom = m_equivalenceSolver->domainSet();
-        std::fill(dom.begin() + 1, dom.end(), 0);
-        m_equivalenceSolver->domainList().resize(1);
-    }
+    std::vector<char> &dom = m_gateEqSolver->domainSet();
+    std::vector<minicore::Var> &list = m_gateEqSolver->domainList();
+    size_t base_domain_size = list.size();
+
+    auto restore_domain = [&]() {
+        for (size_t i = base_domain_size; i < list.size(); ++i) {
+            dom[list[i]] = 0;
+        }
+        list.resize(base_domain_size);
+    };
+
     {
         Clause c1 = ToCNFClause(Clause{aLit, bLit});
         Clause c2 = ToCNFClause(Clause{~aLit, ~bLit});
-        m_equivalenceSolver->addTempClause(c1);
-        m_equivalenceSolver->addTempClause(c2);
+        m_gateEqSolver->addTempClause(c1);
+        m_gateEqSolver->addTempClause(c2);
     }
 
     Cube d = GetCOIDomain(Cube{aLit, bLit});
     {
-        std::vector<char> &dom = m_equivalenceSolver->domainSet();
-        std::vector<minicore::Var> &list = m_equivalenceSolver->domainList();
         for (Lit v : d) {
             Var vv = VarOf(v);
             if (!dom[vv]) {
@@ -1330,15 +1359,15 @@ bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
         }
     }
 
-    minicore::lbool res = m_equivalenceSolver->solve();
+    minicore::lbool res = m_gateEqSolver->solve();
     bool unsat = (res == minicore::l_False);
+    restore_domain();
 
     if (unsat) {
         Clause c1 = ToCNFClause(Clause{aLit, ~bLit});
         Clause c2 = ToCNFClause(Clause{~aLit, bLit});
-        m_equivalenceSolver->addClause(c1);
-        m_equivalenceSolver->addClause(c2);
-        m_eqSolverUnsats++;
+        m_gateEqSolver->addClause(c1);
+        m_gateEqSolver->addClause(c2);
     }
     return unsat;
 }

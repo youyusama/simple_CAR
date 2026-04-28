@@ -36,6 +36,7 @@ class Solver {
     // Problem specification:
     //
     Var newVar(); // Add a new variable with parameters specifying variable mode.
+    void newVarUntil(Var v);
 
     bool addClause(const std::vector<Lit> &ps); // Add a clause to the solver.
     bool addClause_(std::vector<Lit> &ps);      // Add a clause to the solver without making superflous internal copy. Will change the passed vector 'ps'.
@@ -327,7 +328,7 @@ inline std::vector<Lit> Solver::intVec2LitVec(const std::vector<int> &vec) {
     res.reserve(vec.size());
     for (int l : vec) {
         Var v = abs(l);
-        while (v >= nVars()) newVar();
+        newVarUntil(v);
         res.push_back(mkLit(v, l < 0));
     }
     return res;

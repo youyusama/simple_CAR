@@ -5,6 +5,7 @@
 #include "CircuitGraph.h"
 #include "TernarySim.h"
 #include <memory>
+#include <queue>
 #include <vector>
 
 namespace minicore {
@@ -18,7 +19,9 @@ class SATSimulator {
     SATSimulator(std::shared_ptr<CircuitGraph> circuitGraph,
                  const std::vector<Clause> &cnfClauses,
                  const Cube &constraints,
+                 const Cube &initialState,
                  Var trueVar);
+    ~SATSimulator();
 
     std::vector<std::vector<Tbool>> InitSimulation(int maxSamples);
 
@@ -26,21 +29,22 @@ class SATSimulator {
                                                          int maxSamples);
 
   private:
-    void AddBaseClauses(minicore::Solver &solver) const;
+    void AddTransClauses(minicore::Solver &solver,
+                         const std::vector<Clause> &cnfClauses,
+                         const Cube &constraints) const;
 
-    void AddResetClauses(minicore::Solver &solver) const;
+    void AddInitialClauses(minicore::Solver &solver,
+                           const Cube &initialState) const;
 
     Lit ToCNFLit(Lit lit) const;
-
-    Clause ToCNFClause(const Clause &clause) const;
 
     Tbool SolverLitValue(const minicore::Solver &solver, Lit lit) const;
 
     std::shared_ptr<CircuitGraph> m_circuitGraph;
-    const std::vector<Clause> &m_cnfClauses;
-    const Cube &m_constraints;
+    std::unique_ptr<minicore::Solver> m_initSolver;
+    std::unique_ptr<minicore::Solver> m_transitionSolver;
+    std::queue<Cube> m_transitionFrontier;
     Var m_trueVar;
-    Var m_maxVar;
     std::vector<Var> m_latches;
     Cube m_latchLits;
     Cube m_negLatchLits;

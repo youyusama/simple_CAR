@@ -502,6 +502,12 @@ class DecisionBuckets {
         var_activity_[v] = 0.0;
     }
 
+    void init_vars(Var begin, Var end) {
+        for (Var v = begin; v < end; ++v) {
+            var_activity_[v] = 0.0;
+        }
+    }
+
     void insert(Var v) {
         if (in_bucket_[v]) return;
         if (heap_pos_[v] == -1) {

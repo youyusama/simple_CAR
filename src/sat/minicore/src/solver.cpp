@@ -80,10 +80,20 @@ Solver::~Solver() {
 
 
 Var Solver::newVar() {
-    Var v = next_var++;
+    Var v = next_var;
+    newVarUntil(v);
+    return v;
+}
 
+
+void Solver::newVarUntil(Var v) {
+    assert(v >= 0);
+    if (v < next_var) return;
+
+    Var old_next_var = next_var;
+    next_var = v + 1;
     if (alloced_var < next_var) {
-        alloced_var += 128;
+        while (alloced_var < next_var) alloced_var += 128;
         watches.ensure(alloced_var + alloced_var + 1);
         assigns.resize(alloced_var, l_Undef);
         vardata.resize(alloced_var, mkVarData(CRef_Undef, 0));
@@ -93,9 +103,8 @@ Var Solver::newVar() {
         trail.reserve(alloced_var);
         domain_set.resize(alloced_var, 0);
     }
-    dec_vars++;
-    order_list.init_var(v);
-    return v;
+    dec_vars += static_cast<uint64_t>(next_var - old_next_var);
+    order_list.init_vars(old_next_var, next_var);
 }
 
 bool Solver::addClause_(std::vector<Lit> &ps) {
