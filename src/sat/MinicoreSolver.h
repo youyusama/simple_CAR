@@ -32,16 +32,6 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
             return T_UNDEF;
     }
   protected:
-    inline minicore::Lit GetLit(int id) {
-        Var lit_var = AbsLit(id);
-        while (static_cast<int>(lit_var) >= nVars()) newVar();
-        return FromSigned(id);
-    };
-    inline minicore::Lit GetLit(Lit lit) {
-        while (static_cast<int>(VarOf(lit)) >= nVars()) newVar();
-        return lit;
-    }
-
     Model &m_model;
     Var m_maxId;
     vector<minicore::Lit> m_tempClause;
