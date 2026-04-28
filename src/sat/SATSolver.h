@@ -26,10 +26,6 @@ class SATSolver {
         m_slv->AddClause(cls);
     }
 
-    void AddAssumption(const Cube &assumption) {
-        m_slv->AddAssumption(assumption);
-    }
-
     bool Solve();
     bool Solve(const Cube &assumption);
 
@@ -55,18 +51,6 @@ class SATSolver {
 
     Tbool GetModel(Var id) {
         return m_slv->GetModel(id);
-    }
-
-    void ClearAssumption() {
-        m_slv->ClearAssumption();
-    }
-
-    void PushAssumption(Lit a) {
-        m_slv->PushAssumption(a);
-    }
-
-    Lit PopAssumption() {
-        return m_slv->PopAssumption();
     }
 
     // special interface in minicore
@@ -120,8 +104,6 @@ class SATSolver {
     void AddUC(const Cube &uc);
 
     void AddProperty();
-
-    void FlipLastConstrain();
 
   protected:
     Model &m_model;

@@ -13,18 +13,15 @@ bool MinicoreSolver::Solve() {
     if (!m_tempClause.empty()) {
         addTempClause(m_tempClause);
     }
-    return solve(m_assumptions) == minicore::l_True;
+    return solve() == minicore::l_True;
 }
 
 
 bool MinicoreSolver::Solve(const Cube &assumption) {
-    m_assumptions = assumption;
-    return Solve();
-}
-
-
-void MinicoreSolver::AddAssumption(const Cube &assumption) {
-    m_assumptions.insert(m_assumptions.end(), assumption.begin(), assumption.end());
+    if (!m_tempClause.empty()) {
+        addTempClause(m_tempClause);
+    }
+    return solve(assumption) == minicore::l_True;
 }
 
 
@@ -107,23 +104,6 @@ void MinicoreSolver::AddTempClause(const Cube &cls) {
 
 void MinicoreSolver::ReleaseTempClause() {
     m_tempClause.clear();
-}
-
-
-void MinicoreSolver::ClearAssumption() {
-    m_assumptions.clear();
-}
-
-
-void MinicoreSolver::PushAssumption(Lit a) {
-    m_assumptions.emplace_back(a);
-}
-
-
-Lit MinicoreSolver::PopAssumption() {
-    minicore::Lit p = m_assumptions.back();
-    m_assumptions.pop_back();
-    return p;
 }
 
 } // namespace car

@@ -14,7 +14,6 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     ~MinisatSolver();
 
     void AddClause(const Cube &cls) override;
-    void AddAssumption(const Cube &assumption) override;
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
     pair<Cube, Cube> GetAssignment(bool prime) override;
@@ -33,10 +32,6 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
             return T_UNDEF;
         }
     }
-    void ClearAssumption() override;
-    void PushAssumption(Lit a) override;
-    Lit PopAssumption() override;
-
   protected:
     inline Lit GetLiteral(const Minisat::Lit &l);
     inline Minisat::Lit GetLit(int id) {

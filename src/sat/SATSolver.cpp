@@ -400,16 +400,4 @@ void SATSolver::AddProperty() {
     SetDomainCOI(cls);
 }
 
-
-// ================================================================================
-// @brief:
-// @input:
-// @output:
-// ================================================================================
-void SATSolver::FlipLastConstrain() {
-    Lit v = PopAssumption();
-    AddClause({~v});
-}
-
-
 } // namespace car

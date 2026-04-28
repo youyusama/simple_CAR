@@ -50,12 +50,6 @@ void KissatSolver::AddClause(const Cube &cls) {
     kissat_add(m_solver, 0); // end of a Clause
 }
 
-void KissatSolver::AddAssumption(const Cube &assumption) {
-    if (!assumption.empty()) {
-        Unsupported("AddAssumption");
-    }
-}
-
 bool KissatSolver::Solve(const Cube &assumption) {
     if (!assumption.empty()) {
         Unsupported("Solve(const Cube&)");
@@ -85,16 +79,5 @@ void KissatSolver::AddTempClause(const Cube &cls) {
 }
 
 void KissatSolver::ReleaseTempClause() {}
-
-void KissatSolver::ClearAssumption() {}
-
-void KissatSolver::PushAssumption(Lit a) {
-    (void)a;
-    Unsupported("PushAssumption");
-}
-
-Lit KissatSolver::PopAssumption() {
-    Unsupported("PopAssumption");
-}
 
 } // namespace car

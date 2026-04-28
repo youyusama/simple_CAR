@@ -22,10 +22,6 @@ class ISolver {
     virtual void AddTempClause(const Cube &cls) = 0;
     virtual void ReleaseTempClause() = 0;
     virtual Tbool GetModel(Var id) = 0;
-    virtual void AddAssumption(const Cube &assumption) = 0;
-    virtual void ClearAssumption() = 0;
-    virtual void PushAssumption(Lit a) = 0;
-    virtual Lit PopAssumption() = 0;
 
   private:
 };

@@ -514,13 +514,13 @@ bool FCAR::IsInvariant(int frameLevel) {
         return false;
     }
 
-    AddConstraintAnd(frame_i);
+    Lit and_constraint = AddConstraintAnd(frame_i);
     bool result;
     {
         [[maybe_unused]] auto sat_inv = m_log.Section("SAT_Inv");
-        result = !m_invSolver->Solve();
+        result = !m_invSolver->Solve(Cube{and_constraint});
     }
-    m_invSolver->FlipLastConstrain();
+    m_invSolver->AddClause(Cube{~and_constraint});
     AddConstraintOr(frame_i);
 
     return result;
@@ -551,7 +551,7 @@ void FCAR::AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f) {
 // @input:
 // @output:
 // ================================================================================
-void FCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
+Lit FCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
     Var flag = m_invSolver->GetNewVar();
     Lit flag_lit = MkLit(flag);
     for (const Cube &frame_cube : *f) {
@@ -562,7 +562,7 @@ void FCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
         cls.push_back(~flag_lit);
         m_invSolver->AddClause(cls);
     }
-    m_invSolver->AddAssumption(Cube{flag_lit});
+    return flag_lit;
 }
 
 

@@ -30,13 +30,6 @@ bool MinisatSolver::Solve(const Cube &assumption) {
 }
 
 
-void MinisatSolver::AddAssumption(const Cube &assumption) {
-    for (auto it : assumption) {
-        m_assumptions.push(GetLit(it));
-    }
-}
-
-
 void MinisatSolver::AddClause(const Cube &cls) {
     Minisat::vec<Minisat::Lit> literals;
     for (Lit l : cls) {
@@ -128,23 +121,6 @@ void MinisatSolver::ReleaseTempClause() {
     assert(m_tempVar != 0);
     releaseVar(~GetLit(MkLit(m_tempVar)));
     m_tempVar = 0;
-}
-
-
-void MinisatSolver::ClearAssumption() {
-    m_assumptions.clear();
-}
-
-
-void MinisatSolver::PushAssumption(Lit a) {
-    m_assumptions.push(GetLit(a));
-}
-
-
-Lit MinisatSolver::PopAssumption() {
-    Minisat::Lit p = m_assumptions.last();
-    m_assumptions.pop();
-    return GetLiteral(p);
 }
 
 } // namespace car

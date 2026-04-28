@@ -25,7 +25,6 @@ class KissatSolver : public ISolver {
     }
 
     void AddClause(const Cube &cls) override;
-    void AddAssumption(const Cube &assumption) override;
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
     pair<Cube, Cube> GetAssignment(bool prime) override;
@@ -43,10 +42,6 @@ class KissatSolver : public ISolver {
             return T_TRUE;
         }
     }
-    void ClearAssumption() override;
-    void PushAssumption(Lit a) override;
-    Lit PopAssumption() override;
-
   protected:
     Model &m_model;
     Var m_maxId;

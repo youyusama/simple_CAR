@@ -14,7 +14,6 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     ~MinicoreSolver();
 
     void AddClause(const Cube &cls) override;
-    void AddAssumption(const Cube &assumption) override;
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
     pair<Cube, Cube> GetAssignment(bool prime) override;
@@ -32,10 +31,6 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
         else
             return T_UNDEF;
     }
-    void ClearAssumption() override;
-    void PushAssumption(Lit a) override;
-    Lit PopAssumption() override;
-
   protected:
     inline minicore::Lit GetLit(int id) {
         Var lit_var = AbsLit(id);
@@ -49,7 +44,6 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
 
     Model &m_model;
     Var m_maxId;
-    vector<minicore::Lit> m_assumptions;
     vector<minicore::Lit> m_tempClause;
 };
 

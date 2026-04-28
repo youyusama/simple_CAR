@@ -14,7 +14,6 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     ~CadicalSolver();
 
     void AddClause(const Cube &cls) override;
-    void AddAssumption(const Cube &assumption) override;
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
     pair<Cube, Cube> GetAssignment(bool prime) override;
@@ -32,10 +31,6 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
             return T_FALSE;
         }
     }
-    void ClearAssumption() override;
-    void PushAssumption(Lit a) override;
-    Lit PopAssumption() override;
-
   protected:
     Model &m_model;
     Var m_maxId;

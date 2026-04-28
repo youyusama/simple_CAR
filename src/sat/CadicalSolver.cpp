@@ -36,13 +36,6 @@ bool CadicalSolver::Solve(const Cube &assumption) {
 }
 
 
-void CadicalSolver::AddAssumption(const Cube &assumption) {
-    for (auto it : assumption) {
-        m_assumptions.push_back(it);
-    }
-}
-
-
 void CadicalSolver::AddClause(const Cube &cls) {
     for (Lit l : cls)
         if (VarOf(l) > m_maxId) m_maxId = VarOf(l) + 1;
@@ -123,23 +116,6 @@ void CadicalSolver::AddTempClause(const Cube &cls) {
 
 void CadicalSolver::ReleaseTempClause() {
     m_tempClause.clear();
-}
-
-
-void CadicalSolver::ClearAssumption() {
-    m_assumptions.clear();
-}
-
-
-void CadicalSolver::PushAssumption(Lit a) {
-    m_assumptions.push_back(a);
-}
-
-
-Lit CadicalSolver::PopAssumption() {
-    Lit p = m_assumptions.back();
-    m_assumptions.pop_back();
-    return p;
 }
 
 

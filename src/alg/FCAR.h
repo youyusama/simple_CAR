@@ -132,7 +132,7 @@ class FCAR : public IncrAlg {
 
     void AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f);
 
-    void AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f);
+    Lit AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f);
 
     pair<Cube, Cube> GetInputAndState(int lvl);
 
