@@ -15,6 +15,7 @@ SATSimulator::SATSimulator(std::shared_ptr<CircuitGraph> circuitGraph,
       m_transitionSolver(std::make_unique<minicore::Solver>()),
       m_trueVar(trueVar) {
     m_latches = m_circuitGraph->modelLatches;
+    m_modelGates = m_circuitGraph->modelGates;
     m_latchLits.reserve(m_latches.size());
     m_negLatchLits.reserve(m_latches.size());
     m_nextCnfLits.reserve(m_latches.size());
@@ -32,6 +33,11 @@ SATSimulator::SATSimulator(std::shared_ptr<CircuitGraph> circuitGraph,
 
 
 SATSimulator::~SATSimulator() = default;
+
+
+const std::vector<std::vector<Tbool>> &SATSimulator::GetGateSamples() const {
+    return m_gateSamples;
+}
 
 
 Lit SATSimulator::ToCNFLit(Lit lit) const {
@@ -66,15 +72,29 @@ Tbool SATSimulator::SolverLitValue(const minicore::Solver &solver, Lit lit) cons
 }
 
 
+void SATSimulator::RecordGateSample(const minicore::Solver &solver) {
+    std::vector<Tbool> values(m_trueVar + 1, T_UNDEF);
+    values[0] = T_FALSE;
+    values[m_trueVar] = T_TRUE;
+    for (Var gate : m_modelGates) {
+        values[gate] = SolverLitValue(solver, MkLit(gate));
+    }
+    m_gateSamples.emplace_back(std::move(values));
+}
+
+
 std::vector<std::vector<Tbool>> SATSimulator::InitSimulation(int maxSamples) {
     std::vector<std::vector<Tbool>> samples;
     if (maxSamples <= 0) return samples;
 
     minicore::Solver &solver = *m_initSolver;
+    constexpr int TRANSITION_ROOT_LIMIT = 10;
 
     while (static_cast<int>(samples.size()) < maxSamples) {
         minicore::lbool res = solver.solve();
         if (res != minicore::l_True) break;
+        RecordGateSample(solver);
+        bool enqueue_transition_root = static_cast<int>(samples.size()) < TRANSITION_ROOT_LIMIT;
 
         std::vector<Tbool> state(m_trueVar + 1, T_UNDEF);
         state[0] = T_FALSE;
@@ -103,7 +123,7 @@ std::vector<std::vector<Tbool>> SATSimulator::InitSimulation(int maxSamples) {
         samples.emplace_back(std::move(state));
         solver.addClause(block);
         m_transitionSolver->addClause(init_next_block);
-        m_transitionFrontier.emplace(std::move(assumptions));
+        if (enqueue_transition_root) m_transitionFrontier.emplace(std::move(assumptions));
     }
 
     return samples;
@@ -117,7 +137,7 @@ std::vector<std::vector<Tbool>> SATSimulator::TransitionSimulation(const std::ve
 
     minicore::Solver &solver = *m_transitionSolver;
 
-    constexpr int SUCCESSORS_PER_STATE = 4;
+    constexpr int SUCCESSORS_PER_STATE = 1;
     while (!m_transitionFrontier.empty() && static_cast<int>(samples.size()) < maxSamples) {
         Cube assumptions = std::move(m_transitionFrontier.front());
         m_transitionFrontier.pop();
@@ -125,6 +145,7 @@ std::vector<std::vector<Tbool>> SATSimulator::TransitionSimulation(const std::ve
         for (int i = 0; i < SUCCESSORS_PER_STATE && static_cast<int>(samples.size()) < maxSamples; ++i) {
             minicore::lbool res = solver.solve(assumptions);
             if (res != minicore::l_True) break;
+            RecordGateSample(solver);
 
             std::vector<Tbool> next_state(m_trueVar + 1, T_UNDEF);
             next_state[0] = T_FALSE;

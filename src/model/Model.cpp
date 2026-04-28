@@ -8,6 +8,94 @@
 
 
 namespace car {
+namespace {
+
+struct EquivalenceCheckStats {
+    int equivalent = 0;
+    int candidates = 0;
+    bool timeout = false;
+};
+
+template <typename CheckFn, typename AddFn, typename IsEquivalentFn>
+EquivalenceCheckStats CheckSignatureEquivalenceGroups(DynamicSignatureMap &signatures,
+                                                      chrono::steady_clock::time_point start_time,
+                                                      int timeout_seconds,
+                                                      int representative_limit,
+                                                      CheckFn check_equivalence,
+                                                      AddFn add_equivalence,
+                                                      IsEquivalentFn is_equivalent) {
+    EquivalenceCheckStats stats;
+    constexpr size_t SMALL_GROUP_LIMIT = 3;
+    representative_limit = std::max(1, representative_limit);
+
+    auto timed_out = [&]() {
+        return chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > timeout_seconds;
+    };
+
+    auto try_pair = [&](Lit a, Lit b) {
+        if (is_equivalent(a, b)) return false;
+
+        stats.candidates++;
+        if (check_equivalence(a, b)) {
+            stats.equivalent++;
+            add_equivalence(a, b);
+            return true;
+        }
+        return false;
+    };
+
+    for (auto &s : signatures) {
+        if (timed_out()) {
+            stats.timeout = true;
+            break;
+        }
+        if (s.second.size() < 2) continue;
+
+        vector<Lit> may_equal_vars(s.second);
+        sort(may_equal_vars.begin(), may_equal_vars.end());
+
+        if (may_equal_vars.size() <= SMALL_GROUP_LIMIT) {
+            for (size_t i = 0; i + 1 < may_equal_vars.size(); i++) {
+                for (size_t j = i + 1; j < may_equal_vars.size(); j++) {
+                    try_pair(may_equal_vars[i], may_equal_vars[j]);
+                    if (timed_out()) {
+                        stats.timeout = true;
+                        return stats;
+                    }
+                }
+            }
+            continue;
+        }
+
+        int k_rep = std::min<int>(representative_limit, may_equal_vars.size());
+        vector<Lit> reps(may_equal_vars.begin(), may_equal_vars.begin() + k_rep);
+        for (size_t i = k_rep; i < may_equal_vars.size(); i++) {
+            Lit v = may_equal_vars[i];
+            bool already_equiv = false;
+            for (Lit r : reps) {
+                if (is_equivalent(r, v)) {
+                    already_equiv = true;
+                    break;
+                }
+            }
+            if (already_equiv) continue;
+
+            for (Lit r : reps) {
+                bool merged = try_pair(r, v);
+                if (timed_out()) {
+                    stats.timeout = true;
+                    return stats;
+                }
+                if (merged) break;
+            }
+        }
+    }
+
+    return stats;
+}
+
+} // namespace
+
 Lit EquivalenceManager::FindLit(Lit a) {
     Lit root = FindRootRecursive(VarOf(a));
     return Sign(a) ? ~root : root;
@@ -113,7 +201,7 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     if (m_settings.eq == 1) {
         SimplifyModelByTernarySimulation();
         ApplyEquivalence();
-        SimplifyModelByRandomSimulation();
+        SimplifyModelBySATSimulation();
     } else if (m_settings.eq == 2) {
         SimplifyModelByTernarySimulation();
     } else if (m_settings.eq == 3) {
@@ -862,6 +950,7 @@ void Model::SimplifyModelByRandomSimulation() {
     int mayeq_counter = 0;
     int eq_counter = 0;
     auto start_time = chrono::steady_clock::now();
+    auto latch_check_start = chrono::steady_clock::now();
 
     // find may equivalent latches
     Cube eqcheck_latches;
@@ -871,37 +960,24 @@ void Model::SimplifyModelByRandomSimulation() {
 
     ResetLatchEquivalenceSolvers();
 
-    // signatures to equivalent variables
-    for (auto &s : signatures_variables_map) {
-        if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
-            LOG_L(m_log, 1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
-            break;
-        }
+    EquivalenceCheckStats latch_stats = CheckSignatureEquivalenceGroups(
+        signatures_variables_map, start_time, m_settings.eqTimeout, 8,
+        [&](Lit a, Lit b) { return CheckLatchEquivalenceBySAT(a, b); },
+        [&](Lit a, Lit b) { m_equivalenceManager->AddEquivalence(a, b); },
+        [&](Lit a, Lit b) { return m_equivalenceManager->IsEquivalent(a, b); });
+    if (latch_stats.timeout)
+        LOG_L(m_log, 1, "Equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
+    mayeq_counter = latch_stats.candidates;
+    eq_counter = latch_stats.equivalent;
 
-        if (s.second.size() < 2) continue;
-
-        vector<Lit> may_equal_vars(s.second);
-        sort(may_equal_vars.begin(), may_equal_vars.end());
-
-        for (size_t i = 0; i + 1 < may_equal_vars.size(); i++) {
-            if (m_equivalenceManager->HasEquivalence(may_equal_vars[i])) continue;
-
-            for (size_t j = i + 1; j < may_equal_vars.size(); j++) {
-                if (m_equivalenceManager->HasEquivalence(may_equal_vars[j])) continue;
-
-                mayeq_counter++;
-                if (CheckLatchEquivalenceBySAT(may_equal_vars[i], may_equal_vars[j])) {
-                    eq_counter++;
-                    m_equivalenceManager->AddEquivalence(may_equal_vars[i], may_equal_vars[j]);
-                }
-            }
-        }
-    }
     LOG_L(m_log, 1, "Found ", eq_counter, "/", mayeq_counter, " equivalent latches.");
     if (mayeq_counter > 0)
         LOG_L(m_log, 1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
+    LOG_L(m_log, 1, "Random-simulated latch equivalence checking takes ",
+          chrono::duration<double>(chrono::steady_clock::now() - latch_check_start).count(), " seconds.");
 
     if (m_gateEqSolver != nullptr) m_gateEqSolver = nullptr;
+    auto gate_check_start = chrono::steady_clock::now();
     // find may equivalent variables
     signatures_variables_map.clear();
     Cube eqcheck_gates;
@@ -911,60 +987,21 @@ void Model::SimplifyModelByRandomSimulation() {
     mayeq_counter = 0;
     eq_counter = 0;
 
-    // signatures to equivalent variables
-    for (auto &s : signatures_variables_map) {
-        if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
-            LOG_L(m_log, 1, "Equivalent gate checking timeout after ", m_settings.eqTimeout, " seconds.");
-            break;
-        }
-        if (s.second.size() < 2) continue;
+    EquivalenceCheckStats gate_stats = CheckSignatureEquivalenceGroups(
+        signatures_variables_map, start_time, m_settings.eqTimeout, 3,
+        [&](Lit a, Lit b) { return CheckGateEquivalenceBySAT(a, b); },
+        [&](Lit a, Lit b) { m_equivalenceManager->AddEquivalence(a, b); },
+        [&](Lit a, Lit b) { return m_equivalenceManager->IsEquivalent(a, b); });
+    if (gate_stats.timeout)
+        LOG_L(m_log, 1, "Equivalent gate checking timeout after ", m_settings.eqTimeout, " seconds.");
+    mayeq_counter = gate_stats.candidates;
+    eq_counter = gate_stats.equivalent;
 
-        vector<Lit> may_equal_vars(s.second);
-        sort(may_equal_vars.begin(), may_equal_vars.end());
-
-        if (may_equal_vars.size() <= 3) {
-            for (size_t i = 0; i + 1 < may_equal_vars.size(); i++) {
-                for (size_t j = i + 1; j < may_equal_vars.size(); j++) {
-                    Lit a = may_equal_vars[i];
-                    Lit b = may_equal_vars[j];
-                    if (m_equivalenceManager->IsEquivalent(a, b)) {
-                        continue;
-                    }
-                    mayeq_counter++;
-                    if (CheckGateEquivalenceBySAT(a, b)) {
-                        eq_counter++;
-                        m_equivalenceManager->AddEquivalence(a, b);
-                    }
-                }
-            }
-        } else {
-            int k_rep = std::min<int>(3, may_equal_vars.size());
-            vector<Lit> reps(may_equal_vars.begin(), may_equal_vars.begin() + k_rep);
-            for (size_t i = k_rep; i < may_equal_vars.size(); i++) {
-                Lit v = may_equal_vars[i];
-                bool already_equiv = false;
-                for (Lit r : reps) {
-                    if (m_equivalenceManager->IsEquivalent(r, v)) {
-                        already_equiv = true;
-                        break;
-                    }
-                }
-                if (already_equiv) continue;
-
-                for (Lit r : reps) {
-                    mayeq_counter++;
-                    if (CheckGateEquivalenceBySAT(r, v)) {
-                        eq_counter++;
-                        m_equivalenceManager->AddEquivalence(r, v);
-                        break;
-                    }
-                }
-            }
-        }
-    }
     LOG_L(m_log, 1, "Found ", eq_counter, "/", mayeq_counter, " equivalent gates.");
     if (mayeq_counter > 0)
         LOG_L(m_log, 1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
+    LOG_L(m_log, 1, "Random-simulated gate equivalence checking takes ",
+          chrono::duration<double>(chrono::steady_clock::now() - gate_check_start).count(), " seconds.");
     if (m_gateEqSolver != nullptr) m_gateEqSolver = nullptr;
 }
 
@@ -988,7 +1025,9 @@ void Model::SimplifyModelBySATSimulation() {
     vector<vector<Tbool>> samples = simulator.InitSimulation(64);
     vector<vector<Tbool>> transition_samples = simulator.TransitionSimulation(samples, 640);
     samples.insert(samples.end(), transition_samples.begin(), transition_samples.end());
-    LOG_L(m_log, 1, "SAT simulation generated ", samples.size(), " latch samples in ", m_log.Tock(), " seconds.");
+    const vector<vector<Tbool>> &gate_samples = simulator.GetGateSamples();
+    LOG_L(m_log, 1, "SAT simulation generated ", samples.size(), " latch samples and ", gate_samples.size(),
+          " gate samples in ", m_log.Tock(), " seconds.");
     if (samples.empty()) return;
 
     Cube eqcheck_latches;
@@ -996,6 +1035,7 @@ void Model::SimplifyModelBySATSimulation() {
     for (Var v : m_circuitGraph->modelLatches) eqcheck_latches.emplace_back(MkLit(v));
 
     DynamicSignatureMap signatures_variables_map;
+    auto latch_check_start = chrono::steady_clock::now();
     EncodeTernaryValuesToBitSignatures(samples, eqcheck_latches, signatures_variables_map);
 
     int mayeq_counter = 0;
@@ -1003,41 +1043,49 @@ void Model::SimplifyModelBySATSimulation() {
 
     ResetLatchEquivalenceSolvers();
 
-    for (auto &s : signatures_variables_map) {
-        if (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start_time).count() > m_settings.eqTimeout) {
-            LOG_L(m_log, 1, "SAT-based equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
-            break;
-        }
-        if (s.second.size() < 2) continue;
-
-        vector<Lit> may_equal_vars(s.second);
-        sort(may_equal_vars.begin(), may_equal_vars.end());
-        const int check_limit = std::min<int>(16, std::max<int>(1, 10000 / static_cast<int>(may_equal_vars.size())));
-
-        for (size_t i = 0; i < may_equal_vars.size(); ++i) {
-            Lit v = may_equal_vars[i];
-            if (m_equivalenceManager->HasEquivalence(v)) continue;
-
-            int checked = 0;
-            for (size_t j = 0; j < i && checked < check_limit; ++j) {
-                Lit r = may_equal_vars[j];
-                if (m_equivalenceManager->IsEquivalent(r, v)) break;
-                if (m_equivalenceManager->HasEquivalence(r) && !m_equivalenceManager->IsEquivalent(r, v)) continue;
-
-                mayeq_counter++;
-                checked++;
-                if (CheckLatchEquivalenceBySAT(v, r)) {
-                    eq_counter++;
-                    m_equivalenceManager->AddEquivalence(v, r);
-                    break;
-                }
-            }
-        }
-    }
+    EquivalenceCheckStats latch_stats = CheckSignatureEquivalenceGroups(
+        signatures_variables_map, start_time, m_settings.eqTimeout, 8,
+        [&](Lit a, Lit b) { return CheckLatchEquivalenceBySAT(a, b); },
+        [&](Lit a, Lit b) { m_equivalenceManager->AddEquivalence(a, b); },
+        [&](Lit a, Lit b) { return m_equivalenceManager->IsEquivalent(a, b); });
+    if (latch_stats.timeout)
+        LOG_L(m_log, 1, "SAT-based equivalent latch checking timeout after ", m_settings.eqTimeout, " seconds.");
+    mayeq_counter = latch_stats.candidates;
+    eq_counter = latch_stats.equivalent;
 
     LOG_L(m_log, 1, "Found ", eq_counter, "/", mayeq_counter, " SAT-simulated equivalent latches.");
     if (mayeq_counter > 0)
         LOG_L(m_log, 1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
+    LOG_L(m_log, 1, "SAT-simulated latch equivalence checking takes ",
+          chrono::duration<double>(chrono::steady_clock::now() - latch_check_start).count(), " seconds.");
+    ResetLatchEquivalenceSolvers();
+
+    if (m_gateEqSolver != nullptr) m_gateEqSolver = nullptr;
+    auto gate_check_start = chrono::steady_clock::now();
+    signatures_variables_map.clear();
+    Cube eqcheck_gates;
+    eqcheck_gates.reserve(m_circuitGraph->modelGates.size());
+    for (Var v : m_circuitGraph->modelGates) eqcheck_gates.emplace_back(MkLit(v));
+    EncodeTernaryValuesToBitSignatures(gate_samples, eqcheck_gates, signatures_variables_map);
+    mayeq_counter = 0;
+    eq_counter = 0;
+
+    EquivalenceCheckStats gate_stats = CheckSignatureEquivalenceGroups(
+        signatures_variables_map, start_time, m_settings.eqTimeout, 3,
+        [&](Lit a, Lit b) { return CheckGateEquivalenceBySAT(a, b); },
+        [&](Lit a, Lit b) { m_equivalenceManager->AddEquivalence(a, b); },
+        [&](Lit a, Lit b) { return m_equivalenceManager->IsEquivalent(a, b); });
+    if (gate_stats.timeout)
+        LOG_L(m_log, 1, "SAT-based equivalent gate checking timeout after ", m_settings.eqTimeout, " seconds.");
+    mayeq_counter = gate_stats.candidates;
+    eq_counter = gate_stats.equivalent;
+
+    LOG_L(m_log, 1, "Found ", eq_counter, "/", mayeq_counter, " SAT-simulated equivalent gates.");
+    if (mayeq_counter > 0)
+        LOG_L(m_log, 1, "Guessing Correct Ratio: ", eq_counter * 100 / (double)mayeq_counter, "%.");
+    LOG_L(m_log, 1, "SAT-simulated gate equivalence checking takes ",
+          chrono::duration<double>(chrono::steady_clock::now() - gate_check_start).count(), " seconds.");
+    if (m_gateEqSolver != nullptr) m_gateEqSolver = nullptr;
 }
 
 
