@@ -330,6 +330,8 @@ void Model::ApplyEquivalence() {
         }
     }
 
+    m_bad = m_equivalenceManager->FindLit(m_bad);
+
     m_circuitGraph->COIRefine();
     m_circuitGraph->CollectPropertyCOIInputs();
 }
