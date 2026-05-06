@@ -34,7 +34,6 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
   protected:
     Model &m_model;
     Var m_maxId;
-    vector<minicore::Lit> m_tempClause;
 };
 
 } // namespace car

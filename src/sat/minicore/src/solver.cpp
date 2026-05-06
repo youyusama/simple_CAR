@@ -48,11 +48,8 @@ void Solver::reset() {
         trail_lim.resize(0);
     }
 
-    // clean temprary learnts
+    // Keep temporary clauses across solves until releaseTempClause().
     if (temp_cls_activated) {
-        // temp clause
-        temp_cls_activated = false;
-        removeTempLearnt();
         // temp cls act var
         while (assigns[temp_cls_act_var] != l_Undef) {
             Var x = var(trail.back());
@@ -154,6 +151,15 @@ bool Solver::addTempClause(const std::vector<Lit> &cls) {
     temp_clauses.emplace_back(cr);
 
     return true;
+}
+
+
+void Solver::releaseTempClause() {
+    if (state_ != SolverState::Ready) reset();
+    if (!temp_cls_activated) return;
+
+    removeTempLearnt();
+    temp_cls_activated = false;
 }
 
 

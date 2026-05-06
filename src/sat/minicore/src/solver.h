@@ -41,7 +41,8 @@ class Solver {
     bool addClause(const std::vector<Lit> &ps); // Add a clause to the solver.
     bool addClause_(std::vector<Lit> &ps);      // Add a clause to the solver without making superflous internal copy. Will change the passed vector 'ps'.
 
-    bool addTempClause(const std::vector<Lit> &ps); // Add a temp clause that only effects next solve
+    bool addTempClause(const std::vector<Lit> &ps); // Add a temp clause that effects solves until release.
+    void releaseTempClause();                       // Release all active temp clauses and their derived learnts.
     bool solve_in_domain;                           // Deciside in domain.
     void setSolveInDomain(bool in_domain);          // Set decide in domain.
 

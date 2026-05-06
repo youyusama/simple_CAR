@@ -10,17 +10,11 @@ MinicoreSolver::MinicoreSolver(Model &m) : m_model(m) {
 MinicoreSolver::~MinicoreSolver() {}
 
 bool MinicoreSolver::Solve() {
-    if (!m_tempClause.empty()) {
-        addTempClause(m_tempClause);
-    }
     return solve() == minicore::l_True;
 }
 
 
 bool MinicoreSolver::Solve(const Cube &assumption) {
-    if (!m_tempClause.empty()) {
-        addTempClause(m_tempClause);
-    }
     return solve(assumption) == minicore::l_True;
 }
 
@@ -100,12 +94,12 @@ void MinicoreSolver::AddTempClause(const Cube &cls) {
         assert(static_cast<int>(VarOf(l)) < nVars());
     }
 #endif
-    m_tempClause = cls;
+    addTempClause(cls);
 }
 
 
 void MinicoreSolver::ReleaseTempClause() {
-    m_tempClause.clear();
+    releaseTempClause();
 }
 
 } // namespace car
