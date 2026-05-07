@@ -413,7 +413,9 @@ IC3::ALLProveStatus IC3::ActiveProve(int targetLemmaId) {
         }
 
         auto ctp_solver = m_transSolvers[ctp_level - 1];
-        if (IsInductive(ctp_cube, ctp_solver)) {
+        Cube ctp_cube_sorted(ctp_cube);
+        OrderAssumption(ctp_cube_sorted);
+        if (IsInductive(ctp_cube_sorted, ctp_solver)) {
             auto ctp_core = GetAndValidateCore(ctp_solver, ctp_cube);
             Generalize(ctp_core, ctp_level - 1, 0);
             int ctp_lemma_id = AddLemma(ctp_core, ctp_level);
@@ -674,8 +676,10 @@ bool IC3::HandleObligations(set<Obligation> &obligations) {
 
         auto &trans_slv = m_transSolvers[ob.level];
         auto &cti_cube = ob.state->latches;
+        Cube cti_cube_sorted(cti_cube);
+        OrderAssumption(cti_cube_sorted);
 
-        if (!IsReachable(cti_cube, trans_slv)) {
+        if (!IsReachable(cti_cube_sorted, trans_slv)) {
             auto uc = GetAndValidateCore(trans_slv, cti_cube);
             Generalize(uc, ob.level);
             int lemma_id = AddLemma(uc, ob.level + 1, true);
@@ -714,7 +718,6 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     }
     slv->AddTempClause(cls);
     Cube assumption(cb);
-    OrderAssumption(assumption);
     GetPrimed(assumption);
     slv->SetTempDomainCOI(assumption);
     bool result = !slv->Solve(assumption);
@@ -739,7 +742,9 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit
             return true;
         }
 
-        if (recLvl > m_settings.ctgMaxRecursionDepth)
+        if (recLvl > m_settings.ctgMaxRecursionDepth ||
+            ctgs >= m_settings.ctgMaxStates ||
+            frameLvl < 1)
             return false;
 
         shared_ptr<State> down_state = make_shared<State>(nullptr, Cube(), downCube, 0);
@@ -754,10 +759,10 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit
             return false;
         }
 
-        if (ctgs < m_settings.ctgMaxStates &&
-            frameLvl > 0 &&
-            IsInductive(ctg_cube, m_transSolvers[frameLvl - 1])) {
+        Cube ctg_cube_sorted(ctg_cube);
+        OrderAssumption(ctg_cube_sorted);
 
+        if (IsInductive(ctg_cube_sorted, m_transSolvers[frameLvl - 1])) {
             ctgs++;
             LOG_L(m_log, 3, "CTG is inductive at level ", frameLvl - 1);
             Cube ctg_core = GetAndValidateCore(m_transSolvers[frameLvl - 1], ctg_cube);
@@ -915,7 +920,6 @@ string IC3::FramesInfo() const {
 
 bool IC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     Cube assumption(cb);
-    OrderAssumption(assumption);
     GetPrimed(assumption);
     slv->SetTempDomainCOI(assumption);
 
