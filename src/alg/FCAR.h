@@ -159,6 +159,7 @@ class FCAR : public IncrAlg {
     shared_ptr<Branching> m_branching;
     shared_ptr<State> m_lastState;
     shared_ptr<Restart> m_restart;
+    unordered_set<Lit, LitHash> m_conflictScratch;
 
     // liveness
     bool m_initialized{false};

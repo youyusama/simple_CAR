@@ -79,12 +79,12 @@ pair<Cube, Cube> MinicoreSolver::GetAssignment(bool prime) {
 }
 
 
-unordered_set<Lit, LitHash> MinicoreSolver::GetConflict() {
-    unordered_set<Lit, LitHash> conflict_set;
+void MinicoreSolver::GetConflict(unordered_set<Lit, LitHash> &out) {
+    out.clear();
+    out.reserve(conflict.size());
     for (minicore::Lit l : conflict) {
-        conflict_set.insert(~l);
+        out.insert(~l);
     }
-    return conflict_set;
 }
 
 

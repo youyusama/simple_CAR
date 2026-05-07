@@ -446,11 +446,11 @@ void IC3::PrintALLStats() const {
 
 
 Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime) {
-    unordered_set<Lit, LitHash> conflict_set = solver->GetConflict();
+    solver->GetConflict(m_conflictScratch);
     Cube core;
     if (!prime) {
         for (const auto &lit : fallbackCube) {
-            if (conflict_set.count(lit)) {
+            if (m_conflictScratch.count(lit)) {
                 core.push_back(lit);
             }
         }
@@ -458,7 +458,7 @@ Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallback
     } else {
         for (const auto &lit : fallbackCube) {
             Lit lit_p = m_model.EnsurePrimeK(lit, 1);
-            if (conflict_set.count(lit_p)) {
+            if (m_conflictScratch.count(lit_p)) {
                 core.push_back(lit);
             }
         }

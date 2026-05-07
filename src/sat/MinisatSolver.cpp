@@ -95,12 +95,12 @@ pair<Cube, Cube> MinisatSolver::GetAssignment(bool prime) {
     return pair<Cube, Cube>(inputs, latches);
 }
 
-unordered_set<Lit, LitHash> MinisatSolver::GetConflict() {
-    unordered_set<Lit, LitHash> conflict_set;
+void MinisatSolver::GetConflict(unordered_set<Lit, LitHash> &out) {
+    out.clear();
+    out.reserve(static_cast<size_t>(conflict.size()));
     for (int i = 0; i < conflict.size(); ++i) {
-        conflict_set.insert(~GetLiteral(conflict[i]));
+        out.insert(~GetLiteral(conflict[i]));
     }
-    return conflict_set;
 }
 
 

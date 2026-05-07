@@ -95,14 +95,14 @@ pair<Cube, Cube> CadicalSolver::GetAssignment(bool prime) {
 }
 
 
-unordered_set<Lit, LitHash> CadicalSolver::GetConflict() {
-    unordered_set<Lit, LitHash> conflict_set;
+void CadicalSolver::GetConflict(unordered_set<Lit, LitHash> &out) {
+    out.clear();
+    out.reserve(m_assumptions.size());
     for (auto v : m_assumptions) {
         if (failed(ToSigned(v))) {
-            conflict_set.insert(v);
+            out.insert(v);
         }
     }
-    return conflict_set;
 }
 
 void CadicalSolver::AddTempClause(const Cube &cls) {

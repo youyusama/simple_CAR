@@ -33,8 +33,8 @@ class SATSolver {
         return m_slv->GetAssignment(prime);
     }
 
-    unordered_set<Lit, LitHash> GetConflict() {
-        return m_slv->GetConflict();
+    void GetConflict(unordered_set<Lit, LitHash> &out) {
+        m_slv->GetConflict(out);
     }
 
     Var GetNewVar() {

@@ -914,11 +914,11 @@ pair<Cube, Cube> FCAR::GetInputAndState(int lvl) {
 
 Cube FCAR::GetUnsatCore(int lvl, const Cube &state) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UCore");
-    const unordered_set<Lit, LitHash> &conflict = m_transSolvers[lvl]->GetConflict();
+    m_transSolvers[lvl]->GetConflict(m_conflictScratch);
     Cube res;
     for (auto l : state) {
         Lit p = m_model.LookupPrime(l);
-        if (conflict.find(p) != conflict.end())
+        if (m_conflictScratch.find(p) != m_conflictScratch.end())
             res.emplace_back(l);
     }
     return res;
@@ -927,10 +927,10 @@ Cube FCAR::GetUnsatCore(int lvl, const Cube &state) {
 
 Cube FCAR::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UAssump");
-    const unordered_set<Lit, LitHash> &conflict = solver->GetConflict();
+    solver->GetConflict(m_conflictScratch);
     Cube res;
     for (auto a : assumptions) {
-        if (conflict.find(a) != conflict.end())
+        if (m_conflictScratch.find(a) != m_conflictScratch.end())
             res.emplace_back(a);
     }
     return res;

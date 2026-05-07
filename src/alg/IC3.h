@@ -173,6 +173,7 @@ class IC3 : public IncrAlg {
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badLiftSolver;
     unordered_set<Lit, LitHash> m_initialStateSet;
+    unordered_set<Lit, LitHash> m_conflictScratch;
     LemmaForestManager m_lfm;
     shared_ptr<State> m_initialState;
     shared_ptr<State> m_cexStart;

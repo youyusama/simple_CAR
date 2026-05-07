@@ -7,6 +7,7 @@
 #include "SATSolver.h"
 #include "Settings.h"
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 namespace car {
@@ -34,6 +35,7 @@ class RLive : public BaseAlg {
 
     std::unique_ptr<IncrAlg> m_safeChecker;
     std::shared_ptr<SATSolver> m_pdSolver;
+    unordered_set<Lit, LitHash> m_conflictScratch;
 
     Cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions);
 };
