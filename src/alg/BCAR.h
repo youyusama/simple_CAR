@@ -113,7 +113,7 @@ class BCAR : public IncrAlg {
         }
     }
 
-    bool Generalize(Cube &uc, int frameLvl, int recLvl = 0);
+    void Generalize(Cube &uc, int frameLvl, int recLvl = 0);
 
     bool Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses);
 

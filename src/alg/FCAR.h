@@ -113,7 +113,7 @@ class FCAR : public IncrAlg {
 
     void GeneralizePredecessor(pair<Cube, Cube> &s, shared_ptr<State> t);
 
-    bool Generalize(Cube &uc, int frameLvl, int recLvl = 0);
+    void Generalize(Cube &uc, int frameLvl, int recLvl = 0);
 
     bool Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses);
 

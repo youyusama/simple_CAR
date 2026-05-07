@@ -415,9 +415,7 @@ IC3::ALLProveStatus IC3::ActiveProve(int targetLemmaId) {
         auto ctp_solver = m_transSolvers[ctp_level - 1];
         if (IsInductive(ctp_cube, ctp_solver)) {
             auto ctp_core = GetAndValidateCore(ctp_solver, ctp_cube);
-            if (Generalize(ctp_core, ctp_level - 1, 0)) {
-                m_branching->Update(ctp_core);
-            }
+            Generalize(ctp_core, ctp_level - 1, 0);
             int ctp_lemma_id = AddLemma(ctp_core, ctp_level);
             PropagateUp(ctp_lemma_id, ctp_level);
             continue;
@@ -679,9 +677,7 @@ bool IC3::HandleObligations(set<Obligation> &obligations) {
 
         if (!IsReachable(cti_cube, trans_slv)) {
             auto uc = GetAndValidateCore(trans_slv, cti_cube);
-            if (Generalize(uc, ob.level)) {
-                m_branching->Update(uc);
-            }
+            Generalize(uc, ob.level);
             int lemma_id = AddLemma(uc, ob.level + 1, true);
             size_t push_level = PropagateUp(lemma_id, ob.level + 1);
 
@@ -766,9 +762,7 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<Lit> &triedLi
             LOG_L(m_log, 3, "CTG is inductive at level ", frameLvl - 1);
             Cube ctg_core = GetAndValidateCore(m_transSolvers[frameLvl - 1], ctg_cube);
 
-            if (Generalize(ctg_core, frameLvl - 1, recLvl + 1)) {
-                m_branching->Update(ctg_core);
-            }
+            Generalize(ctg_core, frameLvl - 1, recLvl + 1);
             int ctg_lemma_id = AddLemma(ctg_core, frameLvl);
             PropagateUp(ctg_lemma_id, frameLvl);
         } else {
@@ -788,7 +782,7 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<Lit> &triedLi
 }
 
 
-bool IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
+void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
     LOG_L(m_log, 3, "Generalizing Cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
     vector<Cube> blockers;
@@ -839,11 +833,10 @@ bool IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
             tried_lits.insert(lit_to_drop);
         }
     }
+
     sort(cb.begin(), cb.end());
-    if (cb.size() > blocker.size() && frameLvl != 0) {
-        return false;
-    } else {
-        return true;
+    if (cb.size() <= blocker.size() || frameLvl == 0) {
+        m_branching->Update(cb);
     }
 }
 

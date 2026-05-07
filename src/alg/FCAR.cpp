@@ -163,8 +163,7 @@ bool FCAR::Check() {
                     auto uc = GetUnsatCore(task.frameLevel, task.state->latches);
                     assert(uc.size() > 0);
                     LOG_L(m_log, 3, "Get UC: ", CubeToStr(uc));
-                    if (Generalize(uc, task.frameLevel))
-                        m_branching->Update(uc);
+                    Generalize(uc, task.frameLevel);
                     LOG_L(m_log, 2, "Get Generalized UC: ", CubeToStr(uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     if (m_settings.dt) task.state->HasUC();
@@ -621,7 +620,7 @@ void FCAR::GeneralizePredecessor(pair<Cube, Cube> &s, shared_ptr<State> t) {
 // @input:
 // @output:
 // ================================================================================
-bool FCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
+void FCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
     [[maybe_unused]] auto setup_scope = m_log.Section("FC_Gen_Set");
     unordered_set<Lit, LitHash> required_lits;
 
@@ -658,11 +657,10 @@ bool FCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
         }
     }
     setup_scope = m_log.Section("FC_Gen_Post");
+
     sort(uc.begin(), uc.end());
-    if (uc.size() > uc_blocker.size() && frameLvl != 0) {
-        return false;
-    } else {
-        return true;
+    if (uc.size() <= uc_blocker.size() || frameLvl == 0) {
+        m_branching->Update(uc);
     }
 }
 
@@ -719,8 +717,7 @@ bool FCAR::CTSBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube
         if (!IsReachable(frameLvl, cts_ass, "SAT_R_CTS_B")) {
             auto uc_cts = GetUnsatCore(frameLvl, cts->latches);
             LOG_L(m_log, 3, "CTG Get UC:", CubeToStr(uc_cts));
-            if (Generalize(uc_cts, frameLvl, recLvl + 1))
-                m_branching->Update(uc_cts);
+            Generalize(uc_cts, frameLvl, recLvl + 1);
             LOG_L(m_log, 3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
             AddUnsatisfiableCore(uc_cts, frameLvl + 1);
             PropagateUp(uc_cts, frameLvl + 1);

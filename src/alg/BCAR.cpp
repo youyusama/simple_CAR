@@ -227,8 +227,7 @@ bool BCAR::Check() {
                     LOG_L(m_log, 2, "Result >>> UNSAT <<<");
                     auto uc = GetUnsatAssumption(m_transSolvers[task.frameLevel], task.state->latches);
                     LOG_L(m_log, 3, "Get UC:", CubeToStr(uc));
-                    if (Generalize(uc, task.frameLevel))
-                        m_branching->Update(uc);
+                    Generalize(uc, task.frameLevel);
                     LOG_L(m_log, 2, "Get Generalized UC:", CubeToStr(uc));
                     AddUnsatisfiableCore(uc, task.frameLevel + 1);
                     if (m_settings.dt) task.state->HasUC();
@@ -568,7 +567,7 @@ Lit BCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
 // @input:
 // @output:
 // ================================================================================
-bool BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
+void BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
     [[maybe_unused]] auto gen_scope = m_log.Section("FC_Gen");
     unordered_set<Lit, LitHash> required_lits;
 
@@ -601,11 +600,11 @@ bool BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
             required_lits.emplace(uc[i]);
         }
     }
+
     sort(uc.begin(), uc.end());
-    if (uc.size() > uc_blocker.size() && frameLvl != 0) {
-        return false;
-    } else
-        return true;
+    if (uc.size() <= uc_blocker.size() || frameLvl == 0) {
+        m_branching->Update(uc);
+    }
 }
 
 
@@ -652,7 +651,7 @@ bool BCAR::CTSBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube
         if (!IsReachable(frameLvl, cts_ass, "SAT_R_CTS_B")) {
             auto uc_cts = GetUnsatAssumption(m_transSolvers[frameLvl], cts->latches);
             LOG_L(m_log, 3, "CTG Get UC:", CubeToStr(uc_cts));
-            if (Generalize(uc_cts, frameLvl, recLvl + 1)) m_branching->Update(uc_cts);
+            Generalize(uc_cts, frameLvl, recLvl + 1);
             LOG_L(m_log, 3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
             AddUnsatisfiableCore(uc_cts, frameLvl + 1);
             PropagateUp(uc_cts, frameLvl + 1);
