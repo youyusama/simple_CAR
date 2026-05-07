@@ -461,12 +461,11 @@ void Model::CollectNextValueMapping() {
     // reset
     m_maxId = m_circuitGraph->numVar + 1;
     m_primeMaps.clear();
+    m_lookupPrime.clear();
     m_primeMaps.push_back(unordered_map<Var, Lit, std::hash<Var>>());
 
-    auto &prime_map = m_primeMaps[0];
-
     for (Var l : m_circuitGraph->latches) {
-        prime_map[l] = ToCNFLit(m_circuitGraph->latchNextMap[l]);
+        SetPrimeMap0(l, ToCNFLit(m_circuitGraph->latchNextMap[l]));
     }
 }
 
@@ -761,8 +760,8 @@ void Model::CollectInnards() {
 
             // build a new gate
             CircuitGate gate(m_circuitGraph->gatesMap[g]);
-            if (LookupPrime(MkLit(g)) == Lit{}) {
-                m_primeMaps[0].insert(pair<Var, Lit>(g, MkLit(GetNewVar())));
+            if (!HasPrimeMap0(g)) {
+                SetPrimeMap0(g, MkLit(GetNewVar()));
             }
             Var p_fanout = VarOf(LookupPrime(MkLit(g)));
             gate.fanout = p_fanout;
@@ -1453,7 +1452,7 @@ int Model::KLivenessIncrement() {
 
     // rebuild manually
     m_initialState.emplace_back(~MkLit(latch));
-    m_primeMaps[0][latch] = ToCNFLit(next);
+    SetPrimeMap0(latch, ToCNFLit(next));
     m_rawClauses.insert(m_rawClauses.end(), k_clauses.begin(), k_clauses.end());
     m_cnfClauses.insert(m_cnfClauses.end(), k_cnf_clauses.begin(), k_cnf_clauses.end());
     m_simpClauses.insert(m_simpClauses.end(), k_cnf_clauses.begin(), k_cnf_clauses.end());

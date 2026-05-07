@@ -151,9 +151,10 @@ class Model {
     inline PropKind GetPropKind() const { return m_propKind; }
 
     inline Lit LookupPrime(Lit lit) {
-        assert(m_primeMaps[0].find(VarOf(lit)) != m_primeMaps[0].end());
-        Lit prime_lit = m_primeMaps[0][VarOf(lit)];
-        return Sign(lit) ? ~prime_lit : prime_lit;
+        size_t idx = PackedIndex(lit);
+        assert(idx < m_lookupPrime.size());
+        assert(m_lookupPrime[idx] != Lit{});
+        return m_lookupPrime[idx];
     }
 
     Lit EnsurePrimeK(Lit id, int k);
@@ -286,6 +287,22 @@ class Model {
 
     Clause ToCNFClause(const Clause &cls) const;
 
+    inline bool HasPrimeMap0(Var v) const {
+        return m_primeMaps[0].find(v) != m_primeMaps[0].end();
+    }
+
+    inline void SetPrimeMap0(Var v, Lit prime_lit) {
+        m_primeMaps[0][v] = prime_lit;
+
+        size_t pos = PackedIndex(MkLit(v));
+        size_t neg = PackedIndex(~MkLit(v));
+        if (neg >= m_lookupPrime.size()) {
+            m_lookupPrime.resize(neg + 1, Lit{});
+        }
+        m_lookupPrime[pos] = prime_lit;
+        m_lookupPrime[neg] = ~prime_lit;
+    }
+
     Settings m_settings;
     Log &m_log;
     shared_ptr<aiger> m_aiger;
@@ -303,6 +320,7 @@ class Model {
     vector<Clause> m_simpClauses;
 
     vector<unordered_map<Var, Lit, std::hash<Var>>> m_primeMaps;
+    vector<Lit> m_lookupPrime;
     unordered_map<int, vector<int>> m_preValueOfLatchMap;
 
     vector<vector<Var>> m_dependencyVec;
