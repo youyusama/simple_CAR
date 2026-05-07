@@ -1284,6 +1284,7 @@ bool Model::CheckLatchEquivalenceBase(Lit aLit, Lit bLit) {
     m_latchEqBaseSolver->addTempClause(c2);
 
     minicore::lbool res = m_latchEqBaseSolver->solve();
+    m_latchEqBaseSolver->releaseTempClause();
     return res == minicore::l_False;
 }
 
@@ -1328,6 +1329,7 @@ bool Model::CheckLatchEquivalenceInd(Lit aLit, Lit bLit) {
     minicore::lbool res = m_latchEqIndSolver->solve();
     bool unsat = (res == minicore::l_False);
     restore_domain();
+    m_latchEqIndSolver->releaseTempClause();
 
     if (unsat) {
         Clause c1 = ToCNFClause(Clause{aLit, ~bLit});
@@ -1400,6 +1402,7 @@ bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
     minicore::lbool res = m_gateEqSolver->solve();
     bool unsat = (res == minicore::l_False);
     restore_domain();
+    m_gateEqSolver->releaseTempClause();
 
     if (unsat) {
         Clause c1 = ToCNFClause(Clause{aLit, ~bLit});
