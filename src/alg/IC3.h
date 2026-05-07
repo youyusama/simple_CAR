@@ -99,7 +99,7 @@ class IC3 : public IncrAlg {
 
     void Generalize(Cube &cb, int frameLvl, int recLvl = 0);
 
-    bool Down(Cube &c, int frameLvl, int recLvl, const set<Lit> &triedLits);
+    bool Down(Cube &c, int frameLvl, int recLvl, const unordered_set<Lit, LitHash> &triedLits);
 
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 

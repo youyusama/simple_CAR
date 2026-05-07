@@ -722,7 +722,7 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     return result;
 }
 
-bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const set<Lit> &triedLits) {
+bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit, LitHash> &triedLits) {
     LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
@@ -787,7 +787,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
 
     vector<Cube> blockers;
     Cube blocker;
-    set<Lit> tried_lits;
+    unordered_set<Lit, LitHash> tried_lits;
 
     if (m_settings.referSkipping && frameLvl > 0) {
         m_lfm.GetBlockers(cb, frameLvl, blockers);
