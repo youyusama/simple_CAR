@@ -742,7 +742,7 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit
             return true;
         }
 
-        if (recLvl > m_settings.ctgMaxRecursionDepth ||
+        if (recLvl >= m_settings.ctgMaxRecursionDepth ||
             ctgs >= m_settings.ctgMaxStates ||
             frameLvl < 1)
             return false;
