@@ -716,19 +716,19 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     for (const auto &lit : cb) {
         cls.push_back(~lit);
     }
+    slv->ReleaseTempClause();
     slv->AddTempClause(cls);
     Cube assumption(cb);
     GetPrimed(assumption);
     slv->SetTempDomainCOI(assumption);
-    bool result = !slv->Solve(assumption);
-    slv->ReleaseTempClause();
-    return result;
+    return !slv->Solve(assumption);
 }
 
 bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit, LitHash> &triedLits) {
     LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
+    LitSet ctg_lits;
     auto &trans_slv = m_transSolvers[frameLvl];
 
     while (true) {
@@ -742,9 +742,7 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit
             return true;
         }
 
-        if (recLvl >= m_settings.ctgMaxRecursionDepth ||
-            ctgs >= m_settings.ctgMaxStates ||
-            frameLvl < 1)
+        if (recLvl >= m_settings.ctgMaxRecursionDepth)
             return false;
 
         shared_ptr<State> down_state = make_shared<State>(nullptr, Cube(), downCube, 0);
@@ -755,14 +753,14 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit
         const Cube &ctg_cube = ctg_state->latches;
         LOG_L(m_log, 3, "CTG Cube: ", CubeToStr(ctg_cube));
 
-        if (!InitiationCheck(ctg_cube)) {
-            return false;
-        }
-
         Cube ctg_cube_sorted(ctg_cube);
         OrderAssumption(ctg_cube_sorted);
 
-        if (IsInductive(ctg_cube_sorted, m_transSolvers[frameLvl - 1])) {
+        if (ctgs < m_settings.ctgMaxStates &&
+            frameLvl > 0 &&
+            InitiationCheck(ctg_cube) &&
+            IsInductive(ctg_cube_sorted, m_transSolvers[frameLvl - 1])) {
+
             ctgs++;
             LOG_L(m_log, 3, "CTG is inductive at level ", frameLvl - 1);
             Cube ctg_core = GetAndValidateCore(m_transSolvers[frameLvl - 1], ctg_cube);
@@ -772,9 +770,10 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit
             PropagateUp(ctg_lemma_id, frameLvl);
         } else {
             ctgs = 0;
+            ctg_lits.NewSet(ctg_cube);
             Cube join_cube;
             for (size_t i = 0; i < downCube.size(); i++) {
-                if (binary_search(ctg_cube.begin(), ctg_cube.end(), downCube[i])) {
+                if (ctg_lits.Has(downCube[i])) {
                     join_cube.push_back(downCube[i]);
                 } else if (triedLits.count(downCube[i])) {
                     return false;
@@ -794,14 +793,14 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
     Cube blocker;
     unordered_set<Lit, LitHash> tried_lits;
 
-    if (m_settings.referSkipping && frameLvl > 0) {
-        m_lfm.GetBlockers(cb, frameLvl, blockers);
-        if (!blockers.empty()) {
-            if (m_settings.branching > 0) {
-                sort(blockers.begin(), blockers.end(), m_blockerOrder);
-            }
-            blocker = blockers[0];
+    m_lfm.GetBlockers(cb, frameLvl, blockers);
+    if (!blockers.empty()) {
+        if (m_settings.branching > 0) {
+            sort(blockers.begin(), blockers.end(), m_blockerOrder);
         }
+        blocker = blockers[0];
+    }
+    if (m_settings.referSkipping) {
         for (const auto &lit : blocker) {
             tried_lits.insert(lit);
         }

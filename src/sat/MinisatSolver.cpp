@@ -118,7 +118,7 @@ void MinisatSolver::AddTempClause(const Cube &cls) {
 
 
 void MinisatSolver::ReleaseTempClause() {
-    assert(m_tempVar != 0);
+    if (m_tempVar == 0) return;
     releaseVar(~GetLit(MkLit(m_tempVar)));
     m_tempVar = 0;
 }
