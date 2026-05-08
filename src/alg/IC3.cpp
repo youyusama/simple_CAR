@@ -917,6 +917,23 @@ string IC3::FramesInfo() const {
 }
 
 
+string IC3::FramesDetail() const {
+    stringstream ss;
+    ss << "Frames " << m_transSolvers.size() << endl;
+    for (size_t i = 0; i < m_transSolvers.size(); ++i) {
+        ss << "Frame " << i << ": " << endl;
+        std::vector<int> lemmas_to_iterate = m_lfm.BorderIds(i);
+        for (int lemma_id : lemmas_to_iterate) {
+            if (!m_lfm.Alive(lemma_id) || m_lfm.Reachable(lemma_id)) continue;
+
+            Cube cb = m_lfm.CubeOf(lemma_id);
+            ss << CubeToStr(cb) << endl;
+        }
+    }
+    return ss.str();
+}
+
+
 bool IC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     Cube assumption(cb);
     GetPrimed(assumption);

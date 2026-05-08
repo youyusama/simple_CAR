@@ -110,6 +110,8 @@ class IC3 : public IncrAlg {
     }
     string FramesInfo() const;
 
+    string FramesDetail() const;
+
     struct LitOrder {
         shared_ptr<Branching> branching;
 
