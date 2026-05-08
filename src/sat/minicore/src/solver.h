@@ -147,6 +147,7 @@ class Solver {
     Var alloced_var;          // Variable with structure created.
     Var temp_cls_act_var;     // Variable to activate temp clause.
     bool temp_cls_activated;  // A temp clause is added.
+    bool temp_cls_release_pending; // Active temp clauses should be released on the next reset.
     size_t traillim_snapshot; // Snapshot of trail_lim before temp clause/solve in domain is activated.
     int64_t simpDB_called;    // Number of times 'solve()' has been called.
     int64_t simpDB_clauses;   // Number of clauses at last 'simplify()' call.

@@ -716,12 +716,14 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     for (const auto &lit : cb) {
         cls.push_back(~lit);
     }
-    slv->ReleaseTempClause();
+
     slv->AddTempClause(cls);
     Cube assumption(cb);
     GetPrimed(assumption);
     slv->SetTempDomainCOI(assumption);
-    return !slv->Solve(assumption);
+    bool res = !slv->Solve(assumption);
+    slv->ReleaseTempClause();
+    return res;
 }
 
 bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit, LitHash> &triedLits) {

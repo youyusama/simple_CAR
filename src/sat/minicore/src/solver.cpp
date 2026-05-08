@@ -26,7 +26,7 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1.0), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), simpDB_clauses(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1), state_(SolverState::Ready), last_result_(l_Undef) {
+                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1.0), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), simpDB_clauses(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), temp_cls_release_pending(false), restart_limit(-1), state_(SolverState::Ready), last_result_(l_Undef) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
     domain_set[temp_cls_act_var] = 1;
@@ -61,6 +61,12 @@ void Solver::reset() {
         trail_lim.resize(0);
     }
     assert(assigns[temp_cls_act_var] == l_Undef);
+
+    if (temp_cls_release_pending) {
+        removeTempLearnt();
+        temp_cls_activated = false;
+        temp_cls_release_pending = false;
+    }
 
     // solve in domain
     if (solve_in_domain) solve_in_domain_runtime_flag = false;
@@ -155,11 +161,17 @@ bool Solver::addTempClause(const std::vector<Lit> &cls) {
 
 
 void Solver::releaseTempClause() {
-    if (state_ != SolverState::Ready) reset();
     if (!temp_cls_activated) return;
 
+    if (state_ == SolverState::Solved) {
+        temp_cls_release_pending = true;
+        return;
+    }
+
+    assert(state_ == SolverState::Ready);
     removeTempLearnt();
     temp_cls_activated = false;
+    temp_cls_release_pending = false;
 }
 
 
