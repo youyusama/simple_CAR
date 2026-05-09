@@ -755,12 +755,13 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit
         const Cube &ctg_cube = ctg_state->latches;
         LOG_L(m_log, 3, "CTG Cube: ", CubeToStr(ctg_cube));
 
+        if (!InitiationCheck(ctg_cube)) return false;
+
         Cube ctg_cube_sorted(ctg_cube);
         OrderAssumption(ctg_cube_sorted);
 
         if (ctgs < m_settings.ctgMaxStates &&
             frameLvl > 0 &&
-            InitiationCheck(ctg_cube) &&
             IsInductive(ctg_cube_sorted, m_transSolvers[frameLvl - 1])) {
 
             ctgs++;

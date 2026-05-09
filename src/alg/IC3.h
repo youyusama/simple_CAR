@@ -129,10 +129,10 @@ class IC3 : public IncrAlg {
 
         bool operator()(const Cube &a, const Cube &b) const {
             float score_a = 0, score_b = 0;
-            for (size_t i = 0; i < a.size(); i++) {
-                score_a += branching->PriorityOf(a[i]);
-                score_b += branching->PriorityOf(b[i]);
-            }
+            for (Lit lit : a) score_a += branching->PriorityOf(lit);
+            score_a /= a.size();
+            for (Lit lit : b) score_b += branching->PriorityOf(lit);
+            score_b /= b.size();
             return score_a > score_b;
         }
     } m_blockerOrder;
