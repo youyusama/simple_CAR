@@ -48,7 +48,7 @@ struct Settings {
     float restartGrowthRate = 1.5;
     bool restartLuby = false;
     bool solveInProperty = false;
-    int ctgMaxRecursionDepth = 1;
+    int ctgMaxRecursionDepth = 2;
     int ctgMaxStates = 3;
     int ctgMaxBlocks = 1;
     int ctgMaxAttempts = 3;

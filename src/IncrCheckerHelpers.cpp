@@ -54,7 +54,7 @@ void Branching::Update(const Cube &uc) {
 
 void Branching::Decay() {
     for (int i = m_mini; i < m_counts.size(); i++)
-        m_counts[i] *= 0.99;
+        m_counts[i] *= 0.95;
 }
 
 
