@@ -466,6 +466,30 @@ Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallback
     }
 }
 
+
+bool IC3::GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime) {
+    bool res = solver->ShrinkConflict(m_conflictScratch, m_settings.shrink);
+    if (!res) return false;
+
+    core.clear();
+    if (!prime) {
+        for (const auto &lit : fallbackCube) {
+            if (m_conflictScratch.count(lit)) {
+                core.push_back(lit);
+            }
+        }
+    } else {
+        for (const auto &lit : fallbackCube) {
+            Lit lit_p = m_model.EnsurePrimeK(lit, 1);
+            if (m_conflictScratch.count(lit_p)) {
+                core.push_back(lit);
+            }
+        }
+    }
+    return true;
+}
+
+
 shared_ptr<State> IC3::EnumerateStartState() {
     LOG_L(m_log, 2, "Searching for a start state at level ", m_k);
     bool sat = false;
@@ -792,6 +816,17 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit
 void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
     LOG_L(m_log, 3, "Generalizing Cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
+    if (m_settings.shrink > 0 &&
+        recLvl >= m_settings.ctgMaxRecursionDepth &&
+        cb.size() > 2) {
+        Cube s_cb;
+        bool res = GetShrunkUnsatCore(m_transSolvers[frameLvl], s_cb, cb, true);
+        if (res && InitiationCheck(s_cb)) {
+            cb.swap(s_cb);
+        }
+        return;
+    }
+
     vector<Cube> blockers;
     Cube blocker;
     unordered_set<Lit, LitHash> tried_lits;
@@ -872,6 +907,15 @@ void IC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const
 
         bool result = m_liftSolver->Solve(assumption);
         assert(!result);
+
+        if (m_settings.shrink > 0) {
+            Cube s_cb;
+            bool res = GetShrunkUnsatCore(m_liftSolver, s_cb, partial_latch, false);
+            if (res) {
+                partial_latch.swap(s_cb);
+                break;
+            }
+        }
 
         auto core = GetUnsatCore(m_liftSolver, partial_latch, false);
         LOG_L(m_log, 3, "Core size: ", core.size(), ", Partial latch size: ", partial_latch.size());

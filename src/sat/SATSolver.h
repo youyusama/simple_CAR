@@ -37,6 +37,10 @@ class SATSolver {
         m_slv->GetConflict(out);
     }
 
+    bool ShrinkConflict(unordered_set<Lit, LitHash> &out, int shrink) {
+        return m_slv->ShrinkConflict(out, shrink);
+    }
+
     Var GetNewVar() {
         return m_slv->GetNewVar();
     }

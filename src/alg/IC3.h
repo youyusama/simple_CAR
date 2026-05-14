@@ -163,6 +163,8 @@ class IC3 : public IncrAlg {
     Cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube);
     bool InitiationCheck(const Cube &cb);
 
+    bool GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime);
+
     CheckResult m_checkResult;
 
     int m_k;

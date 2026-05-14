@@ -88,6 +88,15 @@ void MinicoreSolver::GetConflict(unordered_set<Lit, LitHash> &out) {
 }
 
 
+bool MinicoreSolver::ShrinkConflict(unordered_set<Lit, LitHash> &out, int shrink) {
+    out.clear();
+    if (shrink == 0) return false;
+
+    // TODO: implement minicore-only shrink strategies 1/2/3.
+    return false;
+}
+
+
 void MinicoreSolver::AddTempClause(const Cube &cls) {
 #ifndef NDEBUG
     for (Lit l : cls) {

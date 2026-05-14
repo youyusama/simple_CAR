@@ -18,6 +18,10 @@ class ISolver {
     virtual bool Solve(const Cube &assumption) = 0;
     virtual pair<Cube, Cube> GetAssignment(bool prime) = 0;
     virtual void GetConflict(unordered_set<Lit, LitHash> &out) = 0;
+    virtual bool ShrinkConflict(unordered_set<Lit, LitHash> &out, int shrink) {
+        out.clear();
+        return false;
+    }
     virtual Var GetNewVar() = 0;
     virtual void AddTempClause(const Cube &cls) = 0;
     virtual void ReleaseTempClause() = 0;
