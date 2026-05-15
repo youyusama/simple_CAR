@@ -101,6 +101,8 @@ class IC3 : public IncrAlg {
 
     bool Down(Cube &c, int frameLvl, int recLvl, const unordered_set<Lit, LitHash> &triedLits);
 
+    bool ExCTGBlock(const Cube &cb, int frameLvl, int recLvl, int blockLimit);
+
     void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
 
     inline void GetPrimed(Cube &p) {
