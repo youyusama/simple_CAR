@@ -110,7 +110,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("--ctg_max_blocks", settings.ctgMaxBlocks, "CTG max blocks")
         ->default_val(1);
 
-    app.add_option("--ctg_max_attempts", settings.ctgMaxAttempts, "CTG max attempts")
+    app.add_option("--ctg_max_attempts", settings.ctgMaxBlocks, "CTG max attempts")
         ->default_val(3);
 
     app.add_flag("--all,--active_lemma_learning", settings.activeLemmaLearning,
