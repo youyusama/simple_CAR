@@ -331,7 +331,7 @@ void IC3::ActiveLemmaLearning(int newLemmaId) {
         }
         if (status == ALLProveStatus::Reachable) {
             m_allStatusReachable++;
-            MarkReachable(hotspot_lemma_id);
+            m_lfm.MarkReachableChain(hotspot_lemma_id);
             continue;
         }
 
@@ -348,7 +348,6 @@ void IC3::ActiveLemmaLearning(int newLemmaId) {
 std::vector<int> IC3::FindHotSpots(const std::vector<int> &ancestorChain) {
     std::vector<int> hot_spots;
     for (int lemma_id : ancestorChain) {
-        if (!m_lfm.Alive(lemma_id)) continue;
         if (m_lfm.Reachable(lemma_id)) break;
         if (m_lfm.RefineCountSinceALL(lemma_id) >= m_settings.allThreshold) {
             hot_spots.push_back(lemma_id);
@@ -358,20 +357,9 @@ std::vector<int> IC3::FindHotSpots(const std::vector<int> &ancestorChain) {
     return hot_spots;
 }
 
-void IC3::MarkReachable(int lemmaId) {
-    int cur = lemmaId;
-    while (cur != -1) {
-        if (!m_lfm.Alive(cur)) break;
-        if (m_lfm.Reachable(cur)) break;
-        m_lfm.SetReachable(cur, true);
-        cur = m_lfm.ParentOf(cur);
-    }
-}
-
 IC3::ALLProveStatus IC3::ActiveProve(int targetLemmaId) {
-    if (!m_lfm.Alive(targetLemmaId)) return ALLProveStatus::Invalidated;
-
     int attempts_left = m_settings.allMaxStates;
+
     while (true) {
         if (!m_lfm.Alive(targetLemmaId)) return ALLProveStatus::Invalidated;
 

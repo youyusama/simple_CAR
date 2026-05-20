@@ -74,8 +74,6 @@ class IC3 : public IncrAlg {
 
     std::vector<int> FindHotSpots(const std::vector<int> &ancestorChain);
 
-    void MarkReachable(int lemmaId);
-
     void PrintALLStats() const;
 
     enum class ALLProveStatus {

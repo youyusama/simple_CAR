@@ -39,23 +39,20 @@ class Branching {
 struct ForestNode {
     ForestNode() = default;
 
-    ForestNode(int inParentId, int inFrameLvl, int inDepth)
+    ForestNode(int inParentId, int inFrameLvl)
         : parentId(inParentId),
-          frameLvl(inFrameLvl),
-          depth(inDepth) {}
+          frameLvl(inFrameLvl) {}
 
     int parentId{-1};
     std::vector<int> childrenIds;
     int frameLvl{0};
-    int depth{0};
+};
 
-    int refineCount{0};
+struct LemmaState {
     int refineCountSinceALL{0};
     bool reachable{false};
 
     std::vector<std::pair<Cube, int>> ctpPreds;
-    Cube ctpSucc;
-    bool hasCTPSucc{false};
 };
 
 struct AddLemmaResult {
@@ -82,7 +79,7 @@ class LemmaForestManager {
     int RefineCountSinceALL(int lemmaId) const;
     void ResetRefineCountSinceALL(int lemmaId);
     bool Reachable(int lemmaId) const;
-    void SetReachable(int lemmaId, bool value = true);
+    void MarkReachableChain(int lemmaId);
     bool PopCTPPred(int lemmaId, Cube &ctpCube, int &ctpLevel);
     void PushCTPPred(int lemmaId, const Cube &ctpCube, int ctpLevel);
     bool HasCTPPreds(int lemmaId) const;
@@ -126,7 +123,6 @@ class LemmaForestManager {
   private:
     std::pair<int, int> FindParentLemma(int startLevel, const Cube &cb);
     int CreateLemma(const Cube &cb, int parentId, int frameLevel);
-    int SwapCreateLemma(const Cube &cb, int existingLemmaId, int frameLevel);
     void AddLemmaToBorder(int frameLevel, int lemmaId);
     void RemoveFromBorder(int level, int lemmaId);
     void UnregisterLemma(int lemmaId);
@@ -136,6 +132,7 @@ class LemmaForestManager {
 
     std::vector<Cube> m_lemmas;
     std::vector<ForestNode> m_forest;
+    std::vector<LemmaState> m_lemmaStates;
     std::vector<uint8_t> m_alive;
     std::vector<std::vector<int>> m_borders;
     mutable LitSet m_tmpLitSet;
