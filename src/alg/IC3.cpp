@@ -445,7 +445,7 @@ Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallback
         return core;
     } else {
         for (const auto &lit : fallbackCube) {
-            Lit lit_p = m_model.EnsurePrimeK(lit, 1);
+            Lit lit_p = m_model.LookupPrime(lit);
             if (m_conflictScratch.count(lit_p)) {
                 core.push_back(lit);
             }
@@ -468,7 +468,7 @@ bool IC3::GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, co
         }
     } else {
         for (const auto &lit : fallbackCube) {
-            Lit lit_p = m_model.EnsurePrimeK(lit, 1);
+            Lit lit_p = m_model.LookupPrime(lit);
             if (m_conflictScratch.count(lit_p)) {
                 core.push_back(lit);
             }
@@ -738,7 +738,7 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     return res;
 }
 
-bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit, LitHash> &triedLits) {
+bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits) {
     LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
@@ -790,7 +790,7 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const unordered_set<Lit
             for (size_t i = 0; i < downCube.size(); i++) {
                 if (ctg_lits.Has(downCube[i])) {
                     join_cube.push_back(downCube[i]);
-                } else if (triedLits.count(downCube[i])) {
+                } else if (triedLits.Has(downCube[i])) {
                     return false;
                 }
             }
@@ -817,7 +817,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
 
     vector<Cube> blockers;
     Cube blocker;
-    unordered_set<Lit, LitHash> tried_lits;
+    LitSet tried_lits;
 
     m_lfm.GetBlockers(cb, frameLvl, blockers);
     if (!blockers.empty()) {
@@ -828,7 +828,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
     }
     if (m_settings.referSkipping) {
         for (const auto &lit : blocker) {
-            tried_lits.insert(lit);
+            tried_lits.Insert(lit);
         }
     }
 
@@ -841,7 +841,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
         Lit lit_to_drop = cb[i];
 
         // If we have already tried and failed to drop this literal, skip.
-        if (tried_lits.count(lit_to_drop)) {
+        if (tried_lits.Has(lit_to_drop)) {
             continue;
         }
 
@@ -860,7 +860,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
             attempts = m_settings.ctgMaxAttempts;
         } else {
             if (--attempts == 0) break;
-            tried_lits.insert(lit_to_drop);
+            tried_lits.Insert(lit_to_drop);
         }
     }
 
@@ -877,7 +877,7 @@ void IC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const
     Clause succ_negation_clause;
     succ_negation_clause.reserve(successorState->latches.size());
     for (const auto &lit : successorState->latches) {
-        succ_negation_clause.push_back(~m_model.EnsurePrimeK(lit, 1));
+        succ_negation_clause.push_back(~m_model.LookupPrime(lit));
     }
     for (auto cons : m_model.GetConstraints()) {
         succ_negation_clause.push_back(~cons);
@@ -934,11 +934,40 @@ Cube IC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fa
     // fallbackCube is sorted
     Cube core = GetUnsatCore(solver, fallbackCube, true);
     LOG_L(m_log, 3, "Got UNSAT core: ", CubeToStr(core));
-    if (!InitiationCheck(core)) {
-        LOG_L(m_log, 3, "GetAndValidateCore: core intersects with initial states. Reverting to fallback Cube.");
-        core = fallbackCube;
+
+    if (InitiationCheck(core)) {
+        return core;
     }
-    return core;
+
+    LOG_L(m_log, 3, "GetAndValidateCore: core intersects with initial states. Repairing core.");
+
+    Lit init_blocking_lit{};
+    bool found = false;
+    for (Lit lit : fallbackCube) {
+        if (m_initialStateSet.count(~lit)) {
+            init_blocking_lit = lit;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        LOG_L(m_log, 3, "GetAndValidateCore: no init-blocking literal found in fallback Cube. Reverting to fallback Cube.");
+        return fallbackCube;
+    }
+
+    Cube repaired;
+    repaired.reserve(core.size() + 1);
+    for (Lit lit : fallbackCube) {
+        Lit lit_p = m_model.LookupPrime(lit);
+        if (m_conflictScratch.count(lit_p) || lit == init_blocking_lit) {
+            repaired.push_back(lit);
+        }
+    }
+
+    assert(InitiationCheck(repaired));
+    LOG_L(m_log, 3, "Repaired UNSAT core: ", CubeToStr(repaired));
+    return repaired;
 }
 
 
