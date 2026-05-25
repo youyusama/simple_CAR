@@ -738,7 +738,16 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     return res;
 }
 
-bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits) {
+
+static bool LitTrueInModel(const shared_ptr<SATSolver> &solver, Lit lit) {
+    Tbool val = solver->GetModel(VarOf(lit));
+    if (val == T_UNDEF) return false;
+
+    return Sign(lit) ? val == T_FALSE : val == T_TRUE;
+}
+
+
+bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits, const Cube &fullCube, vector<pair<LitSet, LitSet>> &cexCache) {
     LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
@@ -747,18 +756,78 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits
 
     while (true) {
         LOG_L(m_log, 3, "Down attempt: ", CubeToStr(downCube));
+
+        // initial state inclusion check
         if (!InitiationCheck(downCube)) {
             return false;
         }
+
+        // cex cache check
+        for (const auto &[s, t] : cexCache) {
+            if (!SubsumeSet(downCube, s) && SubsumeSet(downCube, t)) {
+                return false;
+            }
+        }
+
+        // inductive check
         if (IsInductive(downCube, trans_slv)) {
             Cube down_core = GetAndValidateCore(trans_slv, downCube);
             downCube.swap(down_core);
             return true;
         }
 
-        if (recLvl >= m_settings.ctgMaxRecursionDepth)
-            return false;
+        // plain join down
+        if (recLvl >= m_settings.ctgMaxRecursionDepth) {
+            Cube cube_new;
+            bool keep_conflict = false;
 
+            for (Lit lit : downCube) {
+                bool lit_true = LitTrueInModel(trans_slv, lit);
+
+                if (triedLits.Has(lit) && !lit_true) {
+                    keep_conflict = true;
+                    break;
+                }
+
+                if (lit_true) cube_new.push_back(lit);
+            }
+
+            LitSet s;
+            LitSet t;
+            for (Lit lit : fullCube) {
+                Lit base_lit = MkLit(VarOf(lit));
+
+                Tbool val = trans_slv->GetModel(VarOf(lit));
+                if (val == T_TRUE) {
+                    s.Insert(base_lit);
+                } else if (val == T_FALSE) {
+                    s.Insert(~base_lit);
+                }
+
+                Lit lit_p = m_model.LookupPrime(lit);
+                Tbool val_p = trans_slv->GetModel(VarOf(lit_p));
+                if (val_p == T_TRUE) {
+                    t.Insert(base_lit);
+                } else if (val_p == T_FALSE) {
+                    t.Insert(~base_lit);
+                }
+            }
+            cexCache.emplace_back(std::move(s), std::move(t));
+
+            if (keep_conflict) return false;
+            if (cube_new.size() == downCube.size()) return false;
+
+            downCube.swap(cube_new);
+            continue;
+        }
+
+        for (Lit lit : downCube) {
+            if (!triedLits.Has(lit)) continue;
+
+            if (!LitTrueInModel(trans_slv, lit)) return false;
+        }
+
+        // ctg down
         shared_ptr<State> down_state = make_shared<State>(nullptr, Cube(), downCube, 0);
         auto p = trans_slv->GetAssignment(false);
         auto ctg_state = make_shared<State>(down_state, p.first, p.second, 0);
@@ -818,6 +887,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
     vector<Cube> blockers;
     Cube blocker;
     LitSet tried_lits;
+    vector<pair<LitSet, LitSet>> cex_cache;
 
     m_lfm.GetBlockers(cb, frameLvl, blockers);
     if (!blockers.empty()) {
@@ -832,6 +902,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
         }
     }
 
+    bool limited_attempts = m_settings.ctgMaxAttempts > 0;
     int attempts = m_settings.ctgMaxAttempts;
 
     OrderAssumption(cb);
@@ -853,13 +924,13 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
             drop_cube.push_back(cb[j]);
         }
 
-        if (Down(drop_cube, frameLvl, recLvl, tried_lits)) {
+        if (Down(drop_cube, frameLvl, recLvl, tried_lits, cb, cex_cache)) {
             // dropCube is sorted
             cb.swap(drop_cube);
             i = cb.size();
-            attempts = m_settings.ctgMaxAttempts;
+            if (limited_attempts) attempts = m_settings.ctgMaxAttempts;
         } else {
-            if (--attempts == 0) break;
+            if (limited_attempts && --attempts == 0) break;
             tried_lits.Insert(lit_to_drop);
         }
     }

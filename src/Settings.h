@@ -48,10 +48,10 @@ struct Settings {
     float restartGrowthRate = 1.5;
     bool restartLuby = false;
     bool solveInProperty = false;
-    int ctgMaxRecursionDepth = 2;
+    int ctgMaxRecursionDepth = 1;
     int ctgMaxStates = 3;
     int ctgMaxBlocks = 1;
-    int ctgMaxAttempts = 3;
+    int ctgMaxAttempts = 0;
     bool activeLemmaLearning = false;
     int allThreshold = 8;
     int allMaxStates = 32;
