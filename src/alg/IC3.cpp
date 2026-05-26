@@ -837,33 +837,55 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits
 
         if (!InitiationCheck(ctg_cube)) return false;
 
-        Cube ctg_cube_sorted(ctg_cube);
-        OrderAssumption(ctg_cube_sorted);
-
-        if (ctgs < m_settings.ctgMaxStates &&
-            frameLvl > 0 &&
-            IsInductive(ctg_cube_sorted, m_transSolvers[frameLvl - 1])) {
-
-            ctgs++;
-            LOG_L(m_log, 3, "CTG is inductive at level ", frameLvl - 1);
-            Cube ctg_core = GetAndValidateCore(m_transSolvers[frameLvl - 1], ctg_cube);
-
-            Generalize(ctg_core, frameLvl - 1, recLvl + 1);
-            int ctg_lemma_id = AddLemma(ctg_core, frameLvl);
-            PropagateUp(ctg_lemma_id, frameLvl);
-        } else {
-            ctgs = 0;
-            ctg_lits.NewSet(ctg_cube);
-            Cube join_cube;
-            for (size_t i = 0; i < downCube.size(); i++) {
-                if (ctg_lits.Has(downCube[i])) {
-                    join_cube.push_back(downCube[i]);
-                } else if (triedLits.Has(downCube[i])) {
-                    return false;
-                }
+        if (ctgs < m_settings.ctgMaxCTG && frameLvl > 0) {
+            int block_limit = m_settings.ctgMaxBlocks;
+            if (ExCTGBlock(ctg_cube, frameLvl - 1, recLvl + 1, block_limit)) {
+                ctgs++;
+                LOG_L(m_log, 3, "EXCTG blocked CTG cube at level ", frameLvl - 1);
+                continue;
             }
-            LOG_L(m_log, 3, "Joint Cube: ", CubeToStr(join_cube));
-            downCube.swap(join_cube);
+        }
+        ctgs = 0;
+        ctg_lits.NewSet(ctg_cube);
+        Cube join_cube;
+        for (size_t i = 0; i < downCube.size(); i++) {
+            if (ctg_lits.Has(downCube[i])) {
+                join_cube.push_back(downCube[i]);
+            } else if (triedLits.Has(downCube[i])) {
+                return false;
+            }
+        }
+        LOG_L(m_log, 3, "Joint Cube: ", CubeToStr(join_cube));
+        downCube.swap(join_cube);
+    }
+}
+
+
+bool IC3::ExCTGBlock(const Cube &cb, int frameLvl, int recLvl, int blockLimit) {
+    if (!InitiationCheck(cb)) return false;
+
+    Cube assumption(cb);
+    OrderAssumption(assumption);
+
+    while (true) {
+        if (IsInductive(assumption, m_transSolvers[frameLvl])) {
+            Cube core = GetAndValidateCore(m_transSolvers[frameLvl], cb);
+            Generalize(core, frameLvl, recLvl);
+
+            int lemma_id = AddLemma(core, frameLvl + 1);
+            PropagateUp(lemma_id, frameLvl + 1);
+            return true;
+        }
+
+        if (frameLvl <= 0 || blockLimit <= 1) return false;
+
+        auto p = m_transSolvers[frameLvl]->GetAssignment(false);
+        auto succ = make_shared<State>(nullptr, Cube(), cb, 0);
+        auto pred = make_shared<State>(succ, p.first, p.second, 0);
+        GeneralizePredecessor(pred, succ);
+
+        if (!ExCTGBlock(pred->latches, frameLvl - 1, recLvl, blockLimit - 1)) {
+            return false;
         }
     }
 }
@@ -894,8 +916,8 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
         }
     }
 
-    bool limited_attempts = m_settings.ctgMaxAttempts > 0;
-    int attempts = m_settings.ctgMaxAttempts;
+    bool limited_attempts = m_settings.genMaxFail > 0;
+    int attempts = m_settings.genMaxFail;
 
     OrderAssumption(cb);
     // Iterate backwards to handle the shrinking Cube size gracefully.
@@ -920,7 +942,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
             // dropCube is sorted
             cb.swap(drop_cube);
             i = cb.size();
-            if (limited_attempts) attempts = m_settings.ctgMaxAttempts;
+            if (limited_attempts) attempts = m_settings.genMaxFail;
         } else {
             if (limited_attempts && --attempts == 0) break;
             tried_lits.Insert(lit_to_drop);

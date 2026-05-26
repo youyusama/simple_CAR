@@ -747,8 +747,8 @@ void FCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
     if (m_settings.referSkipping)
         for (auto b : uc_parent) required_lits.emplace(b);
     vector<Cube> failed_ctses;
-    bool limited_attempts = m_settings.ctgMaxAttempts > 0;
-    int attempts = m_settings.ctgMaxAttempts;
+    bool limited_attempts = m_settings.genMaxFail > 0;
+    int attempts = m_settings.genMaxFail;
     OrderAssumption(uc);
     setup_scope = m_log.Section("FC_Gen_Loop");
     for (int i = uc.size() - 1; i >= 0; i--) {
@@ -762,7 +762,7 @@ void FCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
         if (Down(temp_uc, frameLvl, recLvl, failed_ctses)) {
             uc.swap(temp_uc);
             i = uc.size();
-            if (limited_attempts) attempts = m_settings.ctgMaxAttempts;
+            if (limited_attempts) attempts = m_settings.genMaxFail;
         } else {
             if (limited_attempts && --attempts == 0) break;
             required_lits.emplace(uc.at(i));
@@ -794,7 +794,7 @@ bool FCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
         }
 
         if (recLvl >= m_settings.ctgMaxRecursionDepth ||
-            ctgs >= m_settings.ctgMaxStates ||
+            ctgs >= m_settings.ctgMaxCTG ||
             frameLvl < 1) {
             return false;
         }
@@ -805,7 +805,7 @@ bool FCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
         shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
         if (DownHasFailed(cts->latches, failedCtses)) return false;
 
-        if (CTSBlock(cts, frameLvl - 1, recLvl, failedCtses)) {
+        if (ExCTGBlock(cts, frameLvl - 1, recLvl, failedCtses)) {
             ctgs++;
         } else {
             failedCtses.emplace_back(cts->latches);
@@ -815,7 +815,7 @@ bool FCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
 }
 
 
-bool FCAR::CTSBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int ctsCount) {
+bool FCAR::ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int ctsCount) {
     if (ctsCount >= m_settings.ctgMaxBlocks) return false;
 
     // F_i & T & cts'
@@ -842,7 +842,7 @@ bool FCAR::CTSBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube
 
             int pre_cts_lvl = frameLvl - 1;
             if (pre_cts_lvl < 0 ||
-                !CTSBlock(pre_cts, pre_cts_lvl, recLvl, failedCtses, ctsCount + 1)) {
+                !ExCTGBlock(pre_cts, pre_cts_lvl, recLvl, failedCtses, ctsCount + 1)) {
 
                 failedCtses.emplace_back(cts->latches);
                 return false;

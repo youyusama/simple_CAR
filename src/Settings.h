@@ -49,9 +49,9 @@ struct Settings {
     bool restartLuby = false;
     bool solveInProperty = false;
     int ctgMaxRecursionDepth = 1;
-    int ctgMaxStates = 3;
+    int ctgMaxCTG = 3;
     int ctgMaxBlocks = 1;
-    int ctgMaxAttempts = 0;
+    int genMaxFail = 0;
     bool activeLemmaLearning = false;
     int allThreshold = 8;
     int allMaxStates = 32;

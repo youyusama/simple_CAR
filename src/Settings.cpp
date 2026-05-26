@@ -101,16 +101,16 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_flag("--solve_in_property", settings.solveInProperty, "solve in property")
         ->default_val(false);
 
-    app.add_option("--ctg_max_rec_lvl", settings.ctgMaxRecursionDepth, "CTG max recursion depth")
+    app.add_option("--ctg_max_lvl", settings.ctgMaxRecursionDepth, "CTG max recursion depth")
         ->default_val(1);
 
-    app.add_option("--ctg_max_states", settings.ctgMaxStates, "CTG max states")
+    app.add_option("--ctg_max_ctg", settings.ctgMaxCTG, "CTG max counterexamples to generalization")
         ->default_val(3);
 
     app.add_option("--ctg_max_blocks", settings.ctgMaxBlocks, "CTG max blocks")
         ->default_val(1);
 
-    app.add_option("--ctg_max_attempts", settings.ctgMaxAttempts, "CTG max attempts")
+    app.add_option("--gen_max_fail", settings.genMaxFail, "Generalization max failed literal-drop attempts (0 means unlimited)")
         ->default_val(0);
 
     app.add_flag("--all,--active_lemma_learning", settings.activeLemmaLearning,
