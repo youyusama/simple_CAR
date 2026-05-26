@@ -111,13 +111,14 @@ class BCAR : public IncrAlg {
 
     bool Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses);
 
-    bool CTSBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int ctsCount = 0);
+    bool ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int ctsCount = 0);
 
     bool DownHasFailed(const Cube &s, const vector<Cube> &failedCtses);
 
     bool Propagate(const Cube &c, int lvl);
 
     int PropagateUp(const Cube &c, int lvl);
+
     bool CheckBad(shared_ptr<State> s);
 
     void AddConstraintOr(const Frame &f);
