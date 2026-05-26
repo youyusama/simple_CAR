@@ -46,7 +46,20 @@ class BCAR : public IncrAlg {
 
     void InitializeStartSolver();
 
-    bool AddUnsatisfiableCore(const Cube &uc, int frameLevel);
+    bool AddUnsatisfiableCore(const Cube &uc, int frameLevel, bool fromCTR = false);
+
+    enum class ALLProveStatus {
+        Proved,
+        Reachable,
+        Bailout,
+        Invalidated,
+    };
+
+    void ActiveLemmaLearning(OverSequenceSet::RefId newRef);
+
+    std::vector<OverSequenceSet::RefId> FindHotSpots(const std::vector<OverSequenceSet::RefId> &ancestorChain);
+
+    ALLProveStatus ActiveProve(OverSequenceSet::RefId targetRef);
 
     bool ImmediateSatisfiable();
 
@@ -75,25 +88,6 @@ class BCAR : public IncrAlg {
             return (m.GetInnardslvl(inn1) > m.GetInnardslvl(inn2));
         }
     } m_innOrder;
-
-    struct BlockerOrder {
-        shared_ptr<Branching> branching;
-
-        BlockerOrder() {}
-
-        bool operator()(const Cube &a, const Cube &b) const {
-            float score_a = 0, score_b = 0;
-            for (size_t i = 0; i < a.size(); i++) {
-                score_a += branching->PriorityOf(a[i]);
-            }
-            score_a /= a.size();
-            for (size_t i = 0; i < b.size(); i++) {
-                score_b += branching->PriorityOf(b[i]);
-            }
-            score_b /= b.size();
-            return score_a > score_b;
-        }
-    } m_blockerOrder;
 
     void OrderAssumption(Cube &uc) {
         if (m_settings.randomSeed > 0) {
@@ -126,9 +120,9 @@ class BCAR : public IncrAlg {
     int PropagateUp(const Cube &c, int lvl);
     bool CheckBad(shared_ptr<State> s);
 
-    void AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f);
+    void AddConstraintOr(const Frame &f);
 
-    Lit AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f);
+    Lit AddConstraintAnd(const Frame &f);
 
     bool IsReachable(int lvl, const Cube &assumption, const string &label);
 

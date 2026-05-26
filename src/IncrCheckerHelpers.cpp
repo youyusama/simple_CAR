@@ -70,34 +70,6 @@ void Branching::Decay(const Cube &uc, int gap) {
     }
 }
 
-// ================================================================================
-// @brief: if a implies b
-// @input:
-// @output:
-// ================================================================================
-bool OverSequenceSet::Imply(const Cube &a, const Cube &b) {
-    if (a.size() > b.size()) return false;
-    m_tmpLitSet.NewSet(b);
-    return SubsumeSet(a, m_tmpLitSet);
-}
-
-
-bool OverSequenceSet::Insert(const Cube &uc, int index) {
-    auto f = GetFrame(index);
-    if (f->find(uc) != f->end()) return false;
-
-    f->emplace(uc);
-    int &counter = m_insertCounter[index];
-    counter++;
-    if (counter >= K_CLEANUP_THRESHOLD) {
-        counter = 0;
-        CleanupImplied(index);
-    }
-
-    return true;
-}
-
-
 bool IsStateInInv(const Cube &s, const FrameList &inv) {
     bool flag = false;
     for (const auto &f : inv) {
@@ -114,86 +86,388 @@ bool IsStateInInv(const Cube &s, const FrameList &inv) {
 }
 
 
-shared_ptr<OverSequenceSet::FrameSet> OverSequenceSet::GetFrame(int lvl) {
-    while (lvl >= m_sequence.size()) {
-        m_sequence.emplace_back(make_shared<FrameSet>());
-        m_blockCounter.emplace_back(0);
-        m_insertCounter.emplace_back(0);
+void OverSequenceSet::EnsureLevel(int lvl) {
+    if (lvl < 0) return;
+    while (lvl >= static_cast<int>(m_frames.size())) {
+        m_frames.emplace_back();
     }
-    return m_sequence[lvl];
 }
 
-Frame OverSequenceSet::FrameSetToFrame(const FrameSet &fset) const {
-    Frame out;
-    out.reserve(fset.size());
-    for (const auto &fc : fset) {
-        out.emplace_back(fc);
+
+size_t OverSequenceSet::FrameSize(int lvl) const {
+    if (lvl < 0 || lvl >= static_cast<int>(m_frames.size())) return 0;
+    return m_frames[lvl].refOfLemma.size();
+}
+
+
+bool OverSequenceSet::RefAlive(RefId ref) const {
+    return ref >= 0 && ref < static_cast<int>(m_refs.size()) && m_refs[ref].alive;
+}
+
+
+bool OverSequenceSet::RefAliveInFrame(RefId ref, int frameLevel) const {
+    return RefAlive(ref) && m_refs[ref].level == frameLevel;
+}
+
+
+const Cube &OverSequenceSet::CubeOf(LemmaId id) const {
+    assert(id >= 0 && id < static_cast<int>(m_lemmas.size()));
+    return m_lemmas[id];
+}
+
+
+const Cube &OverSequenceSet::CubeOfRef(RefId ref) const {
+    assert(RefAlive(ref));
+    return m_lemmas[m_refs[ref].lemmaId];
+}
+
+
+OverSequenceSet::LemmaId OverSequenceSet::LemmaOfRef(RefId ref) const {
+    assert(RefAlive(ref));
+    return m_refs[ref].lemmaId;
+}
+
+
+int OverSequenceSet::LevelOfRef(RefId ref) const {
+    assert(RefAlive(ref));
+    return m_refs[ref].level;
+}
+
+
+OverSequenceSet::RefId OverSequenceSet::RefOf(LemmaId id, int frameLevel) const {
+    if (frameLevel < 0 || frameLevel >= static_cast<int>(m_frames.size())) return -1;
+    auto it = m_frames[frameLevel].refOfLemma.find(id);
+    if (it == m_frames[frameLevel].refOfLemma.end()) return -1;
+    return RefAliveInFrame(it->second, frameLevel) ? it->second : -1;
+}
+
+
+bool OverSequenceSet::Contains(LemmaId id, int frameLevel) const {
+    return RefOf(id, frameLevel) != -1;
+}
+
+
+bool OverSequenceSet::Alive(RefId ref) const {
+    return RefAlive(ref);
+}
+
+
+std::vector<OverSequenceSet::LemmaId> OverSequenceSet::FrameIds(int lvl) const {
+    std::vector<LemmaId> out;
+    if (lvl < 0 || lvl >= static_cast<int>(m_frames.size())) return out;
+    const auto &frame = m_frames[lvl];
+    out.reserve(frame.refOfLemma.size());
+    for (RefId ref : frame.refs) {
+        if (RefAliveInFrame(ref, lvl)) out.emplace_back(m_refs[ref].lemmaId);
     }
     return out;
 }
 
 
-void OverSequenceSet::CleanupImplied(int frameLevel) {
-    auto f = GetFrame(frameLevel);
+std::vector<OverSequenceSet::RefId> OverSequenceSet::FrameRefs(int lvl) const {
+    std::vector<RefId> out;
+    if (lvl < 0 || lvl >= static_cast<int>(m_frames.size())) return out;
+    const auto &frame = m_frames[lvl];
+    out.reserve(frame.refOfLemma.size());
+    for (RefId ref : frame.refs) {
+        if (RefAliveInFrame(ref, lvl)) out.emplace_back(ref);
+    }
+    return out;
+}
 
-    vector<Cube> cubes;
-    cubes.reserve(f->size());
-    for (const auto &uc : *f) {
-        cubes.emplace_back(uc);
+
+Frame OverSequenceSet::FrameToFrame(int lvl) const {
+    Frame out;
+    if (lvl < 0 || lvl >= static_cast<int>(m_frames.size())) return out;
+    const auto &frame = m_frames[lvl];
+    out.reserve(frame.refOfLemma.size());
+    for (RefId ref : frame.refs) {
+        if (RefAliveInFrame(ref, lvl)) out.emplace_back(CubeOfRef(ref));
+    }
+    return out;
+}
+
+
+OverSequenceSet::LemmaId OverSequenceSet::InternLemma(const Cube &uc) {
+    auto it = m_idOfCube.find(uc);
+    if (it != m_idOfCube.end()) return it->second;
+
+    LemmaId id = static_cast<LemmaId>(m_lemmas.size());
+    m_lemmas.emplace_back(uc);
+    m_idOfCube.emplace(m_lemmas[id], id);
+    return id;
+}
+
+
+std::vector<OverSequenceSet::RefId> OverSequenceSet::CandidateRefsForSubsuming(const Cube &uc, const FrameData &frame) const {
+    if (uc.empty() || frame.refOfLemma.size() <= 64) {
+        return frame.refs;
     }
 
-    sort(cubes.begin(), cubes.end(), [](const Cube &a, const Cube &b) {
-        if (a.size() != b.size()) return a.size() < b.size();
-        return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end());
-    });
+    std::vector<RefId> candidates;
+    std::unordered_set<RefId> seen;
+    for (Lit lit : uc) {
+        auto it = frame.occurs.find(lit);
+        if (it == frame.occurs.end()) continue;
+        for (RefId ref : it->second) {
+            if (seen.emplace(ref).second) candidates.emplace_back(ref);
+        }
+    }
+    return candidates;
+}
 
-    unordered_map<Lit, vector<size_t>, LitHash> occurs;
-    occurs.reserve(cubes.size() * 4);
-    for (size_t i = 0; i < cubes.size(); ++i) {
-        for (Lit lit : cubes[i]) {
-            occurs[lit].emplace_back(i);
+
+std::vector<OverSequenceSet::RefId> OverSequenceSet::FindSubsumedInFrame(const Cube &uc, int frameLevel) {
+    std::vector<RefId> out;
+    if (frameLevel < 0 || frameLevel >= static_cast<int>(m_frames.size())) return out;
+    const auto &frame = m_frames[frameLevel];
+    if (frame.refOfLemma.empty()) return out;
+
+    const std::vector<RefId> *candidate_list = nullptr;
+    std::vector<RefId> all_candidates;
+
+    size_t best_size = static_cast<size_t>(-1);
+    for (Lit lit : uc) {
+        auto it = frame.occurs.find(lit);
+        if (it == frame.occurs.end()) return out;
+        if (it->second.size() < best_size) {
+            best_size = it->second.size();
+            candidate_list = &it->second;
         }
     }
 
-    vector<bool> remove(cubes.size(), false);
-    for (size_t i = 0; i < cubes.size(); ++i) {
-        if (remove[i]) continue;
+    if (!candidate_list) return out;
+    std::unordered_set<RefId> seen;
+    for (RefId ref : *candidate_list) {
+        if (!seen.emplace(ref).second) continue;
+        if (!RefAliveInFrame(ref, frameLevel)) continue;
+        const Cube &old = CubeOfRef(ref);
+        if (uc.size() > old.size()) continue;
+        m_tmpLitSet.NewSet(old);
+        if (SubsumeSet(uc, m_tmpLitSet)) {
+            out.emplace_back(ref);
+        }
+    }
+    return out;
+}
 
-        Lit best_lit = cubes[i][0];
-        size_t best_occ = occurs[best_lit].size();
-        for (Lit lit : cubes[i]) {
-            auto it = occurs.find(lit);
-            if (it == occurs.end()) continue;
-            size_t occ_size = it->second.size();
-            if (occ_size < best_occ) {
-                best_occ = occ_size;
-                best_lit = lit;
+
+void OverSequenceSet::AttachParent(RefId childRef, RefId parentRef) {
+    if (!RefAlive(childRef) || !RefAlive(parentRef)) return;
+    DetachFromParent(childRef);
+    m_refs[childRef].parentRef = parentRef;
+    auto &children = m_refs[parentRef].childRefs;
+    if (find(children.begin(), children.end(), childRef) == children.end()) {
+        children.emplace_back(childRef);
+    }
+}
+
+
+void OverSequenceSet::DetachFromParent(RefId ref) {
+    if (!RefAlive(ref)) return;
+    RefId parent = m_refs[ref].parentRef;
+    if (parent == -1) return;
+    if (RefAlive(parent)) {
+        auto &siblings = m_refs[parent].childRefs;
+        for (int i = 0; i < static_cast<int>(siblings.size()); ++i) {
+            if (siblings[i] == ref) {
+                siblings[i] = siblings.back();
+                siblings.pop_back();
+                break;
             }
         }
-        for (size_t idx : occurs[best_lit]) {
-            if (idx == i || remove[idx]) continue;
-            if (Imply(cubes[i], cubes[idx])) {
-                remove[idx] = true;
-            }
+    }
+    m_refs[ref].parentRef = -1;
+}
+
+
+OverSequenceSet::RefId OverSequenceSet::FindBestParentInPrevFrame(RefId ref) const {
+    if (!RefAlive(ref)) return -1;
+    int parent_level = m_refs[ref].level - 1;
+    if (parent_level < 0 || parent_level >= static_cast<int>(m_frames.size())) return -1;
+
+    const Cube &child_cube = CubeOfRef(ref);
+    LitSet child_set;
+    child_set.NewSet(child_cube);
+
+    RefId best = -1;
+    size_t best_size = 0;
+    for (RefId candidate : m_frames[parent_level].refs) {
+        if (!RefAliveInFrame(candidate, parent_level)) continue;
+        const Cube &parent_cube = CubeOfRef(candidate);
+        if (parent_cube.size() > child_cube.size()) continue;
+        if (parent_cube.size() < best_size) continue;
+        if (SubsumeSet(parent_cube, child_set)) {
+            best = candidate;
+            best_size = parent_cube.size();
         }
     }
+    return best;
+}
 
-    for (size_t i = 0; i < cubes.size(); ++i) {
-        if (remove[i]) {
-            f->erase(cubes[i]);
+
+void OverSequenceSet::RepairParent(RefId ref) {
+    if (!RefAlive(ref)) return;
+    DetachFromParent(ref);
+    RefId parent = FindBestParentInPrevFrame(ref);
+    if (parent != -1) AttachParent(ref, parent);
+}
+
+
+void OverSequenceSet::AttachNeighborRefs(RefId ref) {
+    if (!RefAlive(ref)) return;
+
+    RefId parent = FindBestParentInPrevFrame(ref);
+    if (parent != -1) AttachParent(ref, parent);
+
+    int child_level = m_refs[ref].level + 1;
+    if (child_level >= static_cast<int>(m_frames.size())) return;
+
+    const Cube &parent_cube = CubeOfRef(ref);
+    for (RefId child : m_frames[child_level].refs) {
+        if (!RefAliveInFrame(child, child_level)) continue;
+        const Cube &child_cube = CubeOfRef(child);
+        if (parent_cube.size() > child_cube.size()) continue;
+        m_tmpLitSet.NewSet(child_cube);
+        if (!SubsumeSet(parent_cube, m_tmpLitSet)) continue;
+
+        RefId old_parent = m_refs[child].parentRef;
+        if (old_parent == -1 || CubeOfRef(old_parent).size() < parent_cube.size()) {
+            AttachParent(child, ref);
         }
     }
 }
 
 
+OverSequenceSet::RefId OverSequenceSet::AddMembership(LemmaId id, int frameLevel) {
+    EnsureLevel(frameLevel);
+    auto &frame = m_frames[frameLevel];
+    auto existing = frame.refOfLemma.find(id);
+    if (existing != frame.refOfLemma.end()) return existing->second;
+
+    RefId ref = static_cast<RefId>(m_refs.size());
+    RefNode node;
+    node.lemmaId = id;
+    node.level = frameLevel;
+    m_refs.emplace_back(std::move(node));
+
+    frame.refs.emplace_back(ref);
+    frame.refOfLemma.emplace(id, ref);
+    for (Lit lit : m_lemmas[id]) {
+        frame.occurs[lit].emplace_back(ref);
+    }
+    AttachNeighborRefs(ref);
+    return ref;
+}
+
+
+void OverSequenceSet::RemoveMembership(RefId ref) {
+    if (!RefAlive(ref)) return;
+    int frameLevel = m_refs[ref].level;
+    auto &frame = m_frames[frameLevel];
+
+    std::vector<RefId> children = m_refs[ref].childRefs;
+    for (RefId child : children) {
+        if (RefAlive(child)) {
+            m_refs[child].parentRef = -1;
+        }
+    }
+    m_refs[ref].childRefs.clear();
+    DetachFromParent(ref);
+
+    frame.refOfLemma.erase(m_refs[ref].lemmaId);
+    m_refs[ref].alive = 0;
+    frame.deadCount++;
+
+    for (RefId child : children) {
+        RepairParent(child);
+    }
+
+    if (frame.deadCount * K_REBUILD_DEAD_RATIO > frame.refs.size()) {
+        RebuildFrame(frameLevel);
+    }
+}
+
+
+void OverSequenceSet::RebuildFrame(int frameLevel) {
+    if (frameLevel < 0 || frameLevel >= static_cast<int>(m_frames.size())) return;
+    auto &frame = m_frames[frameLevel];
+    std::vector<RefId> refs;
+    refs.reserve(frame.refOfLemma.size());
+    for (RefId ref : frame.refs) {
+        if (RefAliveInFrame(ref, frameLevel)) refs.emplace_back(ref);
+    }
+    frame.refs.swap(refs);
+    frame.occurs.clear();
+    for (RefId ref : frame.refs) {
+        for (Lit lit : CubeOfRef(ref)) {
+            frame.occurs[lit].emplace_back(ref);
+        }
+    }
+    frame.deadCount = 0;
+}
+
+
+OverSequenceSet::MembershipState *OverSequenceSet::MutableState(RefId ref) {
+    if (!RefAlive(ref)) return nullptr;
+    return &m_refs[ref].state;
+}
+
+
+const OverSequenceSet::MembershipState *OverSequenceSet::StateOf(RefId ref) const {
+    if (!RefAlive(ref)) return nullptr;
+    return &m_refs[ref].state;
+}
+
+
+void OverSequenceSet::IncrementAncestorCounters(RefId ref) {
+    if (!RefAlive(ref)) return;
+    RefId parent = m_refs[ref].parentRef;
+    while (parent != -1) {
+        if (auto *state = MutableState(parent)) {
+            state->refineCountSinceALL++;
+        }
+        parent = m_refs[parent].parentRef;
+    }
+}
+
+
+OverSequenceSet::InsertResult OverSequenceSet::Insert(const Cube &uc, int index) {
+    EnsureLevel(index);
+
+    auto it = m_idOfCube.find(uc);
+    if (it != m_idOfCube.end() && Contains(it->second, index)) {
+        return InsertResult{false, it->second, RefOf(it->second, index), index, uc, {}};
+    }
+
+    LemmaId id = InternLemma(uc);
+    std::vector<RefId> removed = FindSubsumedInFrame(uc, index);
+    for (RefId old_ref : removed) {
+        RemoveMembership(old_ref);
+    }
+
+    RefId ref = AddMembership(id, index);
+    IncrementAncestorCounters(ref);
+    return InsertResult{true, id, ref, index, uc, removed};
+}
+
+
 bool OverSequenceSet::IsBlockedByFrame(const Cube &latches, int frameLevel) {
-    auto f = GetFrame(frameLevel);
-    if (f->empty()) return false;
+    if (frameLevel < 0 || frameLevel >= static_cast<int>(m_frames.size())) return false;
+    const auto &frame = m_frames[frameLevel];
+    if (frame.refOfLemma.empty()) return false;
 
     m_tmpLitSet.NewSet(latches);
 
     size_t latches_size = latches.size();
-    for (const auto &uc : *f) {
+    for (RefId ref : frame.refs) {
+        if (!RefAliveInFrame(ref, frameLevel)) continue;
+        if (CubeOfRef(ref).empty()) return true;
+    }
+    auto candidates = CandidateRefsForSubsuming(latches, frame);
+    for (RefId ref : candidates) {
+        if (!RefAliveInFrame(ref, frameLevel)) continue;
+        const Cube &uc = CubeOfRef(ref);
         if (uc.size() <= latches_size && SubsumeSet(uc, m_tmpLitSet)) {
             return true;
         }
@@ -202,26 +476,38 @@ bool OverSequenceSet::IsBlockedByFrame(const Cube &latches, int frameLevel) {
 }
 
 
-void OverSequenceSet::GetBlockers(const Cube &latches, int frameLevel, vector<Cube> &b) {
-    auto f = GetFrame(frameLevel);
-    if (f->empty()) return;
+bool OverSequenceSet::GetParentCube(const Cube &cube, int parentLevel, Cube &parent) const {
+    parent.clear();
+    if (parentLevel < 0 || parentLevel >= static_cast<int>(m_frames.size())) return false;
+    const auto &frame = m_frames[parentLevel];
+    if (frame.refOfLemma.empty()) return false;
 
-    m_tmpLitSet.NewSet(latches);
+    LitSet cube_set;
+    cube_set.NewSet(cube);
 
-    size_t latches_size = latches.size();
-    for (const auto &uc : *f) {
-        if (uc.size() <= latches_size && SubsumeSet(uc, m_tmpLitSet)) {
-            b.emplace_back(uc);
+    RefId best = -1;
+    size_t best_size = 0;
+    for (RefId ref : frame.refs) {
+        if (!RefAliveInFrame(ref, parentLevel)) continue;
+        const Cube &candidate = CubeOfRef(ref);
+        if (candidate.size() > cube.size()) continue;
+        if (candidate.size() < best_size) continue;
+        if (SubsumeSet(candidate, cube_set)) {
+            best = ref;
+            best_size = candidate.size();
         }
     }
+    if (best == -1) return false;
+    parent = CubeOfRef(best);
+    return true;
 }
 
 
 string OverSequenceSet::FramesInfo() {
     string res;
-    res += "Frames " + to_string(m_sequence.size() - 1) + "\n";
-    for (int i = 0; i < m_sequence.size(); ++i) {
-        res += to_string(m_sequence[i]->size()) + " ";
+    res += "Frames " + to_string(m_frames.size() - 1) + "\n";
+    for (int i = 0; i < static_cast<int>(m_frames.size()); ++i) {
+        res += to_string(FrameSize(i)) + " ";
     }
     return res;
 }
@@ -229,19 +515,92 @@ string OverSequenceSet::FramesInfo() {
 
 string OverSequenceSet::FramesDetail() {
     string res;
-    for (int i = 0; i < m_sequence.size(); ++i) {
+    for (int i = 0; i < static_cast<int>(m_frames.size()); ++i) {
         res += "Frame " + to_string(i) + "\n";
         if (i != 0) {
-            for (auto uc : *m_sequence[i]) {
+            for (RefId ref : m_frames[i].refs) {
+                if (!RefAliveInFrame(ref, i)) continue;
+                const Cube &uc = CubeOfRef(ref);
                 for (auto j : uc) {
                     res += to_string(ToSigned(j)) + " ";
                 }
                 res += "\n";
             }
         }
-        res += "size: " + to_string(m_sequence[i]->size()) + "\n";
+        res += "size: " + to_string(FrameSize(i)) + "\n";
     }
     return res;
+}
+
+
+std::vector<OverSequenceSet::RefId> OverSequenceSet::GetAncestorRefs(RefId ref) const {
+    std::vector<RefId> refs;
+    if (!RefAlive(ref)) return refs;
+    RefId parent = m_refs[ref].parentRef;
+    while (parent != -1) {
+        if (!RefAlive(parent)) break;
+        refs.push_back(parent);
+        parent = m_refs[parent].parentRef;
+    }
+    return refs;
+}
+
+
+int OverSequenceSet::RefineCountSinceALL(RefId ref) const {
+    const auto *state = StateOf(ref);
+    return state ? state->refineCountSinceALL : 0;
+}
+
+
+void OverSequenceSet::ResetRefineCountSinceALL(RefId ref) {
+    if (auto *state = MutableState(ref)) state->refineCountSinceALL = 0;
+}
+
+
+bool OverSequenceSet::Reachable(RefId ref) const {
+    const auto *state = StateOf(ref);
+    return state && state->reachable;
+}
+
+
+void OverSequenceSet::MarkReachableChain(RefId ref) {
+    RefId cur = ref;
+    while (cur != -1) {
+        if (auto *state = MutableState(cur)) {
+            if (state->reachable) break;
+            state->reachable = true;
+        }
+        cur = RefAlive(cur) ? m_refs[cur].parentRef : -1;
+    }
+}
+
+
+bool OverSequenceSet::PopCTPPred(RefId ref, Cube &ctpCube, int &ctpLevel) {
+    auto *state = MutableState(ref);
+    if (!state || state->ctpPreds.empty()) return false;
+    auto item = std::move(state->ctpPreds.back());
+    state->ctpPreds.pop_back();
+    ctpCube = std::move(item.first);
+    ctpLevel = item.second;
+    return true;
+}
+
+
+void OverSequenceSet::PushCTPPred(RefId ref, const Cube &ctpCube, int ctpLevel) {
+    if (auto *state = MutableState(ref)) {
+        state->ctpPreds.emplace_back(ctpCube, ctpLevel);
+    }
+}
+
+
+bool OverSequenceSet::HasCTPPreds(RefId ref) const {
+    const auto *state = StateOf(ref);
+    return state && !state->ctpPreds.empty();
+}
+
+
+void OverSequenceSet::ClearCTPState(RefId ref) {
+    if (auto *state = MutableState(ref)) state->ctpPreds.clear();
 }
 
 
@@ -353,7 +712,7 @@ LemmaForestManager::BorderCubesRange LemmaForestManager::BorderCubes(int level) 
     return BorderCubesRange(this, level);
 }
 
-std::pair<int, int> LemmaForestManager::FindParentLemma(int startLevel, const Cube &cb) {
+std::pair<int, int> LemmaForestManager::FindParentLemma(int startLevel, const Cube &cb) const {
     m_tmpLitSet.NewSet(cb);
     for (int lvl = startLevel; lvl >= 1; --lvl) {
         const auto &borders = m_borders[lvl];
@@ -366,6 +725,15 @@ std::pair<int, int> LemmaForestManager::FindParentLemma(int startLevel, const Cu
         }
     }
     return {-1, -1};
+}
+
+
+bool LemmaForestManager::GetParentCube(const Cube &blockingCube, int startLevel, Cube &parent) const {
+    parent.clear();
+    auto parent_info = FindParentLemma(startLevel, blockingCube);
+    if (parent_info.first == -1) return false;
+    parent = m_lemmas[parent_info.first];
+    return true;
 }
 
 int LemmaForestManager::CreateLemma(const Cube &cb, int parentId, int frameLevel) {
@@ -518,17 +886,6 @@ int LemmaForestManager::PropagateLemma(int lemmaId, int newFrameLevel) {
     RemoveRedundantLemmas(newFrameLevel, newFrameLevel, lemmaId);
     AddLemmaToBorder(newFrameLevel, lemmaId);
     return newFrameLevel;
-}
-
-void LemmaForestManager::GetBlockers(const Cube &blockingCube, int level, std::vector<Cube> &blockers) const {
-    if (level < 0 || level >= static_cast<int>(m_borders.size())) return;
-    m_tmpLitSet.NewSet(blockingCube);
-    for (int lemma_id : m_borders[level]) {
-        if (!Alive(lemma_id)) continue;
-        if (SubsumeSet(m_lemmas[lemma_id], m_tmpLitSet)) {
-            blockers.push_back(m_lemmas[lemma_id]);
-        }
-    }
 }
 
 bool LemmaForestManager::IsBlockedAtLevel(const Cube &cb, int level) const {

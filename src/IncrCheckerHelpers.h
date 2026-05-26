@@ -10,6 +10,8 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -71,7 +73,7 @@ class LemmaForestManager {
     AddLemmaResult AddLemma(const Cube &cb, int frameLevel);
     int PropagateLemma(int lemmaId, int newFrameLevel);
 
-    void GetBlockers(const Cube &blockingCube, int level, std::vector<Cube> &blockers) const;
+    bool GetParentCube(const Cube &blockingCube, int startLevel, Cube &parent) const;
     bool IsBlockedAtLevel(const Cube &cb, int level) const;
     std::vector<int> GetAncestorChain(int lemmaId) const;
     int FrameLevelOf(int lemmaId) const;
@@ -121,7 +123,7 @@ class LemmaForestManager {
     BorderCubesRange BorderCubes(int level) const;
 
   private:
-    std::pair<int, int> FindParentLemma(int startLevel, const Cube &cb);
+    std::pair<int, int> FindParentLemma(int startLevel, const Cube &cb) const;
     int CreateLemma(const Cube &cb, int parentId, int frameLevel);
     void AddLemmaToBorder(int frameLevel, int lemmaId);
     void RemoveFromBorder(int level, int lemmaId);
@@ -144,48 +146,113 @@ using FrameList = std::vector<Frame>;
 
 class OverSequenceSet {
   public:
-    using FrameSet = unordered_set<Cube, CubeHash>;
+    using LemmaId = int;
+    using RefId = int;
 
-    OverSequenceSet(Model &model) : m_model(model) {
+    struct InsertResult {
+        bool inserted{false};
+        LemmaId lemmaId{-1};
+        RefId refId{-1};
+        int level{-1};
+        Cube cube;
+        std::vector<RefId> removedRefs;
+    };
+
+    OverSequenceSet() {
         m_invariantLevel = 0;
-        m_blockCounter.emplace_back(0);
-        m_insertCounter.emplace_back(0);
+        EnsureLevel(0);
     }
 
     void SetInvariantLevel(int lvl) { m_invariantLevel = lvl; }
 
     int GetInvariantLevel() { return m_invariantLevel; }
 
-    bool Insert(const Cube &uc, int index);
+    InsertResult Insert(const Cube &uc, int index);
 
-    shared_ptr<FrameSet> GetFrame(int lvl);
-    Frame FrameSetToFrame(const FrameSet &fset) const;
+    std::vector<LemmaId> FrameIds(int lvl) const;
+    std::vector<RefId> FrameRefs(int lvl) const;
+    Frame FrameToFrame(int lvl) const;
+    const Cube &CubeOf(LemmaId id) const;
+    const Cube &CubeOfRef(RefId ref) const;
+    LemmaId LemmaOfRef(RefId ref) const;
+    int LevelOfRef(RefId ref) const;
+    RefId RefOf(LemmaId id, int frameLevel) const;
+    bool Contains(LemmaId id, int frameLevel) const;
+    bool Alive(RefId ref) const;
 
     bool IsBlockedByFrame(const Cube &latches, int frameLevel);
 
-    void GetBlockers(const Cube &latches, int frameLevel, vector<Cube> &b);
+    bool GetParentCube(const Cube &cube, int parentLevel, Cube &parent) const;
 
     bool IsEmpty(int frameLevel) {
-        if (frameLevel < 0 || frameLevel >= m_sequence.size()) return true;
-        return m_sequence[frameLevel]->empty();
+        return FrameSize(frameLevel) == 0;
     }
 
     string FramesInfo();
 
     string FramesDetail();
 
+    std::vector<RefId> GetAncestorRefs(RefId ref) const;
+    int RefineCountSinceALL(RefId ref) const;
+    void ResetRefineCountSinceALL(RefId ref);
+    bool Reachable(RefId ref) const;
+    void MarkReachableChain(RefId ref);
+    bool PopCTPPred(RefId ref, Cube &ctpCube, int &ctpLevel);
+    void PushCTPPred(RefId ref, const Cube &ctpCube, int ctpLevel);
+    bool HasCTPPreds(RefId ref) const;
+    void ClearCTPState(RefId ref);
+
   private:
-    void CleanupImplied(int frameLevel);
+    struct MembershipState {
+        int refineCountSinceALL{0};
+        bool reachable{false};
+        std::vector<std::pair<Cube, int>> ctpPreds;
+    };
 
-    bool Imply(const Cube &a, const Cube &b);
+    struct RefNode {
+        LemmaId lemmaId{-1};
+        int level{-1};
+        RefId parentRef{-1};
+        std::vector<RefId> childRefs;
+        MembershipState state;
+        uint8_t alive{1};
+    };
 
-    Model &m_model;
-    vector<shared_ptr<FrameSet>> m_sequence;
-    vector<int> m_blockCounter;
-    vector<int> m_insertCounter;
+    struct FrameData {
+        std::vector<RefId> refs;
+        std::unordered_map<LemmaId, RefId> refOfLemma;
+        std::unordered_map<Lit, std::vector<RefId>, LitHash> occurs;
+        size_t deadCount{0};
+    };
+
+    void EnsureLevel(int lvl);
+    size_t FrameSize(int lvl) const;
+
+    LemmaId InternLemma(const Cube &uc);
+    RefId AddMembership(LemmaId id, int frameLevel);
+    void RemoveMembership(RefId ref);
+    void RebuildFrame(int frameLevel);
+    void AttachNeighborRefs(RefId ref);
+    void DetachFromParent(RefId ref);
+    void AttachParent(RefId childRef, RefId parentRef);
+    RefId FindBestParentInPrevFrame(RefId ref) const;
+    void RepairParent(RefId ref);
+
+    std::vector<RefId> FindSubsumedInFrame(const Cube &uc, int frameLevel);
+    std::vector<RefId> CandidateRefsForSubsuming(const Cube &uc, const FrameData &frame) const;
+    bool RefAlive(RefId ref) const;
+    bool RefAliveInFrame(RefId ref, int frameLevel) const;
+    MembershipState *MutableState(RefId ref);
+    const MembershipState *StateOf(RefId ref) const;
+    void IncrementAncestorCounters(RefId ref);
+
+    std::vector<Cube> m_lemmas;
+    std::vector<RefNode> m_refs;
+    std::unordered_map<Cube, LemmaId, CubeHash> m_idOfCube;
+    std::vector<FrameData> m_frames;
     int m_invariantLevel;
     LitSet m_tmpLitSet;
-    static constexpr int K_CLEANUP_THRESHOLD = 128;
+    static constexpr size_t K_REBUILD_DEAD_RATIO = 4;
 };
 
 

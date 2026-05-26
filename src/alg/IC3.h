@@ -120,21 +120,6 @@ class IC3 : public IncrAlg {
         }
     } m_litOrder;
 
-    struct BlockerOrder {
-        shared_ptr<Branching> branching;
-
-        BlockerOrder() {}
-
-        bool operator()(const Cube &a, const Cube &b) const {
-            float score_a = 0, score_b = 0;
-            for (Lit lit : a) score_a += branching->PriorityOf(lit);
-            score_a /= a.size();
-            for (Lit lit : b) score_b += branching->PriorityOf(lit);
-            score_b /= b.size();
-            return score_a > score_b;
-        }
-    } m_blockerOrder;
-
     void OrderAssumption(Cube &c) {
         if (m_settings.randomSeed > 0) {
             shuffle(c.begin(), c.end(), default_random_engine(m_settings.randomSeed));

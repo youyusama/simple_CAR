@@ -36,7 +36,7 @@ void BCAR::RefineWitnessPropertyLit(WitnessBuilder &builder) const {
         if (lvl >= 0) {
             frame_terms.reserve(static_cast<size_t>(lvl) + 1);
             for (int i = 0; i <= lvl; ++i) {
-                Frame frame = m_overSequence->FrameSetToFrame(*m_overSequence->GetFrame(i));
+                Frame frame = m_overSequence->FrameToFrame(i);
                 std::vector<unsigned> cube_terms;
                 cube_terms.reserve(frame.size());
                 for (const Cube &cube : frame) {
@@ -83,7 +83,7 @@ FrameList BCAR::GetInv() {
     int lvl = m_overSequence->GetInvariantLevel();
     if (lvl < 0) return inv;
     for (int i = 0; i <= lvl; ++i) {
-        inv.emplace_back(m_overSequence->FrameSetToFrame(*m_overSequence->GetFrame(i)));
+        inv.emplace_back(m_overSequence->FrameToFrame(i));
     }
     return inv;
 }
@@ -229,7 +229,7 @@ bool BCAR::Check() {
                     LOG_L(m_log, 3, "Get UC:", CubeToStr(uc));
                     Generalize(uc, task.frameLevel);
                     LOG_L(m_log, 2, "Get Generalized UC:", CubeToStr(uc));
-                    AddUnsatisfiableCore(uc, task.frameLevel + 1);
+                    AddUnsatisfiableCore(uc, task.frameLevel + 1, true);
                     if (m_settings.dt) task.state->HasUC();
                     task.frameLevel = PropagateUp(uc, task.frameLevel + 1);
                     LOG_L(m_log, 3, m_overSequence->FramesInfo());
@@ -244,11 +244,10 @@ bool BCAR::Check() {
         for (int i = 0; i < m_k; ++i) {
             // propagation
             if (i >= m_minUpdateLevel) {
-                shared_ptr<OverSequenceSet::FrameSet> fi = m_overSequence->GetFrame(i);
-                shared_ptr<OverSequenceSet::FrameSet> fi_plus_1 = m_overSequence->GetFrame(i + 1);
-                OverSequenceSet::FrameSet::iterator iter;
-                for (const Cube &uc : *fi) {
-                    if (fi_plus_1->find(uc) != fi_plus_1->end()) continue; // propagated
+                auto lemma_ids = m_overSequence->FrameIds(i);
+                for (auto lemma_id : lemma_ids) {
+                    if (m_overSequence->Contains(lemma_id, i + 1)) continue; // propagated
+                    const Cube &uc = m_overSequence->CubeOf(lemma_id);
                     if (Propagate(uc, i))
                         m_branching->Update(uc);
                 }
@@ -284,11 +283,10 @@ void BCAR::Init() {
     if (!m_initStateImplyBad)
         LOG_L(m_log, 1, "Initial state does not imply bad");
 
-    m_overSequence = make_shared<OverSequenceSet>(m_model);
+    m_overSequence = make_shared<OverSequenceSet>();
     m_underSequence = UnderSequence();
     m_branching = make_shared<Branching>(m_settings.branching);
     m_litOrder.branching = m_branching;
-    m_blockerOrder.branching = m_branching;
     m_transSolvers.clear();
     m_lastState = nullptr;
 
@@ -343,8 +341,8 @@ void BCAR::Reset() {
 
     InitializeStartSolver();
     // add exist lemma
-    auto frame_i = m_overSequence->GetFrame(m_k);
-    for (auto l : *frame_i) {
+    auto frame_i = m_overSequence->FrameToFrame(m_k);
+    for (auto l : frame_i) {
         Cube pl(l);
         GetPrimed(pl);
         m_startSolver->AddUC(pl);
@@ -366,13 +364,14 @@ bool BCAR::IsInitStateImplyBad() {
 }
 
 
-bool BCAR::AddUnsatisfiableCore(const Cube &uc, int frameLevel) {
+bool BCAR::AddUnsatisfiableCore(const Cube &uc, int frameLevel, bool fromCTR) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_AddUC");
     m_restart->UcCountsPlus1();
 
-    if (!m_overSequence->Insert(uc, frameLevel)) return false;
+    auto insert_res = m_overSequence->Insert(uc, frameLevel);
+    if (!insert_res.inserted) return false;
 
-    Cube puc(uc);
+    Cube puc(insert_res.cube);
     GetPrimed(puc);
 
     if (frameLevel >= m_transSolvers.size()) {
@@ -396,7 +395,117 @@ bool BCAR::AddUnsatisfiableCore(const Cube &uc, int frameLevel) {
         m_minUpdateLevel = frameLevel;
     }
 
+    if (fromCTR && m_settings.activeLemmaLearning) {
+        ActiveLemmaLearning(insert_res.refId);
+    }
+
     return true;
+}
+
+
+void BCAR::ActiveLemmaLearning(OverSequenceSet::RefId newRef) {
+    auto ancestor_chain = m_overSequence->GetAncestorRefs(newRef);
+    if (ancestor_chain.empty()) return;
+
+    auto hot_spots = FindHotSpots(ancestor_chain);
+    for (auto ref : hot_spots) {
+        if (!m_overSequence->Alive(ref) ||
+            m_overSequence->Reachable(ref)) {
+            continue;
+        }
+
+        m_overSequence->ResetRefineCountSinceALL(ref);
+        auto status = ActiveProve(ref);
+
+        if (status == ALLProveStatus::Reachable) {
+            m_overSequence->MarkReachableChain(ref);
+            continue;
+        }
+        if (status != ALLProveStatus::Proved) {
+            continue;
+        }
+        if (!m_overSequence->Alive(ref)) continue;
+
+        Cube cube = m_overSequence->CubeOfRef(ref);
+        int level = m_overSequence->LevelOfRef(ref);
+        PropagateUp(cube, level);
+    }
+}
+
+
+std::vector<OverSequenceSet::RefId> BCAR::FindHotSpots(const std::vector<OverSequenceSet::RefId> &ancestorChain) {
+    std::vector<OverSequenceSet::RefId> hot_spots;
+    for (auto ref : ancestorChain) {
+        if (m_overSequence->Reachable(ref)) break;
+        if (m_overSequence->RefineCountSinceALL(ref) >= m_settings.allThreshold) {
+            hot_spots.emplace_back(ref);
+        }
+    }
+    reverse(hot_spots.begin(), hot_spots.end());
+    return hot_spots;
+}
+
+
+BCAR::ALLProveStatus BCAR::ActiveProve(OverSequenceSet::RefId targetRef) {
+    int attempts_left = m_settings.allMaxStates;
+
+    while (true) {
+        if (!m_overSequence->Alive(targetRef)) return ALLProveStatus::Invalidated;
+
+        int goal_level = m_overSequence->LevelOfRef(targetRef);
+        if (goal_level < 1 || goal_level >= static_cast<int>(m_transSolvers.size())) {
+            return ALLProveStatus::Invalidated;
+        }
+
+        Cube goal_cube = m_overSequence->CubeOfRef(targetRef);
+
+        if (!m_overSequence->HasCTPPreds(targetRef)) {
+            Cube assumption(goal_cube);
+            OrderAssumption(assumption);
+
+            if (!IsReachable(goal_level, assumption, "SAT_BC_ALL_Target")) {
+                return ALLProveStatus::Proved;
+            }
+            if (attempts_left <= 0) return ALLProveStatus::Bailout;
+
+            auto succ = m_transSolvers[goal_level]->GetAssignment(true);
+            m_overSequence->PushCTPPred(targetRef, succ.second, goal_level);
+        }
+
+        if (attempts_left <= 0) return ALLProveStatus::Bailout;
+
+        Cube ctp_cube;
+        int ctp_level = -1;
+        if (!m_overSequence->PopCTPPred(targetRef, ctp_cube, ctp_level)) {
+            continue;
+        }
+        attempts_left--;
+
+        if (ctp_level < 1 || ctp_level >= static_cast<int>(m_transSolvers.size())) {
+            return ALLProveStatus::Invalidated;
+        }
+        if (m_overSequence->IsBlockedByFrame(ctp_cube, ctp_level)) {
+            continue;
+        }
+
+        Cube assumption(ctp_cube);
+        OrderAssumption(assumption);
+
+        if (!IsReachable(ctp_level - 1, assumption, "SAT_BC_ALL_CTP")) {
+            auto core = GetUnsatAssumption(m_transSolvers[ctp_level - 1], ctp_cube);
+            Generalize(core, ctp_level - 1, 0);
+            AddUnsatisfiableCore(core, ctp_level);
+            PropagateUp(core, ctp_level);
+            continue;
+        }
+
+        if (ctp_level == 1) return ALLProveStatus::Reachable;
+
+        m_overSequence->PushCTPPred(targetRef, ctp_cube, ctp_level);
+
+        auto succ = m_transSolvers[ctp_level - 1]->GetAssignment(true);
+        m_overSequence->PushCTPPred(targetRef, succ.second, ctp_level - 1);
+    }
 }
 
 
@@ -503,7 +612,7 @@ int BCAR::GetNewLevel(const Cube &states, int start) {
 
 bool BCAR::IsInvariant(int frameLevel) {
     [[maybe_unused]] auto inv_scope = m_log.Section("FC_Invariant");
-    shared_ptr<OverSequenceSet::FrameSet> frame_i = m_overSequence->GetFrame(frameLevel);
+    Frame frame_i = m_overSequence->FrameToFrame(frameLevel);
 
     if (frameLevel < m_minUpdateLevel) {
         AddConstraintOr(frame_i);
@@ -528,9 +637,9 @@ bool BCAR::IsInvariant(int frameLevel) {
 // @input:
 // @output:
 // ================================================================================
-void BCAR::AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f) {
+void BCAR::AddConstraintOr(const Frame &f) {
     Cube cls;
-    for (const Cube &frame_cube : *f) {
+    for (const Cube &frame_cube : f) {
         Var flag = m_invSolver->GetNewVar();
         Lit flag_lit = MkLit(flag);
         cls.push_back(flag_lit);
@@ -547,10 +656,10 @@ void BCAR::AddConstraintOr(const shared_ptr<OverSequenceSet::FrameSet> f) {
 // @input:
 // @output:
 // ================================================================================
-Lit BCAR::AddConstraintAnd(const shared_ptr<OverSequenceSet::FrameSet> f) {
+Lit BCAR::AddConstraintAnd(const Frame &f) {
     Var flag = m_invSolver->GetNewVar();
     Lit flag_lit = MkLit(flag);
-    for (const Cube &frame_cube : *f) {
+    for (const Cube &frame_cube : f) {
         Cube cls;
         for (size_t i = 0; i < frame_cube.size(); i++) {
             cls.push_back(~frame_cube[i]);
@@ -571,18 +680,13 @@ void BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
     [[maybe_unused]] auto gen_scope = m_log.Section("FC_Gen");
     unordered_set<Lit, LitHash> required_lits;
 
-    vector<Cube> uc_blockers;
-    m_overSequence->GetBlockers(uc, frameLvl, uc_blockers);
-    Cube uc_blocker;
-    if (uc_blockers.size() > 0) {
-        if (m_settings.branching > 0)
-            stable_sort(uc_blockers.begin(), uc_blockers.end(), m_blockerOrder);
-        uc_blocker = uc_blockers[0];
-    }
+    Cube uc_parent;
+    m_overSequence->GetParentCube(uc, frameLvl, uc_parent);
 
     if (m_settings.referSkipping)
-        for (auto b : uc_blocker) required_lits.emplace(b);
+        for (auto b : uc_parent) required_lits.emplace(b);
     vector<Cube> failed_ctses;
+    bool limited_attempts = m_settings.ctgMaxAttempts > 0;
     int attempts = m_settings.ctgMaxAttempts;
     OrderAssumption(uc);
     for (int i = uc.size() - 1; i > 0; i--) {
@@ -594,15 +698,15 @@ void BCAR::Generalize(Cube &uc, int frameLvl, int recLvl) {
         if (Down(temp_uc, frameLvl, recLvl, failed_ctses)) {
             uc.swap(temp_uc);
             i = uc.size();
-            attempts = m_settings.ctgMaxAttempts;
+            if (limited_attempts) attempts = m_settings.ctgMaxAttempts;
         } else {
-            if (--attempts == 0) break;
+            if (limited_attempts && --attempts == 0) break;
             required_lits.emplace(uc[i]);
         }
     }
 
     sort(uc.begin(), uc.end());
-    if (uc.size() <= uc_blocker.size() || frameLvl == 0) {
+    if (uc.size() <= uc_parent.size() || frameLvl == 0) {
         m_branching->Update(uc);
     }
 }

@@ -188,7 +188,6 @@ void IC3::Init() {
     m_invariantLevel = 0;
     m_branching = make_shared<Branching>(m_settings.branching);
     m_litOrder.branching = m_branching;
-    m_blockerOrder.branching = m_branching;
 
     // create frame 0
     AddNewFrame();
@@ -884,18 +883,11 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
         return;
     }
 
-    vector<Cube> blockers;
     Cube blocker;
     LitSet tried_lits;
     vector<pair<LitSet, LitSet>> cex_cache;
 
-    m_lfm.GetBlockers(cb, frameLvl, blockers);
-    if (!blockers.empty()) {
-        if (m_settings.branching > 0) {
-            sort(blockers.begin(), blockers.end(), m_blockerOrder);
-        }
-        blocker = blockers[0];
-    }
+    m_lfm.GetParentCube(cb, frameLvl, blocker);
     if (m_settings.referSkipping) {
         for (const auto &lit : blocker) {
             tried_lits.Insert(lit);
