@@ -734,7 +734,8 @@ bool BCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
         shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
         if (DownHasFailed(cts->latches, failedCtses)) return false;
 
-        if (ExCTGBlock(cts, frameLvl - 1, recLvl, failedCtses)) {
+        int block_limit = m_settings.ctgMaxBlocks;
+        if (ExCTGBlock(cts, frameLvl - 1, recLvl + 1, failedCtses, block_limit)) {
             ctgs++;
         } else {
             failedCtses.emplace_back(cts->latches);
@@ -744,9 +745,7 @@ bool BCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
 }
 
 
-bool BCAR::ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int ctsCount) {
-    if (ctsCount >= m_settings.ctgMaxBlocks) return false;
-
+bool BCAR::ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int blockLimit) {
     LOG_L(m_log, 3, "Try cts:", CubeToStr(cts->latches), "on frame: ", frameLvl);
     Cube cts_ass(cts->latches);
     OrderAssumption(cts_ass);
@@ -760,28 +759,28 @@ bool BCAR::ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cu
             AddUnsatisfiableCore(uc_cts, frameLvl + 1);
             PropagateUp(uc_cts, frameLvl + 1);
             return true;
-        } else {
-            auto p = m_transSolvers[frameLvl]->GetAssignment(true);
-            shared_ptr<State> post_cts(new State(nullptr, p.first, p.second, 0));
-            if (DownHasFailed(post_cts->latches, failedCtses)) return false;
+        }
 
-            int pre_cts_lvl = frameLvl - 1;
-            if (pre_cts_lvl < 0 ||
-                !ExCTGBlock(post_cts, pre_cts_lvl, recLvl, failedCtses, ctsCount + 1)) {
+        if (frameLvl <= 0 || blockLimit <= 1) return false;
 
-                failedCtses.emplace_back(cts->latches);
-                return false;
-            }
+        auto p = m_transSolvers[frameLvl]->GetAssignment(true);
+        shared_ptr<State> post_cts(new State(nullptr, p.first, p.second, 0));
+        if (DownHasFailed(post_cts->latches, failedCtses)) return false;
+
+        if (!ExCTGBlock(post_cts, frameLvl - 1, recLvl, failedCtses, blockLimit - 1)) {
+            failedCtses.emplace_back(cts->latches);
+            return false;
         }
     }
 }
 
 
 bool BCAR::DownHasFailed(const Cube &s, const vector<Cube> &failedCtses) {
-    for (auto f : failedCtses) {
+    LitSet s_set;
+    s_set.NewSet(s);
+    for (const auto &f : failedCtses) {
         // if f->s , return true
-        if (f.size() > s.size()) continue;
-        if (includes(s.begin(), s.end(), f.begin(), f.end())) return true;
+        if (SubsumeSet(f, s_set)) return true;
     }
     return false;
 }

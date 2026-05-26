@@ -802,22 +802,22 @@ bool FCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
         [[maybe_unused]] auto ctg_scope = m_log.Section("FC_Dn_CTG");
         auto p = GetInputAndState(frameLvl);
         GeneralizePredecessor(p, p_ucs);
-        shared_ptr<State> cts(new State(nullptr, p.first, p.second, 0));
-        if (DownHasFailed(cts->latches, failedCtses)) return false;
+        shared_ptr<State> ctg_state(new State(nullptr, p.first, p.second, 0));
 
-        if (ExCTGBlock(cts, frameLvl - 1, recLvl, failedCtses)) {
+        if (DownHasFailed(ctg_state->latches, failedCtses)) return false;
+
+        int block_limit = m_settings.ctgMaxBlocks;
+        if (ExCTGBlock(ctg_state, frameLvl - 1, recLvl + 1, failedCtses, block_limit)) {
             ctgs++;
         } else {
-            failedCtses.emplace_back(cts->latches);
+            failedCtses.emplace_back(ctg_state->latches);
             return false;
         }
     }
 }
 
 
-bool FCAR::ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int ctsCount) {
-    if (ctsCount >= m_settings.ctgMaxBlocks) return false;
-
+bool FCAR::ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int blockLimit) {
     // F_i & T & cts'
     LOG_L(m_log, 3, "Try cts:", CubeToStr(cts->latches));
     Cube cts_ass(cts->latches);
@@ -834,29 +834,29 @@ bool FCAR::ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cu
             AddUnsatisfiableCore(uc_cts, frameLvl + 1);
             PropagateUp(uc_cts, frameLvl + 1);
             return true;
-        } else {
-            auto p = GetInputAndState(frameLvl);
-            GeneralizePredecessor(p, cts);
-            shared_ptr<State> pre_cts(new State(nullptr, p.first, p.second, 0));
-            if (DownHasFailed(pre_cts->latches, failedCtses)) return false;
+        }
 
-            int pre_cts_lvl = frameLvl - 1;
-            if (pre_cts_lvl < 0 ||
-                !ExCTGBlock(pre_cts, pre_cts_lvl, recLvl, failedCtses, ctsCount + 1)) {
+        if (frameLvl <= 0 || blockLimit <= 1) return false;
 
-                failedCtses.emplace_back(cts->latches);
-                return false;
-            }
+        auto p = GetInputAndState(frameLvl);
+        GeneralizePredecessor(p, cts);
+        shared_ptr<State> pre_cts(new State(nullptr, p.first, p.second, 0));
+        if (DownHasFailed(pre_cts->latches, failedCtses)) return false;
+
+        if (!ExCTGBlock(pre_cts, frameLvl - 1, recLvl, failedCtses, blockLimit - 1)) {
+            failedCtses.emplace_back(cts->latches);
+            return false;
         }
     }
 }
 
 
 bool FCAR::DownHasFailed(const Cube &s, const vector<Cube> &failedCtses) {
-    for (auto f : failedCtses) {
+    LitSet s_set;
+    s_set.NewSet(s);
+    for (const auto &f : failedCtses) {
         // if f->s , return true
-        if (f.size() > s.size()) continue;
-        if (includes(s.begin(), s.end(), f.begin(), f.end())) return true;
+        if (SubsumeSet(f, s_set)) return true;
     }
     return false;
 }
