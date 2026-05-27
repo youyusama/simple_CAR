@@ -68,6 +68,7 @@ void IC3::KLiveIncr() {
 
 
 bool IC3::ImmediateSatisfiable() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_ImmSAT");
     auto slv = make_unique<SATSolver>(m_model, MCSATSolver::cadical);
     slv->AddTrans();
     slv->AddConstraints();
@@ -117,6 +118,7 @@ bool IC3::IsInitStateImplyBad() {
 
 
 void IC3::Extend() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_Extend");
     // reserve k+1 frames
     while (m_transSolvers.size() <= m_k + 1) AddNewFrame();
 
@@ -127,6 +129,7 @@ void IC3::Extend() {
 }
 
 bool IC3::Check() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_Check");
 
     if (!m_initialized) {
         Init();
@@ -164,6 +167,7 @@ bool IC3::Check() {
 
 
 void IC3::Init() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_Init");
 
     // start solver search state in frame k
     m_k = m_searchFromInitSucc ? 2 : 1;
@@ -229,6 +233,7 @@ void IC3::Init() {
 
 
 void IC3::InitializeStartSolver() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_InitStart");
     if (m_settings.searchFromBadPred) {
         // s & T & c & P & T' & c' & bad'
         m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
@@ -264,6 +269,7 @@ void IC3::Reset() {
 
 
 void IC3::AddNewFrame() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_AddFrame");
     int level = static_cast<int>(m_transSolvers.size());
     LOG_L(m_log, 2, "Adding new frame F_", level);
 
@@ -278,6 +284,7 @@ void IC3::AddNewFrame() {
 
 
 void IC3::AddLemmaToSolvers(const Cube &blockingCube, int beginLevel, int endLevel) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_AddUC");
     // add lemma to trans solvers
     for (int i = beginLevel; i <= endLevel; ++i) {
         m_transSolvers[i]->AddUC(blockingCube);
@@ -291,6 +298,7 @@ void IC3::AddLemmaToSolvers(const Cube &blockingCube, int beginLevel, int endLev
 
 
 int IC3::AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI, int obligationId) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_AddLemma");
     // add lemma to lemma forest
     auto res = m_lfm.AddLemma(blockingCube, frameLevel, obligationId);
 
@@ -308,6 +316,7 @@ int IC3::AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI, int ob
 }
 
 void IC3::ActiveLemmaLearning(int newLemmaId) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_ALL");
     auto ancestor_chain = m_lfm.GetAncestorChain(newLemmaId);
     if (ancestor_chain.empty()) return;
 
@@ -435,6 +444,7 @@ void IC3::PrintALLStats() const {
 
 
 Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_UCore");
     solver->GetConflict(m_conflictScratch);
     Cube core;
     if (!prime) {
@@ -457,6 +467,7 @@ Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallback
 
 
 bool IC3::GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_ShrinkCore");
     bool res = solver->ShrinkConflict(m_conflictScratch, m_settings.shrink);
     if (!res) return false;
 
@@ -480,6 +491,7 @@ bool IC3::GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, co
 
 
 shared_ptr<State> IC3::EnumerateStartState() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_StartEnum");
     LOG_L(m_log, 2, "Searching for a start state at level ", m_k);
     bool sat = false;
     {
@@ -614,6 +626,7 @@ shared_ptr<State> IC3::EnumerateStartState() {
 }
 
 bool IC3::Strengthen() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_Strengthen");
     m_minUpdateLevel = m_k;
 
     while (true) {
@@ -638,6 +651,7 @@ bool IC3::Strengthen() {
 // @output: -1 if not subsumed
 // ================================================================================
 int IC3::GetSubsumeLevel(const Cube &cb, int startLvl) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_Subsumed");
     if (startLvl < 0) startLvl = 0;
     if (startLvl > m_k + 1) return -1;
 
@@ -650,6 +664,7 @@ int IC3::GetSubsumeLevel(const Cube &cb, int startLvl) {
 }
 
 int IC3::AddObligation(shared_ptr<State> state, int level, int depth, double act) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_AddPO");
     int id = static_cast<int>(m_obligationRecords.size());
     ObligationRecord record;
     record.state = state;
@@ -664,6 +679,7 @@ int IC3::AddObligation(shared_ptr<State> state, int level, int depth, double act
 }
 
 bool IC3::PopObligation(Obligation &ob) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_PopPO");
     while (!m_obligations.empty()) {
         auto it = m_obligations.begin();
         if (it->level > m_k) return false;
@@ -684,6 +700,7 @@ bool IC3::PopObligation(Obligation &ob) {
 }
 
 void IC3::PushObligation(int obligationId, int newLevel) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_PushPO");
     if (obligationId < 0 || obligationId >= static_cast<int>(m_obligationRecords.size())) return;
     auto &record = m_obligationRecords[obligationId];
     if (!record.alive) return;
@@ -697,12 +714,14 @@ void IC3::PushObligation(int obligationId, int newLevel) {
 }
 
 void IC3::DropObligation(int obligationId) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_DropPO");
     if (obligationId < 0 || obligationId >= static_cast<int>(m_obligationRecords.size())) return;
     m_obligationRecords[obligationId].alive = false;
     m_obligationRecords[obligationId].version++;
 }
 
 bool IC3::HandleObligations() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_HandlePO");
     Obligation ob;
     while (PopObligation(ob)) {
 
@@ -757,6 +776,7 @@ bool IC3::HandleObligations() {
 }
 
 bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_IsInd");
     Clause cls;
     cls.reserve(cb.size());
     for (const auto &lit : cb) {
@@ -767,7 +787,11 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
     Cube assumption(cb);
     GetPrimed(assumption);
     slv->SetTempDomainCOI(assumption);
-    bool res = !slv->Solve(assumption);
+    bool res;
+    {
+        [[maybe_unused]] auto sat_scope = m_log.Section("SAT_Ind");
+        res = !slv->Solve(assumption);
+    }
     slv->ReleaseTempClause();
     return res;
 }
@@ -782,6 +806,7 @@ static bool LitTrueInModel(const shared_ptr<SATSolver> &solver, Lit lit) {
 
 
 bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits, const Cube &fullCube, vector<pair<LitSet, LitSet>> &cexCache) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_Down");
     LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
     int joins = 0;
@@ -897,6 +922,7 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits
 
 
 bool IC3::ExCTGBlock(const Cube &cb, int frameLvl, int recLvl, int blockLimit) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_ExCTG");
     if (!InitiationCheck(cb)) return false;
 
     Cube assumption(cb);
@@ -927,6 +953,7 @@ bool IC3::ExCTGBlock(const Cube &cb, int frameLvl, int recLvl, int blockLimit) {
 
 
 void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_Gen");
     LOG_L(m_log, 3, "Generalizing Cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
     if (m_settings.shrink > 0 &&
@@ -992,6 +1019,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
 
 
 void IC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_GenPred");
     LOG_L(m_log, 3, "Generalizing predecessor. Initial latch size: ", predecessorState->latches.size(), ", input size: ", predecessorState->inputs.size(), ", Successor state latch size: ", successorState->latches.size());
 
     Clause succ_negation_clause;
@@ -1013,7 +1041,11 @@ void IC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const
         assumption.insert(assumption.begin(), predecessorState->inputs.begin(), predecessorState->inputs.end());
         // There exist some successors whose predecessors are the entire set. (All latches are determined solely by the inputs.)
 
-        bool result = m_liftSolver->Solve(assumption);
+        bool result;
+        {
+            [[maybe_unused]] auto sat_lift = m_log.Section("SAT_Lift");
+            result = m_liftSolver->Solve(assumption);
+        }
         assert(!result);
 
         if (m_settings.shrink > 0) {
@@ -1040,6 +1072,7 @@ void IC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const
 }
 
 bool IC3::InitiationCheck(const Cube &cb) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_InitChk");
     for (const auto &lit : cb) {
         if (m_initialStateSet.count(~lit)) {
             return true; // Disjoint (UNSAT), check passes.
@@ -1051,6 +1084,7 @@ bool IC3::InitiationCheck(const Cube &cb) {
 
 
 Cube IC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_ValidCore");
     // fallbackCube is sorted
     Cube core = GetUnsatCore(solver, fallbackCube, true);
     LOG_L(m_log, 3, "Got UNSAT core: ", CubeToStr(core));
@@ -1119,11 +1153,15 @@ string IC3::FramesDetail() const {
 
 
 bool IC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_IsReach");
     Cube assumption(cb);
     GetPrimed(assumption);
     slv->SetTempDomainCOI(assumption);
 
-    return slv->Solve(assumption);
+    {
+        [[maybe_unused]] auto sat_scope = m_log.Section("SAT_Reach");
+        return slv->Solve(assumption);
+    }
 }
 
 
@@ -1133,6 +1171,7 @@ bool IC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
 // @output:
 // ================================================================================
 bool IC3::Propagate(int lemmaId, int lvl) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_Prop");
     bool result;
     Cube cb = m_lfm.CubeOf(lemmaId);
     std::vector<int> obligation_ids = m_lfm.ObligationsOf(lemmaId);
@@ -1162,6 +1201,7 @@ bool IC3::Propagate(int lemmaId, int lvl) {
 
 
 int IC3::PropagateUp(int LemmaId, int startLevel) {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_PropUp");
     int lvl = startLevel;
     while (lvl <= m_k) {
         if (!m_lfm.Alive(LemmaId) || !Propagate(LemmaId, lvl))
@@ -1173,6 +1213,7 @@ int IC3::PropagateUp(int LemmaId, int startLevel) {
 
 
 bool IC3::PropagateFrame() {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_PropFrame");
     LOG_L(m_log, 2, "Propagating clauses.");
 
     for (int i = m_minUpdateLevel; i <= m_k; ++i) {
