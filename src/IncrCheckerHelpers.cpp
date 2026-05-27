@@ -666,6 +666,29 @@ bool LemmaForestManager::Alive(int id) const {
     return id >= 0 && id < static_cast<int>(m_alive.size()) && m_alive[id];
 }
 
+const std::vector<int> &LemmaForestManager::ObligationsOf(int lemmaId) const {
+    static const std::vector<int> EMPTY;
+    if (lemmaId < 0 || lemmaId >= static_cast<int>(m_lemmaStates.size())) return EMPTY;
+    return m_lemmaStates[lemmaId].obligationIds;
+}
+
+void LemmaForestManager::AddObligationBinding(int lemmaId, int obligationId) {
+    if (!Alive(lemmaId) || obligationId < 0) return;
+
+    auto &ids = m_lemmaStates[lemmaId].obligationIds;
+    if (std::find(ids.begin(), ids.end(), obligationId) == ids.end()) {
+        ids.push_back(obligationId);
+    }
+}
+
+void LemmaForestManager::CopyObligationBindings(int newLemmaId, int oldLemmaId) {
+    if (!Alive(newLemmaId) || oldLemmaId < 0 || oldLemmaId >= static_cast<int>(m_lemmaStates.size())) return;
+
+    for (int obligation_id : m_lemmaStates[oldLemmaId].obligationIds) {
+        AddObligationBinding(newLemmaId, obligation_id);
+    }
+}
+
 void LemmaForestManager::BorderCubesRange::Iterator::SkipDead() {
     if (!lfm) return;
     if (level < 0 || level >= static_cast<int>(lfm->m_borders.size())) return;
@@ -775,6 +798,10 @@ void LemmaForestManager::AddLemmaToBorder(int frameLevel, int lemmaId) {
     m_borders[frameLevel].push_back(lemmaId);
 }
 
+void LemmaForestManager::MergeObligationBindings(int newLemmaId, int oldLemmaId) {
+    CopyObligationBindings(newLemmaId, oldLemmaId);
+}
+
 void LemmaForestManager::AdoptRelations(int newLemmaId, int oldLemmaId) {
     assert(Alive(newLemmaId));
     assert(Alive(oldLemmaId));
@@ -796,6 +823,7 @@ void LemmaForestManager::AdoptRelations(int newLemmaId, int oldLemmaId) {
         m_forest[child_id].parentId = newLemmaId;
         new_meta.childrenIds.push_back(child_id);
     }
+    MergeObligationBindings(newLemmaId, oldLemmaId);
     old_meta.childrenIds.clear();
     UnregisterLemma(oldLemmaId);
 }
@@ -844,7 +872,7 @@ void LemmaForestManager::UpdateRefineCountersOnInsert(int newLemmaId) {
     }
 }
 
-AddLemmaResult LemmaForestManager::AddLemma(const Cube &cb, int frameLevel) {
+AddLemmaResult LemmaForestManager::AddLemma(const Cube &cb, int frameLevel, int obligationId) {
     assert(frameLevel >= 1);
     EnsureLevel(frameLevel);
 
@@ -870,6 +898,7 @@ AddLemmaResult LemmaForestManager::AddLemma(const Cube &cb, int frameLevel) {
 
     int begin_level = parent_level + 1;
     RemoveRedundantLemmas(begin_level, frameLevel, new_lemma_id);
+    AddObligationBinding(new_lemma_id, obligationId);
     AddLemmaToBorder(frameLevel, new_lemma_id);
     UpdateRefineCountersOnInsert(new_lemma_id);
     return AddLemmaResult{new_lemma_id, begin_level, frameLevel};

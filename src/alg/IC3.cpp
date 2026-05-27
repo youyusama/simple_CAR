@@ -169,6 +169,8 @@ void IC3::Init() {
     m_k = m_searchFromInitSucc ? 2 : 1;
     m_lfm.Reset();
     m_transSolvers.clear();
+    m_obligations.clear();
+    m_obligationRecords.clear();
 
     if (m_searchFromInitSucc) {
         m_initStateImplyBad = IsInitStateImplyBad();
@@ -288,9 +290,9 @@ void IC3::AddLemmaToSolvers(const Cube &blockingCube, int beginLevel, int endLev
 }
 
 
-int IC3::AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI) {
+int IC3::AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI, int obligationId) {
     // add lemma to lemma forest
-    auto res = m_lfm.AddLemma(blockingCube, frameLevel);
+    auto res = m_lfm.AddLemma(blockingCube, frameLevel, obligationId);
 
     // add lemma to solvers
     AddLemmaToSolvers(blockingCube, res.beginLevel, res.endLevel);
@@ -615,14 +617,13 @@ bool IC3::Strengthen() {
     m_minUpdateLevel = m_k;
 
     while (true) {
+        if (!HandleObligations()) {
+            return false;
+        }
+
         shared_ptr<State> start_state = EnumerateStartState();
         if (start_state != nullptr) {
-            set<Obligation> obligations;
-            obligations.emplace(start_state, m_k - 1, 1);
-
-            if (!HandleObligations(obligations)) {
-                return false;
-            }
+            AddObligation(start_state, m_k - 1, 1);
         } else {
             LOG_L(m_log, 2, "No more CTIs at level ", m_k, ". Frame is strengthened.");
             return true;
@@ -648,37 +649,73 @@ int IC3::GetSubsumeLevel(const Cube &cb, int startLvl) {
     return -1;
 }
 
-bool IC3::PopObligation(set<Obligation> &obligations, Obligation &ob) {
-    if (obligations.empty()) return false;
-    auto it = obligations.begin();
-    if (it->level > m_k) return false;
-    ob = *it;
-    obligations.erase(it);
-    ob.act += 1.0;
-    return true;
+int IC3::AddObligation(shared_ptr<State> state, int level, int depth, double act) {
+    int id = static_cast<int>(m_obligationRecords.size());
+    ObligationRecord record;
+    record.state = state;
+    record.level = level;
+    record.depth = depth;
+    record.act = act;
+    record.version = 1;
+    record.alive = true;
+    m_obligationRecords.emplace_back(record);
+    m_obligations.emplace(id, record.version, state, level, depth, act);
+    return id;
 }
 
-void IC3::PushObligation(set<Obligation> &obligations, Obligation ob, int newLevel) {
-    while (ob.level < newLevel) {
-        ob.act *= 0.6;
-        ob.level++;
+bool IC3::PopObligation(Obligation &ob) {
+    while (!m_obligations.empty()) {
+        auto it = m_obligations.begin();
+        if (it->level > m_k) return false;
+
+        Obligation candidate = *it;
+        m_obligations.erase(it);
+
+        if (candidate.id < 0 || candidate.id >= static_cast<int>(m_obligationRecords.size())) continue;
+        auto &record = m_obligationRecords[candidate.id];
+        if (!record.alive || candidate.version != record.version) continue;
+
+        record.act += 1.0;
+        record.version++;
+        ob = Obligation(candidate.id, record.version, record.state, record.level, record.depth, record.act);
+        return true;
     }
-    obligations.insert(ob);
+    return false;
 }
 
-bool IC3::HandleObligations(set<Obligation> &obligations) {
-    Obligation ob(nullptr, 0, 0);
-    while (PopObligation(obligations, ob)) {
+void IC3::PushObligation(int obligationId, int newLevel) {
+    if (obligationId < 0 || obligationId >= static_cast<int>(m_obligationRecords.size())) return;
+    auto &record = m_obligationRecords[obligationId];
+    if (!record.alive) return;
+
+    while (record.level < newLevel) {
+        record.act *= 0.6;
+        record.level++;
+    }
+    record.version++;
+    m_obligations.emplace(obligationId, record.version, record.state, record.level, record.depth, record.act);
+}
+
+void IC3::DropObligation(int obligationId) {
+    if (obligationId < 0 || obligationId >= static_cast<int>(m_obligationRecords.size())) return;
+    m_obligationRecords[obligationId].alive = false;
+    m_obligationRecords[obligationId].version++;
+}
+
+bool IC3::HandleObligations() {
+    Obligation ob;
+    while (PopObligation(ob)) {
 
         if (ob.act >= m_settings.maxObligationAct) {
             LOG_L(m_log, 2, "Obligation at level ", ob.level, " depth ", ob.depth, " reached max activity. Skipped.");
+            DropObligation(ob.id);
             continue;
         }
 
         int subsume_lvl = GetSubsumeLevel(ob.state->latches, ob.level + 1);
         if (subsume_lvl != -1) {
             LOG_L(m_log, 2, "Obligation at level ", ob.level + 1, " depth ", ob.depth, " is subsumed at level ", subsume_lvl, ". Skipped.");
-            PushObligation(obligations, ob, subsume_lvl + 1);
+            PushObligation(ob.id, subsume_lvl + 1);
             continue;
         }
 
@@ -693,13 +730,11 @@ bool IC3::HandleObligations(set<Obligation> &obligations) {
         if (!IsReachable(cti_cube_sorted, trans_slv)) {
             auto uc = GetAndValidateCore(trans_slv, cti_cube);
             Generalize(uc, ob.level);
-            int lemma_id = AddLemma(uc, ob.level + 1, true);
-            size_t push_level = PropagateUp(lemma_id, ob.level + 1);
+            int lemma_id = AddLemma(uc, ob.level + 1, true, ob.id);
+            int push_level = PropagateUp(lemma_id, ob.level + 1);
 
-            if (push_level <= m_k) {
-                LOG_L(m_log, 2, "Creating new obligation for same state at higher level ", push_level);
-                PushObligation(obligations, ob, static_cast<int>(push_level));
-            }
+            LOG_L(m_log, 2, "Creating new obligation for same state at higher level ", push_level);
+            PushObligation(ob.id, push_level);
         } else {
             auto p = trans_slv->GetAssignment(false);
             auto predecessor_state =
@@ -714,8 +749,8 @@ bool IC3::HandleObligations(set<Obligation> &obligations) {
             GeneralizePredecessor(predecessor_state, ob.state);
 
             LOG_L(m_log, 2, "Found predecessor for CTI. New obligation at level ", ob.level - 1);
-            PushObligation(obligations, ob, ob.level);
-            PushObligation(obligations, Obligation(predecessor_state, ob.level - 1, ob.depth + 1), ob.level - 1);
+            PushObligation(ob.id, ob.level);
+            AddObligation(predecessor_state, ob.level - 1, ob.depth + 1);
         }
     }
     return true;
@@ -1100,14 +1135,22 @@ bool IC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
 bool IC3::Propagate(int lemmaId, int lvl) {
     bool result;
     Cube cb = m_lfm.CubeOf(lemmaId);
+    std::vector<int> obligation_ids = m_lfm.ObligationsOf(lemmaId);
 
     if (!IsReachable(cb, m_transSolvers[lvl])) {
         auto core = GetAndValidateCore(m_transSolvers[lvl], cb);
         if (core.size() < cb.size()) {
-            AddLemma(core, lvl + 1);
+            int new_lemma_id = AddLemma(core, lvl + 1);
+            m_lfm.CopyObligationBindings(new_lemma_id, lemmaId);
+            for (int obligation_id : obligation_ids) {
+                PushObligation(obligation_id, lvl + 1);
+            }
         } else {
             int propagated_level = m_lfm.PropagateLemma(lemmaId, lvl + 1);
             AddLemmaToSolvers(cb, propagated_level, propagated_level);
+            for (int obligation_id : obligation_ids) {
+                PushObligation(obligation_id, propagated_level);
+            }
         }
         m_branching->Update(core);
         result = true;
