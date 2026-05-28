@@ -693,12 +693,18 @@ bool IC3::PopObligation(Obligation &ob) {
         if (!record.alive || candidate.version != record.version) continue;
 
         record.queued = false;
-        record.act += 1.0;
         record.version++;
         ob = Obligation(candidate.id, record.version, record.state, record.level, record.depth, record.act);
         return true;
     }
     return false;
+}
+
+void IC3::BumpObligationAct(int obligationId) {
+    if (obligationId < 0 || obligationId >= static_cast<int>(m_obligationRecords.size())) return;
+    auto &record = m_obligationRecords[obligationId];
+    if (!record.alive) return;
+    record.act += 1.0;
 }
 
 void IC3::PushObligation(int obligationId, int newLevel, bool onlyIfQueued) {
@@ -728,17 +734,19 @@ bool IC3::HandleObligations() {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_HandlePO");
     Obligation ob;
     while (PopObligation(ob)) {
-
-        if (ob.act >= m_settings.maxObligationAct) {
-            LOG_L(m_log, 2, "Obligation at level ", ob.level, " depth ", ob.depth, " reached max activity. Skipped.");
-            DropObligation(ob.id);
-            continue;
-        }
-
         int subsume_lvl = GetSubsumeLevel(ob.state->latches, ob.level + 1);
         if (subsume_lvl != -1) {
             LOG_L(m_log, 2, "Obligation at level ", ob.level + 1, " depth ", ob.depth, " is subsumed at level ", subsume_lvl, ". Skipped.");
             PushObligation(ob.id, subsume_lvl + 1);
+            continue;
+        }
+
+        BumpObligationAct(ob.id);
+        ob.act = m_obligationRecords[ob.id].act;
+
+        if (ob.act > m_settings.maxObligationAct) {
+            LOG_L(m_log, 2, "Obligation at level ", ob.level, " depth ", ob.depth, " reached max activity. Skipped.");
+            DropObligation(ob.id);
             continue;
         }
 

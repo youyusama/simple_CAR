@@ -35,8 +35,13 @@ struct Obligation {
             return level < other.level;
         if (depth != other.depth)
             return depth > other.depth;
-        if (CubeComp(state->latches, other.state->latches)) return true;
-        if (CubeComp(other.state->latches, state->latches)) return false;
+        const Cube &lhs = state->latches;
+        const Cube &rhs = other.state->latches;
+        if (lhs.size() != rhs.size()) return lhs.size() < rhs.size();
+        for (size_t i = 0; i < lhs.size(); ++i) {
+            if (lhs[i] < rhs[i]) return true;
+            if (rhs[i] < lhs[i]) return false;
+        }
         if (id != other.id) return id < other.id;
         return version < other.version;
     }
@@ -115,6 +120,8 @@ class IC3 : public IncrAlg {
     int AddObligation(shared_ptr<State> state, int level, int depth, double act = 0.0);
 
     bool PopObligation(Obligation &ob);
+
+    void BumpObligationAct(int obligationId);
 
     void PushObligation(int obligationId, int newLevel, bool onlyIfQueued = false);
 
