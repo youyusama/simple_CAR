@@ -673,6 +673,7 @@ int IC3::AddObligation(shared_ptr<State> state, int level, int depth, double act
     record.act = act;
     record.version = 1;
     record.alive = true;
+    record.queued = true;
     m_obligationRecords.emplace_back(record);
     m_obligations.emplace(id, record.version, state, level, depth, act);
     return id;
@@ -691,6 +692,7 @@ bool IC3::PopObligation(Obligation &ob) {
         auto &record = m_obligationRecords[candidate.id];
         if (!record.alive || candidate.version != record.version) continue;
 
+        record.queued = false;
         record.act += 1.0;
         record.version++;
         ob = Obligation(candidate.id, record.version, record.state, record.level, record.depth, record.act);
@@ -699,17 +701,18 @@ bool IC3::PopObligation(Obligation &ob) {
     return false;
 }
 
-void IC3::PushObligation(int obligationId, int newLevel) {
+void IC3::PushObligation(int obligationId, int newLevel, bool onlyIfQueued) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_PushPO");
     if (obligationId < 0 || obligationId >= static_cast<int>(m_obligationRecords.size())) return;
     auto &record = m_obligationRecords[obligationId];
-    if (!record.alive) return;
+    if (!record.alive || (onlyIfQueued && !record.queued)) return;
 
     while (record.level < newLevel) {
         record.act *= 0.6;
         record.level++;
     }
     record.version++;
+    record.queued = true;
     m_obligations.emplace(obligationId, record.version, record.state, record.level, record.depth, record.act);
 }
 
@@ -717,6 +720,7 @@ void IC3::DropObligation(int obligationId) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_DropPO");
     if (obligationId < 0 || obligationId >= static_cast<int>(m_obligationRecords.size())) return;
     m_obligationRecords[obligationId].alive = false;
+    m_obligationRecords[obligationId].queued = false;
     m_obligationRecords[obligationId].version++;
 }
 
@@ -1174,21 +1178,20 @@ bool IC3::Propagate(int lemmaId, int lvl) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_Prop");
     bool result;
     Cube cb = m_lfm.CubeOf(lemmaId);
-    std::vector<int> obligation_ids = m_lfm.ObligationsOf(lemmaId);
+    int obligation_id = m_lfm.ObligationOf(lemmaId);
 
     if (!IsReachable(cb, m_transSolvers[lvl])) {
         auto core = GetAndValidateCore(m_transSolvers[lvl], cb);
         if (core.size() < cb.size()) {
-            int new_lemma_id = AddLemma(core, lvl + 1);
-            m_lfm.CopyObligationBindings(new_lemma_id, lemmaId);
-            for (int obligation_id : obligation_ids) {
-                PushObligation(obligation_id, lvl + 1);
+            AddLemma(core, lvl + 1, false, obligation_id);
+            if (obligation_id != -1) {
+                PushObligation(obligation_id, lvl + 1, true);
             }
         } else {
             int propagated_level = m_lfm.PropagateLemma(lemmaId, lvl + 1);
             AddLemmaToSolvers(cb, propagated_level, propagated_level);
-            for (int obligation_id : obligation_ids) {
-                PushObligation(obligation_id, propagated_level);
+            if (obligation_id != -1) {
+                PushObligation(obligation_id, propagated_level, true);
             }
         }
         m_branching->Update(core);

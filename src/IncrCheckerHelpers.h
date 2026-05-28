@@ -55,7 +55,7 @@ struct LemmaState {
     bool reachable{false};
 
     std::vector<std::pair<Cube, int>> ctpPreds;
-    std::vector<int> obligationIds;
+    int obligationId{-1};
 };
 
 struct AddLemmaResult {
@@ -96,9 +96,8 @@ class LemmaForestManager {
 
     const Cube &CubeOf(int id) const;
     bool Alive(int id) const;
-    const std::vector<int> &ObligationsOf(int lemmaId) const;
+    int ObligationOf(int lemmaId) const;
     void AddObligationBinding(int lemmaId, int obligationId);
-    void CopyObligationBindings(int newLemmaId, int oldLemmaId);
 
     class BorderCubesRange {
       public:
@@ -133,7 +132,6 @@ class LemmaForestManager {
     void RemoveFromBorder(int level, int lemmaId);
     void UnregisterLemma(int lemmaId);
     void AdoptRelations(int newLemmaId, int oldLemmaId);
-    void MergeObligationBindings(int newLemmaId, int oldLemmaId);
     uint64_t RemoveRedundantLemmas(int startLevel, int endLevel, int newLemmaId);
     void UpdateRefineCountersOnInsert(int newLemmaId);
 

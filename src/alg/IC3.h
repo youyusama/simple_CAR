@@ -49,6 +49,7 @@ struct ObligationRecord {
     double act{0.0};
     uint64_t version{0};
     bool alive{true};
+    bool queued{false};
 };
 
 class IC3 : public IncrAlg {
@@ -115,7 +116,7 @@ class IC3 : public IncrAlg {
 
     bool PopObligation(Obligation &ob);
 
-    void PushObligation(int obligationId, int newLevel);
+    void PushObligation(int obligationId, int newLevel, bool onlyIfQueued = false);
 
     void DropObligation(int obligationId);
 
