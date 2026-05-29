@@ -17,6 +17,76 @@
 
 namespace car {
 
+struct State {
+    State(shared_ptr<State> inPreState,
+          const Cube &inInputs,
+          const Cube &inLatches,
+          int inDepth) : depth(inDepth),
+                         preState(inPreState),
+                         inputs(inInputs),
+                         latches(inLatches),
+                         dtScore(0) {}
+    static int num_inputs;
+    static int num_latches;
+
+    string GetLatchesString();
+    string GetInputsString();
+
+    int depth;
+    shared_ptr<State> preState = nullptr;
+    Cube inputs;
+    Cube latches;
+    double dtScore;
+
+    void HasUC() {
+        dtScore += 0.7;
+    }
+
+    void HasSucc() {
+        dtScore += 0.3;
+    }
+};
+
+struct Obligation {
+    Obligation() = default;
+    Obligation(shared_ptr<State> s, int l, int d, double a = 0.0)
+        : state(s),
+          level(l),
+          depth(d),
+          act(a) {}
+
+    shared_ptr<State> state;
+    int level{0};
+    int depth{0};
+    double act{0.0};
+};
+
+using ObligationRef = std::shared_ptr<Obligation>;
+
+struct ObligationLess {
+    bool operator()(const ObligationRef &lhsOb, const ObligationRef &rhsOb) const {
+        if (lhsOb == rhsOb) return false;
+        if (!lhsOb) return static_cast<bool>(rhsOb);
+        if (!rhsOb) return false;
+
+        if (lhsOb->level != rhsOb->level)
+            return lhsOb->level < rhsOb->level;
+        if (lhsOb->depth != rhsOb->depth)
+            return lhsOb->depth > rhsOb->depth;
+
+        const Cube &lhs = lhsOb->state->latches;
+        const Cube &rhs = rhsOb->state->latches;
+        if (lhs.size() != rhs.size()) return lhs.size() < rhs.size();
+        for (size_t i = 0; i < lhs.size(); ++i) {
+            if (lhs[i] < rhs[i]) return true;
+            if (rhs[i] < lhs[i]) return false;
+        }
+
+        return lhsOb.get() < rhsOb.get();
+    }
+};
+
+
 class Branching {
   public:
     Branching(int type = 1);
@@ -55,7 +125,6 @@ struct LemmaState {
     bool reachable{false};
 
     std::vector<std::pair<Cube, int>> ctpPreds;
-    int obligationId{-1};
 };
 
 struct AddLemmaResult {
@@ -71,7 +140,7 @@ class LemmaForestManager {
     void Reset();
     void EnsureLevel(int level);
 
-    AddLemmaResult AddLemma(const Cube &cb, int frameLevel, int obligationId = -1);
+    AddLemmaResult AddLemma(const Cube &cb, int frameLevel);
     int PropagateLemma(int lemmaId, int newFrameLevel);
 
     bool GetParentCube(const Cube &blockingCube, int startLevel, Cube &parent) const;
@@ -96,8 +165,6 @@ class LemmaForestManager {
 
     const Cube &CubeOf(int id) const;
     bool Alive(int id) const;
-    int ObligationOf(int lemmaId) const;
-    void AddObligationBinding(int lemmaId, int obligationId);
 
     class BorderCubesRange {
       public:
@@ -256,37 +323,6 @@ class OverSequenceSet {
     int m_invariantLevel;
     LitSet m_tmpLitSet;
     static constexpr size_t K_REBUILD_DEAD_RATIO = 4;
-};
-
-
-struct State {
-    State(shared_ptr<State> inPreState,
-          const Cube &inInputs,
-          const Cube &inLatches,
-          int inDepth) : depth(inDepth),
-                         preState(inPreState),
-                         inputs(inInputs),
-                         latches(inLatches),
-                         dtScore(0) {}
-    static int num_inputs;
-    static int num_latches;
-
-    string GetLatchesString();
-    string GetInputsString();
-
-    int depth;
-    shared_ptr<State> preState = nullptr;
-    Cube inputs;
-    Cube latches;
-    double dtScore;
-
-    void HasUC() {
-        dtScore += 0.7;
-    }
-
-    void HasSucc() {
-        dtScore += 0.3;
-    }
 };
 
 

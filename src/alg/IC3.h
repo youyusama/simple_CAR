@@ -13,50 +13,6 @@
 
 namespace car {
 
-struct Obligation {
-    Obligation() = default;
-    Obligation(int inId, uint64_t inVersion, shared_ptr<State> s, int l, int d, double a = 0.0)
-        : id(inId),
-          version(inVersion),
-          state(s),
-          level(l),
-          depth(d),
-          act(a) {}
-
-    int id{-1};
-    uint64_t version{0};
-    shared_ptr<State> state;
-    int level{0};
-    int depth{0};
-    double act{0.0};
-
-    bool operator<(const Obligation &other) const {
-        if (level != other.level)
-            return level < other.level;
-        if (depth != other.depth)
-            return depth > other.depth;
-        const Cube &lhs = state->latches;
-        const Cube &rhs = other.state->latches;
-        if (lhs.size() != rhs.size()) return lhs.size() < rhs.size();
-        for (size_t i = 0; i < lhs.size(); ++i) {
-            if (lhs[i] < rhs[i]) return true;
-            if (rhs[i] < lhs[i]) return false;
-        }
-        if (id != other.id) return id < other.id;
-        return version < other.version;
-    }
-};
-
-struct ObligationRecord {
-    shared_ptr<State> state;
-    int level{0};
-    int depth{0};
-    double act{0.0};
-    uint64_t version{0};
-    bool alive{true};
-    bool queued{false};
-};
-
 class IC3 : public IncrAlg {
   public:
     IC3(Settings settings,
@@ -94,7 +50,7 @@ class IC3 : public IncrAlg {
 
     void AddNewFrame();
 
-    int AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI = false, int obligationId = -1);
+    int AddLemma(const Cube &blockingCube, int frameLevel, bool fromCTI = false);
 
     void AddLemmaToSolvers(const Cube &blockingCube, int beginLevel, int endLevel);
 
@@ -117,15 +73,11 @@ class IC3 : public IncrAlg {
 
     bool HandleObligations();
 
-    int AddObligation(shared_ptr<State> state, int level, int depth, double act = 0.0);
+    ObligationRef AddObligation(shared_ptr<State> state, int level, int depth, double act = 0.0);
 
-    bool PopObligation(Obligation &ob);
+    bool PopObligation(ObligationRef &ob);
 
-    void BumpObligationAct(int obligationId);
-
-    void PushObligation(int obligationId, int newLevel, bool onlyIfQueued = false);
-
-    void DropObligation(int obligationId);
+    void PushObligation(const ObligationRef &ob, int newLevel);
 
     int GetSubsumeLevel(const Cube &cb, int startLvl);
 
@@ -203,8 +155,7 @@ class IC3 : public IncrAlg {
     int m_minUpdateLevel;
     int m_invariantLevel;
     shared_ptr<Branching> m_branching;
-    std::set<Obligation> m_obligations;
-    std::vector<ObligationRecord> m_obligationRecords;
+    std::set<ObligationRef, ObligationLess> m_obligations;
 
     // all stats
     uint64_t m_allPushAttempted{0};
