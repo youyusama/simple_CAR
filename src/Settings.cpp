@@ -102,7 +102,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->default_val(false);
 
     app.add_option("--ctg_max_lvl", settings.ctgMaxRecursionDepth, "CTG max recursion depth")
-        ->default_val(1);
+        ->default_val(2);
 
     app.add_option("--ctg_max_ctg", settings.ctgMaxCTG, "CTG max counterexamples to generalization")
         ->default_val(3);
@@ -126,7 +126,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->check(CLI::Range(1, INT32_MAX));
 
     app.add_option("--max_ob_act", settings.maxObligationAct, "max obligation activity")
-        ->default_val(20.0);
+        ->default_val(10.0);
 
     app.add_flag("--sd", settings.satSolveInDomain, "solve SAT in domain")
         ->default_val(false)

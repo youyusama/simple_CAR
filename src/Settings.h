@@ -48,7 +48,7 @@ struct Settings {
     float restartGrowthRate = 1.5;
     bool restartLuby = false;
     bool solveInProperty = false;
-    int ctgMaxRecursionDepth = 1;
+    int ctgMaxRecursionDepth = 2;
     int ctgMaxCTG = 3;
     int ctgMaxBlocks = 1;
     int genMaxFail = 0;
@@ -57,7 +57,7 @@ struct Settings {
     int allMaxStates = 32;
     bool satSolveInDomain = false;
     int shrink = 0;
-    double maxObligationAct = 20.0;
+    double maxObligationAct = 10.0;
     int bmcStep = 1;
     int eq = 2;
     int eqTimeout = 600;
