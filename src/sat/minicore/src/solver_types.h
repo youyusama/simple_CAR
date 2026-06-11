@@ -493,7 +493,6 @@ class DecisionBuckets {
     void resize(Var s) {
         var_activity_.resize(s, 0.0);
         heap_pos_.resize(s, -1);
-        in_bucket_.resize(s, false);
         bucket_pos_.resize(s, -1);
         bucket_idx_.resize(s, -1);
     }
@@ -509,7 +508,7 @@ class DecisionBuckets {
     }
 
     void insert(Var v) {
-        if (in_bucket_[v]) return;
+        if (inBucket(v)) return;
         if (heap_pos_[v] == -1) {
             heapInsert(v);
         }
@@ -518,7 +517,6 @@ class DecisionBuckets {
         bucket_pos_[v] = static_cast<int>(buckets_[bucket_index].size());
         bucket_idx_[v] = bucket_index;
         buckets_[bucket_index].push_back(v);
-        in_bucket_[v] = true;
         if (bucket_index < head_) {
             head_ = bucket_index;
         }
@@ -542,7 +540,6 @@ class DecisionBuckets {
         }
         Var v = buckets_[head_].back();
         buckets_[head_].pop_back();
-        in_bucket_[v] = false;
         bucket_pos_[v] = -1;
         bucket_idx_[v] = -1;
         return v;
@@ -559,18 +556,17 @@ class DecisionBuckets {
             heapUp(heap_pos_[v]);
         }
 
-        if (in_bucket_[v]) {
+        int old_bucket = bucket_idx_[v];
+        if (old_bucket >= 0) {
             int new_bucket = bucketIndexFromPosCached(heap_pos_[v]);
-            int old_bucket = bucket_idx_[v];
-            if (old_bucket < 0 || new_bucket < old_bucket) {
-                removeFromBucket(v);
-                insert(v);
+            if (new_bucket < old_bucket) {
+                moveToBucket(v, new_bucket);
             }
         }
     }
 
     bool inBucket(Var v) const {
-        return v >= 0 && v < static_cast<Var>(in_bucket_.size()) && in_bucket_[v];
+        return bucket_idx_[v] >= 0;
     }
 
   private:
@@ -627,49 +623,39 @@ class DecisionBuckets {
         heap_pos_[v] = idx;
     }
 
-    void removeFromBucket(Var v) {
-        int b = bucket_idx_[v];
-        if (b < 0 || b >= static_cast<int>(buckets_.size())) {
-            in_bucket_[v] = false;
-            bucket_pos_[v] = -1;
-            bucket_idx_[v] = -1;
-            return;
+    void moveToBucket(Var v, int new_bucket) {
+        int old_bucket = bucket_idx_[v];
+        int old_pos = bucket_pos_[v];
+        assert(old_bucket >= 0);
+        assert(old_bucket < static_cast<int>(buckets_.size()));
+        assert(new_bucket >= 0);
+        assert(new_bucket < old_bucket);
+
+        auto &src = buckets_[old_bucket];
+        assert(old_pos >= 0);
+        assert(old_pos < static_cast<int>(src.size()));
+        assert(src[static_cast<size_t>(old_pos)] == v);
+
+        Var moved = src.back();
+        src[static_cast<size_t>(old_pos)] = moved;
+        src.pop_back();
+        if (moved != v) {
+            bucket_pos_[moved] = old_pos;
         }
-        auto &bucket = buckets_[b];
-        int pos = bucket_pos_[v];
-        if (pos >= 0 && pos < static_cast<int>(bucket.size()) &&
-            bucket[static_cast<size_t>(pos)] == v) {
-            Var moved = bucket.back();
-            bucket[static_cast<size_t>(pos)] = moved;
-            bucket.pop_back();
-            if (moved != v) {
-                bucket_pos_[moved] = pos;
-                bucket_idx_[moved] = b;
-            }
-        } else {
-            for (size_t i = 0; i < bucket.size(); ++i) {
-                if (bucket[i] == v) {
-                    Var moved = bucket.back();
-                    bucket[i] = moved;
-                    bucket.pop_back();
-                    if (moved != v) {
-                        bucket_pos_[moved] = static_cast<int>(i);
-                        bucket_idx_[moved] = b;
-                    }
-                    break;
-                }
-            }
+
+        auto &dst = buckets_[new_bucket];
+        bucket_pos_[v] = static_cast<int>(dst.size());
+        bucket_idx_[v] = new_bucket;
+        dst.push_back(v);
+        if (new_bucket < head_) {
+            head_ = new_bucket;
         }
-        in_bucket_[v] = false;
-        bucket_pos_[v] = -1;
-        bucket_idx_[v] = -1;
     }
 
     std::vector<std::vector<Var>> buckets_;
     std::vector<double> var_activity_;
     std::vector<Var> heap_;
     std::vector<int> heap_pos_;
-    std::vector<char> in_bucket_;
     std::vector<int> bucket_pos_;
     std::vector<int> bucket_idx_;
     std::vector<int> bucket_table_;

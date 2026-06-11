@@ -110,6 +110,13 @@ class Solver {
     uint64_t dec_vars, num_clauses, num_learnts, clauses_literals, learnts_literals, max_literals, tot_literals;
 
   protected:
+    static constexpr uint8_t assign_True = 0;
+    static constexpr uint8_t assign_False = 1;
+    static constexpr uint8_t assign_Undef = 2;
+
+    bool is_value_true(Lit p) const noexcept;
+    bool is_value_false(Lit p) const noexcept;
+
     std::shared_ptr<ClauseAllocator> ca;
 
     // Solver state:
@@ -121,7 +128,7 @@ class Solver {
     std::vector<size_t> trail_lim;  // Separator indices for different decision levels in 'trail'.
     std::vector<Lit> assumptions;   // Current set of assumptions provided to solve by the user.
 
-    std::vector<lbool> assigns;   // The current assignments.
+    std::vector<uint8_t> assigns; // The current assignments.
     std::vector<char> polarity;   // The preferred polarity of each variable.
     std::vector<VarData> vardata; // Stores reason and level for each variable.
     OccLists watches;             // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
@@ -137,20 +144,20 @@ class Solver {
     // VarOrderLt var_order_lt; // Compare function for var on activity order
     reduceDB_lt reduce_db_lt;
 
-    bool ok;                  // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
-    double cla_inc;           // Amount to bump next clause with.
-    size_t qhead;             // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
-    size_t simpDB_assigns;    // Number of top-level assignments since last execution of 'simplify()'.
-    int64_t simpDB_props;     // Remaining number of propagations that must be made before next execution of 'simplify()'.
-    double progress_estimate; // Set by 'search()'.
-    Var next_var;             // Next variable to be created.
-    Var alloced_var;          // Variable with structure created.
-    Var temp_cls_act_var;     // Variable to activate temp clause.
-    bool temp_cls_activated;  // A temp clause is added.
+    bool ok;                       // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
+    double cla_inc;                // Amount to bump next clause with.
+    size_t qhead;                  // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
+    size_t simpDB_assigns;         // Number of top-level assignments since last execution of 'simplify()'.
+    int64_t simpDB_props;          // Remaining number of propagations that must be made before next execution of 'simplify()'.
+    double progress_estimate;      // Set by 'search()'.
+    Var next_var;                  // Next variable to be created.
+    Var alloced_var;               // Variable with structure created.
+    Var temp_cls_act_var;          // Variable to activate temp clause.
+    bool temp_cls_activated;       // A temp clause is added.
     bool temp_cls_release_pending; // Active temp clauses should be released on the next reset.
-    size_t traillim_snapshot; // Snapshot of trail_lim before temp clause/solve in domain is activated.
-    int64_t simpDB_called;    // Number of times 'solve()' has been called.
-    int64_t simpDB_clauses;   // Number of clauses at last 'simplify()' call.
+    size_t traillim_snapshot;      // Snapshot of trail_lim before temp clause/solve in domain is activated.
+    int64_t simpDB_called;         // Number of times 'solve()' has been called.
+    int64_t simpDB_clauses;        // Number of clauses at last 'simplify()' call.
     SolverState state_;
     lbool last_result_;
 
@@ -205,8 +212,7 @@ class Solver {
 
     // Misc:
     //
-    size_t decisionLevel() const;        // Gives the current decisionlevel.
-    uint32_t abstractLevel(Var x) const; // Used to represent an abstraction of sets of decision levels.
+    size_t decisionLevel() const; // Gives the current decisionlevel.
     CRef reason(Var x) const;
     size_t level(Var x) const;
     double progressEstimate() const;
@@ -261,7 +267,7 @@ inline void Solver::claBumpActivity(Clause &c) {
 }
 
 inline void Solver::checkGarbage(void) {
-    if (ca->wasted_memory() > ca->allocated_memory() * 0.5)
+    if (3 * ca->wasted_memory() > ca->allocated_memory())
         garbageCollect();
 }
 
@@ -275,9 +281,26 @@ inline bool Solver::locked(const Clause &c) const { return value(c[0]) == l_True
 inline void Solver::newDecisionLevel() { trail_lim.emplace_back(trail.size()); }
 
 inline size_t Solver::decisionLevel() const { return trail_lim.size(); }
-inline uint32_t Solver::abstractLevel(Var x) const { return 1u << (level(x) & 31); }
-inline lbool Solver::value(Var x) const { return assigns[x]; }
-inline lbool Solver::value(Lit p) const { return assigns[var(p)] ^ sign(p); }
+
+inline void Solver::uncheckedEnqueue(Lit p, CRef from) {
+    assert((assigns[p.x >> 1] ^ (p.x & 1)) & assign_Undef);
+    assigns[var(p)] = sign(p) ? assign_False : assign_True;
+    vardata[var(p)] = mkVarData(from, decisionLevel());
+    trail.emplace_back(p);
+}
+
+
+inline lbool Solver::value(Var x) const { return toLbool(assigns[x]); }
+inline lbool Solver::value(Lit p) const {
+    return toLbool(static_cast<uint8_t>(assigns[p.x >> 1] ^ (p.x & 1)));
+}
+inline bool Solver::is_value_true(Lit p) const noexcept {
+    return (assigns[p.x >> 1] ^ (p.x & 1)) == assign_True;
+}
+inline bool Solver::is_value_false(Lit p) const noexcept {
+    return (assigns[p.x >> 1] ^ (p.x & 1)) == assign_False;
+}
+
 inline size_t Solver::nAssigns() const { return trail.size(); }
 inline int Solver::nClauses() const { return num_clauses; }
 inline int Solver::nLearnts() const { return num_learnts; }
