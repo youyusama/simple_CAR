@@ -685,7 +685,10 @@ bool IC3::PopObligation(ObligationRef &ob) {
 
 void IC3::PushObligation(const ObligationRef &ob, int newLevel) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_PushPO");
-    ob->level = newLevel;
+    while (ob->level < newLevel) {
+        ob->level++;
+        ob->act *= 0.6;
+    }
     m_obligations.insert(ob);
 }
 
@@ -694,15 +697,15 @@ bool IC3::HandleObligations() {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_HandlePO");
     ObligationRef ob;
     while (PopObligation(ob)) {
-        if (++ob->act > m_k / 10.0 + m_settings.maxObligationAct) {
-            LOG_L(m_log, 2, "Obligation at level ", ob->level, " depth ", ob->depth, " reached max activity. Skipped.");
-            continue;
-        }
-
         int subsume_lvl = GetSubsumeLevel(ob->state->latches, ob->level + 1);
         if (subsume_lvl != -1) {
             LOG_L(m_log, 2, "Obligation at level ", ob->level + 1, " depth ", ob->depth, " is subsumed at level ", subsume_lvl, ". Skipped.");
             PushObligation(ob, subsume_lvl + 1);
+            continue;
+        }
+
+        if (++ob->act > m_k / 10.0 + m_settings.maxObligationAct) {
+            LOG_L(m_log, 2, "Obligation at level ", ob->level, " depth ", ob->depth, " reached max activity. Skipped.");
             continue;
         }
 
@@ -721,7 +724,6 @@ bool IC3::HandleObligations() {
             int push_level = PropagateUp(lemma_id, ob->level + 1);
 
             LOG_L(m_log, 2, "Creating new obligation for same state at higher level ", push_level);
-            ob->act *= 0.6;
             PushObligation(ob, push_level);
         } else {
             auto p = trans_slv->GetAssignment(false);
