@@ -8,7 +8,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("-v", settings.verbosity, "Verbosity")
         ->default_val(0);
 
-    app.add_option("aiger_file", settings.aigFilePath, "Input .aig File Path")
+    app.add_option("input_file", settings.aigFilePath, "Input .aig, .aag, or .btor2 file")
         ->required()
         ->check(CLI::ExistingFile);
 

@@ -1,8 +1,14 @@
 #include "WitnessBuilder.h"
 
+#include "Btor2Frontend.h"
 #include "Log.h"
+#include "Model.h"
+#include "WLModel.h"
+#include "WLTypes.h"
+#include "WLSimulator.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -151,13 +157,30 @@ std::string OriginalLitSymbol(unsigned lit) {
 
 } // namespace
 
-WitnessBuilder::WitnessBuilder(const Settings &settings, Log &log, const aiger *model_aig)
-    : m_settings(settings), m_log(log), m_modelAig(model_aig) {
+WitnessBuilder::WitnessBuilder(const Settings &settings,
+                               Log &log,
+                               const Model &model)
+    : m_settings(settings),
+      m_log(log),
+      m_model(&model),
+      m_modelAig(model.GetAiger().get()) {
     assert(m_modelAig != nullptr);
     m_numInputs = static_cast<int>(m_modelAig->num_inputs);
     m_numLatches = static_cast<int>(m_modelAig->num_latches);
 }
 
+WitnessBuilder::WitnessBuilder(const Settings &settings,
+                               Log &log,
+                               const WLModel &model)
+    : m_settings(settings),
+      m_log(log),
+      m_model(&model.BitModel()),
+      m_wlTraceMap(&model.TraceMap()),
+      m_modelAig(model.BitModel().GetAiger().get()) {
+    assert(m_modelAig != nullptr);
+    m_numInputs = static_cast<int>(m_modelAig->num_inputs);
+    m_numLatches = static_cast<int>(m_modelAig->num_latches);
+}
 
 void WitnessBuilder::BeginWitness() {
     m_witnessAigPtr = CloneBaseAig(m_modelAig);
@@ -175,6 +198,14 @@ bool WitnessBuilder::WriteWitness() {
 
 
 bool WitnessBuilder::WriteCounterexample(const std::vector<std::pair<Cube, Cube>> &trace) {
+    if (IsBtor2Input()) {
+        return WriteBtor2Counterexample(trace);
+    }
+    return WriteAigerCounterexample(trace);
+}
+
+bool WitnessBuilder::WriteAigerCounterexample(
+    const std::vector<std::pair<Cube, Cube>> &trace) {
     if (trace.empty()) {
         LOG_L(m_log, 1, "WitnessBuilder: counterexample trace is empty.");
         return false;
@@ -194,6 +225,38 @@ bool WitnessBuilder::WriteCounterexample(const std::vector<std::pair<Cube, Cube>
     }
     cex_file << "." << std::endl;
     return true;
+}
+
+bool WitnessBuilder::WriteBtor2Counterexample(
+    const std::vector<std::pair<Cube, Cube>> &trace) {
+    if (m_wlTraceMap == nullptr) {
+        LOG_L(m_log, 1, "WitnessBuilder: BTOR2 counterexample needs word-level trace map.");
+        return false;
+    }
+    if (trace.empty()) {
+        LOG_L(m_log, 1, "WitnessBuilder: counterexample trace is empty.");
+        return false;
+    }
+
+    try {
+        Btor2IR ir = Btor2Frontend::LoadIR(m_settings.aigFilePath);
+        WLSimulator simulator(ir);
+        WLSimulator::Result replay =
+            simulator.Replay(trace, *m_wlTraceMap);
+        if (!replay.concreteCounterexample) {
+            LOG_L(m_log,
+                  1,
+                  "WitnessBuilder: BTOR2 counterexample could not be reproduced.");
+            return false;
+        }
+        return simulator.WriteCounterexample(GetBtor2CounterexamplePath());
+    } catch (const std::exception &error) {
+        LOG_L(m_log,
+              1,
+              "WitnessBuilder: failed to write BTOR2 counterexample: ",
+              error.what());
+        return false;
+    }
 }
 
 unsigned WitnessBuilder::BuildCube(const Cube &cube) {
@@ -518,6 +581,18 @@ std::string WitnessBuilder::GetWitnessPath(const std::string &suffix) const {
     return m_settings.witnessOutputDir + aig_name + suffix;
 }
 
+std::string WitnessBuilder::GetBtor2CounterexamplePath() const {
+    std::filesystem::path outputDir(m_settings.witnessOutputDir);
+    return (outputDir / (std::filesystem::path(m_settings.aigFilePath)
+                             .filename()
+                             .string() +
+                         ".cexb"))
+        .string();
+}
+
+bool WitnessBuilder::IsBtor2Input() const {
+    return std::filesystem::path(m_settings.aigFilePath).extension() == ".btor2";
+}
 
 bool WitnessBuilder::WriteAigWitness(const aiger *model_aig, unsigned invariant_lit) {
     assert(m_witnessAig != nullptr);
