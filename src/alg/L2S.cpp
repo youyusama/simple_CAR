@@ -13,10 +13,12 @@ L2S::L2S(Settings settings,
                      m_model(model),
                      m_log(log),
                      m_checker(nullptr),
+                     m_checkResult(CheckResult::Unknown),
                      m_save(0) {
 }
 
 CheckResult L2S::Run() {
+    m_checkResult = CheckResult::Unknown;
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
         LOG_L(m_log, 0, "L2S only supports liveness properties.");
         return CheckResult::Unknown;
@@ -29,12 +31,36 @@ CheckResult L2S::Run() {
         return CheckResult::Unknown;
     }
 
-    return m_checker->Run();
+    m_checkResult = m_checker->Run();
+    return m_checkResult;
 }
 
 std::vector<std::pair<Cube, Cube>> L2S::GetCexTrace() {
+    std::vector<std::pair<Cube, Cube>> projectedTrace;
+    if (!m_checker || m_checkResult != CheckResult::Unsafe) return projectedTrace;
 
-    return {};
+    const auto aig = m_model.GetAiger();
+    Var originalInputEnd = static_cast<Var>(aig->num_inputs);
+    Var originalLatchEnd = originalInputEnd + static_cast<Var>(aig->num_latches);
+
+    auto trace = m_checker->GetCexTrace();
+    projectedTrace.reserve(trace.size());
+    for (const auto &step : trace) {
+        Cube inputs;
+        for (Lit lit : step.first) {
+            Var v = VarOf(lit);
+            if (v >= 1 && v <= originalInputEnd) inputs.emplace_back(lit);
+        }
+
+        Cube latches;
+        for (Lit lit : step.second) {
+            Var v = VarOf(lit);
+            if (v > originalInputEnd && v <= originalLatchEnd) latches.emplace_back(lit);
+        }
+
+        projectedTrace.emplace_back(std::move(inputs), std::move(latches));
+    }
+    return projectedTrace;
 }
 
 std::unique_ptr<BaseAlg> L2S::CreateSafetyChecker() {
@@ -56,23 +82,17 @@ std::unique_ptr<BaseAlg> L2S::CreateSafetyChecker() {
 }
 
 void L2S::Translate() {
-    m_origInputs = m_model.GetModelInputs();
-    m_origLatches = m_model.GetModelLatches();
-    m_origInputSet.clear();
-    m_origLatchSet.clear();
-    for (Var v : m_origInputs) m_origInputSet.emplace(v);
-    for (Var v : m_origLatches) m_origLatchSet.emplace(v);
+    std::vector<Var> loopLatches = m_model.GetModelLatches();
 
     // save = input
     m_save = m_model.NewInputVar();
 
-    std::vector<Var> latches = m_origLatches;
-    m_latchCopy.clear();
-    m_latchCopy.reserve(latches.size());
+    std::vector<Var> latchCopy;
+    latchCopy.reserve(loopLatches.size());
 
-    for (Var v : latches) {
+    for (Var v : loopLatches) {
         Var nv = m_model.NewLatchVar();
-        m_latchCopy.emplace_back(nv);
+        latchCopy.emplace_back(nv);
 
         // Init(nv) = Init(v)
         // Next(nv) = if (save) then v else nv
@@ -84,7 +104,7 @@ void L2S::Translate() {
 
     // Init(triggered) = false
     // Next(triggered) = justice | ( !save & triggered)
-    Lit justice = m_model.GetBad();
+    Lit justice = m_model.GetBadRaw();
     Var triggered = m_model.NewLatchVar();
     Lit next_triggered = m_model.MakeOR(justice, m_model.MakeAND(~MkLit(m_save), MkLit(triggered)));
     m_model.SetLatchReset(triggered, LIT_FALSE);
@@ -92,16 +112,16 @@ void L2S::Translate() {
 
     // equality = Next(v_i) <-> Next(nv_i) & ...
     Lit equality = LIT_TRUE;
-    for (size_t i = 0; i < latches.size(); i++) {
-        Var v = latches[i];
-        Var nv = m_latchCopy[i];
+    for (size_t i = 0; i < loopLatches.size(); i++) {
+        Var v = loopLatches[i];
+        Var nv = latchCopy[i];
         Lit next_v = m_model.GetLatchNextLit(v);
         Lit next_nv = m_model.GetLatchNextLit(nv);
         Lit iff = m_model.MakeXNOR(next_v, next_nv);
         equality = m_model.MakeAND(equality, iff);
     }
 
-    // bad = equality && triggered
+    // bad = equality && next_triggered
     Lit bad = m_model.MakeAND(equality, next_triggered);
 
     m_model.SetBad(bad);

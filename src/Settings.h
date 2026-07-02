@@ -19,6 +19,22 @@ enum class MCAlgorithm { FCAR,
                          KFAIR,
                          RLIVE };
 
+enum class MCAlgorithmProperty { Safety,
+                                 Liveness };
+
+inline MCAlgorithmProperty GetMCAlgorithmProperty(MCAlgorithm alg) {
+    switch (alg) {
+    case MCAlgorithm::L2S:
+    case MCAlgorithm::KLIVE:
+    case MCAlgorithm::FAIR:
+    case MCAlgorithm::KFAIR:
+    case MCAlgorithm::RLIVE:
+        return MCAlgorithmProperty::Liveness;
+    default:
+        return MCAlgorithmProperty::Safety;
+    }
+}
+
 enum class MCSATSolver { minisat,
                          cadical,
                          minicore,

@@ -140,6 +140,7 @@ class Model {
     inline vector<Var> &GetModelLatches() { return m_circuitGraph->modelLatches; }
     inline vector<Var> &GetModelGates() { return m_circuitGraph->modelGates; }
 
+    inline Lit GetBadRaw() const { return m_bad; }
     inline Lit GetBad() { return ToCNFLit(m_bad); }
     inline Lit GetProperty() { return ~ToCNFLit(m_bad); }
 

@@ -193,7 +193,7 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     LOG_L(m_log, 1, "COI Refined Model: ",
           m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
 
-    m_cnfTrueVar = m_circuitGraph->numVar + 1;
+    m_cnfTrueVar = m_circuitGraph->NewModelVar();
     m_maxId = m_cnfTrueVar;
 
     // try to find equivalences

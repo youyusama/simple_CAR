@@ -6,7 +6,6 @@
 #include "Model.h"
 #include "Settings.h"
 #include <memory>
-#include <unordered_set>
 #include <vector>
 
 namespace car {
@@ -28,12 +27,8 @@ class L2S : public BaseAlg {
     Model &m_model;
     Log &m_log;
     std::unique_ptr<BaseAlg> m_checker;
+    CheckResult m_checkResult;
     int m_save;
-    std::vector<Var> m_latchCopy;
-    std::vector<Var> m_origInputs;
-    std::vector<Var> m_origLatches;
-    std::unordered_set<Var> m_origInputSet;
-    std::unordered_set<Var> m_origLatchSet;
 };
 
 } // namespace car
