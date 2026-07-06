@@ -184,6 +184,9 @@ Model::Model(Settings settings, Log &log) : m_settings(settings),
     } else if (num_justice == 1) {
         // liveness extraction
         m_bad = BuildLiveness();
+        m_circuitGraph->bad.clear();
+        m_circuitGraph->bad.emplace_back(m_bad);
+        m_circuitGraph->numBad = 1;
         m_propKind = PropKind::Liveness;
     }
 
