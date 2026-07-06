@@ -1,8 +1,8 @@
 #include "RLive.h"
 
 #include "BCAR.h"
-#include "IC3.h"
 #include "FCAR.h"
+#include "IC3.h"
 #include <algorithm>
 
 namespace car {
@@ -160,8 +160,31 @@ bool RLive::PruneDead(const Cube &s) {
             return false;
         } else {
             auto new_dead = GetUnsatAssumption(m_pdSolver, assumption);
+
+            // generalize dead
+            if (new_dead.size() > 2) {
+                std::unordered_set<int> required;
+
+                for (int i = 0; i < static_cast<int>(new_dead.size()); ++i) {
+                    if (required.find(i) != required.end()) continue;
+
+                    Cube tmp;
+                    tmp.reserve(new_dead.size() - 1);
+                    for (int j = 0; j < static_cast<int>(new_dead.size()); ++j) {
+                        if (j != i) tmp.emplace_back(new_dead[j]);
+                    }
+
+                    bool is_not_dead = m_pdSolver->Solve(tmp);
+                    if (is_not_dead) {
+                        required.emplace(i);
+                    } else {
+                        new_dead.swap(tmp);
+                        required.clear();
+                        i = -1;
+                    }
+                }
+            }
             LOG_L(m_log, 2, "get new dead", CubeToStr(new_dead));
-            m_pdSolver->AddShoalConstraints({}, vector<Cube>{new_dead}, 1);
             m_pdSolver->AddCubeAsClauseK(new_dead, true, 1);
             m_globalDead.emplace_back(new_dead);
         }
