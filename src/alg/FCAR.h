@@ -47,6 +47,8 @@ class FCAR : public IncrAlg {
 
     void InitializeStartSolver();
 
+    void InitializeBadLiftSolver();
+
     bool AddUnsatisfiableCore(const Cube &uc, int frameLevel, bool fromCTR = false);
 
     enum class ALLProveStatus {

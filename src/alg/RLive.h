@@ -24,6 +24,7 @@ class RLive : public BaseAlg {
     std::unique_ptr<IncrAlg> MakeSafeChecker();
     bool CheckReachable(const Cube &s);
     bool PruneDead(const Cube &s);
+    void BuildCexTrace(const std::vector<std::pair<Cube, Cube>> &closingTrace);
 
     Settings m_settings;
     Model &m_model;
@@ -32,6 +33,8 @@ class RLive : public BaseAlg {
     std::vector<FrameList> m_globalShoals;
     std::vector<Cube> m_globalDead;
     std::vector<Cube> m_badStack;
+    std::vector<std::vector<std::pair<Cube, Cube>>> m_traceStack;
+    std::vector<std::pair<Cube, Cube>> m_cexTrace;
 
     std::unique_ptr<IncrAlg> m_safeChecker;
     std::shared_ptr<SATSolver> m_pdSolver;

@@ -213,7 +213,7 @@ void FCAR::Init() {
     [[maybe_unused]] auto init_scope = m_log.Section("FC_Init");
 
     // start solver search state in frame k
-    m_k = m_searchFromInitSucc ? 2 : 1;
+    m_k = 1;
 
     if (m_searchFromInitSucc) {
         m_initStateImplyBad = IsInitStateImplyBad();
@@ -245,21 +245,7 @@ void FCAR::Init() {
     m_liftSolver->SetDomainCOI(m_model.GetConstraints());
 
     InitializeStartSolver();
-    if (m_settings.searchFromBadPred) {
-        // bad predecessor lift
-        m_badLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
-        m_badLiftSolver->AddTrans();
-        m_badLiftSolver->AddTransK(1);
-    } else {
-        // bad lift
-        m_badLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-        if (m_settings.satSolveInDomain) m_badLiftSolver->SetSolveInDomain();
-        m_badLiftSolver->AddTrans();
-        m_badLiftSolver->SetDomainCOI(m_model.GetConstraints());
-        m_badLiftSolver->SetDomainCOI({m_model.GetBad()});
-        m_shoalsLabels = m_badLiftSolver->AddShoalConstraintsAsLabels(m_shoals, m_dead);
-        m_wallsLabels = m_badLiftSolver->AddWallConstraintsAsLabels(m_walls);
-    }
+    InitializeBadLiftSolver();
 
     m_restart.reset(new Restart(m_settings));
 
@@ -285,8 +271,9 @@ void FCAR::CreateTransSolver(int k) {
         m_transSolvers.back()->AddTrans();
         m_transSolvers.back()->AddConstraints();
         if (m_settings.solveInProperty && k > 0) m_transSolvers.back()->AddProperty();
-        // liveness: T = T & ( W <-> W' )
-        m_transSolvers.back()->AddWallConstraints(m_walls);
+        // liveness loop refutation: T = T & ( W <-> W' )
+        if (m_loopRefuting)
+            m_transSolvers.back()->AddWallConstraints(m_walls);
     }
 }
 
@@ -297,10 +284,10 @@ void FCAR::Reset() {
     m_cexTrace.clear();
 
     InitializeStartSolver();
+    InitializeBadLiftSolver();
     // add exist lemma
     auto frame_i = m_overSequence->FrameToFrame(m_k);
     for (auto l : frame_i) m_startSolver->AddUC(l);
-    m_wallsLabels = m_badLiftSolver->AddWallConstraintsAsLabels(m_walls);
 }
 
 
@@ -332,6 +319,28 @@ void FCAR::InitializeStartSolver() {
         m_startSolver->AddShoalConstraints(m_shoals, m_dead);
         m_startSolver->AddWallConstraints(m_walls);
     }
+}
+
+
+void FCAR::InitializeBadLiftSolver() {
+    if (m_settings.searchFromBadPred) {
+        // bad predecessor lift
+        m_badLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+        m_badLiftSolver->AddTrans();
+        m_badLiftSolver->AddTransK(1);
+        m_shoalsLabels.clear();
+        m_wallsLabels.clear();
+        return;
+    }
+
+    // bad lift
+    m_badLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    if (m_settings.satSolveInDomain) m_badLiftSolver->SetSolveInDomain();
+    m_badLiftSolver->AddTrans();
+    m_badLiftSolver->SetDomainCOI(m_model.GetConstraints());
+    m_badLiftSolver->SetDomainCOI({m_model.GetBad()});
+    m_shoalsLabels = m_badLiftSolver->AddShoalConstraintsAsLabels(m_shoals, m_dead);
+    m_wallsLabels = m_badLiftSolver->AddWallConstraintsAsLabels(m_walls);
 }
 
 
@@ -864,9 +873,14 @@ bool FCAR::DownHasFailed(const Cube &s, const vector<Cube> &failedCtses) {
 
 bool FCAR::ImmediateSatisfiable() {
     [[maybe_unused]] auto scoped = m_log.Section("FC_InitSat");
+    // skip when loop refuting
+    if (m_searchFromInitSucc) return false;
+
     auto slv = make_unique<SATSolver>(m_model, MCSATSolver::cadical);
     slv->AddTrans();
     slv->AddConstraints();
+    slv->AddShoalConstraints(m_shoals, m_dead);
+    slv->AddWallConstraints(m_walls);
     for (auto i : m_model.GetInitialState()) {
         slv->AddClause(Cube{i});
     }
@@ -902,7 +916,7 @@ bool FCAR::ImmediateSatisfiable() {
 
 bool FCAR::CheckInit(shared_ptr<State> s) {
     [[maybe_unused]] auto scoped = m_log.Section("FC_InitChk");
-    assert(!m_searchFromInitSucc);
+
     LOG_L(m_log, 2, "SAT Check Init ");
     LOG_L(m_log, 2, "From State: ", CubeToStrShort(s->latches));
     LOG_L(m_log, 3, "State Detail: ", CubeToStr(s->latches));
@@ -1058,6 +1072,10 @@ void FCAR::BuildCEXTrace() {
     }
     m_cexTrace.emplace_back(pair<Cube, Cube>(state->inputs, state->latches));
 
+    if (!m_cexTrace.empty()) {
+        m_cexTrace[0].second = m_initialState->latches;
+    }
+
     LOG_L(m_log, 3, "Build CEX Trace:");
     // simulate the concrete execution
     auto slv = make_shared<SATSolver>(m_model, MCSATSolver::minicore);
@@ -1107,16 +1125,19 @@ FrameList FCAR::GetInv() {
 void FCAR::KLiveIncr() {
     int k_step = m_model.KLivenessIncrement();
     vector<Clause> k_clauses = m_model.GetKLiveClauses(k_step);
+    Lit k_signal = m_model.GetKLiveSignal(k_step);
 
     // add trans
     for (auto slv : m_transSolvers) {
         for (auto cls : k_clauses) slv->AddClause(cls);
     }
     for (auto cls : k_clauses) m_liftSolver->AddClause(cls);
-    for (auto cls : k_clauses) m_badLiftSolver->AddClause(cls);
 
     // add init
-    m_transSolvers[0]->AddClause({~m_model.GetKLiveSignal(k_step)});
+    if (m_initialState) m_initialState->latches.emplace_back(~k_signal);
+    Cube init_uc{k_signal};
+    m_transSolvers[0]->AddUC(init_uc);
+    if (m_overSequence) m_overSequence->Insert(init_uc, 0);
 
     // start solver will be reset
 }

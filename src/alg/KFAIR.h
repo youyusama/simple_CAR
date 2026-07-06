@@ -20,13 +20,14 @@ class KFAIR : public BaseAlg {
 
   private:
     std::unique_ptr<IncrAlg> MakeSafeChecker();
-    bool DetectKLiveCex(IncrAlg &checker);
+    bool DetectKLiveCex(const std::vector<std::pair<Cube, Cube>> &trace);
 
     Settings m_settings;
     Model &m_model;
     Log &m_log;
 
     std::vector<FrameList> m_globalWalls;
+    std::vector<std::pair<Cube, Cube>> m_cexTrace;
 };
 
 } // namespace car

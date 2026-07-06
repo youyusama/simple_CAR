@@ -20,6 +20,8 @@ RLive::RLive(Settings settings,
 
 CheckResult RLive::Run() {
     signal(SIGINT, SignalHandler);
+    m_cexTrace.clear();
+    m_traceStack.clear();
 
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
         LOG_L(m_log, 0, "rlive only supports liveness properties.");
@@ -30,12 +32,14 @@ CheckResult RLive::Run() {
         auto trace = m_safeChecker->GetCexTrace();
         Cube t = trace.back().second;
         m_badStack.emplace_back(t);
+        m_traceStack.emplace_back(std::move(trace));
 
         while (!m_badStack.empty()) {
             Cube s = m_badStack.back();
 
             if (PruneDead(s)) {
                 m_badStack.pop_back();
+                if (!m_traceStack.empty()) m_traceStack.pop_back();
                 continue;
             }
 
@@ -50,9 +54,13 @@ CheckResult RLive::Run() {
                         break;
                     }
                 }
-                if (looped) return CheckResult::Unsafe;
+                if (looped) {
+                    BuildCexTrace(new_trace);
+                    return CheckResult::Unsafe;
+                }
 
                 m_badStack.emplace_back(new_t);
+                m_traceStack.emplace_back(std::move(new_trace));
             } else {
                 FrameList new_shoal = m_safeChecker->GetInv();
                 if (!new_shoal.empty()) {
@@ -65,6 +73,7 @@ CheckResult RLive::Run() {
                 }
 
                 m_badStack.pop_back();
+                if (!m_traceStack.empty()) m_traceStack.pop_back();
             }
         }
     }
@@ -73,7 +82,18 @@ CheckResult RLive::Run() {
 }
 
 std::vector<std::pair<Cube, Cube>> RLive::GetCexTrace() {
-    return {};
+    return m_cexTrace;
+}
+
+void RLive::BuildCexTrace(const std::vector<std::pair<Cube, Cube>> &closingTrace) {
+    m_cexTrace.clear();
+    for (auto segment : m_traceStack) {
+        if (!segment.empty()) segment.pop_back();
+        m_cexTrace.insert(m_cexTrace.end(), segment.begin(), segment.end());
+    }
+    auto closing_segment = closingTrace;
+    if (!closing_segment.empty()) closing_segment.pop_back();
+    m_cexTrace.insert(m_cexTrace.end(), closing_segment.begin(), closing_segment.end());
 }
 
 std::unique_ptr<IncrAlg> RLive::MakeSafeChecker() {

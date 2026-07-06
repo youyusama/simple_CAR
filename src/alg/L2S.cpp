@@ -36,31 +36,8 @@ CheckResult L2S::Run() {
 }
 
 std::vector<std::pair<Cube, Cube>> L2S::GetCexTrace() {
-    std::vector<std::pair<Cube, Cube>> projectedTrace;
-    if (!m_checker || m_checkResult != CheckResult::Unsafe) return projectedTrace;
-
-    const auto aig = m_model.GetAiger();
-    Var originalInputEnd = static_cast<Var>(aig->num_inputs);
-    Var originalLatchEnd = originalInputEnd + static_cast<Var>(aig->num_latches);
-
-    auto trace = m_checker->GetCexTrace();
-    projectedTrace.reserve(trace.size());
-    for (const auto &step : trace) {
-        Cube inputs;
-        for (Lit lit : step.first) {
-            Var v = VarOf(lit);
-            if (v >= 1 && v <= originalInputEnd) inputs.emplace_back(lit);
-        }
-
-        Cube latches;
-        for (Lit lit : step.second) {
-            Var v = VarOf(lit);
-            if (v > originalInputEnd && v <= originalLatchEnd) latches.emplace_back(lit);
-        }
-
-        projectedTrace.emplace_back(std::move(inputs), std::move(latches));
-    }
-    return projectedTrace;
+    if (!m_checker || m_checkResult != CheckResult::Unsafe) return {};
+    return m_checker->GetCexTrace();
 }
 
 std::unique_ptr<BaseAlg> L2S::CreateSafetyChecker() {
