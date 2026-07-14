@@ -700,7 +700,7 @@ bool IC3::HandleObligations() {
         int subsume_lvl = GetSubsumeLevel(ob->state->latches, ob->level + 1);
         if (subsume_lvl != -1) {
             LOG_L(m_log, 2, "Obligation at level ", ob->level + 1, " depth ", ob->depth, " is subsumed at level ", subsume_lvl, ". Skipped.");
-            PushObligation(ob, subsume_lvl + 1);
+            PushObligation(ob, subsume_lvl);
             continue;
         }
 
