@@ -1,6 +1,5 @@
 #include "RLive.h"
 
-#include "BCAR.h"
 #include "FCAR.h"
 #include "IC3.h"
 #include <algorithm>
@@ -27,7 +26,6 @@ CheckResult RLive::Run() {
         LOG_L(m_log, 0, "rlive only supports liveness properties.");
         return CheckResult::Unknown;
     }
-
     while (CheckReachable(Cube())) {
         auto trace = m_safeChecker->GetCexTrace();
         Cube t = trace.back().second;
@@ -65,11 +63,7 @@ CheckResult RLive::Run() {
                 FrameList new_shoal = m_safeChecker->GetInv();
                 if (!new_shoal.empty()) {
                     m_globalShoals.emplace_back(new_shoal);
-                    if (m_settings.safetyBaseAlg == MCAlgorithm::BCAR) {
-                        m_pdSolver->AddInvAsClauseK(new_shoal, false, 1);
-                    } else {
-                        m_pdSolver->AddInvAsClauseK(new_shoal, true, 1);
-                    }
+                    m_pdSolver->AddInvAsClauseK(new_shoal, true, 1);
                 }
 
                 m_badStack.pop_back();
@@ -102,8 +96,6 @@ std::unique_ptr<IncrAlg> RLive::MakeSafeChecker() {
     switch (m_settings.safetyBaseAlg) {
     case MCAlgorithm::FCAR:
         return std::make_unique<FCAR>(sub_settings, m_model, m_log);
-    case MCAlgorithm::BCAR:
-        return std::make_unique<BCAR>(sub_settings, m_model, m_log);
     case MCAlgorithm::IC3:
         return std::make_unique<IC3>(sub_settings, m_model, m_log);
     default:

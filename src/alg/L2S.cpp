@@ -4,6 +4,7 @@
 #include "BMC.h"
 #include "FCAR.h"
 #include "IC3.h"
+#include "KIND.h"
 
 namespace car {
 
@@ -51,6 +52,8 @@ std::unique_ptr<BaseAlg> L2S::CreateSafetyChecker() {
         return std::make_unique<BCAR>(safety_settings, m_model, m_log);
     case MCAlgorithm::BMC:
         return std::make_unique<BMC>(safety_settings, m_model, m_log);
+    case MCAlgorithm::KIND:
+        return std::make_unique<KIND>(safety_settings, m_model, m_log);
     case MCAlgorithm::IC3:
         return std::make_unique<IC3>(safety_settings, m_model, m_log);
     default:

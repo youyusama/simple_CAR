@@ -36,6 +36,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"fcar", MCAlgorithm::FCAR},
                 {"bcar", MCAlgorithm::BCAR},
                 {"bmc", MCAlgorithm::BMC},
+                {"kind", MCAlgorithm::KIND},
                 {"ic3", MCAlgorithm::IC3}}))
         ->default_val("fcar");
 
@@ -156,6 +157,20 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
 
     try {
         app.parse(argc, argv);
+
+        bool requires_incremental_safety_checker =
+            settings.alg == MCAlgorithm::KLIVE ||
+            settings.alg == MCAlgorithm::FAIR ||
+            settings.alg == MCAlgorithm::KFAIR ||
+            settings.alg == MCAlgorithm::RLIVE;
+        bool is_incremental_safety_checker =
+            settings.safetyBaseAlg == MCAlgorithm::FCAR ||
+            settings.safetyBaseAlg == MCAlgorithm::IC3;
+        if (requires_incremental_safety_checker && !is_incremental_safety_checker) {
+            throw CLI::ValidationError(
+                "--sa",
+                "rlive, klive, fair, and kfair require 'fcar' or 'ic3'");
+        }
 
         if (settings.bmcCnf) {
             if (settings.alg != MCAlgorithm::BMC) {

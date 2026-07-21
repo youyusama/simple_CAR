@@ -1,6 +1,5 @@
 #include "KFAIR.h"
 
-#include "BCAR.h"
 #include "IC3.h"
 #include "FCAR.h"
 #include <algorithm>
@@ -22,7 +21,6 @@ CheckResult KFAIR::Run() {
         LOG_L(m_log, 0, "KFAIR only supports liveness properties.");
         return CheckResult::Unknown;
     }
-
     bool enable_klive = (m_settings.alg == MCAlgorithm::KLIVE || m_settings.alg == MCAlgorithm::KFAIR);
     bool enable_fair = (m_settings.alg == MCAlgorithm::FAIR || m_settings.alg == MCAlgorithm::KFAIR);
 
@@ -95,8 +93,6 @@ std::unique_ptr<IncrAlg> KFAIR::MakeSafeChecker() {
     switch (m_settings.safetyBaseAlg) {
     case MCAlgorithm::FCAR:
         return std::make_unique<FCAR>(sub_settings, m_model, m_log);
-    case MCAlgorithm::BCAR:
-        return std::make_unique<BCAR>(sub_settings, m_model, m_log);
     case MCAlgorithm::IC3:
         return std::make_unique<IC3>(sub_settings, m_model, m_log);
     default:
