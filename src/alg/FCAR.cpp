@@ -873,7 +873,7 @@ bool FCAR::DownHasFailed(const Cube &s, const vector<Cube> &failedCtses) {
 
 bool FCAR::ImmediateSatisfiable() {
     [[maybe_unused]] auto scoped = m_log.Section("FC_InitSat");
-    // skip when loop refuting
+    // skip when searching from init successor
     if (m_searchFromInitSucc) return false;
 
     auto slv = make_unique<SATSolver>(m_model, MCSATSolver::cadical);

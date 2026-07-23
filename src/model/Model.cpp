@@ -462,7 +462,7 @@ void Model::CollectConstraints() {
 
 void Model::CollectNextValueMapping() {
     // reset
-    m_maxId = m_circuitGraph->numVar + 1;
+    m_maxId = m_circuitGraph->numVar;
     m_primeMaps.clear();
     m_lookupPrime.clear();
     m_primeMaps.push_back(unordered_map<Var, Lit, std::hash<Var>>());
@@ -1418,43 +1418,57 @@ bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
 
 int Model::KLivenessIncrement() {
     Var latch = NewLatchVar();
+    Lit k = MkLit(latch);
     Lit q = m_bad;
     // Init(k) = false
     // Next(k) = q ? true : k
     Lit init = LIT_FALSE;
-    Lit next = MakeITE(q, LIT_TRUE, MkLit(latch));
+    Lit next = MakeITE(q, LIT_TRUE, k);
     SetLatchReset(latch, init);
     SetLatchNext(latch, next);
     // q_k = q & k
-    m_bad = MakeAND(q, MkLit(latch));
+    m_bad = MakeAND(q, k);
 
     m_kliveStep++;
 
     // store signals
     m_kliveSignals.resize(m_kliveStep + 1);
-    m_kliveSignals[m_kliveStep] = MkLit(latch);
+    m_kliveSignals[m_kliveStep] = k;
 
     // get clauses
     m_kliveTransClauses.resize(m_kliveStep + 1);
     vector<Clause> k_clauses;
     // and gate
-    k_clauses.emplace_back(Clause{m_bad, ~q, ~MkLit(latch)});
-    k_clauses.emplace_back(Clause{~m_bad, q});
-    k_clauses.emplace_back(Clause{~m_bad, MkLit(latch)});
+    k_clauses.emplace_back(Clause{~q, ~k, m_bad});
+    k_clauses.emplace_back(Clause{q, ~m_bad});
+    k_clauses.emplace_back(Clause{k, ~m_bad});
     // Ite gate
-    k_clauses.emplace_back(Clause{next, ~q, LIT_FALSE});
-    k_clauses.emplace_back(Clause{next, q, ~MkLit(latch)});
-    k_clauses.emplace_back(Clause{~next, ~q, LIT_TRUE});
-    k_clauses.emplace_back(Clause{~next, q, MkLit(latch)});
+    k_clauses.emplace_back(Clause{~q, LIT_FALSE, next});
+    k_clauses.emplace_back(Clause{q, ~k, next});
+    k_clauses.emplace_back(Clause{~q, LIT_TRUE, ~next});
+    k_clauses.emplace_back(Clause{q, k, ~next});
     vector<Clause> k_cnf_clauses;
     k_cnf_clauses.reserve(k_clauses.size());
     for (const Clause &cls : k_clauses) {
         k_cnf_clauses.emplace_back(ToCNFClause(cls));
     }
+
+    // update DAG dependency
+    size_t required_size =
+        max(m_dependencyVec.size(), static_cast<size_t>(m_circuitGraph->numVar) + 1);
+    m_dependencyVec.resize(required_size);
+
+    for (const Clause &cls : k_cnf_clauses) {
+        Var head = VarOf(cls.back());
+        for (size_t i = 0; i + 1 < cls.size(); ++i) {
+            m_dependencyVec[head].emplace_back(VarOf(cls[i]));
+        }
+    }
+
     m_kliveTransClauses[m_kliveStep] = k_cnf_clauses;
 
     // rebuild manually
-    m_initialState.emplace_back(~MkLit(latch));
+    m_initialState.emplace_back(~k);
     SetPrimeMap0(latch, ToCNFLit(next));
     m_rawClauses.insert(m_rawClauses.end(), k_clauses.begin(), k_clauses.end());
     m_cnfClauses.insert(m_cnfClauses.end(), k_cnf_clauses.begin(), k_cnf_clauses.end());
