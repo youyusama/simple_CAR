@@ -632,16 +632,17 @@ Lit Model::BuildLiveness() {
 }
 
 
-Cube Model::GetCOIDomain(const Cube &c) {
+vector<Var> Model::GetCOIDomain(const Cube &c) {
     vector<uint8_t> visited(m_dependencyVec.size(), 0);
     vector<Var> stack;
-    Cube domain;
+    vector<Var> domain;
 
     auto push = [&](Var v) {
         assert(v < m_dependencyVec.size());
         if (!visited[v]) {
             visited[v] = 1;
             stack.emplace_back(v);
+            domain.emplace_back(v);
         }
     };
 
@@ -653,7 +654,6 @@ Cube Model::GetCOIDomain(const Cube &c) {
     while (!stack.empty()) {
         Var cur = stack.back();
         stack.pop_back();
-        domain.emplace_back(MkLit(cur));
         for (Var d : m_dependencyVec[cur]) {
             push(d);
         }
@@ -1229,14 +1229,13 @@ void Model::EnsureLatchEqIndSolver() {
     for (Lit c : m_constraints) m_latchEqIndSolver->addClause(Clause{c});
     m_latchEqIndSolver->setSolveInDomain(true);
 
-    Cube constraints_domain = GetCOIDomain(m_constraints);
+    vector<Var> constraints_domain = GetCOIDomain(m_constraints);
     std::vector<char> &dom = m_latchEqIndSolver->domainSet();
     std::vector<minicore::Var> &list = m_latchEqIndSolver->domainList();
-    for (Lit v : constraints_domain) {
-        Var vv = VarOf(v);
-        if (!dom[vv]) {
-            dom[vv] = 1;
-            list.push_back(vv);
+    for (Var v : constraints_domain) {
+        if (!dom[v]) {
+            dom[v] = 1;
+            list.push_back(v);
         }
     }
 }
@@ -1288,13 +1287,12 @@ bool Model::CheckLatchEquivalenceInd(Lit aLit, Lit bLit) {
         m_latchEqIndSolver->addTempClause(c4);
     }
 
-    Cube d = GetCOIDomain(Cube{aLit, bLit, a_prime, b_prime});
+    vector<Var> d = GetCOIDomain(Cube{aLit, bLit, a_prime, b_prime});
     {
-        for (Lit v : d) {
-            Var vv = VarOf(v);
-            if (!dom[vv]) {
-                dom[vv] = 1;
-                list.push_back(vv);
+        for (Var v : d) {
+            if (!dom[v]) {
+                dom[v] = 1;
+                list.push_back(v);
             }
         }
     }
@@ -1361,13 +1359,12 @@ bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
         m_gateEqSolver->addTempClause(c2);
     }
 
-    Cube d = GetCOIDomain(Cube{aLit, bLit});
+    vector<Var> d = GetCOIDomain(Cube{aLit, bLit});
     {
-        for (Lit v : d) {
-            Var vv = VarOf(v);
-            if (!dom[vv]) {
-                dom[vv] = 1;
-                list.push_back(vv);
+        for (Var v : d) {
+            if (!dom[v]) {
+                dom[v] = 1;
+                list.push_back(v);
             }
         }
     }

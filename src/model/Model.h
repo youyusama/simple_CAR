@@ -189,7 +189,7 @@ class Model {
 
     vector<Var> &GetPropertyCOIInputs() { return m_circuitGraph->propertyCOIInputs; };
 
-    Cube GetCOIDomain(const Cube &c);
+    vector<Var> GetCOIDomain(const Cube &c);
 
     const vector<vector<Var>> &GetDependencyVec() const { return m_dependencyVec; }
 
