@@ -211,7 +211,10 @@ void IC3::Init() {
     } else {
         // bad lift
         m_badLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-        if (m_settings.satSolveInDomain) m_badLiftSolver->SetSolveInDomain();
+        if (m_settings.satSolveInDomain &&
+            m_shoals.empty() && m_dead.empty() && m_walls.empty()) {
+            m_badLiftSolver->SetSolveInDomain();
+        }
         m_badLiftSolver->AddTrans();
         m_badLiftSolver->SetDomainCOI(m_model.GetConstraints());
         m_badLiftSolver->SetDomainCOI({m_model.GetBad()});
@@ -245,7 +248,10 @@ void IC3::InitializeStartSolver() {
     } else {
         // s & c & bad
         m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-        if (m_settings.satSolveInDomain) m_startSolver->SetSolveInDomain();
+        if (m_settings.satSolveInDomain &&
+            m_shoals.empty() && m_dead.empty() && m_walls.empty()) {
+            m_startSolver->SetSolveInDomain();
+        }
         m_startSolver->AddTrans();
         m_startSolver->AddConstraints();
         if (m_loopRefuting) {

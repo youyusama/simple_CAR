@@ -304,7 +304,10 @@ void FCAR::InitializeStartSolver() {
     } else {
         // s & c & bad
         m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-        if (m_settings.satSolveInDomain) m_startSolver->SetSolveInDomain();
+        if (m_settings.satSolveInDomain &&
+            m_shoals.empty() && m_dead.empty() && m_walls.empty()) {
+            m_startSolver->SetSolveInDomain();
+        }
         m_startSolver->AddTrans();
         m_startSolver->AddConstraints();
         if (m_loopRefuting) {
@@ -335,7 +338,10 @@ void FCAR::InitializeBadLiftSolver() {
 
     // bad lift
     m_badLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
-    if (m_settings.satSolveInDomain) m_badLiftSolver->SetSolveInDomain();
+    if (m_settings.satSolveInDomain &&
+        m_shoals.empty() && m_dead.empty() && m_walls.empty()) {
+        m_badLiftSolver->SetSolveInDomain();
+    }
     m_badLiftSolver->AddTrans();
     m_badLiftSolver->SetDomainCOI(m_model.GetConstraints());
     m_badLiftSolver->SetDomainCOI({m_model.GetBad()});
@@ -924,8 +930,10 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
     OrderAssumption(assumption);
     if (m_searchFromInitSucc) {
         GetPrimed(assumption);
+        m_transSolvers[0]->SetTempDomainCOI(assumption);
+    } else {
+        m_transSolvers[0]->SetTempDomain(assumption);
     }
-    m_transSolvers[0]->SetTempDomain(assumption);
     bool result = IsReachable(0, assumption, "SAT_R_Init");
     if (result) {
         // Solver return SAT
