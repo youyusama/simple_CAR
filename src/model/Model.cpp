@@ -421,18 +421,6 @@ void Model::UpdateDependencyVecDAGCNF() {
         sort(deps.begin(), deps.end());
         deps.erase(unique(deps.begin(), deps.end()), deps.end());
     }
-
-    m_coiCache.clear();
-    m_coiCacheReady.clear();
-    m_coiVisited.clear();
-    m_coiCacheVisited.clear();
-    m_coiDomain.clear();
-    m_coiCacheTodo.clear();
-
-    m_coiCache.resize(m_maxId + 1);
-    m_coiCacheReady.assign(m_maxId + 1, 0);
-    m_coiVisited.assign(m_maxId + 1, 0);
-    m_coiCacheVisited.assign(m_maxId + 1, 0);
 }
 
 
@@ -645,24 +633,32 @@ Lit Model::BuildLiveness() {
 
 
 Cube Model::GetCOIDomain(const Cube &c) {
-    m_coiDomain.clear();
+    vector<uint8_t> visited(m_dependencyVec.size(), 0);
+    vector<Var> stack;
+    Cube domain;
+
+    auto push = [&](Var v) {
+        assert(v < m_dependencyVec.size());
+        if (!visited[v]) {
+            visited[v] = 1;
+            stack.emplace_back(v);
+        }
+    };
+
+    push(TrueId());
     for (Lit lit : c) {
-        Var a = VarOf(lit);
-        EnsureCOICache(a);
-        for (Var d : m_coiCache[a]) {
-            if (!m_coiVisited[d]) {
-                m_coiVisited[d] = 1;
-                m_coiDomain.emplace_back(d);
-            }
+        push(VarOf(lit));
+    }
+
+    while (!stack.empty()) {
+        Var cur = stack.back();
+        stack.pop_back();
+        domain.emplace_back(MkLit(cur));
+        for (Var d : m_dependencyVec[cur]) {
+            push(d);
         }
     }
 
-    for (Var v : m_coiDomain) m_coiVisited[v] = 0;
-
-    Cube domain;
-    domain.reserve(m_coiDomain.size() + 1);
-    for (Var v : m_coiDomain) domain.emplace_back(MkLit(v));
-    domain.emplace_back(MkLit(TrueId()));
     return domain;
 }
 
@@ -674,31 +670,6 @@ Clause Model::ToCNFClause(const Clause &cls) const {
         out.emplace_back(ToCNFLit(lit));
     }
     return out;
-}
-
-
-void Model::EnsureCOICache(Var v) {
-    if (m_coiCacheReady[v]) return;
-
-    m_coiCacheReady[v] = 1;
-    m_coiCache[v].clear();
-    m_coiCacheTodo.clear();
-
-    m_coiCacheTodo.emplace_back(v);
-    m_coiCacheVisited[v] = 1;
-
-    for (size_t i = 0; i < m_coiCacheTodo.size(); ++i) {
-        Var cur = m_coiCacheTodo[i];
-        m_coiCache[v].emplace_back(cur);
-        for (Var d : m_dependencyVec[cur]) {
-            if (!m_coiCacheVisited[d]) {
-                m_coiCacheVisited[d] = 1;
-                m_coiCacheTodo.emplace_back(d);
-            }
-        }
-    }
-
-    for (Var t : m_coiCache[v]) m_coiCacheVisited[t] = 0;
 }
 
 

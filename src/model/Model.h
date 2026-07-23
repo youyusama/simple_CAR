@@ -271,8 +271,6 @@ class Model {
 
     bool CheckGateEquivalenceBySAT(Lit a, Lit b);
 
-    void EnsureCOICache(Var v);
-
     void BuildEquivalenceWitness();
 
     void BuildEquivalenceClauses(std::vector<Clause> &out);
@@ -325,13 +323,6 @@ class Model {
     unordered_map<int, vector<int>> m_preValueOfLatchMap;
 
     vector<vector<Var>> m_dependencyVec;
-
-    vector<vector<Var>> m_coiCache;
-    vector<uint8_t> m_coiCacheReady;
-    vector<uint8_t> m_coiVisited;
-    vector<uint8_t> m_coiCacheVisited;
-    vector<Var> m_coiDomain;
-    vector<Var> m_coiCacheTodo;
 
     shared_ptr<EquivalenceManager> m_equivalenceManager;
 
