@@ -614,7 +614,7 @@ void LemmaForestManager::Reset() {
 }
 
 void LemmaForestManager::EnsureLevel(int level) {
-    assert(level >= 1);
+    assert(level >= 0);
     if (static_cast<int>(m_borders.size()) <= level) {
         m_borders.resize(level + 1);
     }
@@ -714,7 +714,7 @@ LemmaForestManager::BorderCubesRange LemmaForestManager::BorderCubes(int level) 
 
 std::pair<int, int> LemmaForestManager::FindParentLemma(int startLevel, const Cube &cb) const {
     m_tmpLitSet.NewSet(cb);
-    for (int lvl = startLevel; lvl >= 1; --lvl) {
+    for (int lvl = startLevel; lvl >= 0; --lvl) {
         const auto &borders = m_borders[lvl];
         for (int j = 0; j < static_cast<int>(borders.size()); ++j) {
             int lemma_id = borders[j];
@@ -801,7 +801,7 @@ void LemmaForestManager::AdoptRelations(int newLemmaId, int oldLemmaId) {
 }
 
 uint64_t LemmaForestManager::RemoveRedundantLemmas(int startLevel, int endLevel, int newLemmaId) {
-    if (startLevel < 1) startLevel = 1;
+    if (startLevel < 0) startLevel = 0;
     if (endLevel >= static_cast<int>(m_borders.size())) endLevel = static_cast<int>(m_borders.size()) - 1;
     if (startLevel > endLevel) return 0;
 
@@ -845,13 +845,13 @@ void LemmaForestManager::UpdateRefineCountersOnInsert(int newLemmaId) {
 }
 
 AddLemmaResult LemmaForestManager::AddLemma(const Cube &cb, int frameLevel) {
-    assert(frameLevel >= 1);
+    assert(frameLevel >= 0);
     EnsureLevel(frameLevel);
 
     auto parent = FindParentLemma(frameLevel - 1, cb);
     int parent_id = parent.first;
     int parent_index = parent.second;
-    int parent_level = (parent_id == -1) ? 0 : m_forest[parent_id].frameLvl;
+    int parent_level = (parent_id == -1) ? -1 : m_forest[parent_id].frameLvl;
 
     int new_lemma_id;
     if (parent_id != -1 && cb.size() == m_lemmas[parent_id].size()) {
