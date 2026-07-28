@@ -24,6 +24,7 @@ class RLive : public BaseAlg {
     std::unique_ptr<IncrAlg> MakeSafeChecker();
     bool CheckReachable(const Cube &s);
     bool PruneDead(const Cube &s);
+    bool WriteProof(const FrameList &finalInvariant) const;
     void BuildCexTrace(const std::vector<std::pair<Cube, Cube>> &closingTrace);
 
     Settings m_settings;

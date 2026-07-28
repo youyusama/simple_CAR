@@ -45,11 +45,12 @@ struct Settings {
     string aigFilePath;
     string witnessOutputDir = "";
 
-    MCSATSolver solver = MCSATSolver::minisat;
-    MCAlgorithm alg = MCAlgorithm::FCAR;
-    MCAlgorithm safetyBaseAlg = MCAlgorithm::FCAR;
+    MCSATSolver solver = MCSATSolver::minicore;
+    MCAlgorithm alg = MCAlgorithm::IC3;
+    MCAlgorithm safetyBaseAlg = MCAlgorithm::IC3;
     int shoalUnroll = 1;
     bool rlivePruneDead = false;
+    string rliveProofPath = "";
     int bmcK = -1;
     bool bmcCnf = false;
     string bmcCnfDir = "";
@@ -71,7 +72,7 @@ struct Settings {
     bool activeLemmaLearning = false;
     int allThreshold = 8;
     int allMaxStates = 32;
-    bool satSolveInDomain = false;
+    bool satSolveInDomain = true;
     int shrink = 0;
     double maxObligationAct = 10.0;
     int bmcStep = 1;

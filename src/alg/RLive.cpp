@@ -3,6 +3,7 @@
 #include "FCAR.h"
 #include "IC3.h"
 #include <algorithm>
+#include <string>
 
 namespace car {
 
@@ -21,6 +22,9 @@ CheckResult RLive::Run() {
     signal(SIGINT, SignalHandler);
     m_cexTrace.clear();
     m_traceStack.clear();
+    m_badStack.clear();
+    m_globalShoals.clear();
+    m_globalDead.clear();
 
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
         LOG_L(m_log, 0, "rlive only supports liveness properties.");
@@ -72,7 +76,137 @@ CheckResult RLive::Run() {
         }
     }
 
+    FrameList final_invariant = m_safeChecker->GetInv();
+    if (!m_settings.rliveProofPath.empty() && !WriteProof(final_invariant)) {
+        LOG_L(m_log, 1, "Failed to write RLive proof.");
+    }
     return CheckResult::Safe;
+}
+
+bool RLive::WriteProof(const FrameList &finalInvariant) const {
+    const std::string &path = m_settings.rliveProofPath;
+    if (path.size() < 4 || path.substr(path.size() - 4) != ".aag") {
+        LOG_L(m_log, 1, "RLive proof path must end in '.aag': ", path);
+        return false;
+    }
+    if (finalInvariant.empty()) {
+        LOG_L(m_log, 1, "RLive final invariant is empty.");
+        return false;
+    }
+
+    const aiger *model_aig = m_model.GetAiger().get();
+    std::shared_ptr<aiger> proof_ptr(aiger_init(), [](aiger *aig) {
+        aiger_reset(aig);
+    });
+    aiger *proof = proof_ptr.get();
+
+    std::unordered_set<Var> latch_vars;
+    latch_vars.reserve(model_aig->num_latches);
+    for (unsigned i = 0; i < model_aig->num_latches; ++i) {
+        const aiger_symbol &latch = model_aig->latches[i];
+        aiger_add_input(proof, latch.lit, latch.name);
+        latch_vars.emplace(aiger_lit2var(latch.lit));
+    }
+
+    auto valid_cube = [&](const Cube &cube) {
+        for (Lit lit : cube) {
+            if (!IsConst(lit) && latch_vars.find(VarOf(lit)) == latch_vars.end()) {
+                LOG_L(m_log, 1,
+                      "RLive proof contains non-latch literal ",
+                      ToSigned(lit), ".");
+                return false;
+            }
+        }
+        return true;
+    };
+
+    auto valid_invariant = [&](const FrameList &invariant) {
+        for (const Frame &frame : invariant) {
+            for (const Cube &cube : frame) {
+                if (!valid_cube(cube)) return false;
+            }
+        }
+        return true;
+    };
+
+    for (const FrameList &shoal : m_globalShoals) {
+        if (!valid_invariant(shoal)) return false;
+    }
+    for (const Cube &state : m_globalDead) {
+        if (!valid_cube(state)) return false;
+    }
+    if (!valid_invariant(finalInvariant)) return false;
+
+    auto build_and = [&](const std::vector<unsigned> &lits) {
+        if (lits.empty()) return ToAigerLit(LIT_TRUE);
+        unsigned result = lits.front();
+        for (size_t i = 1; i < lits.size(); ++i) {
+            unsigned gate = (proof->maxvar + 1) * 2U;
+            aiger_add_and(proof, gate, result, lits[i]);
+            result = gate;
+        }
+        return result;
+    };
+
+    auto build_or = [&](const std::vector<unsigned> &lits) {
+        if (lits.empty()) return ToAigerLit(LIT_FALSE);
+        std::vector<unsigned> negated;
+        negated.reserve(lits.size());
+        for (unsigned lit : lits) negated.push_back(lit ^ 1U);
+        return build_and(negated) ^ 1U;
+    };
+
+    auto build_cube = [&](const Cube &cube) {
+        std::vector<unsigned> lits;
+        lits.reserve(cube.size());
+        for (Lit lit : cube) lits.push_back(ToAigerLit(lit));
+        return build_and(lits);
+    };
+
+    auto build_frame = [&](const Frame &frame) {
+        std::vector<unsigned> terms;
+        terms.reserve(frame.size());
+        for (const Cube &blocked_cube : frame) {
+            terms.push_back(build_cube(blocked_cube) ^ 1U);
+        }
+        return build_and(terms);
+    };
+
+    auto build_invariant = [&](const FrameList &invariant) {
+        std::vector<unsigned> frames;
+        frames.reserve(invariant.size());
+        for (const Frame &frame : invariant) frames.push_back(build_frame(frame));
+        return build_or(frames);
+    };
+
+    size_t output_index = 0;
+    for (const FrameList &shoal : m_globalShoals) {
+        unsigned lit = build_invariant(shoal);
+        std::string name = "shoal_" + std::to_string(output_index++);
+        aiger_add_output(proof, lit, name.c_str());
+    }
+    for (const Cube &state : m_globalDead) {
+        unsigned lit = build_cube(state);
+        std::string name = "dead_" + std::to_string(output_index++);
+        aiger_add_output(proof, lit, name.c_str());
+    }
+    aiger_add_output(proof, build_invariant(finalInvariant), "final_invariant");
+
+    if (const char *err = aiger_check(proof)) {
+        LOG_L(m_log, 1, "invalid RLive proof AAG: ", err);
+        return false;
+    }
+    if (!aiger_open_and_write_to_file(proof, path.c_str())) {
+        if (const char *err = aiger_error(proof)) {
+            LOG_L(m_log, 1, "RLive proof write error: ", err);
+        } else {
+            LOG_L(m_log, 1, "failed to write RLive proof AAG: ", path);
+        }
+        return false;
+    }
+
+    LOG_L(m_log, 1, "RLive proof written to ", path);
+    return true;
 }
 
 std::vector<std::pair<Cube, Cube>> RLive::GetCexTrace() {

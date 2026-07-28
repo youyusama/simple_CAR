@@ -28,7 +28,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"fair", MCAlgorithm::FAIR},
                 {"kfair", MCAlgorithm::KFAIR},
                 {"rlive", MCAlgorithm::RLIVE}}))
-        ->default_val("fcar");
+        ->default_val("ic3");
 
     app.add_option("--sa", settings.safetyBaseAlg, "Safety base algorithm")
         ->transform(CLI::CheckedTransformer(
@@ -38,13 +38,16 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"bmc", MCAlgorithm::BMC},
                 {"kind", MCAlgorithm::KIND},
                 {"ic3", MCAlgorithm::IC3}}))
-        ->default_val("fcar");
+        ->default_val("ic3");
 
     // app.add_option("--su,--shoal-unroll", settings.shoalUnroll, "unroll shoals for K cycles in rlive")
     //     ->default_val(1);
 
     app.add_flag("--pd,--rlive-prune-dead", settings.rlivePruneDead, "prune dead states in rlive")
         ->default_val(false);
+
+    app.add_option("--rlive-proof", settings.rliveProofPath,
+                   "Output RLive proof as a combinational .aag circuit");
 
     app.add_option("-s", settings.solver, "Main SAT Solver")
         ->transform(CLI::CheckedTransformer(
@@ -54,7 +57,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"minicore", MCSATSolver::minicore},
                 {"kissat", MCSATSolver::kissat},
             }))
-        ->default_val("minisat");
+        ->default_val("minicore");
 
     app.add_option("-k", settings.bmcK, "BMC bound")
         ->default_val(-1);
@@ -130,7 +133,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
         ->default_val(10.0);
 
     app.add_flag("--sd", settings.satSolveInDomain, "solve SAT in domain")
-        ->default_val(false)
+        ->default_val(true)
         ->excludes("--is");
 
     app.add_option("--shrink", settings.shrink,
