@@ -9,6 +9,7 @@ namespace car {
 
 class Log;
 class Model;
+class WLModel;
 
 class SimpleCAR {
   public:
@@ -22,6 +23,7 @@ class SimpleCAR {
     Settings m_settings;
     std::unique_ptr<Log> m_log;
     std::unique_ptr<Model> m_model;
+    std::unique_ptr<WLModel> m_wmodel;
     std::unique_ptr<BaseAlg> m_checker;
 };
 

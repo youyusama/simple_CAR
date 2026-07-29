@@ -138,20 +138,33 @@ Lit EquivalenceManager::FindRootRecursive(Var key) {
 }
 
 
-Model::Model(Settings settings, Log &log) : m_settings(settings),
-                                            m_log(log) {
-    // load aiger
-    string aig_file_path = settings.aigFilePath;
+Model::Model(Settings settings, Log &log)
+    : m_settings(settings), m_log(log) {
+    const string input_path = settings.aigFilePath;
     m_aiger = shared_ptr<aiger>(aiger_init(), AigerDeleter);
-    aiger_open_and_read_from_file(m_aiger.get(), aig_file_path.c_str());
+    aiger_open_and_read_from_file(m_aiger.get(), input_path.c_str());
     if (aiger_error(m_aiger.get())) {
-        cout << "aiger parse error" << endl;
-        exit(0);
+        throw std::runtime_error("AIGER parse error: " +
+                                 std::string(aiger_error(m_aiger.get())));
     }
     if (!aiger_is_reencoded(m_aiger.get())) {
         aiger_reencode(m_aiger.get());
     }
+    InitializeFromAiger();
+}
 
+Model::Model(Settings settings, Log &log, std::shared_ptr<aiger> aig)
+    : m_settings(settings), m_log(log), m_aiger(std::move(aig)) {
+    if (!m_aiger) {
+        throw std::runtime_error("Model requires a non-null AIGER object.");
+    }
+    if (!aiger_is_reencoded(m_aiger.get())) {
+        aiger_reencode(m_aiger.get());
+    }
+    InitializeFromAiger();
+}
+
+void Model::InitializeFromAiger() {
     // create circuit graph
     m_circuitGraph = make_shared<CircuitGraph>(m_aiger);
 

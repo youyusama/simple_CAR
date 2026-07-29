@@ -15,6 +15,9 @@ extern "C" {
 namespace car {
 
 class Log;
+class Model;
+class WLModel;
+struct WLTraceMap;
 
 struct EquivalenceWitness {
     std::vector<Clause> equivalence_clauses;
@@ -24,7 +27,12 @@ struct EquivalenceWitness {
 
 class WitnessBuilder {
   public:
-    WitnessBuilder(const Settings &settings, Log &log, const aiger *model_aig);
+    WitnessBuilder(const Settings &settings,
+                   Log &log,
+                   const Model &model);
+    WitnessBuilder(const Settings &settings,
+                   Log &log,
+                   const WLModel &model);
 
     void BeginWitness();
 
@@ -50,12 +58,20 @@ class WitnessBuilder {
 
   private:
     std::string GetWitnessPath(const std::string &suffix) const;
+    std::string GetBtor2CounterexamplePath() const;
     bool WriteAigWitness(const aiger *model_aig, unsigned invariant_lit);
+    bool WriteAigerCounterexample(
+        const std::vector<std::pair<Cube, Cube>> &trace);
+    bool WriteBtor2Counterexample(
+        const std::vector<std::pair<Cube, Cube>> &trace);
     std::string CubeToInputString(const Cube &cube) const;
     std::string CubeToLatchString(const Cube &cube) const;
+    bool IsBtor2Input() const;
 
     const Settings &m_settings;
     Log &m_log;
+    const Model *m_model{nullptr};
+    const WLTraceMap *m_wlTraceMap{nullptr};
     const aiger *m_modelAig{nullptr};
     std::shared_ptr<aiger> m_witnessAigPtr;
     aiger *m_witnessAig{nullptr};

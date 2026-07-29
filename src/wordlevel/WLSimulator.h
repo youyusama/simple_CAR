@@ -1,0 +1,53 @@
+#ifndef WL_SIMULATOR_H
+#define WL_SIMULATOR_H
+
+#include "Btor2Frontend.h"
+#include "CarTypes.h"
+#include "WLTypes.h"
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace car {
+
+// Simulator-based replay for word-level abstract traces.  It confirms concrete
+// counterexamples and reports read mismatches used by memory-abstraction CEGAR.
+struct WLReadMismatch {
+    // Concrete/abstract read disagreement used to select a refinement pair.
+    int64_t readNodeId{0};
+    int64_t memoryStateId{0};
+    int64_t addressNodeId{0};
+    unsigned time{0};
+    unsigned delay{0};
+};
+
+class WLSimulator {
+  public:
+    struct Result {
+        // Unsafe is accepted only when replay reaches a concrete bad state.
+        bool concreteCounterexample{false};
+        bool incomplete{false};
+        unsigned badTime{0};
+        std::vector<WLReadMismatch> mismatches;
+    };
+
+    explicit WLSimulator(const Btor2IR &ir);
+    ~WLSimulator();
+
+    // Replay a checker trace on the original word-level transition system.
+    Result Replay(const std::vector<std::pair<Cube, Cube>> &trace,
+                  const WLTraceMap &traceMap);
+
+    // Write the most recently replayed concrete trace as a BTOR2 witness.
+    bool WriteCounterexample(const std::string &path) const;
+
+  private:
+    class Impl;
+    std::unique_ptr<Impl> m_impl;
+};
+
+} // namespace car
+
+#endif
