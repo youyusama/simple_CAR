@@ -1,6 +1,5 @@
 #include "KFAIR.h"
 
-#include "BCAR.h"
 #include "IC3.h"
 #include "FCAR.h"
 #include <algorithm>
@@ -16,12 +15,12 @@ KFAIR::KFAIR(Settings settings,
 
 CheckResult KFAIR::Run() {
     signal(SIGINT, SignalHandler);
+    m_cexTrace.clear();
 
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
         LOG_L(m_log, 0, "KFAIR only supports liveness properties.");
         return CheckResult::Unknown;
     }
-
     bool enable_klive = (m_settings.alg == MCAlgorithm::KLIVE || m_settings.alg == MCAlgorithm::KFAIR);
     bool enable_fair = (m_settings.alg == MCAlgorithm::FAIR || m_settings.alg == MCAlgorithm::KFAIR);
 
@@ -45,8 +44,9 @@ CheckResult KFAIR::Run() {
             return CheckResult::Safe;
         }
 
+        auto prefix_trace = prefix->GetCexTrace();
         if (enable_klive) {
-            if (DetectKLiveCex(*prefix)) {
+            if (DetectKLiveCex(prefix_trace)) {
                 LOG_L(m_log, 1, "===== CEX found in trace =====");
                 return CheckResult::Unsafe;
             }
@@ -54,8 +54,7 @@ CheckResult KFAIR::Run() {
 
         if (enable_fair) {
             LOG_L(m_log, 1, "===== Search for a loop by fair =====");
-            auto trace = prefix->GetCexTrace();
-            Cube t = trace.back().second;
+            Cube t = prefix_trace.back().second;
             LOG_L(m_log, 2, "start from bad state ", CubeToStr(t));
             auto loop = MakeSafeChecker();
             loop->SetInit(t);
@@ -64,6 +63,12 @@ CheckResult KFAIR::Run() {
             loop->SetWalls(m_globalWalls);
             CheckResult loop_res = loop->Run();
             if (loop_res == CheckResult::Unsafe) {
+                m_cexTrace = prefix_trace;
+                if (!m_cexTrace.empty()) m_cexTrace.pop_back();
+                auto loop_trace = loop->GetCexTrace();
+                for (const auto &step : loop_trace) {
+                    if (!step.first.empty()) m_cexTrace.emplace_back(step);
+                }
                 return CheckResult::Unsafe;
             } else {
                 FrameList new_wall = loop->GetInv();
@@ -79,7 +84,7 @@ CheckResult KFAIR::Run() {
 }
 
 std::vector<std::pair<Cube, Cube>> KFAIR::GetCexTrace() {
-    return {};
+    return m_cexTrace;
 }
 
 std::unique_ptr<IncrAlg> KFAIR::MakeSafeChecker() {
@@ -88,8 +93,6 @@ std::unique_ptr<IncrAlg> KFAIR::MakeSafeChecker() {
     switch (m_settings.safetyBaseAlg) {
     case MCAlgorithm::FCAR:
         return std::make_unique<FCAR>(sub_settings, m_model, m_log);
-    case MCAlgorithm::BCAR:
-        return std::make_unique<BCAR>(sub_settings, m_model, m_log);
     case MCAlgorithm::IC3:
         return std::make_unique<IC3>(sub_settings, m_model, m_log);
     default:
@@ -97,9 +100,8 @@ std::unique_ptr<IncrAlg> KFAIR::MakeSafeChecker() {
     }
 }
 
-bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
+bool KFAIR::DetectKLiveCex(const std::vector<std::pair<Cube, Cube>> &trace) {
     std::vector<Cube> states;
-    auto trace = checker.GetCexTrace();
     states.reserve(trace.size());
     for (auto &step : trace) {
         states.emplace_back(step.second);
@@ -111,8 +113,9 @@ bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
 
     // Build a set of k-liveness latch variables for quick filtering.
     std::unordered_set<Var> live_set;
-    for (int i = 1; i <= klive_step; i++)
+    for (int i = 1; i <= klive_step; i++) {
         live_set.emplace(VarOf(m_model.GetKLiveSignal(i)));
+    }
 
     // Track indices where the k-counter value changes and store the trimmed trace
     // (state without k-liveness latch literals).
@@ -148,6 +151,7 @@ bool KFAIR::DetectKLiveCex(IncrAlg &checker) {
             if (trace_to_bad[i] == trace_to_bad[j]) {
                 for (int idx : bad_indices) {
                     if (idx >= static_cast<int>(i) && idx <= static_cast<int>(j)) {
+                        m_cexTrace.assign(trace.begin(), trace.begin() + static_cast<std::ptrdiff_t>(j));
                         return true;
                     }
                 }

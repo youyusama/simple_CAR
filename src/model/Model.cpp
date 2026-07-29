@@ -197,6 +197,9 @@ void Model::InitializeFromAiger() {
     } else if (num_justice == 1) {
         // liveness extraction
         m_bad = BuildLiveness();
+        m_circuitGraph->bad.clear();
+        m_circuitGraph->bad.emplace_back(m_bad);
+        m_circuitGraph->numBad = 1;
         m_propKind = PropKind::Liveness;
     }
 
@@ -206,7 +209,7 @@ void Model::InitializeFromAiger() {
     LOG_L(m_log, 1, "COI Refined Model: ",
           m_circuitGraph->modelInputs.size(), " inputs, ", m_circuitGraph->modelLatches.size(), " latches, ", m_circuitGraph->modelGates.size(), " gates.");
 
-    m_cnfTrueVar = m_circuitGraph->numVar + 1;
+    m_cnfTrueVar = m_circuitGraph->NewModelVar();
     m_maxId = m_cnfTrueVar;
 
     // try to find equivalences
@@ -431,18 +434,6 @@ void Model::UpdateDependencyVecDAGCNF() {
         sort(deps.begin(), deps.end());
         deps.erase(unique(deps.begin(), deps.end()), deps.end());
     }
-
-    m_coiCache.clear();
-    m_coiCacheReady.clear();
-    m_coiVisited.clear();
-    m_coiCacheVisited.clear();
-    m_coiDomain.clear();
-    m_coiCacheTodo.clear();
-
-    m_coiCache.resize(m_maxId + 1);
-    m_coiCacheReady.assign(m_maxId + 1, 0);
-    m_coiVisited.assign(m_maxId + 1, 0);
-    m_coiCacheVisited.assign(m_maxId + 1, 0);
 }
 
 
@@ -472,7 +463,7 @@ void Model::CollectConstraints() {
 
 void Model::CollectNextValueMapping() {
     // reset
-    m_maxId = m_circuitGraph->numVar + 1;
+    m_maxId = m_circuitGraph->numVar;
     m_primeMaps.clear();
     m_lookupPrime.clear();
     m_primeMaps.push_back(unordered_map<Var, Lit, std::hash<Var>>());
@@ -654,25 +645,33 @@ Lit Model::BuildLiveness() {
 }
 
 
-Cube Model::GetCOIDomain(const Cube &c) {
-    m_coiDomain.clear();
+vector<Var> Model::GetCOIDomain(const Cube &c) {
+    vector<uint8_t> visited(m_dependencyVec.size(), 0);
+    vector<Var> stack;
+    vector<Var> domain;
+
+    auto push = [&](Var v) {
+        assert(v < m_dependencyVec.size());
+        if (!visited[v]) {
+            visited[v] = 1;
+            stack.emplace_back(v);
+            domain.emplace_back(v);
+        }
+    };
+
+    push(TrueId());
     for (Lit lit : c) {
-        Var a = VarOf(lit);
-        EnsureCOICache(a);
-        for (Var d : m_coiCache[a]) {
-            if (!m_coiVisited[d]) {
-                m_coiVisited[d] = 1;
-                m_coiDomain.emplace_back(d);
-            }
+        push(VarOf(lit));
+    }
+
+    while (!stack.empty()) {
+        Var cur = stack.back();
+        stack.pop_back();
+        for (Var d : m_dependencyVec[cur]) {
+            push(d);
         }
     }
 
-    for (Var v : m_coiDomain) m_coiVisited[v] = 0;
-
-    Cube domain;
-    domain.reserve(m_coiDomain.size() + 1);
-    for (Var v : m_coiDomain) domain.emplace_back(MkLit(v));
-    domain.emplace_back(MkLit(TrueId()));
     return domain;
 }
 
@@ -684,31 +683,6 @@ Clause Model::ToCNFClause(const Clause &cls) const {
         out.emplace_back(ToCNFLit(lit));
     }
     return out;
-}
-
-
-void Model::EnsureCOICache(Var v) {
-    if (m_coiCacheReady[v]) return;
-
-    m_coiCacheReady[v] = 1;
-    m_coiCache[v].clear();
-    m_coiCacheTodo.clear();
-
-    m_coiCacheTodo.emplace_back(v);
-    m_coiCacheVisited[v] = 1;
-
-    for (size_t i = 0; i < m_coiCacheTodo.size(); ++i) {
-        Var cur = m_coiCacheTodo[i];
-        m_coiCache[v].emplace_back(cur);
-        for (Var d : m_dependencyVec[cur]) {
-            if (!m_coiCacheVisited[d]) {
-                m_coiCacheVisited[d] = 1;
-                m_coiCacheTodo.emplace_back(d);
-            }
-        }
-    }
-
-    for (Var t : m_coiCache[v]) m_coiCacheVisited[t] = 0;
 }
 
 
@@ -1268,14 +1242,13 @@ void Model::EnsureLatchEqIndSolver() {
     for (Lit c : m_constraints) m_latchEqIndSolver->addClause(Clause{c});
     m_latchEqIndSolver->setSolveInDomain(true);
 
-    Cube constraints_domain = GetCOIDomain(m_constraints);
+    vector<Var> constraints_domain = GetCOIDomain(m_constraints);
     std::vector<char> &dom = m_latchEqIndSolver->domainSet();
     std::vector<minicore::Var> &list = m_latchEqIndSolver->domainList();
-    for (Lit v : constraints_domain) {
-        Var vv = VarOf(v);
-        if (!dom[vv]) {
-            dom[vv] = 1;
-            list.push_back(vv);
+    for (Var v : constraints_domain) {
+        if (!dom[v]) {
+            dom[v] = 1;
+            list.push_back(v);
         }
     }
 }
@@ -1327,13 +1300,12 @@ bool Model::CheckLatchEquivalenceInd(Lit aLit, Lit bLit) {
         m_latchEqIndSolver->addTempClause(c4);
     }
 
-    Cube d = GetCOIDomain(Cube{aLit, bLit, a_prime, b_prime});
+    vector<Var> d = GetCOIDomain(Cube{aLit, bLit, a_prime, b_prime});
     {
-        for (Lit v : d) {
-            Var vv = VarOf(v);
-            if (!dom[vv]) {
-                dom[vv] = 1;
-                list.push_back(vv);
+        for (Var v : d) {
+            if (!dom[v]) {
+                dom[v] = 1;
+                list.push_back(v);
             }
         }
     }
@@ -1400,13 +1372,12 @@ bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
         m_gateEqSolver->addTempClause(c2);
     }
 
-    Cube d = GetCOIDomain(Cube{aLit, bLit});
+    vector<Var> d = GetCOIDomain(Cube{aLit, bLit});
     {
-        for (Lit v : d) {
-            Var vv = VarOf(v);
-            if (!dom[vv]) {
-                dom[vv] = 1;
-                list.push_back(vv);
+        for (Var v : d) {
+            if (!dom[v]) {
+                dom[v] = 1;
+                list.push_back(v);
             }
         }
     }
@@ -1428,43 +1399,57 @@ bool Model::CheckGateEquivalenceBySAT(Lit aLit, Lit bLit) {
 
 int Model::KLivenessIncrement() {
     Var latch = NewLatchVar();
+    Lit k = MkLit(latch);
     Lit q = m_bad;
     // Init(k) = false
     // Next(k) = q ? true : k
     Lit init = LIT_FALSE;
-    Lit next = MakeITE(q, LIT_TRUE, MkLit(latch));
+    Lit next = MakeITE(q, LIT_TRUE, k);
     SetLatchReset(latch, init);
     SetLatchNext(latch, next);
     // q_k = q & k
-    m_bad = MakeAND(q, MkLit(latch));
+    m_bad = MakeAND(q, k);
 
     m_kliveStep++;
 
     // store signals
     m_kliveSignals.resize(m_kliveStep + 1);
-    m_kliveSignals[m_kliveStep] = MkLit(latch);
+    m_kliveSignals[m_kliveStep] = k;
 
     // get clauses
     m_kliveTransClauses.resize(m_kliveStep + 1);
     vector<Clause> k_clauses;
     // and gate
-    k_clauses.emplace_back(Clause{m_bad, ~q, ~MkLit(latch)});
-    k_clauses.emplace_back(Clause{~m_bad, q});
-    k_clauses.emplace_back(Clause{~m_bad, MkLit(latch)});
+    k_clauses.emplace_back(Clause{~q, ~k, m_bad});
+    k_clauses.emplace_back(Clause{q, ~m_bad});
+    k_clauses.emplace_back(Clause{k, ~m_bad});
     // Ite gate
-    k_clauses.emplace_back(Clause{next, ~q, LIT_FALSE});
-    k_clauses.emplace_back(Clause{next, q, ~MkLit(latch)});
-    k_clauses.emplace_back(Clause{~next, ~q, LIT_TRUE});
-    k_clauses.emplace_back(Clause{~next, q, MkLit(latch)});
+    k_clauses.emplace_back(Clause{~q, LIT_FALSE, next});
+    k_clauses.emplace_back(Clause{q, ~k, next});
+    k_clauses.emplace_back(Clause{~q, LIT_TRUE, ~next});
+    k_clauses.emplace_back(Clause{q, k, ~next});
     vector<Clause> k_cnf_clauses;
     k_cnf_clauses.reserve(k_clauses.size());
     for (const Clause &cls : k_clauses) {
         k_cnf_clauses.emplace_back(ToCNFClause(cls));
     }
+
+    // update DAG dependency
+    size_t required_size =
+        max(m_dependencyVec.size(), static_cast<size_t>(m_circuitGraph->numVar) + 1);
+    m_dependencyVec.resize(required_size);
+
+    for (const Clause &cls : k_cnf_clauses) {
+        Var head = VarOf(cls.back());
+        for (size_t i = 0; i + 1 < cls.size(); ++i) {
+            m_dependencyVec[head].emplace_back(VarOf(cls[i]));
+        }
+    }
+
     m_kliveTransClauses[m_kliveStep] = k_cnf_clauses;
 
     // rebuild manually
-    m_initialState.emplace_back(~MkLit(latch));
+    m_initialState.emplace_back(~k);
     SetPrimeMap0(latch, ToCNFLit(next));
     m_rawClauses.insert(m_rawClauses.end(), k_clauses.begin(), k_clauses.end());
     m_cnfClauses.insert(m_cnfClauses.end(), k_cnf_clauses.begin(), k_cnf_clauses.end());

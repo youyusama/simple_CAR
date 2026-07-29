@@ -1,7 +1,7 @@
 #ifndef BCAR_H
 #define BCAR_H
 
-#include "IncrAlg.h"
+#include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
@@ -14,7 +14,7 @@
 
 namespace car {
 
-class BCAR : public IncrAlg {
+class BCAR : public BaseAlg {
   public:
     BCAR(Settings settings,
          Model &model,
@@ -23,26 +23,12 @@ class BCAR : public IncrAlg {
     bool SupportsWitness() const override { return true; }
     void RefineWitnessPropertyLit(WitnessBuilder &builder) const override;
 
-    void SetInit(const Cube &c) override { m_customInit = c; }
-    void SetSearchFromInitSucc(bool b) override { /*bcar originally search from init succ*/ }
-    void SetLoopRefuting(bool b) override { m_loopRefuting = b; }
-    void SetDead(const std::vector<Cube> &dead) override { m_dead = dead; }
-    void SetShoals(const std::vector<FrameList> &shoals) override { m_shoals = shoals; }
-    void SetWalls(const std::vector<FrameList> &walls) override { m_walls = walls; }
-
     std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
-    FrameList GetInv() override;
-
-    void KLiveIncr() override;
 
   private:
     bool Check();
 
     void Init();
-
-    void Reset();
-
-    bool IsInitStateImplyBad();
 
     void InitializeStartSolver();
 
@@ -63,7 +49,7 @@ class BCAR : public IncrAlg {
 
     bool ImmediateSatisfiable();
 
-    void ResetBadSolver();
+    void InitializeBadSolver();
 
     int GetNewLevel(const Cube &states, int start = 0);
 
@@ -153,14 +139,6 @@ class BCAR : public IncrAlg {
     std::shared_ptr<Restart> m_restart;
     unordered_set<Lit, LitHash> m_conflictScratch;
 
-    // liveness
-    bool m_initialized{false};
-    Cube m_customInit;
-    bool m_loopRefuting{false};
-    std::vector<Cube> m_dead;
-    std::vector<FrameList> m_shoals;
-    std::vector<FrameList> m_walls;
-    bool m_initStateImplyBad{false};
     std::vector<std::pair<Cube, Cube>> m_cexTrace;
 };
 

@@ -77,63 +77,20 @@ void BCAR::BuildCEXTrace() {
 }
 
 
-FrameList BCAR::GetInv() {
-    FrameList inv;
-    if (!m_overSequence) return inv;
-    int lvl = m_overSequence->GetInvariantLevel();
-    if (lvl < 0) return inv;
-    for (int i = 0; i <= lvl; ++i) {
-        inv.emplace_back(m_overSequence->FrameToFrame(i));
-    }
-    return inv;
-}
-
-void BCAR::KLiveIncr() {
-    int k_step = m_model.KLivenessIncrement();
-    vector<Clause> k_clauses = m_model.GetKLiveClauses(k_step);
-
-    // add trans
-    for (auto slv : m_transSolvers) {
-        for (auto cls : k_clauses) slv->AddClause(cls);
-    }
-
-    ResetBadSolver();
-    // start solver will be reset
-}
-
-
-void BCAR::ResetBadSolver() {
-    // reset bad solver
-
+void BCAR::InitializeBadSolver() {
     // bad & T & c
     m_badSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_badSolver->AddTrans();
     m_badSolver->AddConstraints();
-    if (m_loopRefuting) {
-        for (auto l : m_customInit)
-            m_badSolver->AddClause({l});
-    } else {
-        m_badSolver->AddBad();
-    }
-    // liveness: T = T & (W <-> W')
-    //           T = T & C'
-    //           T = T & !d'
-    m_badSolver->AddWallConstraints(m_walls);
-    for (auto inv : m_shoals) m_badSolver->AddInvAsClauseK(inv, false, 1);
-    for (auto d : m_dead) m_badSolver->AddCubeAsClauseK(d, true, 1);
+    m_badSolver->AddBad();
 }
 
 
 bool BCAR::Check() {
     [[maybe_unused]] auto check_scope = m_log.Section("FC_Check");
 
-    if (!m_initialized) {
-        Init();
-        LOG_L(m_log, 2, "Initialized");
-    } else {
-        Reset();
-        LOG_L(m_log, 2, "Reset");
-    }
+    Init();
+    LOG_L(m_log, 2, "Initialized");
 
     if (!CheckBad(make_shared<State>(nullptr, Cube{}, Cube{}, 0))) {
         LOG_L(m_log, 1, "Bad State not reachable");
@@ -279,34 +236,22 @@ void BCAR::Init() {
 
     m_k = 0;
 
-    m_initStateImplyBad = IsInitStateImplyBad();
-    if (!m_initStateImplyBad)
-        LOG_L(m_log, 1, "Initial state does not imply bad");
-
     m_overSequence = make_shared<OverSequenceSet>();
     m_underSequence = UnderSequence();
     m_branching = make_shared<Branching>(m_settings.branching);
     m_litOrder.branching = m_branching;
     m_transSolvers.clear();
     m_lastState = nullptr;
+    m_cexTrace.clear();
 
     // s & T & c & O_i'
     m_transSolvers.emplace_back(make_shared<SATSolver>(m_model, m_settings.solver));
     m_transSolvers[0]->AddTrans();
     m_transSolvers[0]->AddConstraints();
-    // liveness: T = T & (W <-> W')
-    //           T = T & C'
-    //           T = T & !d'
-    if (m_loopRefuting) m_transSolvers[0]->AddWallConstraints(m_walls);
-    for (auto inv : m_shoals) m_transSolvers[0]->AddInvAsClauseK(inv, false, 1);
-    for (auto d : m_dead) m_transSolvers[0]->AddCubeAsClauseK(d, true, 1);
-
     InitializeStartSolver();
-    ResetBadSolver();
+    InitializeBadSolver();
 
     m_restart.reset(new Restart(m_settings));
-
-    m_initialized = true;
 }
 
 
@@ -315,52 +260,9 @@ void BCAR::InitializeStartSolver() {
     m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
     m_startSolver->AddTrans();
     m_startSolver->AddConstraints();
-    if (!m_customInit.empty()) {
-        for (Lit lit : m_customInit) {
-            m_startSolver->AddClause({lit});
-        }
-        if (!m_initStateImplyBad) m_startSolver->AddBad();
-    } else {
-        for (auto l : m_model.GetInitialState()) {
-            m_startSolver->AddClause({l});
-        }
+    for (auto l : m_model.GetInitialState()) {
+        m_startSolver->AddClause({l});
     }
-    // liveness: T = T & (W <-> W')
-    //           T = T & C'
-    //           T = T & !d'
-    if (m_loopRefuting) m_startSolver->AddWallConstraints(m_walls);
-    for (auto inv : m_shoals) m_startSolver->AddInvAsClauseK(inv, false, 1);
-    for (auto d : m_dead) m_startSolver->AddCubeAsClauseK(d, true, 1);
-}
-
-
-void BCAR::Reset() {
-    m_underSequence.Clear();
-    m_lastState = nullptr;
-    m_cexTrace.clear();
-
-    InitializeStartSolver();
-    // add exist lemma
-    auto frame_i = m_overSequence->FrameToFrame(m_k);
-    for (auto l : frame_i) {
-        Cube pl(l);
-        GetPrimed(pl);
-        m_startSolver->AddUC(pl);
-    }
-
-    ResetBadSolver();
-}
-
-
-bool BCAR::IsInitStateImplyBad() {
-    if (m_customInit.empty()) return false;
-    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
-    slv->AddTrans();
-    slv->AddConstraints();
-    Cube assumptions = m_customInit;
-    assumptions.push_back(m_model.GetBad());
-    bool sat = slv->Solve(assumptions);
-    return !sat;
 }
 
 
@@ -379,12 +281,6 @@ bool BCAR::AddUnsatisfiableCore(const Cube &uc, int frameLevel, bool fromCTR) {
         m_transSolvers.back()->AddTrans();
         m_transSolvers.back()->AddConstraints();
         if (m_settings.solveInProperty) m_transSolvers.back()->AddProperty();
-        // liveness: T = T & (W <-> W')
-        //           T = T & C'
-        //           T = T & !d'
-        if (m_loopRefuting) m_transSolvers.back()->AddWallConstraints(m_walls);
-        for (auto inv : m_shoals) m_transSolvers.back()->AddInvAsClauseK(inv, false, 1);
-        for (auto d : m_dead) m_transSolvers.back()->AddCubeAsClauseK(d, true, 1);
     }
     m_transSolvers[frameLevel]->AddUC(puc);
 
@@ -511,10 +407,6 @@ BCAR::ALLProveStatus BCAR::ActiveProve(OverSequenceSet::RefId targetRef) {
 
 bool BCAR::ImmediateSatisfiable() {
     [[maybe_unused]] auto imm_scope = m_log.Section("FC_ImmSAT");
-    if (!m_customInit.empty()) {
-        return false;
-    }
-
     Cube assumptions;
     assumptions.push_back(m_model.GetBad());
     bool result = false;
@@ -562,17 +454,15 @@ void BCAR::OverSequenceRefine(int lvl) {
     // assert( s & T & c & (O_0 | O_1 | ... | O_i+1)' is UNSAT)
     // add uc to O_0 ... O_i
 
-    if (m_loopRefuting) return;
-
     // solver: I & c & (O_0 | O_1 | ... | O_i)
     shared_ptr<SATSolver> refine_solver = make_shared<SATSolver>(m_model, m_settings.solver);
     refine_solver->AddConstraints();
-    if (!m_customInit.empty()) {
-        for (Lit lit : m_customInit) refine_solver->AddClause({lit});
-    } else {
-        for (auto l : m_model.GetInitialState()) refine_solver->AddClause({l});
+    for (auto l : m_model.GetInitialState()) refine_solver->AddClause({l});
+    FrameList inv;
+    for (int i = 0; i <= lvl; ++i) {
+        inv.emplace_back(m_overSequence->FrameToFrame(i));
     }
-    refine_solver->AddInvAsClauseK(GetInv(), false, 0);
+    refine_solver->AddInvAsClauseK(inv, false, 0);
 
     // if I & c & (O_0 | O_1 | ... | O_i) is SAT, get model s
     while (true) {

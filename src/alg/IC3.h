@@ -29,7 +29,10 @@ class IC3 : public IncrAlg {
 
     void SetInit(const Cube &c) override { m_customInit = c; }
     void SetSearchFromInitSucc(bool b) override { m_searchFromInitSucc = b; }
-    void SetLoopRefuting(bool b) override { m_loopRefuting = b; }
+    void SetLoopRefuting(bool b) override {
+        m_loopRefuting = b;
+        if (b) m_settings.satSolveInDomain = false;
+    }
     void SetDead(const std::vector<Cube> &dead) override { m_dead = dead; }
     void SetShoals(const std::vector<FrameList> &shoals) override { m_shoals = shoals; }
     void SetWalls(const std::vector<FrameList> &walls) override { m_walls = walls; }
@@ -50,6 +53,10 @@ class IC3 : public IncrAlg {
     bool IsInitStateImplyBad();
 
     void InitializeStartSolver();
+
+    void InitializeInitSolver();
+
+    void InitializeBadLiftSolver();
 
     void AddNewFrame();
 
@@ -130,12 +137,14 @@ class IC3 : public IncrAlg {
 
     shared_ptr<State> EnumerateStartState();
 
+    void BuildCEXTrace();
 
     Cube GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime);
     bool IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv);
     bool IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv);
     Cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube);
     bool InitiationCheck(const Cube &cb);
+    bool IsInitSuccessor(const Cube &cb);
 
     bool GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime);
 
@@ -148,6 +157,7 @@ class IC3 : public IncrAlg {
     Model &m_model;
     vector<shared_ptr<SATSolver>> m_transSolvers;
     shared_ptr<SATSolver> m_liftSolver;
+    shared_ptr<SATSolver> m_initSolver;
     shared_ptr<SATSolver> m_startSolver;
     shared_ptr<SATSolver> m_badLiftSolver;
     unordered_set<Lit, LitHash> m_initialStateSet;

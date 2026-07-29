@@ -22,7 +22,7 @@ void AigerDeleter(aiger *aig);
 
 namespace {
 
-unsigned GetBadLit(const aiger *model_aig) {
+unsigned GetBadRaw(const aiger *model_aig) {
     if (model_aig->num_bad == 1) {
         return model_aig->bad[0].lit;
     }
@@ -185,7 +185,7 @@ WitnessBuilder::WitnessBuilder(const Settings &settings,
 void WitnessBuilder::BeginWitness() {
     m_witnessAigPtr = CloneBaseAig(m_modelAig);
     m_witnessAig = m_witnessAigPtr.get();
-    m_propertyLit = Negate(GetBadLit(m_modelAig));
+    m_propertyLit = Negate(GetBadRaw(m_modelAig));
 }
 
 
@@ -218,7 +218,7 @@ bool WitnessBuilder::WriteAigerCounterexample(
     }
 
     cex_file << "1" << std::endl
-             << "b0" << std::endl;
+             << (GetMCAlgorithmProperty(m_settings.alg) == MCAlgorithmProperty::Liveness ? "j0" : "b0") << std::endl;
     cex_file << CubeToLatchString(trace.front().second) << std::endl;
     for (const auto &step : trace) {
         cex_file << CubeToInputString(step.first) << std::endl;
@@ -492,7 +492,7 @@ void WitnessBuilder::BuildKInductionWitness(int safeK) {
         folded.SetLatchNext(valid[t], t == n - 1 ? folded.TrueLit() : valid[t + 1]);
     }
 
-    unsigned bad = GetBadLit(m_modelAig);
+    unsigned bad = GetBadRaw(m_modelAig);
     std::vector<unsigned> property_terms;
     property_terms.reserve(static_cast<size_t>(5 * n));
 

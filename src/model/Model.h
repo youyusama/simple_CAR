@@ -141,6 +141,7 @@ class Model {
     inline vector<Var> &GetModelLatches() { return m_circuitGraph->modelLatches; }
     inline vector<Var> &GetModelGates() { return m_circuitGraph->modelGates; }
 
+    inline Lit GetBadRaw() const { return m_bad; }
     inline Lit GetBad() { return ToCNFLit(m_bad); }
     inline Lit GetProperty() { return ~ToCNFLit(m_bad); }
 
@@ -189,7 +190,7 @@ class Model {
 
     vector<Var> &GetPropertyCOIInputs() { return m_circuitGraph->propertyCOIInputs; };
 
-    Cube GetCOIDomain(const Cube &c);
+    vector<Var> GetCOIDomain(const Cube &c);
 
     const vector<vector<Var>> &GetDependencyVec() const { return m_dependencyVec; }
 
@@ -273,8 +274,6 @@ class Model {
 
     bool CheckGateEquivalenceBySAT(Lit a, Lit b);
 
-    void EnsureCOICache(Var v);
-
     void BuildEquivalenceWitness();
 
     void BuildEquivalenceClauses(std::vector<Clause> &out);
@@ -327,13 +326,6 @@ class Model {
     unordered_map<int, vector<int>> m_preValueOfLatchMap;
 
     vector<vector<Var>> m_dependencyVec;
-
-    vector<vector<Var>> m_coiCache;
-    vector<uint8_t> m_coiCacheReady;
-    vector<uint8_t> m_coiVisited;
-    vector<uint8_t> m_coiCacheVisited;
-    vector<Var> m_coiDomain;
-    vector<Var> m_coiCacheTodo;
 
     shared_ptr<EquivalenceManager> m_equivalenceManager;
 

@@ -1,8 +1,7 @@
 #include "RLive.h"
 
-#include "BCAR.h"
-#include "IC3.h"
 #include "FCAR.h"
+#include "IC3.h"
 #include <algorithm>
 
 namespace car {
@@ -20,22 +19,25 @@ RLive::RLive(Settings settings,
 
 CheckResult RLive::Run() {
     signal(SIGINT, SignalHandler);
+    m_cexTrace.clear();
+    m_traceStack.clear();
 
     if (m_model.GetPropKind() != Model::PropKind::Liveness) {
         LOG_L(m_log, 0, "rlive only supports liveness properties.");
         return CheckResult::Unknown;
     }
-
     while (CheckReachable(Cube())) {
         auto trace = m_safeChecker->GetCexTrace();
         Cube t = trace.back().second;
         m_badStack.emplace_back(t);
+        m_traceStack.emplace_back(std::move(trace));
 
         while (!m_badStack.empty()) {
             Cube s = m_badStack.back();
 
             if (PruneDead(s)) {
                 m_badStack.pop_back();
+                if (!m_traceStack.empty()) m_traceStack.pop_back();
                 continue;
             }
 
@@ -50,21 +52,22 @@ CheckResult RLive::Run() {
                         break;
                     }
                 }
-                if (looped) return CheckResult::Unsafe;
+                if (looped) {
+                    BuildCexTrace(new_trace);
+                    return CheckResult::Unsafe;
+                }
 
                 m_badStack.emplace_back(new_t);
+                m_traceStack.emplace_back(std::move(new_trace));
             } else {
                 FrameList new_shoal = m_safeChecker->GetInv();
                 if (!new_shoal.empty()) {
                     m_globalShoals.emplace_back(new_shoal);
-                    if (m_settings.safetyBaseAlg == MCAlgorithm::BCAR) {
-                        m_pdSolver->AddInvAsClauseK(new_shoal, false, 1);
-                    } else {
-                        m_pdSolver->AddInvAsClauseK(new_shoal, true, 1);
-                    }
+                    m_pdSolver->AddInvAsClauseK(new_shoal, true, 1);
                 }
 
                 m_badStack.pop_back();
+                if (!m_traceStack.empty()) m_traceStack.pop_back();
             }
         }
     }
@@ -73,7 +76,18 @@ CheckResult RLive::Run() {
 }
 
 std::vector<std::pair<Cube, Cube>> RLive::GetCexTrace() {
-    return {};
+    return m_cexTrace;
+}
+
+void RLive::BuildCexTrace(const std::vector<std::pair<Cube, Cube>> &closingTrace) {
+    m_cexTrace.clear();
+    for (auto segment : m_traceStack) {
+        if (!segment.empty()) segment.pop_back();
+        m_cexTrace.insert(m_cexTrace.end(), segment.begin(), segment.end());
+    }
+    auto closing_segment = closingTrace;
+    if (!closing_segment.empty()) closing_segment.pop_back();
+    m_cexTrace.insert(m_cexTrace.end(), closing_segment.begin(), closing_segment.end());
 }
 
 std::unique_ptr<IncrAlg> RLive::MakeSafeChecker() {
@@ -82,8 +96,6 @@ std::unique_ptr<IncrAlg> RLive::MakeSafeChecker() {
     switch (m_settings.safetyBaseAlg) {
     case MCAlgorithm::FCAR:
         return std::make_unique<FCAR>(sub_settings, m_model, m_log);
-    case MCAlgorithm::BCAR:
-        return std::make_unique<BCAR>(sub_settings, m_model, m_log);
     case MCAlgorithm::IC3:
         return std::make_unique<IC3>(sub_settings, m_model, m_log);
     default:
@@ -140,8 +152,31 @@ bool RLive::PruneDead(const Cube &s) {
             return false;
         } else {
             auto new_dead = GetUnsatAssumption(m_pdSolver, assumption);
+
+            // generalize dead
+            if (new_dead.size() > 2) {
+                std::unordered_set<int> required;
+
+                for (int i = 0; i < static_cast<int>(new_dead.size()); ++i) {
+                    if (required.find(i) != required.end()) continue;
+
+                    Cube tmp;
+                    tmp.reserve(new_dead.size() - 1);
+                    for (int j = 0; j < static_cast<int>(new_dead.size()); ++j) {
+                        if (j != i) tmp.emplace_back(new_dead[j]);
+                    }
+
+                    bool is_not_dead = m_pdSolver->Solve(tmp);
+                    if (is_not_dead) {
+                        required.emplace(i);
+                    } else {
+                        new_dead.swap(tmp);
+                        required.clear();
+                        i = -1;
+                    }
+                }
+            }
             LOG_L(m_log, 2, "get new dead", CubeToStr(new_dead));
-            m_pdSolver->AddShoalConstraints({}, vector<Cube>{new_dead}, 1);
             m_pdSolver->AddCubeAsClauseK(new_dead, true, 1);
             m_globalDead.emplace_back(new_dead);
         }
