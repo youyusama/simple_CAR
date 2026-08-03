@@ -60,7 +60,7 @@ void Solver::reset() {
         qhead = trail.size();
         trail_lim.resize(0);
     }
-    assert(assigns[temp_cls_act_var] != assign_Undef);
+    assert(assigns[temp_cls_act_var] == assign_Undef);
 
     if (temp_cls_release_pending) {
         removeTempLearnt();
@@ -599,6 +599,8 @@ void Solver::reduceDB() {
             Clause &c = ca->get_clause(learnts[i]);
             if (c.size() > 2 && !locked(c))
                 removeClause(learnts[i]);
+            else
+                learnts[j++] = learnts[i];
         } else
             learnts[j++] = learnts[i];
     }
