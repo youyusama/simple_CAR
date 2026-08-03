@@ -21,6 +21,9 @@ class IC3 : public IncrAlg {
     ~IC3();
 
     CheckResult Run() override;
+    int GetSafeDepth() const override {
+        return m_checkResult == CheckResult::Safe ? std::max(0, m_invariantLevel - 1) : -1;
+    }
     bool SupportsWitness() const override { return true; }
     void RefineWitnessPropertyLit(WitnessBuilder &builder) const override;
 

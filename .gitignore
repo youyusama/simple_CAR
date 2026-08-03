@@ -78,6 +78,7 @@ __pycache__/
 *.pyc
 
 build/
+build-asan/
 release/
 deps/
 scripts/

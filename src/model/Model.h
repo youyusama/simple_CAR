@@ -93,6 +93,7 @@ class Model {
     };
 
     Model(Settings settings, Log &log);
+    Model(Settings settings, Log &log, std::shared_ptr<aiger> aig);
 
     inline Var TrueId() {
         return m_cnfTrueVar;
@@ -215,6 +216,8 @@ class Model {
     Lit MakeITE(Lit i, Lit t, Lit e);
 
   private:
+    void InitializeFromAiger();
+
     void SetTsimReachedStateCubes(const std::vector<Cube> &cubes);
 
     void ApplyEquivalence();
