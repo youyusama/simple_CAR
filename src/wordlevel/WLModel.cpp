@@ -6,6 +6,8 @@
 #include "WLBoolectorBitblast.h"
 #include "WLPackageResize.h"
 
+#include <stdexcept>
+
 namespace car {
 
 WLModel::WLModel(const Settings &settings, Log &log)
@@ -14,42 +16,83 @@ WLModel::WLModel(const Settings &settings, Log &log)
     Rebuild({});
 }
 
-void WLModel::Rebuild(const std::vector<WLMemoryPair> &memoryPairs) {
-    // Re-run the complete WL pipeline after each CEGAR refinement.
-    WLModelLoadResult result = LoadBtor2(m_inputPath, memoryPairs);
+void WLModel::AdoptLoadResult(WLModelLoadResult result) {
     m_hasArrays = result.hasArrays;
     m_arrayReads = std::move(result.arrayReads);
     m_traceMap = std::move(result.traceMap);
-    m_model = std::make_unique<Model>(m_settings, m_log, std::move(result.aig));
+    m_aig = std::move(result.aig);
+}
+
+void WLModel::WriteBitblastOutput() const {
+    if (!m_aig || m_settings.wlBitblastOutputPath.empty()) {
+        throw std::runtime_error("missing AIGER bitblast output");
+    }
+    if (!aiger_open_and_write_to_file(
+            m_aig.get(), m_settings.wlBitblastOutputPath.c_str())) {
+        throw std::runtime_error(
+            "failed to write AIGER output: " +
+            m_settings.wlBitblastOutputPath);
+    }
+}
+
+void WLModel::Rebuild(const std::vector<WLMemoryPair> &memoryPairs) {
+    // Re-run the complete WL pipeline after each CEGAR refinement.
+    WLModelLoadResult result = LoadBtor2(memoryPairs);
+    AdoptLoadResult(std::move(result));
+
+    // AIG export stops at the final bitblast, before Model simplification.
+    if (!m_settings.wlBitblastOutputPath.empty()) {
+        m_model.reset();
+        return;
+    }
+    m_model = std::make_unique<Model>(m_settings, m_log, m_aig);
 }
 
 WLModelLoadResult
-WLModel::LoadBtor2(const std::string &path,
-                   const std::vector<WLMemoryPair> &memoryPairs) {
+WLModel::LoadBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
     // Stage 1: parse and validate the format-specific source model.
-    Btor2IR ir = Btor2Frontend::LoadIR(path);
+    Btor2IR ir = Btor2Frontend::LoadIR(m_inputPath);
     const bool hasArrays = ir.HasArrays();
+    const bool bitblastOnly = !m_settings.wlBitblastOutputPath.empty();
 
-    // Stage 2: eliminate arrays through selected-slot abstraction.
-    WLArrayAbstractionResult abstraction =
-        WLArrayAbstraction::Run(ir, memoryPairs);
-    if (abstraction.ir.HasArrays()) {
-        throw std::runtime_error(
-            "array abstraction produced an array-valued word-level model");
+    Btor2IR processedIr;
+    std::vector<WLMemoryPair> tracePairs;
+    std::vector<WLArrayRead> reads;
+    WLIRTraceMap traceSources;
+
+    // Stage 2: normal checking abstracts arrays; export mode rejects them.
+    if (bitblastOnly) {
+        if (hasArrays) {
+            throw std::runtime_error(
+                "--wl-bitblast-only accepts only array-free BTOR2 input");
+        }
+        processedIr = std::move(ir);
+    } else {
+        WLArrayAbstractionResult abstraction =
+            WLArrayAbstraction::Run(ir, memoryPairs);
+        if (abstraction.ir.HasArrays()) {
+            throw std::runtime_error(
+                "array abstraction produced an array-valued word-level model");
+        }
+        processedIr = std::move(abstraction.ir);
+        tracePairs = std::move(abstraction.tracePairs);
+        reads = std::move(abstraction.reads);
+        traceSources = std::move(abstraction.traceSources);
     }
 
     // Stage 3: compact safe finite-domain packages in the array-free IR.
-    WLPackageResize::Run(abstraction.ir);
+    if (!m_settings.wlDisablePackageResize)
+        WLPackageResize::Run(processedIr, traceSources);
 
     // Stage 4: standard bitblast produces the bit-level model and trace mapping.
     WLTraceMap traceMap;
-    traceMap.memoryPairs = std::move(abstraction.tracePairs);
-    std::shared_ptr<aiger> aig = GenerateWLAig(
-        abstraction.ir, abstraction.traceSources, traceMap);
+    traceMap.memoryPairs = std::move(tracePairs);
+    std::shared_ptr<aiger> aig =
+        GenerateWLAig(processedIr, traceSources, traceMap);
 
     return {std::move(aig),
             hasArrays,
-            std::move(abstraction.reads),
+            std::move(reads),
             std::move(traceMap)};
 }
 

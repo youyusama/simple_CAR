@@ -79,6 +79,17 @@ bool SimpleCAR::LoadModel() {
         return false;
     }
 
+    // AIG export stops after word-level lowering and does not create a checker.
+    if (!m_settings.wlBitblastOutputPath.empty()) {
+        try {
+            m_wmodel->WriteBitblastOutput();
+        } catch (const std::exception &error) {
+            std::cerr << error.what() << std::endl;
+            return false;
+        }
+        return true;
+    }
+
     // create checker
     try {
         if (m_wmodel) {

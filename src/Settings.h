@@ -44,6 +44,8 @@ struct Settings {
     int verbosity = 0;
     string aigFilePath;
     string witnessOutputDir = "";
+    bool wlDisablePackageResize = false;
+    string wlBitblastOutputPath = "";
 
     MCSATSolver solver = MCSATSolver::minisat;
     MCAlgorithm alg = MCAlgorithm::FCAR;

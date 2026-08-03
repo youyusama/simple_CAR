@@ -37,20 +37,23 @@ class WLModel {
     bool HasArrays() const { return m_hasArrays; }
     const std::vector<WLArrayRead> &ArrayReads() const { return m_arrayReads; }
     const WLTraceMap &TraceMap() const { return m_traceMap; }
+    const std::shared_ptr<aiger> &GetAiger() const { return m_aig; }
     const std::string &InputPath() const { return m_inputPath; }
+
+    void WriteBitblastOutput() const;
 
     // Rebuild the abstraction using the current CEGAR memory pairs.
     void Rebuild(const std::vector<WLMemoryPair> &memoryPairs);
 
-    // Execute parse, array abstraction, package resize, and bitblasting.
-    static WLModelLoadResult
-    LoadBtor2(const std::string &path,
-              const std::vector<WLMemoryPair> &memoryPairs = {});
-
   private:
+    WLModelLoadResult
+    LoadBtor2(const std::vector<WLMemoryPair> &memoryPairs);
+    void AdoptLoadResult(WLModelLoadResult result);
+
     const Settings &m_settings;
     Log &m_log;
     std::string m_inputPath;
+    std::shared_ptr<aiger> m_aig;
     std::unique_ptr<Model> m_model;
     bool m_hasArrays{false};
     std::vector<WLArrayRead> m_arrayReads;

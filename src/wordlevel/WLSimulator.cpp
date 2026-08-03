@@ -3,10 +3,12 @@
 #include <boost/multiprecision/cpp_int.hpp>
 
 #include <algorithm>
-#include <fstream>
 #include <cstdlib>
+#include <fstream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
+#include <tuple>
 #include <unordered_set>
 
 namespace car {
@@ -327,23 +329,24 @@ class WLSimulator::Impl {
 
     void SetTraceBit(Frame &frame, const WLTraceBit &desc, bool value) const {
         // Route each AIGER bit to its original or abstraction-specific value.
+        const uint32_t originalBit = desc.originalBitOffset + desc.bit;
         switch (desc.kind) {
         case WLTraceBitKind::OriginalInput: {
             BitValue &bits =
                 EnsureBits(frame.inputs, desc.nodeId, NodeWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << desc.bit);
+            if (value) bits.value |= (cpp_int(1) << originalBit);
             break;
         }
         case WLTraceBitKind::OriginalState: {
             BitValue &bits =
                 EnsureBits(frame.states, desc.nodeId, NodeWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << desc.bit);
+            if (value) bits.value |= (cpp_int(1) << originalBit);
             break;
         }
         case WLTraceBitKind::AbstractReadInput: {
             BitValue &bits = EnsureBits(
                 frame.readMisses, desc.nodeId, NodeWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << desc.bit);
+            if (value) bits.value |= (cpp_int(1) << originalBit);
             break;
         }
         case WLTraceBitKind::ArrayNextInput: {
@@ -351,22 +354,40 @@ class WLSimulator::Impl {
                 EnsureBits(frame.arrayNextInputs,
                            desc.nodeId,
                            ArrayElementWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << desc.bit);
+            if (value) bits.value |= (cpp_int(1) << originalBit);
             break;
         }
         case WLTraceBitKind::SelectorState: {
             BitValue &bits = EnsurePairBits(
                 frame.selectors, desc.pairIndex, ArrayIndexWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << desc.bit);
+            if (value) bits.value |= (cpp_int(1) << originalBit);
             break;
         }
         case WLTraceBitKind::ContentState: {
             BitValue &bits = EnsurePairBits(
                 frame.contents, desc.pairIndex, ArrayElementWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << desc.bit);
+            if (value) bits.value |= (cpp_int(1) << originalBit);
             break;
         }
         default: break;
+        }
+    }
+
+    void SetTraceSegment(Frame &frame,
+                         const WLTraceBit &desc,
+                         cpp_int encoded) const {
+        // The all-one package code denotes the original all-one constant;
+        // every other code is injected by zero extension.
+        cpp_int decoded = Normalize(encoded, desc.encodedSegmentWidth);
+        if (decoded == Mask(desc.encodedSegmentWidth))
+            decoded = Mask(desc.originalSegmentWidth);
+        for (uint32_t bit = 0; bit < desc.originalSegmentWidth; ++bit) {
+            WLTraceBit decodedBit = desc;
+            decodedBit.bit = bit;
+            decodedBit.resized = false;
+            SetTraceBit(frame,
+                        decodedBit,
+                        static_cast<bool>((decoded >> bit) & 1));
         }
     }
 
@@ -384,13 +405,39 @@ class WLSimulator::Impl {
         // Input and latch cubes use final AIGER variable IDs from WLTraceMap.
         auto inputValues = CubeValues(traceFrame.first);
         auto latchValues = CubeValues(traceFrame.second);
-        for (const auto &[var, desc] : traceMap.inputBits) {
-            auto it = inputValues.find(var);
-            if (it != inputValues.end()) SetTraceBit(frame, desc, it->second);
-        }
-        for (const auto &[var, desc] : traceMap.latchBits) {
-            auto it = latchValues.find(var);
-            if (it != latchValues.end()) SetTraceBit(frame, desc, it->second);
+        using SegmentKey =
+            std::tuple<int, int64_t, size_t, uint32_t, uint32_t, uint32_t>;
+        struct EncodedSegment {
+            WLTraceBit descriptor;
+            cpp_int value{0};
+        };
+        std::map<SegmentKey, EncodedSegment> encodedSegments;
+        auto load = [&](const auto &descriptors, const auto &values) {
+            for (const auto &[var, desc] : descriptors) {
+                auto value = values.find(var);
+                if (value == values.end()) continue;
+                if (!desc.resized) {
+                    SetTraceBit(frame, desc, value->second);
+                    continue;
+                }
+                SegmentKey key{static_cast<int>(desc.kind),
+                               desc.nodeId,
+                               desc.pairIndex,
+                               desc.originalBitOffset,
+                               desc.originalSegmentWidth,
+                               desc.encodedSegmentWidth};
+                auto [it, inserted] = encodedSegments.emplace(
+                    key, EncodedSegment{desc, 0});
+                (void)inserted;
+                if (value->second)
+                    it->second.value |= (cpp_int(1) << desc.bit);
+            }
+        };
+        load(traceMap.inputBits, inputValues);
+        load(traceMap.latchBits, latchValues);
+        for (const auto &[key, segment] : encodedSegments) {
+            (void)key;
+            SetTraceSegment(frame, segment.descriptor, segment.value);
         }
     }
 

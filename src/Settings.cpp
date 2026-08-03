@@ -1,5 +1,7 @@
 #include "Settings.h"
 
+#include <filesystem>
+
 namespace car {
 
 bool ParseSettings(int argc, char **argv, Settings &settings) {
@@ -14,6 +16,14 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
 
     app.add_option("-w", settings.witnessOutputDir, "Witness Output Dir")
         ->check(CLI::ExistingDirectory);
+
+    app.add_flag("--wl-no-package-resize", settings.wlDisablePackageResize,
+                 "Disable word-level package resizing")
+        ->default_val(false);
+
+    app.add_option("--wl-bitblast-only", settings.wlBitblastOutputPath,
+                   "Preprocess an array-free BTOR2 model and write the resulting .aig")
+        ->type_name("OUTPUT.aig");
 
     app.add_option("-a", settings.alg, "Model Checking Algorithm")
         ->transform(CLI::CheckedTransformer(
@@ -157,6 +167,19 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
 
     try {
         app.parse(argc, argv);
+
+        if (!settings.wlBitblastOutputPath.empty()) {
+            if (std::filesystem::path(settings.aigFilePath).extension() !=
+                ".btor2") {
+                throw CLI::ValidationError(
+                    "--wl-bitblast-only", "requires a .btor2 input file");
+            }
+            if (std::filesystem::path(settings.wlBitblastOutputPath)
+                    .extension() != ".aig") {
+                throw CLI::ValidationError(
+                    "--wl-bitblast-only", "output path must end in .aig");
+            }
+        }
 
         bool requires_incremental_safety_checker =
             settings.alg == MCAlgorithm::KLIVE ||

@@ -72,8 +72,16 @@ class BoolectorModel {
         std::vector<WLTraceBit> bits;
         bits.reserve(width);
         for (uint32_t bit = 0; bit < width; ++bit) {
-            bits.push_back(
-                {source.kind, source.nodeId, bit, source.pairIndex});
+            bits.push_back({source.kind,
+                            source.nodeId,
+                            bit,
+                            source.pairIndex,
+                            source.originalBitOffset,
+                            source.originalSegmentWidth
+                                ? source.originalSegmentWidth
+                                : width,
+                            width,
+                            source.resized});
         }
         traceBits[node] = std::move(bits);
     }

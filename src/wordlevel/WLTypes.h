@@ -39,8 +39,14 @@ enum class WLTraceBitKind {
 struct WLTraceBit {
     WLTraceBitKind kind{WLTraceBitKind::None};
     int64_t nodeId{0};
+    // Bit position in the encoded segment emitted by the transformed model.
     uint32_t bit{0};
     size_t pairIndex{0};
+    // Segment metadata used to inject compact package values into original words.
+    uint32_t originalBitOffset{0};
+    uint32_t originalSegmentWidth{0};
+    uint32_t encodedSegmentWidth{0};
+    bool resized{false};
 };
 
 // Provenance attached to a word-level IR variable before bitblasting.
@@ -48,6 +54,9 @@ struct WLIRTraceSource {
     WLTraceBitKind kind{WLTraceBitKind::None};
     int64_t nodeId{0};
     size_t pairIndex{0};
+    uint32_t originalBitOffset{0};
+    uint32_t originalSegmentWidth{0};
+    bool resized{false};
 };
 
 using WLIRTraceMap = std::unordered_map<int64_t, WLIRTraceSource>;
