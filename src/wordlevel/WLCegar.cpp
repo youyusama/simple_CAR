@@ -60,7 +60,7 @@ unsigned WLCegar::MaxDelay() const {
 bool WLCegar::ReloadModel() {
     try {
         // Rebuild the abstraction and recreate the selected checker on its new AIG.
-        m_model.Rebuild(m_memoryPairs);
+        m_model.Build(m_memoryPairs);
         m_checker = m_checkerFactory(m_model.BitModel(), m_log);
         if (!m_checker) return false;
     } catch (const std::exception &error) {

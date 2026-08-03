@@ -29,7 +29,7 @@ WLChecker::WLChecker(const Settings &settings,
         throw std::runtime_error("word-level checker requires a bit-level checker.");
     }
 
-    if (m_model.HasArrays()) {
+    if (m_model.SourceHasArrays()) {
         // Array inputs wrap the selected checker in simulator-based CEGAR.
         WLCegar::CheckerFactory checkerFactory =
             [this](Model &nextModel, Log &nextLog) {

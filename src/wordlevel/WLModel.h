@@ -17,10 +17,10 @@ namespace car {
 class Log;
 class Model;
 
-struct WLModelLoadResult {
+struct WLModelBuildResult {
     // Completed WL pipeline result before constructing the bit-level Model.
     std::shared_ptr<aiger> aig;
-    bool hasArrays{false};
+    bool sourceHasArrays{false};
     std::vector<WLArrayRead> arrayReads;
     WLTraceMap traceMap;
 };
@@ -34,28 +34,26 @@ class WLModel {
     Model &BitModel() { return *m_model; }
     const Model &BitModel() const { return *m_model; }
 
-    bool HasArrays() const { return m_hasArrays; }
+    bool SourceHasArrays() const { return m_sourceHasArrays; }
     const std::vector<WLArrayRead> &ArrayReads() const { return m_arrayReads; }
     const WLTraceMap &TraceMap() const { return m_traceMap; }
-    const std::shared_ptr<aiger> &GetAiger() const { return m_aig; }
     const std::string &InputPath() const { return m_inputPath; }
 
-    void WriteBitblastOutput() const;
+    void WriteBitblastAig() const;
 
-    // Rebuild the abstraction using the current CEGAR memory pairs.
-    void Rebuild(const std::vector<WLMemoryPair> &memoryPairs);
+    // Run the complete WL pipeline using the current CEGAR memory pairs.
+    void Build(const std::vector<WLMemoryPair> &memoryPairs);
 
   private:
-    WLModelLoadResult
-    LoadBtor2(const std::vector<WLMemoryPair> &memoryPairs);
-    void AdoptLoadResult(WLModelLoadResult result);
+    WLModelBuildResult
+    BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs);
 
     const Settings &m_settings;
     Log &m_log;
     std::string m_inputPath;
     std::shared_ptr<aiger> m_aig;
     std::unique_ptr<Model> m_model;
-    bool m_hasArrays{false};
+    bool m_sourceHasArrays{false};
     std::vector<WLArrayRead> m_arrayReads;
     WLTraceMap m_traceMap;
 };

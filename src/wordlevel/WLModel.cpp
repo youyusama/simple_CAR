@@ -13,17 +13,10 @@ namespace car {
 WLModel::WLModel(const Settings &settings, Log &log)
     : m_settings(settings), m_log(log), m_inputPath(settings.aigFilePath) {
     // The initial abstraction tracks no memory/address pairs.
-    Rebuild({});
+    Build({});
 }
 
-void WLModel::AdoptLoadResult(WLModelLoadResult result) {
-    m_hasArrays = result.hasArrays;
-    m_arrayReads = std::move(result.arrayReads);
-    m_traceMap = std::move(result.traceMap);
-    m_aig = std::move(result.aig);
-}
-
-void WLModel::WriteBitblastOutput() const {
+void WLModel::WriteBitblastAig() const {
     if (!m_aig || m_settings.wlBitblastOutputPath.empty()) {
         throw std::runtime_error("missing AIGER bitblast output");
     }
@@ -35,10 +28,13 @@ void WLModel::WriteBitblastOutput() const {
     }
 }
 
-void WLModel::Rebuild(const std::vector<WLMemoryPair> &memoryPairs) {
+void WLModel::Build(const std::vector<WLMemoryPair> &memoryPairs) {
     // Re-run the complete WL pipeline after each CEGAR refinement.
-    WLModelLoadResult result = LoadBtor2(memoryPairs);
-    AdoptLoadResult(std::move(result));
+    WLModelBuildResult result = BuildFromBtor2(memoryPairs);
+    m_sourceHasArrays = result.sourceHasArrays;
+    m_arrayReads = std::move(result.arrayReads);
+    m_traceMap = std::move(result.traceMap);
+    m_aig = std::move(result.aig);
 
     // AIG export stops at the final bitblast, before Model simplification.
     if (!m_settings.wlBitblastOutputPath.empty()) {
@@ -48,11 +44,11 @@ void WLModel::Rebuild(const std::vector<WLMemoryPair> &memoryPairs) {
     m_model = std::make_unique<Model>(m_settings, m_log, m_aig);
 }
 
-WLModelLoadResult
-WLModel::LoadBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
+WLModelBuildResult
+WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
     // Stage 1: parse and validate the format-specific source model.
     Btor2IR ir = Btor2Frontend::LoadIR(m_inputPath);
-    const bool hasArrays = ir.HasArrays();
+    const bool sourceHasArrays = ir.HasArrays();
     const bool bitblastOnly = !m_settings.wlBitblastOutputPath.empty();
 
     Btor2IR processedIr;
@@ -62,7 +58,7 @@ WLModel::LoadBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
 
     // Stage 2: normal checking abstracts arrays; export mode rejects them.
     if (bitblastOnly) {
-        if (hasArrays) {
+        if (sourceHasArrays) {
             throw std::runtime_error(
                 "--wl-bitblast-only accepts only array-free BTOR2 input");
         }
@@ -91,7 +87,7 @@ WLModel::LoadBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
         GenerateWLAig(processedIr, traceSources, traceMap);
 
     return {std::move(aig),
-            hasArrays,
+            sourceHasArrays,
             std::move(reads),
             std::move(traceMap)};
 }
