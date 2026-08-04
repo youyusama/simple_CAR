@@ -50,6 +50,10 @@ class Btor2IR {
     // Mutation APIs are used by word-level IR-to-IR optimization passes.
     Btor2IRNode &MutableNode(int64_t id);
     std::vector<Btor2IRNode> &MutableNodes() { return m_nodes; }
+    // Fresh IDs share the global BTOR2 sort/node namespace.
+    int64_t FreshId();
+    // Derived IRs call this before copying source declarations incrementally.
+    void ReserveFreshIdsAfter(const Btor2IR &source);
     void AddSort(const Btor2IRSort &sort);
     void AddNode(const Btor2IRNode &node);
     void SetHasArrays(bool value) { m_hasArrays = value; }
@@ -58,8 +62,10 @@ class Btor2IR {
     friend class Btor2Frontend;
 
     static Btor2IR Parse(const std::string &path);
+    void ObserveId(int64_t id);
 
     bool m_hasArrays{false};
+    uint64_t m_nextFreshId{1};
     std::vector<Btor2IRNode> m_nodes;
     std::unordered_map<int64_t, Btor2IRSort> m_sorts;
     std::unordered_map<int64_t, size_t> m_nodeIndex;

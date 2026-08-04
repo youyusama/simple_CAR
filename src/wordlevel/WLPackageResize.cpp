@@ -153,11 +153,11 @@ std::vector<bool> ConstantBits(const Btor2IR &ir,
 // Shared constants must not merge otherwise independent word-level packages.
 Btor2IR CloneConstantsPerUse(const Btor2IR &input) {
     Btor2IR output;
+    output.ReserveFreshIdsAfter(input);
     for (const auto &[id, sort] : input.Sorts()) {
         (void)id;
         output.AddSort(sort);
     }
-    int64_t nextId = INT64_C(1) << 55;
     for (const Btor2IRNode &node : input.Nodes()) {
         Btor2IRNode copy = node;
         const uint32_t operands = DataOperandCount(node.tag);
@@ -168,7 +168,7 @@ Btor2IR CloneConstantsPerUse(const Btor2IR &input) {
             if (IsConstant(argument.tag) &&
                 input.Sort(argument.sortId).width > 1) {
                 Btor2IRNode proxy = argument;
-                proxy.id = nextId++;
+                proxy.id = output.FreshId();
                 proxy.symbol.clear();
                 output.AddNode(proxy);
                 argumentId = proxy.id;
@@ -176,7 +176,7 @@ Btor2IR CloneConstantsPerUse(const Btor2IR &input) {
             // Turn BTOR2's signed-ID inversion into an ordinary bitwise node.
             if (signedArg < 0) {
                 Btor2IRNode inversion;
-                inversion.id = nextId++;
+                inversion.id = output.FreshId();
                 inversion.tag = BTOR2_TAG_not;
                 inversion.sortId = argument.sortId;
                 inversion.nargs = 1;
@@ -1022,7 +1022,7 @@ class SegmentIRRewriter {
     int64_t EnsureSort(uint32_t width) {
         auto found = m_sorts.find(width);
         if (found != m_sorts.end()) return found->second;
-        const int64_t id = m_nextSortId++;
+        const int64_t id = m_output.FreshId();
         m_output.AddSort({id, BTOR2_TAG_SORT_bitvec, width, 0, 0});
         m_sorts[width] = id;
         return id;
@@ -1034,10 +1034,11 @@ class SegmentIRRewriter {
                     uint32_t nargs = 0,
                     std::string symbol = {},
                     std::string constant = {}) {
+        const int64_t sortId = EnsureSort(width);
         Btor2IRNode node;
-        node.id = m_nextNodeId++;
+        node.id = m_output.FreshId();
         node.tag = tag;
-        node.sortId = EnsureSort(width);
+        node.sortId = sortId;
         node.nargs = nargs;
         node.args = args;
         node.symbol = std::move(symbol);
@@ -1367,8 +1368,6 @@ class SegmentIRRewriter {
     const WLIRTraceMap &m_inputTraceSources;
     Btor2IR m_output;
     WLIRTraceMap m_outputTraceSources;
-    int64_t m_nextSortId{INT64_C(1) << 53};
-    int64_t m_nextNodeId{INT64_C(1) << 54};
     std::unordered_map<uint32_t, int64_t> m_sorts;
     std::unordered_map<int64_t, std::vector<Piece>> m_pieces;
     std::unordered_map<int64_t, int64_t> m_whole;

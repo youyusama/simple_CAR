@@ -13,6 +13,7 @@ class Builder {
     Builder(const Btor2IR &input, const std::vector<WLMemoryPair> &pairs)
         : m_input(input), m_pairs(pairs) {
         // Build a fresh array-free IR instead of mutating the source BTOR2 model.
+        m_output.ReserveFreshIdsAfter(m_input);
         CopyBitVectorSorts();
         IndexModel();
         CreateScalarVariables();
@@ -53,7 +54,7 @@ class Builder {
             if (sort.tag == BTOR2_TAG_SORT_bitvec && sort.width == width)
                 return id;
         }
-        int64_t id = NewSyntheticSortId();
+        int64_t id = m_output.FreshId();
         m_output.AddSort(
             {id, BTOR2_TAG_SORT_bitvec, width, 0, 0});
         return id;
@@ -142,8 +143,8 @@ class Builder {
                 TrackedSlot slot;
                 slot.pair = pair;
                 slot.pairIndex = m_tracePairs.size();
-                slot.selectorId = NewSyntheticNodeId();
-                slot.contentId = NewSyntheticNodeId();
+                slot.selectorId = m_output.FreshId();
+                slot.contentId = m_output.FreshId();
 
                 AddNode(slot.selectorId,
                         BTOR2_TAG_state,
@@ -264,7 +265,7 @@ class Builder {
                      0},
                     2);
                 for (unsigned i = 0; i < slot.pair.delay; ++i) {
-                    int64_t delayId = NewSyntheticNodeId();
+                    int64_t delayId = m_output.FreshId();
                     AddNode(delayId,
                             BTOR2_TAG_state,
                             boolSort,
@@ -376,7 +377,7 @@ class Builder {
             return read.id;
         }
 
-        int64_t result = NewSyntheticNodeId();
+        int64_t result = m_output.FreshId();
         AddNode(result,
                 BTOR2_TAG_input,
                 arraySort.elementSort,
@@ -399,7 +400,7 @@ class Builder {
                 {address, slot.selectorId, 0},
                 2);
             int64_t id =
-                index == 0 ? read.id : NewSyntheticNodeId();
+                index == 0 ? read.id : m_output.FreshId();
             AddNode(id,
                     BTOR2_TAG_ite,
                     arraySort.elementSort,
@@ -448,7 +449,7 @@ class Builder {
         case BTOR2_TAG_input: {
             // A nondeterministic whole-array next value becomes one scalar input per slot.
             const Btor2IRSort &arraySort = m_input.Sort(node.sortId);
-            int64_t inputId = NewSyntheticNodeId();
+            int64_t inputId = m_output.FreshId();
             AddNode(inputId,
                     BTOR2_TAG_input,
                     arraySort.elementSort,
@@ -469,8 +470,8 @@ class Builder {
                           int64_t sortId,
                           std::array<int64_t, 3> args,
                           uint32_t nargs) {
-        // Expression helpers allocate synthetic IDs above the BTOR2 input ID range.
-        int64_t id = NewSyntheticNodeId();
+        // Expression helpers allocate IDs above the complete source ID space.
+        int64_t id = m_output.FreshId();
         AddNode(id, tag, sortId, args, nargs, {});
         return id;
     }
@@ -479,7 +480,7 @@ class Builder {
                      int64_t sortId,
                      int64_t lhs,
                      int64_t rhs) {
-        AddNode(NewSyntheticNodeId(),
+        AddNode(m_output.FreshId(),
                 tag,
                 sortId,
                 {lhs, rhs, 0},
@@ -503,17 +504,12 @@ class Builder {
         m_output.AddNode(node);
     }
 
-    int64_t NewSyntheticNodeId() { return m_nextSyntheticNodeId++; }
-    int64_t NewSyntheticSortId() { return m_nextSyntheticSortId++; }
-
     const Btor2IR &m_input;
     const std::vector<WLMemoryPair> &m_pairs;
     Btor2IR m_output;
     std::vector<WLMemoryPair> m_tracePairs;
     std::vector<WLArrayRead> m_reads;
     WLIRTraceMap m_traceSources;
-    int64_t m_nextSyntheticNodeId{INT64_C(1) << 50};
-    int64_t m_nextSyntheticSortId{INT64_C(1) << 49};
     std::unordered_map<int64_t, int64_t> m_scalarMap;
     std::unordered_map<int64_t, int64_t> m_inits;
     std::unordered_map<int64_t, int64_t> m_next;

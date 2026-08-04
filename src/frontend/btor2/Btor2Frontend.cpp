@@ -1,7 +1,9 @@
 #include "Btor2Frontend.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -56,9 +58,8 @@ Btor2IR Btor2IR::Parse(const std::string &path) {
             } else {
                 sort.indexSort = line->sort.array.index;
                 sort.elementSort = line->sort.array.element;
-                result.m_hasArrays = true;
             }
-            result.m_sorts.emplace(sort.id, sort);
+            result.AddSort(sort);
             continue;
         }
 
@@ -74,8 +75,7 @@ Btor2IR Btor2IR::Parse(const std::string &path) {
         }
         if (line->constant) node.constant = line->constant;
         if (line->symbol) node.symbol = line->symbol;
-        result.m_nodeIndex.emplace(node.id, result.m_nodes.size());
-        result.m_nodes.push_back(std::move(node));
+        result.AddNode(node);
     }
 
     btor2parser_delete(parser);
@@ -110,9 +110,11 @@ Btor2IRNode &Btor2IR::MutableNode(int64_t id) {
 }
 
 void Btor2IR::AddSort(const Btor2IRSort &sort) {
-    // Pass-generated sorts must remain globally unique within the transformed IR.
-    if (!m_sorts.emplace(sort.id, sort).second) {
-        throw std::runtime_error("duplicate word-level sort id " +
+    // BTOR2 sort and node declarations share one global positive ID space.
+    ObserveId(sort.id);
+    if (m_nodeIndex.count(sort.id) ||
+        !m_sorts.emplace(sort.id, sort).second) {
+        throw std::runtime_error("duplicate word-level id " +
                                  std::to_string(sort.id));
     }
     if (sort.tag == BTOR2_TAG_SORT_array) m_hasArrays = true;
@@ -120,11 +122,32 @@ void Btor2IR::AddSort(const Btor2IRSort &sort) {
 
 void Btor2IR::AddNode(const Btor2IRNode &node) {
     // Keep the vector order for traversal and an ID index for constant-time lookup.
-    if (!m_nodeIndex.emplace(node.id, m_nodes.size()).second) {
-        throw std::runtime_error("duplicate word-level node id " +
+    ObserveId(node.id);
+    if (m_sorts.count(node.id) ||
+        !m_nodeIndex.emplace(node.id, m_nodes.size()).second) {
+        throw std::runtime_error("duplicate word-level id " +
                                  std::to_string(node.id));
     }
     m_nodes.push_back(node);
+}
+
+void Btor2IR::ObserveId(int64_t id) {
+    if (id <= 0)
+        throw std::runtime_error("word-level IDs must be positive");
+    m_nextFreshId = std::max(
+        m_nextFreshId, static_cast<uint64_t>(id) + UINT64_C(1));
+}
+
+int64_t Btor2IR::FreshId() {
+    if (m_nextFreshId >
+        static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        throw std::runtime_error("word-level ID space exhausted");
+    }
+    return static_cast<int64_t>(m_nextFreshId++);
+}
+
+void Btor2IR::ReserveFreshIdsAfter(const Btor2IR &source) {
+    m_nextFreshId = std::max(m_nextFreshId, source.m_nextFreshId);
 }
 
 void Btor2Frontend::Validate(const Btor2IR &ir) {
