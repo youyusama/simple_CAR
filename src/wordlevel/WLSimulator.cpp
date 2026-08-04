@@ -1,94 +1,35 @@
 #include "WLSimulator.h"
+#include "WLBitVector.h"
 
-#include <boost/multiprecision/cpp_int.hpp>
+#include <btorsim/btorsimbv.h>
 
-#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <map>
-#include <sstream>
-#include <stdexcept>
 #include <tuple>
 #include <unordered_set>
 
 namespace car {
-namespace {
-
-using boost::multiprecision::cpp_int;
-
-cpp_int Mask(unsigned width) {
-    // Construct a width-limited mask for arbitrary-precision bit-vectors.
-    if (width == 0) return 0;
-    return (cpp_int(1) << width) - 1;
-}
-
-cpp_int Normalize(cpp_int value, unsigned width) {
-    // BTOR2 arithmetic wraps every result to the destination width.
-    value &= Mask(width);
-    if (value < 0) value += (cpp_int(1) << width);
-    return value & Mask(width);
-}
-
-cpp_int Signed(cpp_int value, unsigned width) {
-    // Interpret a normalized bit-vector as a two's-complement integer.
-    value = Normalize(value, width);
-    if (width > 0 && ((value >> (width - 1)) & 1) != 0)
-        value -= (cpp_int(1) << width);
-    return value;
-}
-
-unsigned ToUnsigned(cpp_int value) {
-    unsigned result = 0;
-    for (unsigned i = 0; i < sizeof(unsigned) * 8; ++i) {
-        if (((value >> i) & 1) != 0) result |= (1U << i);
-    }
-    return result;
-}
-
-std::string ToBinary(cpp_int value, unsigned width) {
-    value = Normalize(value, width);
-    std::string out(width, '0');
-    for (unsigned i = 0; i < width; ++i) {
-        if (((value >> i) & 1) != 0) out[width - i - 1] = '1';
-    }
-    return out;
-}
-
-cpp_int ParseBinary(const std::string &text) {
-    cpp_int value = 0;
-    for (char c : text) {
-        value <<= 1;
-        if (c == '1') value += 1;
-    }
-    return value;
-}
-
-cpp_int ParseHex(const std::string &text) {
-    cpp_int value = 0;
-    for (char c : text) {
-        value <<= 4;
-        if (c >= '0' && c <= '9') value += c - '0';
-        else if (c >= 'a' && c <= 'f') value += c - 'a' + 10;
-        else if (c >= 'A' && c <= 'F') value += c - 'A' + 10;
-    }
-    return value;
-}
-
-} // namespace
 
 class WLSimulator::Impl {
   public:
     struct BitValue {
         unsigned width{0};
         bool known{false};
-        cpp_int value{0};
+        WLBitVector value;
 
-        static BitValue Unknown(unsigned width) { return {width, false, 0}; }
-        static BitValue Known(unsigned width, cpp_int value) {
-            return {width, true, Normalize(value, width)};
+        static BitValue Unknown(unsigned width) {
+            return {width, false, WLBitVector::Zero(width)};
         }
-        bool IsOne() const { return known && width == 1 && value == 1; }
-        bool IsZero() const { return known && value == 0; }
+        static BitValue Known(WLBitVector value) {
+            const unsigned width = value.Width();
+            return {width, true, std::move(value)};
+        }
+        static BitValue Known(unsigned width, uint64_t value) {
+            return Known(WLBitVector::FromUInt64(width, value));
+        }
+        bool IsOne() const { return known && width == 1 && value.IsOne(); }
+        bool IsZero() const { return known && value.IsZero(); }
     };
 
     struct ArrayValue {
@@ -232,9 +173,7 @@ class WLSimulator::Impl {
                 auto frameIt = m_frames[time].inputs.find(id);
                 if (frameIt != m_frames[time].inputs.end() &&
                     frameIt->second.known) {
-                    out << i << " "
-                        << ToBinary(frameIt->second.value,
-                                    frameIt->second.width)
+                    out << i << " " << frameIt->second.value.ToBinary()
                         << "\n";
                 }
             }
@@ -334,19 +273,19 @@ class WLSimulator::Impl {
         case WLTraceBitKind::OriginalInput: {
             BitValue &bits =
                 EnsureBits(frame.inputs, desc.nodeId, NodeWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << originalBit);
+            if (value) bits.value.SetBit(originalBit, true);
             break;
         }
         case WLTraceBitKind::OriginalState: {
             BitValue &bits =
                 EnsureBits(frame.states, desc.nodeId, NodeWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << originalBit);
+            if (value) bits.value.SetBit(originalBit, true);
             break;
         }
         case WLTraceBitKind::AbstractReadInput: {
             BitValue &bits = EnsureBits(
                 frame.readMisses, desc.nodeId, NodeWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << originalBit);
+            if (value) bits.value.SetBit(originalBit, true);
             break;
         }
         case WLTraceBitKind::ArrayNextInput: {
@@ -354,19 +293,19 @@ class WLSimulator::Impl {
                 EnsureBits(frame.arrayNextInputs,
                            desc.nodeId,
                            ArrayElementWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << originalBit);
+            if (value) bits.value.SetBit(originalBit, true);
             break;
         }
         case WLTraceBitKind::SelectorState: {
             BitValue &bits = EnsurePairBits(
                 frame.selectors, desc.pairIndex, ArrayIndexWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << originalBit);
+            if (value) bits.value.SetBit(originalBit, true);
             break;
         }
         case WLTraceBitKind::ContentState: {
             BitValue &bits = EnsurePairBits(
                 frame.contents, desc.pairIndex, ArrayElementWidth(desc.nodeId));
-            if (value) bits.value |= (cpp_int(1) << originalBit);
+            if (value) bits.value.SetBit(originalBit, true);
             break;
         }
         default: break;
@@ -375,19 +314,18 @@ class WLSimulator::Impl {
 
     void SetTraceSegment(Frame &frame,
                          const WLTraceBit &desc,
-                         cpp_int encoded) const {
+                         const WLBitVector &encoded) const {
         // The all-one package code denotes the original all-one constant;
         // every other code is injected by zero extension.
-        cpp_int decoded = Normalize(encoded, desc.encodedSegmentWidth);
-        if (decoded == Mask(desc.encodedSegmentWidth))
-            decoded = Mask(desc.originalSegmentWidth);
+        const bool expandsToOnes = encoded.IsOnes();
         for (uint32_t bit = 0; bit < desc.originalSegmentWidth; ++bit) {
             WLTraceBit decodedBit = desc;
             decodedBit.bit = bit;
             decodedBit.resized = false;
             SetTraceBit(frame,
                         decodedBit,
-                        static_cast<bool>((decoded >> bit) & 1));
+                        expandsToOnes ||
+                            (bit < encoded.Width() && encoded.GetBit(bit)));
         }
     }
 
@@ -409,7 +347,7 @@ class WLSimulator::Impl {
             std::tuple<int, int64_t, size_t, uint32_t, uint32_t, uint32_t>;
         struct EncodedSegment {
             WLTraceBit descriptor;
-            cpp_int value{0};
+            WLBitVector value;
         };
         std::map<SegmentKey, EncodedSegment> encodedSegments;
         auto load = [&](const auto &descriptors, const auto &values) {
@@ -427,10 +365,12 @@ class WLSimulator::Impl {
                                desc.originalSegmentWidth,
                                desc.encodedSegmentWidth};
                 auto [it, inserted] = encodedSegments.emplace(
-                    key, EncodedSegment{desc, 0});
+                    key,
+                    EncodedSegment{
+                        desc, WLBitVector::Zero(desc.encodedSegmentWidth)});
                 (void)inserted;
                 if (value->second)
-                    it->second.value |= (cpp_int(1) << desc.bit);
+                    it->second.value.SetBit(desc.bit, true);
             }
         };
         load(traceMap.inputBits, inputValues);
@@ -541,8 +481,8 @@ class WLSimulator::Impl {
             Value value = abstract ? EvalAbstract(-signedId) : Eval(-signedId);
             if (value.isArray || !value.bits.known)
                 return Value::BV(BitValue::Unknown(value.bits.width));
-            return Value::BV(BitValue::Known(
-                value.bits.width, (~value.bits.value) & Mask(value.bits.width)));
+            return Value::BV(
+                BitValue::Known(value.bits.value.Apply(btorsim_bv_not)));
         }
 
         const Btor2IRNode &node = m_ir.Node(signedId);
@@ -580,27 +520,27 @@ class WLSimulator::Impl {
 
         switch (node.tag) {
         case BTOR2_TAG_const:
-            return Value::BV(BitValue::Known(NodeWidth(node.id),
-                                             ParseBinary(node.constant)));
+            return Value::BV(BitValue::Known(WLBitVector::FromBinary(
+                NodeWidth(node.id), node.constant)));
         case BTOR2_TAG_constd:
-            return Value::BV(BitValue::Known(NodeWidth(node.id),
-                                             cpp_int(node.constant)));
+            return Value::BV(BitValue::Known(WLBitVector::FromDecimal(
+                NodeWidth(node.id), node.constant)));
         case BTOR2_TAG_consth:
-            return Value::BV(BitValue::Known(NodeWidth(node.id),
-                                             ParseHex(node.constant)));
+            return Value::BV(BitValue::Known(WLBitVector::FromHex(
+                NodeWidth(node.id), node.constant)));
         case BTOR2_TAG_zero:
             return Value::BV(BitValue::Known(NodeWidth(node.id), 0));
         case BTOR2_TAG_one:
             return Value::BV(BitValue::Known(NodeWidth(node.id), 1));
         case BTOR2_TAG_ones:
-            return Value::BV(BitValue::Known(NodeWidth(node.id),
-                                             Mask(NodeWidth(node.id))));
+            return Value::BV(BitValue::Known(
+                WLBitVector::Ones(NodeWidth(node.id))));
         case BTOR2_TAG_read: {
             Value array = arg(0);
             Value index = arg(1);
             if (!array.isArray || !index.bits.known)
                 return Value::BV(BitValue::Unknown(NodeWidth(node.id)));
-            std::string key = ToBinary(index.bits.value, index.bits.width);
+            std::string key = index.bits.value.ToBinary();
             auto it = array.array.entries.find(key);
             if (it != array.array.entries.end()) return Value::BV(it->second);
             return Value::BV(array.array.defaultKnown
@@ -613,8 +553,7 @@ class WLSimulator::Impl {
             Value data = arg(2);
             if (!array.isArray) return array;
             if (index.bits.known && data.bits.known) {
-                array.array.entries[ToBinary(index.bits.value,
-                                             index.bits.width)] = data.bits;
+                array.array.entries[index.bits.value.ToBinary()] = data.bits;
             } else {
                 array.array.defaultKnown = false;
             }
@@ -645,21 +584,21 @@ class WLSimulator::Impl {
             if (!value.bits.known)
                 return Value::BV(BitValue::Unknown(outWidth));
             return Value::BV(
-                BitValue::Known(outWidth, value.bits.value >> low));
+                BitValue::Known(value.bits.value.Slice(high, low)));
         }
         case BTOR2_TAG_uext: {
             Value value = arg(0);
             if (!value.bits.known)
                 return Value::BV(BitValue::Unknown(NodeWidth(node.id)));
-            return Value::BV(
-                BitValue::Known(NodeWidth(node.id), value.bits.value));
+            return Value::BV(BitValue::Known(value.bits.value.ZeroExtend(
+                NodeWidth(node.id) - value.bits.width)));
         }
         case BTOR2_TAG_sext: {
             Value value = arg(0);
             if (!value.bits.known)
                 return Value::BV(BitValue::Unknown(NodeWidth(node.id)));
-            cpp_int signedValue = Signed(value.bits.value, value.bits.width);
-            return Value::BV(BitValue::Known(NodeWidth(node.id), signedValue));
+            return Value::BV(BitValue::Known(value.bits.value.SignExtend(
+                NodeWidth(node.id) - value.bits.width)));
         }
         default: break;
         }
@@ -673,22 +612,17 @@ class WLSimulator::Impl {
 
     Value EvalUnary(Btor2Tag tag, const Value &a, unsigned width) const {
         if (a.isArray || !a.bits.known) return Value::BV(BitValue::Unknown(width));
-        cpp_int x = a.bits.value;
+        auto apply = [&](WLBitVector::UnaryOperation operation) {
+            return Value::BV(BitValue::Known(a.bits.value.Apply(operation)));
+        };
         switch (tag) {
-        case BTOR2_TAG_not: return Value::BV(BitValue::Known(width, ~x));
-        case BTOR2_TAG_inc: return Value::BV(BitValue::Known(width, x + 1));
-        case BTOR2_TAG_dec: return Value::BV(BitValue::Known(width, x - 1));
-        case BTOR2_TAG_neg: return Value::BV(BitValue::Known(width, -x));
-        case BTOR2_TAG_redand:
-            return Value::BV(BitValue::Known(1, x == Mask(a.bits.width)));
-        case BTOR2_TAG_redor:
-            return Value::BV(BitValue::Known(1, x != 0));
-        case BTOR2_TAG_redxor: {
-            bool parity = false;
-            for (unsigned i = 0; i < a.bits.width; ++i)
-                parity ^= (((x >> i) & 1) != 0);
-            return Value::BV(BitValue::Known(1, parity));
-        }
+        case BTOR2_TAG_not: return apply(btorsim_bv_not);
+        case BTOR2_TAG_inc: return apply(btorsim_bv_inc);
+        case BTOR2_TAG_dec: return apply(btorsim_bv_dec);
+        case BTOR2_TAG_neg: return apply(btorsim_bv_neg);
+        case BTOR2_TAG_redand: return apply(btorsim_bv_redand);
+        case BTOR2_TAG_redor: return apply(btorsim_bv_redor);
+        case BTOR2_TAG_redxor: return apply(btorsim_bv_redxor);
         default: return Value::BV(BitValue::Unknown(width));
         }
     }
@@ -699,65 +633,47 @@ class WLSimulator::Impl {
                      unsigned width) const {
         if (a.isArray || b.isArray || !a.bits.known || !b.bits.known)
             return Value::BV(BitValue::Unknown(width));
-        cpp_int x = a.bits.value;
-        cpp_int y = b.bits.value;
-        auto boolValue = [](bool b) { return Value::BV(BitValue::Known(1, b)); };
+        const WLBitVector &x = a.bits.value;
+        const WLBitVector &y = b.bits.value;
+        auto apply = [&](WLBitVector::BinaryOperation operation) {
+            return Value::BV(BitValue::Known(x.Apply(operation, y)));
+        };
+        auto reverse = [&](WLBitVector::BinaryOperation operation) {
+            return Value::BV(BitValue::Known(y.Apply(operation, x)));
+        };
         switch (tag) {
-        case BTOR2_TAG_add: return Value::BV(BitValue::Known(width, x + y));
-        case BTOR2_TAG_sub: return Value::BV(BitValue::Known(width, x - y));
-        case BTOR2_TAG_mul: return Value::BV(BitValue::Known(width, x * y));
-        case BTOR2_TAG_and: return Value::BV(BitValue::Known(width, x & y));
-        case BTOR2_TAG_or: return Value::BV(BitValue::Known(width, x | y));
-        case BTOR2_TAG_xor: return Value::BV(BitValue::Known(width, x ^ y));
-        case BTOR2_TAG_nand:
-            return Value::BV(BitValue::Known(width, ~(x & y)));
-        case BTOR2_TAG_nor:
-            return Value::BV(BitValue::Known(width, ~(x | y)));
-        case BTOR2_TAG_xnor:
-            return Value::BV(BitValue::Known(width, ~(x ^ y)));
+        case BTOR2_TAG_add: return apply(btorsim_bv_add);
+        case BTOR2_TAG_sub: return apply(btorsim_bv_sub);
+        case BTOR2_TAG_mul: return apply(btorsim_bv_mul);
+        case BTOR2_TAG_and: return apply(btorsim_bv_and);
+        case BTOR2_TAG_or: return apply(btorsim_bv_or);
+        case BTOR2_TAG_xor: return apply(btorsim_bv_xor);
+        case BTOR2_TAG_nand: return apply(btorsim_bv_nand);
+        case BTOR2_TAG_nor: return apply(btorsim_bv_nor);
+        case BTOR2_TAG_xnor: return apply(btorsim_bv_xnor);
         case BTOR2_TAG_eq:
-        case BTOR2_TAG_iff: return boolValue(x == y);
-        case BTOR2_TAG_neq: return boolValue(x != y);
-        case BTOR2_TAG_implies: return boolValue(x == 0 || y != 0);
-        case BTOR2_TAG_ult: return boolValue(x < y);
-        case BTOR2_TAG_ulte: return boolValue(x <= y);
-        case BTOR2_TAG_ugt: return boolValue(x > y);
-        case BTOR2_TAG_ugte: return boolValue(x >= y);
-        case BTOR2_TAG_slt:
-            return boolValue(Signed(x, a.bits.width) < Signed(y, b.bits.width));
-        case BTOR2_TAG_slte:
-            return boolValue(Signed(x, a.bits.width) <= Signed(y, b.bits.width));
-        case BTOR2_TAG_sgt:
-            return boolValue(Signed(x, a.bits.width) > Signed(y, b.bits.width));
-        case BTOR2_TAG_sgte:
-            return boolValue(Signed(x, a.bits.width) >= Signed(y, b.bits.width));
-        case BTOR2_TAG_udiv:
-            return Value::BV(BitValue::Known(width, y == 0 ? Mask(width) : x / y));
-        case BTOR2_TAG_urem:
-            return Value::BV(BitValue::Known(width, y == 0 ? x : x % y));
-        case BTOR2_TAG_sll:
-            return Value::BV(BitValue::Known(width, x << ToUnsigned(y)));
-        case BTOR2_TAG_srl:
-            return Value::BV(BitValue::Known(width, x >> ToUnsigned(y)));
-        case BTOR2_TAG_sra: {
-            unsigned shift = ToUnsigned(y);
-            cpp_int sx = Signed(x, a.bits.width);
-            return Value::BV(BitValue::Known(width, sx >> shift));
-        }
-        case BTOR2_TAG_concat:
-            return Value::BV(BitValue::Known(width, (x << b.bits.width) | y));
-        case BTOR2_TAG_rol:
-        case BTOR2_TAG_ror: {
-            unsigned w = a.bits.width;
-            if (w == 0) return Value::BV(BitValue::Known(width, 0));
-            unsigned shift = ToUnsigned(y) % w;
-            cpp_int result = 0;
-            if (tag == BTOR2_TAG_rol)
-                result = ((x << shift) | (x >> (w - shift))) & Mask(w);
-            else
-                result = ((x >> shift) | (x << (w - shift))) & Mask(w);
-            return Value::BV(BitValue::Known(width, result));
-        }
+        case BTOR2_TAG_iff: return apply(btorsim_bv_eq);
+        case BTOR2_TAG_neq: return apply(btorsim_bv_neq);
+        case BTOR2_TAG_implies: return apply(btorsim_bv_implies);
+        case BTOR2_TAG_ult: return apply(btorsim_bv_ult);
+        case BTOR2_TAG_ulte: return apply(btorsim_bv_ulte);
+        case BTOR2_TAG_ugt: return reverse(btorsim_bv_ult);
+        case BTOR2_TAG_ugte: return reverse(btorsim_bv_ulte);
+        case BTOR2_TAG_slt: return apply(btorsim_bv_slt);
+        case BTOR2_TAG_slte: return apply(btorsim_bv_slte);
+        case BTOR2_TAG_sgt: return reverse(btorsim_bv_slt);
+        case BTOR2_TAG_sgte: return reverse(btorsim_bv_slte);
+        case BTOR2_TAG_udiv: return apply(btorsim_bv_udiv);
+        case BTOR2_TAG_urem: return apply(btorsim_bv_urem);
+        case BTOR2_TAG_sdiv: return apply(btorsim_bv_sdiv);
+        case BTOR2_TAG_srem: return apply(btorsim_bv_srem);
+        case BTOR2_TAG_smod: return apply(btorsim_bv_smod);
+        case BTOR2_TAG_sll: return apply(btorsim_bv_sll);
+        case BTOR2_TAG_srl: return apply(btorsim_bv_srl);
+        case BTOR2_TAG_sra: return apply(btorsim_bv_sra);
+        case BTOR2_TAG_concat: return apply(btorsim_bv_concat);
+        case BTOR2_TAG_rol: return apply(btorsim_bv_rol);
+        case BTOR2_TAG_ror: return apply(btorsim_bv_ror);
         default:
             return Value::BV(BitValue::Unknown(width));
         }
@@ -852,14 +768,13 @@ class WLSimulator::Impl {
                            const Value &value) const {
         if (!value.isArray) {
             if (value.bits.known)
-                out << position << " "
-                    << ToBinary(value.bits.value, value.bits.width) << "\n";
+                out << position << " " << value.bits.value.ToBinary() << "\n";
             return;
         }
         for (const auto &[index, data] : value.array.entries) {
             if (!data.known) continue;
             out << position << " [" << index << "] "
-                << ToBinary(data.value, data.width) << "\n";
+                << data.value.ToBinary() << "\n";
         }
     }
 

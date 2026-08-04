@@ -1,6 +1,5 @@
 #include "WLPackageResize.h"
-
-#include <boost/multiprecision/cpp_int.hpp>
+#include "WLBitVector.h"
 
 #include <algorithm>
 #include <array>
@@ -12,14 +11,11 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace car {
 namespace {
-
-using boost::multiprecision::cpp_int;
 
 bool IsConstant(Btor2Tag tag) {
     return tag == BTOR2_TAG_const || tag == BTOR2_TAG_constd ||
@@ -34,7 +30,7 @@ bool IsValueNode(Btor2Tag tag) {
            tag != BTOR2_TAG_justice;
 }
 
-bool IsUnaryBitblast(Btor2Tag tag) {
+bool IsUnaryFixedWidth(Btor2Tag tag) {
     switch (tag) {
     case BTOR2_TAG_dec:
     case BTOR2_TAG_inc:
@@ -47,7 +43,7 @@ bool IsUnaryBitblast(Btor2Tag tag) {
     }
 }
 
-bool IsBinaryBitblast(Btor2Tag tag) {
+bool IsBinaryFixedWidth(Btor2Tag tag) {
     switch (tag) {
     case BTOR2_TAG_add:
     case BTOR2_TAG_and:
@@ -117,7 +113,7 @@ uint32_t DataOperandCount(Btor2Tag tag) {
     case BTOR2_TAG_justice:
         throw std::runtime_error(
             "word-level resizing does not support justice metadata");
-    default: return IsUnaryBitblast(tag) ? 1 : 2;
+    default: return IsUnaryFixedWidth(tag) ? 1 : 2;
     }
 }
 
@@ -136,34 +132,21 @@ uint32_t CeilLog2(uint64_t value) {
 std::vector<bool> ConstantBits(const Btor2IR &ir,
                                const Btor2IRNode &node) {
     const uint32_t width = ir.Sort(node.sortId).width;
-    cpp_int value = 0;
+    WLBitVector value = WLBitVector::Zero(width);
     if (node.tag == BTOR2_TAG_one) {
-        value = 1;
+        value = WLBitVector::One(width);
     } else if (node.tag == BTOR2_TAG_ones) {
-        value = (cpp_int(1) << width) - 1;
+        value = WLBitVector::Ones(width);
     } else if (node.tag == BTOR2_TAG_const) {
-        for (char digit : node.constant) {
-            value <<= 1;
-            if (digit == '1') value += 1;
-        }
+        value = WLBitVector::FromBinary(width, node.constant);
     } else if (node.tag == BTOR2_TAG_consth) {
-        for (char digit : node.constant) {
-            value <<= 4;
-            if (digit >= '0' && digit <= '9')
-                value += digit - '0';
-            else if (digit >= 'a' && digit <= 'f')
-                value += digit - 'a' + 10;
-            else if (digit >= 'A' && digit <= 'F')
-                value += digit - 'A' + 10;
-        }
+        value = WLBitVector::FromHex(width, node.constant);
     } else if (node.tag == BTOR2_TAG_constd) {
-        value = cpp_int(node.constant);
+        value = WLBitVector::FromDecimal(width, node.constant);
     }
-    const cpp_int mask = (cpp_int(1) << width) - 1;
-    value &= mask;
     std::vector<bool> bits(width);
     for (uint32_t bit = 0; bit < width; ++bit)
-        bits[bit] = static_cast<bool>((value >> bit) & 1);
+        bits[bit] = value.GetBit(bit);
     return bits;
 }
 
@@ -217,8 +200,6 @@ struct SegmentView {
 
 class SegmentAnalyzer {
   public:
-    static constexpr size_t kBitLevelClass =
-        std::numeric_limits<size_t>::max();
     static constexpr size_t kInvalidMember =
         std::numeric_limits<size_t>::max();
 
@@ -227,26 +208,21 @@ class SegmentAnalyzer {
             if (!node.sortId || !IsValueNode(node.tag)) continue;
             const Btor2IRSort &sort = m_ir.Sort(node.sortId);
             if (sort.tag != BTOR2_TAG_SORT_bitvec) continue;
-            // Width-one nodes already are the bit-level partition and need no
-            // interval/equivalence-class allocation.
-            if (sort.width > 1) RegisterNode(node.id, sort.width);
+            RegisterNode(node.id, sort.width);
         }
     }
 
     void Run() {
-        for (const Btor2IRNode &node : m_ir.Nodes()) {
-            if (node.sortId && IsValueNode(node.tag) &&
-                m_ir.Sort(node.sortId).tag == BTOR2_TAG_SORT_bitvec)
-                Process(node.id);
-        }
-
-        // Negative references are implicit bitwise inversion and therefore bit-level.
+        // Btor2IR preserves the source/generator topological insertion order.
         for (const Btor2IRNode &node : m_ir.Nodes()) {
             const uint32_t operands = DataOperandCount(node.tag);
             for (uint32_t i = 0; i < operands; ++i) {
                 if (node.args[i] < 0 && m_segments.count(-node.args[i]))
-                    Bitblast(-node.args[i]);
+                    MarkFixedWidth(-node.args[i]);
             }
+            if (node.sortId && IsValueNode(node.tag) &&
+                m_ir.Sort(node.sortId).tag == BTOR2_TAG_SORT_bitvec)
+                ProcessNode(node);
         }
 
         // Sequential boundaries use exactly the same segmentation and package encoding.
@@ -254,8 +230,6 @@ class SegmentAnalyzer {
             if (node.tag != BTOR2_TAG_init && node.tag != BTOR2_TAG_next)
                 continue;
             if (!m_segments.count(std::abs(node.args[0]))) continue;
-            Process(std::abs(node.args[0]));
-            Process(std::abs(node.args[1]));
             MakeCompatible({std::abs(node.args[0]), std::abs(node.args[1])});
             UnionNodes({std::abs(node.args[0]), std::abs(node.args[1])});
             if (node.tag == BTOR2_TAG_next)
@@ -269,14 +243,11 @@ class SegmentAnalyzer {
         FinalizeClasses();
     }
 
-    std::vector<SegmentView> Segments(int64_t signedId) const {
+    std::vector<SegmentView> Ranges(int64_t signedId) const {
         std::vector<SegmentView> result;
         auto found = m_segments.find(std::abs(signedId));
-        if (found == m_segments.end()) {
-            if (Width(signedId) != 1)
-                throw std::runtime_error("missing word-level segmentation");
-            return {{0, 1, kBitLevelClass}};
-        }
+        if (found == m_segments.end())
+            throw std::runtime_error("missing word-level segmentation");
         const auto &segments = found->second;
         for (const auto &[lo, segment] : segments) {
             (void)lo;
@@ -289,11 +260,8 @@ class SegmentAnalyzer {
 
     SegmentView SegmentAt(int64_t signedId, uint32_t bit) const {
         auto found = m_segments.find(std::abs(signedId));
-        if (found == m_segments.end()) {
-            if (Width(signedId) == 1 && bit == 0)
-                return {0, 1, kBitLevelClass};
+        if (found == m_segments.end())
             throw std::runtime_error("missing word-level segment lookup");
-        }
         const auto &segments = found->second;
         auto it = segments.upper_bound(bit);
         if (it == segments.begin())
@@ -316,6 +284,7 @@ class SegmentAnalyzer {
 
     struct Class {
         bool active{true};
+        bool fixedWidth{false};
         size_t parent{0};
         size_t memberCount{0};
         uint32_t width{0};
@@ -325,6 +294,9 @@ class SegmentAnalyzer {
     };
 
     const std::vector<Class> &Classes() const { return m_classes; }
+    bool IsFixedWidth(const SegmentView &segment) const {
+        return m_classes.at(FindClass(segment.classId)).fixedWidth;
+    }
     const std::vector<std::pair<int64_t, int64_t>> &Comparisons() const {
         return m_comparisons;
     }
@@ -381,17 +353,9 @@ class SegmentAnalyzer {
         m_segments[id].emplace(0, SegmentView{0, width, classId});
     }
 
-    void Process(int64_t signedId) {
-        const int64_t id = std::abs(signedId);
-        if (!m_processed.insert(id).second) return;
-        const Btor2IRNode &node = m_ir.Node(id);
+    void ProcessNode(const Btor2IRNode &node) {
+        const int64_t id = node.id;
         const uint32_t operands = DataOperandCount(node.tag);
-        for (uint32_t i = 0; i < operands; ++i) {
-            const Btor2IRNode &argument = m_ir.Node(node.args[i]);
-            if (argument.sortId && IsValueNode(argument.tag))
-                Process(node.args[i]);
-        }
-
         if (IsConstant(node.tag)) {
             const std::vector<bool> bits = ConstantBits(m_ir, node);
             for (uint32_t bit = 1; bit < bits.size(); ++bit) {
@@ -410,7 +374,7 @@ class SegmentAnalyzer {
             m_comparisons.emplace_back(node.args[0], node.args[1]);
             return;
         case BTOR2_TAG_ite:
-            Bitblast(std::abs(node.args[0]));
+            MarkFixedWidth(std::abs(node.args[0]));
             if (!m_segments.count(id)) return;
             MakeCompatible(
                 {id, std::abs(node.args[1]), std::abs(node.args[2])});
@@ -420,9 +384,9 @@ class SegmentAnalyzer {
         case BTOR2_TAG_concat: ProcessConcat(node); return;
         case BTOR2_TAG_uext:
         case BTOR2_TAG_sext:
-            // BTOR2 extension operators are lowered to exact bit-level constructs.
-            Bitblast(id);
-            Bitblast(std::abs(node.args[0]));
+            // Extensions require their original widths until the final bitblast.
+            MarkFixedWidth(id);
+            MarkFixedWidth(std::abs(node.args[0]));
             return;
         default: break;
         }
@@ -439,20 +403,10 @@ class SegmentAnalyzer {
             return;
         }
 
-        if (IsUnaryBitblast(node.tag) || IsBinaryBitblast(node.tag)) {
-            Bitblast(id);
+        if (IsUnaryFixedWidth(node.tag) || IsBinaryFixedWidth(node.tag)) {
+            MarkFixedWidth(id);
             for (uint32_t i = 0; i < operands; ++i)
-                Bitblast(std::abs(node.args[i]));
-            // Preserve the paper's corresponding-bit equivalence where widths agree.
-            std::vector<int64_t> compatible;
-            if (m_segments.count(id)) compatible.push_back(id);
-            const uint32_t width = Width(id);
-            for (uint32_t i = 0; i < operands; ++i) {
-                if (m_segments.count(std::abs(node.args[i])) &&
-                    Width(node.args[i]) == width)
-                    compatible.push_back(std::abs(node.args[i]));
-            }
-            if (compatible.size() > 1) UnionNodes(compatible);
+                MarkFixedWidth(std::abs(node.args[i]));
             return;
         }
         throw std::runtime_error("unclassified word-level BTOR2 operator at id " +
@@ -469,14 +423,22 @@ class SegmentAnalyzer {
         const uint32_t lower = static_cast<uint32_t>(node.args[2]);
         Split(source, lower);
         Split(source, upper + 1);
-        for (const SegmentView &segment : Segments(source)) {
-            if (segment.lo > lower && segment.lo <= upper)
-                Split(node.id, segment.lo - lower);
-        }
         if (!m_segments.count(node.id)) return;
-        for (const SegmentView &result : Segments(node.id)) {
-            MergeClasses(result.classId,
-                         SegmentAt(source, lower + result.lo).classId);
+
+        // Map source boundaries and fixed-width intervals into the slice.
+        for (const SegmentView &range : Ranges(source)) {
+            const uint32_t begin = std::max(range.lo, lower);
+            const uint32_t end = std::min(range.hi, upper + 1);
+            if (begin >= end) continue;
+            Split(node.id, begin - lower);
+            Split(node.id, end - lower);
+            if (IsFixedWidth(range))
+                MarkFixedWidthRange(node.id, begin - lower, end - lower);
+        }
+        for (const SegmentView &result : Ranges(node.id)) {
+            const SegmentView sourceRange =
+                SegmentAt(source, lower + result.lo);
+            MergeClasses(result.classId, sourceRange.classId);
         }
     }
 
@@ -485,18 +447,23 @@ class SegmentAnalyzer {
         const int64_t low = std::abs(node.args[1]);
         const uint32_t lowWidth = Width(low);
         Split(node.id, lowWidth);
-        for (const SegmentView &segment : Segments(low)) {
-            if (segment.lo) Split(node.id, segment.lo);
-        }
-        for (const SegmentView &segment : Segments(high)) {
-            if (segment.lo) Split(node.id, lowWidth + segment.lo);
-        }
-        for (const SegmentView &result : Segments(node.id)) {
+        auto mapOperand = [&](int64_t operand, uint32_t offset) {
+            for (const SegmentView &range : Ranges(operand)) {
+                Split(node.id, offset + range.lo);
+                Split(node.id, offset + range.hi);
+                if (IsFixedWidth(range))
+                    MarkFixedWidthRange(
+                        node.id, offset + range.lo, offset + range.hi);
+            }
+        };
+        mapOperand(low, 0);
+        mapOperand(high, lowWidth);
+
+        for (const SegmentView &result : Ranges(node.id)) {
             const SegmentView source = result.lo < lowWidth
                                            ? SegmentAt(low, result.lo)
                                            : SegmentAt(high, result.lo - lowWidth);
-            if (source.classId != kBitLevelClass)
-                MergeClasses(result.classId, source.classId);
+            MergeClasses(result.classId, source.classId);
         }
     }
 
@@ -507,41 +474,40 @@ class SegmentAnalyzer {
             if (Width(id) != width)
                 throw std::runtime_error("incompatible package widths");
         }
-        // A split propagates by relative offset through its equivalence class and
-        // can therefore introduce a new global cut in another operand. Iterate
-        // until all operands have exactly the same global boundaries.
+        // Propagate fixed-width ranges and ordinary cuts to a fixed point.
         while (true) {
             std::set<uint32_t> cuts;
-            std::vector<std::set<uint32_t>> nodeCuts;
+            std::vector<std::pair<uint32_t, uint32_t>> fixedWidth;
             for (int64_t id : nodes) {
-                std::set<uint32_t> current;
-                for (const SegmentView &segment : Segments(id)) {
-                    if (segment.lo) {
-                        cuts.insert(segment.lo);
-                        current.insert(segment.lo);
-                    }
+                for (const SegmentView &range : Ranges(id)) {
+                    if (range.lo) cuts.insert(range.lo);
+                    if (range.hi < width) cuts.insert(range.hi);
+                    if (IsFixedWidth(range))
+                        fixedWidth.emplace_back(range.lo, range.hi);
                 }
-                nodeCuts.push_back(std::move(current));
             }
-            const bool compatible = std::all_of(
-                nodeCuts.begin(), nodeCuts.end(),
-                [&](const std::set<uint32_t> &current) {
-                    return current == cuts;
-                });
-            if (compatible) return;
-            for (int64_t id : nodes)
-                for (uint32_t cut : cuts) Split(id, cut);
+            bool changed = false;
+            for (int64_t id : nodes) {
+                for (const auto &[lo, hi] : fixedWidth)
+                    changed = MarkFixedWidthRange(id, lo, hi) || changed;
+                for (uint32_t cut : cuts) changed = Split(id, cut) || changed;
+            }
+            if (!changed) return;
         }
     }
 
     void UnionNodes(const std::vector<int64_t> &nodes) {
         if (nodes.size() < 2) return;
-        const std::vector<SegmentView> base = Segments(nodes.front());
+        const std::vector<SegmentView> base = Ranges(nodes.front());
         for (size_t index = 1; index < nodes.size(); ++index) {
-            const std::vector<SegmentView> other = Segments(nodes[index]);
+            const std::vector<SegmentView> other = Ranges(nodes[index]);
             if (base.size() != other.size())
                 throw std::runtime_error("segment union requires compatible nodes");
             for (size_t segment = 0; segment < base.size(); ++segment) {
+                if (base[segment].lo != other[segment].lo ||
+                    base[segment].hi != other[segment].hi)
+                    throw std::runtime_error(
+                        "segment union requires aligned ranges");
                 // Earlier merges may retain the other class and invalidate snapshots.
                 MergeClasses(SegmentAt(nodes.front(), base[segment].lo).classId,
                              SegmentAt(nodes[index], other[segment].lo).classId);
@@ -549,26 +515,57 @@ class SegmentAnalyzer {
         }
     }
 
-    void Bitblast(int64_t id) {
-        if (!m_segments.count(std::abs(id))) return;
-        const uint32_t width = Width(id);
-        for (uint32_t bit = 1; bit < width; ++bit) Split(id, bit);
+    void MarkClassFixedWidth(size_t classId) {
+        classId = FindClass(classId);
+        Class &cls = m_classes.at(classId);
+        if (!cls.active)
+            throw std::runtime_error("cannot fix inactive segment class");
+        cls.fixedWidth = true;
     }
 
-    void Split(int64_t signedId, uint32_t cut) {
+    bool MarkFixedWidthRange(int64_t signedId, uint32_t lo, uint32_t hi) {
         const int64_t id = std::abs(signedId);
-        if (cut == 0 || cut >= Width(id)) return;
+        if (!m_segments.count(id) || lo >= hi) return false;
+        if (hi > Width(id))
+            throw std::runtime_error("fixed-width range exceeds node width");
+
+        bool changed = Split(id, lo);
+        changed = Split(id, hi) || changed;
+        while (true) {
+            size_t classId = kInvalidMember;
+            for (const auto &[rangeLo, range] : m_segments.at(id)) {
+                (void)rangeLo;
+                if (range.hi <= lo || range.lo >= hi ||
+                    IsFixedWidth(range))
+                    continue;
+                classId = range.classId;
+                break;
+            }
+            if (classId == kInvalidMember) return changed;
+            MarkClassFixedWidth(classId);
+            changed = true;
+        }
+    }
+
+    void MarkFixedWidth(int64_t id) {
+        if (!m_segments.count(std::abs(id))) return;
+        MarkFixedWidthRange(std::abs(id), 0, Width(id));
+    }
+
+    bool Split(int64_t signedId, uint32_t cut) {
+        const int64_t id = std::abs(signedId);
+        if (cut == 0 || cut >= Width(id)) return false;
         auto &nodeSegments = m_segments.at(id);
         auto it = nodeSegments.upper_bound(cut);
-        if (it == nodeSegments.begin()) return;
+        if (it == nodeSegments.begin()) return false;
         --it;
-        if (it->second.lo == cut || cut >= it->second.hi) return;
-
+        if (it->second.lo == cut || cut >= it->second.hi) return false;
         const size_t oldId = FindClass(it->second.classId);
         Class &old = m_classes.at(oldId);
         if (!old.active) throw std::runtime_error("split inactive segment class");
         const uint32_t offset = cut - it->second.lo;
         const uint32_t oldWidth = old.width;
+        const bool fixedWidth = old.fixedWidth;
         size_t memberId = old.memberHead;
         old.active = false;
         old.memberHead = kInvalidMember;
@@ -577,6 +574,8 @@ class SegmentAnalyzer {
 
         const size_t lowId = NewClass(offset);
         const size_t highId = NewClass(oldWidth - offset);
+        m_classes[lowId].fixedWidth = fixedWidth;
+        m_classes[highId].fixedWidth = fixedWidth;
 
         // A union-find set cannot be split directly. Rebind every segment in
         // the old root while reusing its member record for the low half.
@@ -602,6 +601,7 @@ class SegmentAnalyzer {
                 NewMember({member.nodeId, member.lo + offset}));
             memberId = nextMember;
         }
+        return true;
     }
 
     void MergeClasses(size_t lhsId, size_t rhsId) {
@@ -621,6 +621,7 @@ class SegmentAnalyzer {
         // the corresponding equivalence-class merge constant time.
         rhs.parent = lhsId;
         rhs.active = false;
+        lhs.fixedWidth = lhs.fixedWidth || rhs.fixedWidth;
         if (rhs.memberHead != kInvalidMember) {
             if (lhs.memberTail == kInvalidMember)
                 lhs.memberHead = rhs.memberHead;
@@ -672,7 +673,6 @@ class SegmentAnalyzer {
     std::unordered_map<int64_t, std::map<uint32_t, SegmentView>> m_segments;
     std::vector<Class> m_classes;
     std::vector<MemberRecord> m_memberRecords;
-    std::unordered_set<int64_t> m_processed;
     std::vector<std::pair<int64_t, int64_t>> m_comparisons;
     std::unordered_map<int64_t, int64_t> m_next;
     std::unordered_map<int64_t, int64_t> m_init;
@@ -718,6 +718,7 @@ class PackageSizer {
         for (size_t id = 0; id < classes.size(); ++id) {
             const auto &cls = classes[id];
             if (!cls.active) continue;
+            if (cls.fixedWidth) continue;
             if (cls.width == 1) {
                 widths[id] = 1;
                 continue;
@@ -764,8 +765,10 @@ class PackageSizer {
             if (!node.sortId || !IsValueNode(node.tag) ||
                 m_ir.Sort(node.sortId).tag != BTOR2_TAG_SORT_bitvec)
                 continue;
-            for (const SegmentView &segment : m_analysis.Segments(node.id)) {
-                if (segment.hi - segment.lo == 1) continue;
+            for (const SegmentView &segment : m_analysis.Ranges(node.id)) {
+                if (m_analysis.IsFixedWidth(segment) ||
+                    segment.hi - segment.lo == 1)
+                    continue;
                 SegmentKey from{node.id, segment.lo};
                 switch (node.tag) {
                 case BTOR2_TAG_input:
@@ -866,9 +869,11 @@ class PackageSizer {
 
     void BuildComparisonGraphs() {
         for (const auto &[lhsId, rhsId] : m_analysis.Comparisons()) {
-            const auto lhsSegments = m_analysis.Segments(lhsId);
+            const auto lhsSegments = m_analysis.Ranges(lhsId);
             for (const SegmentView &lhs : lhsSegments) {
-                if (lhs.hi - lhs.lo == 1) continue;
+                if (m_analysis.IsFixedWidth(lhs) ||
+                    lhs.hi - lhs.lo == 1)
+                    continue;
                 const SegmentView rhs = m_analysis.SegmentAt(rhsId, lhs.lo);
                 auto lhsRaw = m_feeders[Key(lhs, lhsId)];
                 auto rhsRaw = m_feeders[Key(rhs, rhsId)];
@@ -1042,7 +1047,8 @@ class SegmentIRRewriter {
     }
 
     uint32_t TargetWidth(const SegmentView &segment) const {
-        if (segment.classId == SegmentAnalyzer::kBitLevelClass) return 1;
+        if (m_analysis.IsFixedWidth(segment))
+            return segment.hi - segment.lo;
         return m_widths.at(segment.classId);
     }
 
@@ -1069,7 +1075,7 @@ class SegmentIRRewriter {
         } else if (node.tag == BTOR2_TAG_concat) {
             pieces = BuildConcat(node);
         } else {
-            pieces = BuildBitblasted(node);
+            pieces = BuildFixedWidthOperator(node);
         }
         auto [it, inserted] = m_pieces.emplace(id, std::move(pieces));
         if (!inserted) throw std::runtime_error("duplicate segment rewrite");
@@ -1079,7 +1085,7 @@ class SegmentIRRewriter {
     std::vector<Piece> BuildVariable(const Btor2IRNode &node) {
         std::vector<Piece> result;
         const auto trace = m_inputTraceSources.find(node.id);
-        for (const SegmentView &segment : m_analysis.Segments(node.id)) {
+        for (const SegmentView &segment : m_analysis.Ranges(node.id)) {
             const uint32_t originalWidth = segment.hi - segment.lo;
             const uint32_t width = TargetWidth(segment);
             const std::string symbol =
@@ -1105,11 +1111,32 @@ class SegmentIRRewriter {
     std::vector<Piece> BuildConstant(const Btor2IRNode &node) {
         const std::vector<bool> bits = ConstantBits(m_input, node);
         std::vector<Piece> result;
-        for (const SegmentView &segment : m_analysis.Segments(node.id)) {
+        for (const SegmentView &segment : m_analysis.Ranges(node.id)) {
+            const uint32_t originalWidth = segment.hi - segment.lo;
             const uint32_t width = TargetWidth(segment);
-            const Btor2Tag tag = bits[segment.lo] ? BTOR2_TAG_ones
-                                                  : BTOR2_TAG_zero;
-            const int64_t id = AddNode(tag, width);
+            const bool first = bits[segment.lo];
+            const bool uniform = std::all_of(
+                bits.begin() + segment.lo,
+                bits.begin() + segment.hi,
+                [first](bool bit) { return bit == first; });
+            int64_t id = 0;
+            if (uniform) {
+                id = AddNode(first ? BTOR2_TAG_ones : BTOR2_TAG_zero, width);
+            } else {
+                if (width != originalWidth)
+                    throw std::runtime_error(
+                        "non-uniform constant package was resized");
+                std::string binary;
+                binary.reserve(width);
+                for (uint32_t bit = segment.hi; bit-- > segment.lo;)
+                    binary.push_back(bits[bit] ? '1' : '0');
+                id = AddNode(BTOR2_TAG_const,
+                             width,
+                             {},
+                             0,
+                             {},
+                             std::move(binary));
+            }
             result.push_back(
                 {segment.lo, segment.hi, width, id, segment.classId});
         }
@@ -1133,7 +1160,15 @@ class SegmentIRRewriter {
             const Piece &right = PieceAt(rhs, left.lo);
             if (left.lo != right.lo || left.hi != right.hi ||
                 left.width != right.width)
-                throw std::runtime_error("incompatible equality segments");
+                throw std::runtime_error(
+                    "incompatible equality segments at node " +
+                    std::to_string(node.id) + ": lhs [" +
+                    std::to_string(left.lo) + "," +
+                    std::to_string(left.hi) + ")/" +
+                    std::to_string(left.width) + ", rhs [" +
+                    std::to_string(right.lo) + "," +
+                    std::to_string(right.hi) + ")/" +
+                    std::to_string(right.width));
             comparisons.push_back(AddNode(
                 node.tag, 1, {left.nodeId, right.nodeId, 0}, 2));
         }
@@ -1142,7 +1177,7 @@ class SegmentIRRewriter {
                                                           : BTOR2_TAG_or;
         for (size_t i = 1; i < comparisons.size(); ++i)
             result = AddNode(combine, 1, {result, comparisons[i], 0}, 2);
-        const SegmentView segment = m_analysis.Segments(node.id).front();
+        const SegmentView segment = m_analysis.Ranges(node.id).front();
         return {{0, 1, 1, result, segment.classId}};
     }
 
@@ -1195,7 +1230,7 @@ class SegmentIRRewriter {
             prefixEqual = BoolAnd(prefixEqual, equal);
         }
         if (inclusive) result = BoolOr(result, prefixEqual);
-        const SegmentView segment = m_analysis.Segments(node.id).front();
+        const SegmentView segment = m_analysis.Ranges(node.id).front();
         return {{0, 1, 1, result, segment.classId}};
     }
 
@@ -1204,7 +1239,7 @@ class SegmentIRRewriter {
         const auto &onTrue = Build(node.args[1]);
         const auto &onFalse = Build(node.args[2]);
         std::vector<Piece> result;
-        for (const SegmentView &segment : m_analysis.Segments(node.id)) {
+        for (const SegmentView &segment : m_analysis.Ranges(node.id)) {
             const Piece &lhs = PieceAt(onTrue, segment.lo);
             const Piece &rhs = PieceAt(onFalse, segment.lo);
             const uint32_t width = TargetWidth(segment);
@@ -1223,7 +1258,7 @@ class SegmentIRRewriter {
         const auto &source = Build(node.args[0]);
         const uint32_t lower = static_cast<uint32_t>(node.args[2]);
         std::vector<Piece> result;
-        for (const SegmentView &segment : m_analysis.Segments(node.id)) {
+        for (const SegmentView &segment : m_analysis.Ranges(node.id)) {
             const Piece &input = PieceAt(source, lower + segment.lo);
             result.push_back({segment.lo,
                               segment.hi,
@@ -1240,7 +1275,7 @@ class SegmentIRRewriter {
         const uint32_t lowWidth =
             m_input.Sort(m_input.Node(node.args[1]).sortId).width;
         std::vector<Piece> result;
-        for (const SegmentView &segment : m_analysis.Segments(node.id)) {
+        for (const SegmentView &segment : m_analysis.Ranges(node.id)) {
             const Piece &input = segment.lo < lowWidth
                                      ? PieceAt(low, segment.lo)
                                      : PieceAt(high, segment.lo - lowWidth);
@@ -1253,29 +1288,30 @@ class SegmentIRRewriter {
         return result;
     }
 
-    std::vector<Piece> BuildBitblasted(const Btor2IRNode &node) {
+    std::vector<Piece> BuildFixedWidthOperator(const Btor2IRNode &node) {
         const uint32_t resultWidth = m_input.Sort(node.sortId).width;
         std::array<int64_t, 3> args = node.args;
         const uint32_t operands = DataOperandCount(node.tag);
         for (uint32_t i = 0; i < operands; ++i) args[i] = Whole(node.args[i]);
         const int64_t full = AddNode(node.tag, resultWidth, args, node.nargs);
         std::vector<Piece> result;
-        for (const SegmentView &segment : m_analysis.Segments(node.id)) {
-            if (segment.hi - segment.lo != 1 ||
-                TargetWidth(segment) != 1)
+        for (const SegmentView &segment : m_analysis.Ranges(node.id)) {
+            const uint32_t width = segment.hi - segment.lo;
+            if (!m_analysis.IsFixedWidth(segment) ||
+                TargetWidth(segment) != width)
                 throw std::runtime_error(
-                    "bitblasted operator retained a word-level segment");
-            int64_t bit = full;
-            if (resultWidth != 1) {
-                bit = AddNode(BTOR2_TAG_slice,
-                              1,
-                              {full,
-                               static_cast<int64_t>(segment.lo),
-                               static_cast<int64_t>(segment.lo)},
-                              3);
+                    "fixed-width operator retained a resizable segment");
+            int64_t piece = full;
+            if (segment.lo != 0 || segment.hi != resultWidth) {
+                piece = AddNode(BTOR2_TAG_slice,
+                                width,
+                                {full,
+                                 static_cast<int64_t>(segment.hi - 1),
+                                 static_cast<int64_t>(segment.lo)},
+                                3);
             }
             result.push_back(
-                {segment.lo, segment.hi, 1, bit, segment.classId});
+                {segment.lo, segment.hi, width, piece, segment.classId});
         }
         return result;
     }

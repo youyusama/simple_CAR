@@ -86,6 +86,7 @@ set(SRCS
     src/model/DAGCNFSimplifier.cpp
     src/frontend/btor2/Btor2Frontend.cpp
     src/wordlevel/WLArrayAbstraction.cpp
+    src/wordlevel/WLBitVector.cpp
     src/wordlevel/WLModel.cpp
     src/wordlevel/WLPackageResize.cpp
     src/wordlevel/WLSimulator.cpp
@@ -93,6 +94,8 @@ set(SRCS
     src/wordlevel/WLCegar.cpp
     src/wordlevel/WLBoolectorBitblast.cpp
     btor2/deps/btor2tools/src/btor2parser/btor2parser.c
+    btor2/deps/btor2tools/src/btorsim/btorsimbv.c
+    btor2/deps/btor2tools/src/btorsim/btorsimrng.c
     src/Settings.cpp
     src/Log.cpp
     src/WitnessBuilder.cpp

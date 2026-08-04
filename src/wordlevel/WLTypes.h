@@ -68,13 +68,6 @@ struct WLTraceMap {
     std::vector<WLMemoryPair> memoryPairs;
 };
 
-// Compatibility names while the only WL frontend is still BTOR2-shaped.
-using Btor2MemoryPair = WLMemoryPair;
-using Btor2ArrayRead = WLArrayRead;
-using Btor2TraceBitKind = WLTraceBitKind;
-using Btor2TraceBit = WLTraceBit;
-using Btor2TraceMap = WLTraceMap;
-
 } // namespace car
 
 #endif
