@@ -44,6 +44,7 @@ struct Settings {
     int verbosity = 0;
     string aigFilePath;
     string witnessOutputDir = "";
+    bool wlDisableCoi = false;
     bool wlDisablePackageResize = false;
     string wlBitblastOutputPath = "";
 

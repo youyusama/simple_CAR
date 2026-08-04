@@ -17,6 +17,10 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("-w", settings.witnessOutputDir, "Witness Output Dir")
         ->check(CLI::ExistingDirectory);
 
+    app.add_flag("--wl-no-coi", settings.wlDisableCoi,
+                 "Disable word-level property COI reduction")
+        ->default_val(false);
+
     app.add_flag("--wl-no-package-resize", settings.wlDisablePackageResize,
                  "Disable word-level package resizing")
         ->default_val(false);

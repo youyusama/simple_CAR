@@ -168,7 +168,7 @@ WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
     }
 
     // Stage 2: discard logic outside the safety property/constraint COI.
-    ir = ReduceToPropertyCoi(ir);
+    if (!m_settings.wlDisableCoi) ir = ReduceToPropertyCoi(ir);
 
     Btor2IR processedIr;
     std::vector<WLMemoryPair> tracePairs;
