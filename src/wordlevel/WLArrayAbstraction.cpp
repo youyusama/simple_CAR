@@ -11,7 +11,9 @@ namespace {
 class Builder {
   public:
     Builder(const Btor2IR &input, const std::vector<WLMemoryPair> &pairs)
-        : m_input(input), m_pairs(pairs) {
+        : m_input(input), m_pairs(pairs) {}
+
+    WLArrayAbstractionResult Build() {
         // Build a fresh array-free IR instead of mutating the source BTOR2 model.
         m_output.ReserveFreshIdsAfter(m_input);
         CopyBitVectorSorts();
@@ -22,9 +24,6 @@ class Builder {
         BuildMemories();
         BuildProperties();
         m_output.SetHasArrays(false);
-    }
-
-    WLArrayAbstractionResult Finish() {
         return {std::move(m_output),
                 std::move(m_tracePairs),
                 std::move(m_reads),
@@ -525,7 +524,7 @@ class Builder {
 WLArrayAbstractionResult
 WLArrayAbstraction::Run(const Btor2IR &ir,
                         const std::vector<WLMemoryPair> &pairs) {
-    return Builder(ir, pairs).Finish();
+    return Builder(ir, pairs).Build();
 }
 
 } // namespace car

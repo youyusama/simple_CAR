@@ -23,27 +23,17 @@ WLChecker::WLChecker(const Settings &settings,
     : m_settings(settings),
       m_log(log),
       m_model(model) {
-    // Every BTOR2 model ultimately delegates proof search to a bit-level checker.
-    auto checker = CreateBitLevelChecker(m_model.BitModel(), m_log);
-    if (!checker) {
-        throw std::runtime_error("word-level checker requires a bit-level checker.");
-    }
-
     if (m_model.SourceHasArrays()) {
-        // Array inputs wrap the selected checker in simulator-based CEGAR.
-        WLCegar::CheckerFactory checkerFactory =
-            [this](Model &nextModel, Log &nextLog) {
-                return CreateBitLevelChecker(nextModel, nextLog);
-            };
-        m_cegar = std::make_unique<WLCegar>(
-            m_settings,
-            m_log,
-            m_model,
-            std::move(checker),
-            std::move(checkerFactory));
+        // Array CEGAR owns the checker lifecycle across abstraction rebuilds.
+        m_cegar =
+            std::make_unique<WLCegar>(m_settings, m_log, m_model);
     } else {
         // Array-free BTOR2 models need only the standard checker wrapper.
-        m_checker = std::move(checker);
+        m_checker = CreateBitLevelChecker(m_model.BitModel(), m_log);
+        if (!m_checker) {
+            throw std::runtime_error(
+                "word-level checker requires a bit-level checker.");
+        }
     }
 }
 

@@ -5,7 +5,6 @@
 #include "Settings.h"
 #include "WLTypes.h"
 
-#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,14 +21,9 @@ class WLModel;
 // checks.  WLChecker owns this engine when the input contains word-level arrays.
 class WLCegar {
   public:
-    using CheckerFactory =
-        std::function<std::unique_ptr<BaseAlg>(Model &, Log &)>;
-
     WLCegar(const Settings &settings,
             Log &log,
-            WLModel &model,
-            std::unique_ptr<BaseAlg> checker,
-            CheckerFactory checkerFactory);
+            WLModel &model);
     ~WLCegar();
 
     // Run checker/replay/refinement iterations until a definitive result.
@@ -45,12 +39,12 @@ class WLCegar {
     void AddPair(const WLMemoryPair &pair);
     unsigned MaxDelay() const;
     bool ReloadModel();
+    std::unique_ptr<BaseAlg> CreateBitLevelChecker(Model &model, Log &log);
 
     const Settings &m_settings;
     Log &m_log;
     WLModel &m_model;
     std::unique_ptr<BaseAlg> m_checker;
-    CheckerFactory m_checkerFactory;
     std::vector<WLMemoryPair> m_memoryPairs;
     std::unique_ptr<Btor2IR> m_ir;
     bool m_concreteCounterexample{false};

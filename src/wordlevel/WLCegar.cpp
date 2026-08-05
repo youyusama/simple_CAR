@@ -1,8 +1,16 @@
 #include "WLCegar.h"
 
+#include "BCAR.h"
+#include "BMC.h"
 #include "Btor2Frontend.h"
+#include "FCAR.h"
+#include "IC3.h"
+#include "KFAIR.h"
+#include "KIND.h"
+#include "L2S.h"
 #include "Log.h"
 #include "Model.h"
+#include "RLive.h"
 #include "WLModel.h"
 #include "WLSimulator.h"
 
@@ -14,14 +22,10 @@ namespace car {
 
 WLCegar::WLCegar(const Settings &settings,
                  Log &log,
-                 WLModel &model,
-                 std::unique_ptr<BaseAlg> checker,
-                 CheckerFactory checkerFactory)
+                 WLModel &model)
     : m_settings(settings),
       m_log(log),
-      m_model(model),
-      m_checker(std::move(checker)),
-      m_checkerFactory(std::move(checkerFactory)) {
+      m_model(model) {
     try {
         // Replay always uses the original concrete BTOR2 model.
         m_ir =
@@ -30,6 +34,11 @@ WLCegar::WLCegar(const Settings &settings,
     } catch (const std::exception &error) {
         throw std::runtime_error("word-level CEGAR parse error: " +
                                  std::string(error.what()));
+    }
+    m_checker = CreateBitLevelChecker(m_model.BitModel(), m_log);
+    if (!m_checker) {
+        throw std::runtime_error(
+            "word-level CEGAR requires a bit-level checker.");
     }
 }
 
@@ -57,11 +66,38 @@ unsigned WLCegar::MaxDelay() const {
     return maxDelay;
 }
 
+std::unique_ptr<BaseAlg>
+WLCegar::CreateBitLevelChecker(Model &model, Log &log) {
+    // Each abstraction revision uses the same user-selected bit-level algorithm.
+    switch (m_settings.alg) {
+    case MCAlgorithm::FCAR:
+        return std::make_unique<FCAR>(m_settings, model, log);
+    case MCAlgorithm::BCAR:
+        return std::make_unique<BCAR>(m_settings, model, log);
+    case MCAlgorithm::BMC:
+        return std::make_unique<BMC>(m_settings, model, log);
+    case MCAlgorithm::KIND:
+        return std::make_unique<KIND>(m_settings, model, log);
+    case MCAlgorithm::IC3:
+        return std::make_unique<IC3>(m_settings, model, log);
+    case MCAlgorithm::L2S:
+        return std::make_unique<L2S>(m_settings, model, log);
+    case MCAlgorithm::KLIVE:
+    case MCAlgorithm::FAIR:
+    case MCAlgorithm::KFAIR:
+        return std::make_unique<KFAIR>(m_settings, model, log);
+    case MCAlgorithm::RLIVE:
+        return std::make_unique<RLive>(m_settings, model, log);
+    default:
+        return nullptr;
+    }
+}
+
 bool WLCegar::ReloadModel() {
     try {
         // Rebuild the abstraction and recreate the selected checker on its new AIG.
         m_model.Build(m_memoryPairs);
-        m_checker = m_checkerFactory(m_model.BitModel(), m_log);
+        m_checker = CreateBitLevelChecker(m_model.BitModel(), m_log);
         if (!m_checker) return false;
     } catch (const std::exception &error) {
         LOG_L(m_log, 0, "word-level refinement reload failed: ", error.what());
