@@ -353,6 +353,8 @@ class SegmentAnalyzer {
         const uint32_t operands = DataOperandCount(node.tag);
         if (IsConstant(node.tag)) {
             const std::vector<bool> bits = ConstantBits(m_ir, node);
+            // Every resulting constant segment is a maximal uniform bit run;
+            // later analysis may only split it further, never make it non-uniform.
             for (uint32_t bit = 1; bit < bits.size(); ++bit) {
                 if (bits[bit] != bits[bit - 1]) Split(id, bit);
             }
@@ -1096,31 +1098,17 @@ class SegmentIRRewriter {
         const std::vector<bool> bits = ConstantBits(m_input, node);
         std::vector<Piece> result;
         for (const SegmentView &segment : m_analysis.Ranges(node.id)) {
-            const uint32_t originalWidth = segment.hi - segment.lo;
             const uint32_t width = TargetWidth(segment);
             const bool first = bits[segment.lo];
             const bool uniform = std::all_of(
                 bits.begin() + segment.lo,
                 bits.begin() + segment.hi,
                 [first](bool bit) { return bit == first; });
-            int64_t id = 0;
-            if (uniform) {
-                id = AddNode(first ? BTOR2_TAG_ones : BTOR2_TAG_zero, width);
-            } else {
-                if (width != originalWidth)
-                    throw std::runtime_error(
-                        "non-uniform constant package was resized");
-                std::string binary;
-                binary.reserve(width);
-                for (uint32_t bit = segment.hi; bit-- > segment.lo;)
-                    binary.push_back(bits[bit] ? '1' : '0');
-                id = AddNode(BTOR2_TAG_const,
-                             width,
-                             {},
-                             0,
-                             {},
-                             std::move(binary));
-            }
+            if (!uniform)
+                throw std::runtime_error(
+                    "constant segment analysis produced a non-uniform range");
+            const int64_t id =
+                AddNode(first ? BTOR2_TAG_ones : BTOR2_TAG_zero, width);
             result.push_back(
                 {segment.lo, segment.hi, width, id, segment.classId});
         }
@@ -1339,8 +1327,7 @@ class SegmentIRRewriter {
 
     void RewriteMetadata(const Btor2IRNode &node) {
         const int64_t expression = Whole(node.args[0]);
-        const uint32_t width = m_input.Sort(m_input.Node(node.args[0]).sortId).width;
-        AddNode(node.tag, width, {expression, 0, 0}, 1, node.symbol);
+        AddNode(node.tag, 1, {expression, 0, 0}, 1, node.symbol);
     }
 
     const Btor2IR &m_input;

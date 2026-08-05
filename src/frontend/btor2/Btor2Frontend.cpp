@@ -151,6 +151,22 @@ void Btor2IR::ReserveFreshIdsAfter(const Btor2IR &source) {
 }
 
 void Btor2Frontend::Validate(const Btor2IR &ir) {
+    // Safety and fairness metadata always consumes a one-bit condition.
+    for (const Btor2IRNode &node : ir.Nodes()) {
+        if (node.tag != BTOR2_TAG_bad &&
+            node.tag != BTOR2_TAG_constraint &&
+            node.tag != BTOR2_TAG_fair) {
+            continue;
+        }
+        const Btor2IRNode &condition = ir.Node(node.args[0]);
+        if (!condition.sortId ||
+            ir.Sort(condition.sortId).tag != BTOR2_TAG_SORT_bitvec ||
+            ir.Sort(condition.sortId).width != 1) {
+            throw Unsupported(node,
+                              "property condition must be a one-bit bitvector");
+        }
+    }
+
     // Nested arrays are outside the selected-slot abstraction supported subset.
     for (const auto &[id, sort] : ir.Sorts()) {
         (void)id;
