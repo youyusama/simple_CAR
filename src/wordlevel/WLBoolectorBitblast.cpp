@@ -92,7 +92,7 @@ class BoolectorModel {
     std::unordered_map<BoolectorNode *, std::vector<WLTraceBit>> traceBits;
     std::unordered_map<int64_t, BoolectorNode *> init;
     std::unordered_map<int64_t, BoolectorNode *> next;
-    std::vector<BoolectorNode *> bad;
+    BoolectorNode *bad{nullptr};
     std::vector<BoolectorNode *> constraints;
     std::unordered_map<int64_t, BoolectorNode *> nodes;
     std::unordered_map<int64_t, BoolectorSort> sorts;
@@ -182,7 +182,7 @@ class Lowering {
                 m_model.next[node.args[0]] = Evaluate(node.args[1]);
                 break;
             case BTOR2_TAG_bad:
-                m_model.bad.push_back(Evaluate(node.args[0]));
+                m_model.bad = Evaluate(node.args[0]);
                 break;
             case BTOR2_TAG_constraint:
                 m_model.constraints.push_back(Evaluate(node.args[0]));
@@ -419,12 +419,10 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
         aiger_add_constraint(aig, bits[0], "");
         boolector_aig_free_bits(manager, bits, 1);
     }
-    for (BoolectorNode *bad : model.bad) {
-        bitblast(bad);
-        uint64_t *bits = boolector_aig_get_bits(manager, bad);
-        aiger_add_bad(aig, bits[0], "");
-        boolector_aig_free_bits(manager, bits, 1);
-    }
+    bitblast(model.bad);
+    uint64_t *badBits = boolector_aig_get_bits(manager, model.bad);
+    aiger_add_bad(aig, badBits[0], "");
+    boolector_aig_free_bits(manager, badBits, 1);
 
     // Encode symbolic resets as constraints active only in the first frame.
     if (!symbolicInits.empty()) {

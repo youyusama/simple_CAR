@@ -31,8 +31,7 @@ enum class WLTraceBitKind {
     AbstractReadInput,
     SelectorState,
     ContentState,
-    GuardState,
-    ArrayNextInput
+    GuardState
 };
 
 // Provenance of one final AIGER bit used to decode checker traces.

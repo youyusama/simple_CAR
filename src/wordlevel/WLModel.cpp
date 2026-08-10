@@ -21,8 +21,6 @@ class PropertyCoiReducer {
 
     Btor2IR Run() {
         IndexModel();
-        // This pass targets safety properties; preserve other model kinds.
-        if (!m_hasBad) return m_input;
         MarkLiveNodes();
         return BuildReducedIr();
     }
@@ -39,7 +37,6 @@ class PropertyCoiReducer {
                 m_nextNodes[std::abs(node.args[0])] = node.id;
                 break;
             case BTOR2_TAG_bad:
-                m_hasBad = true;
                 m_worklist.push_back(node.id);
                 break;
             case BTOR2_TAG_constraint:
@@ -108,7 +105,6 @@ class PropertyCoiReducer {
     }
 
     const Btor2IR &m_input;
-    bool m_hasBad{false};
     std::vector<int64_t> m_worklist;
     std::unordered_set<int64_t> m_liveNodes;
     std::unordered_set<int64_t> m_liveSorts;

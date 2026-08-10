@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
-#include <unordered_set>
 
 namespace car {
 namespace {
@@ -151,8 +150,19 @@ void Btor2IR::ReserveFreshIdsAfter(const Btor2IR &source) {
 }
 
 void Btor2Frontend::Validate(const Btor2IR &ir) {
+    const Btor2IRNode *badProperty = nullptr;
+
     // Safety and fairness metadata always consumes a one-bit condition.
     for (const Btor2IRNode &node : ir.Nodes()) {
+        if (node.tag == BTOR2_TAG_bad) {
+            if (badProperty) {
+                throw Unsupported(
+                    node,
+                    "multiple bad properties are unsupported; the first is "
+                    "at line " + std::to_string(badProperty->line));
+            }
+            badProperty = &node;
+        }
         if (node.tag != BTOR2_TAG_bad &&
             node.tag != BTOR2_TAG_constraint &&
             node.tag != BTOR2_TAG_fair) {
@@ -165,6 +175,10 @@ void Btor2Frontend::Validate(const Btor2IR &ir) {
             throw Unsupported(node,
                               "property condition must be a one-bit bitvector");
         }
+    }
+    if (!badProperty) {
+        throw std::runtime_error(
+            "BTOR2 input must contain exactly one bad property");
     }
 
     // Nested arrays are outside the selected-slot abstraction supported subset.
@@ -179,21 +193,7 @@ void Btor2Frontend::Validate(const Btor2IR &ir) {
 
     if (!ir.HasArrays()) return;
 
-    // Direct array next-state inputs are the only accepted nondeterministic arrays.
-    std::unordered_set<int64_t> allowedArrayInputs;
-
     // Restrict array-valued expressions to the remodellable state/write/ite form.
-    for (const Btor2IRNode &node : ir.Nodes()) {
-        if (node.tag == BTOR2_TAG_next) {
-            const Btor2IRNode &state = ir.Node(node.args[0]);
-            const Btor2IRNode &value = ir.Node(node.args[1]);
-            if (IsArray(ir, state.sortId) && value.tag == BTOR2_TAG_input) {
-                allowedArrayInputs.insert(value.id);
-            }
-        }
-    }
-
-    // Array equality requires reasoning not provided by the selected-slot model.
     for (const Btor2IRNode &node : ir.Nodes()) {
         if (!IsArray(ir, node.sortId)) continue;
         switch (node.tag) {
@@ -204,13 +204,7 @@ void Btor2Frontend::Validate(const Btor2IR &ir) {
         case BTOR2_TAG_next:
             break;
         case BTOR2_TAG_input:
-            if (!allowedArrayInputs.count(node.id)) {
-                throw Unsupported(
-                    node,
-                    "general array inputs are unsupported; only an array "
-                    "state's direct nondeterministic next value is allowed");
-            }
-            break;
+            throw Unsupported(node, "whole-array inputs are unsupported");
         default:
             throw Unsupported(node,
                               "array-valued operator is outside the supported "
@@ -241,13 +235,6 @@ void Btor2Frontend::Validate(const Btor2IR &ir) {
                 throw Unsupported(
                     node,
                     "array operand is used outside read/write/ite/init/next");
-            }
-
-            if (argument.tag == BTOR2_TAG_input &&
-                !(node.tag == BTOR2_TAG_next && i == 1)) {
-                throw Unsupported(
-                    node,
-                    "array input is used outside a direct state next value");
             }
         }
     }

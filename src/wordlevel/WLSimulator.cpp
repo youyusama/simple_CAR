@@ -3,7 +3,6 @@
 
 #include <btorsim/btorsimbv.h>
 
-#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <tuple>
@@ -62,7 +61,6 @@ class WLSimulator::Impl {
         std::unordered_map<int64_t, BitValue> inputs;
         std::unordered_map<int64_t, BitValue> states;
         std::unordered_map<int64_t, BitValue> readMisses;
-        std::unordered_map<int64_t, BitValue> arrayNextInputs;
         std::unordered_map<size_t, BitValue> selectors;
         std::unordered_map<size_t, BitValue> contents;
     };
@@ -107,15 +105,9 @@ class WLSimulator::Impl {
                 }
             }
 
-            bool badKnown = false;
-            bool badTrue = false;
-            for (int64_t badId : m_bad) {
-                Value value = Eval(badId);
-                if (value.bits.known) {
-                    badKnown = true;
-                    badTrue = badTrue || value.bits.IsOne();
-                }
-            }
+            Value badValue = Eval(m_bad);
+            const bool badKnown = badValue.bits.known;
+            const bool badTrue = badKnown && badValue.bits.IsOne();
 
             // Read mismatches identify memory/address pairs for CEGAR refinement.
             for (int64_t readId : m_reads) {
@@ -214,7 +206,7 @@ class WLSimulator::Impl {
                 break;
             case BTOR2_TAG_init: m_init[node.args[0]] = node.args[1]; break;
             case BTOR2_TAG_next: m_next[node.args[0]] = node.args[1]; break;
-            case BTOR2_TAG_bad: m_bad.push_back(node.args[0]); break;
+            case BTOR2_TAG_bad: m_bad = node.args[0]; break;
             case BTOR2_TAG_constraint:
                 m_constraints.push_back(node.args[0]);
                 break;
@@ -237,12 +229,12 @@ class WLSimulator::Impl {
     }
 
     unsigned ArrayIndexWidth(int64_t memoryId) const {
-        const Btor2IRSort &sort = m_ir.Sort(m_ir.Node(std::abs(memoryId)).sortId);
+        const Btor2IRSort &sort = m_ir.Sort(m_ir.Node(memoryId).sortId);
         return m_ir.Sort(sort.indexSort).width;
     }
 
     unsigned ArrayElementWidth(int64_t memoryId) const {
-        const Btor2IRSort &sort = m_ir.Sort(m_ir.Node(std::abs(memoryId)).sortId);
+        const Btor2IRSort &sort = m_ir.Sort(m_ir.Node(memoryId).sortId);
         return m_ir.Sort(sort.elementSort).width;
     }
 
@@ -285,14 +277,6 @@ class WLSimulator::Impl {
         case WLTraceBitKind::AbstractReadInput: {
             BitValue &bits = EnsureBits(
                 frame.readMisses, desc.nodeId, NodeWidth(desc.nodeId));
-            if (value) bits.value.SetBit(originalBit, true);
-            break;
-        }
-        case WLTraceBitKind::ArrayNextInput: {
-            BitValue &bits =
-                EnsureBits(frame.arrayNextInputs,
-                           desc.nodeId,
-                           ArrayElementWidth(desc.nodeId));
             if (value) bits.value.SetBit(originalBit, true);
             break;
         }
@@ -497,14 +481,6 @@ class WLSimulator::Impl {
             if (it != m_state.end()) return it->second;
         }
         if (node.tag == BTOR2_TAG_input) {
-            if (IsArraySort(node.sortId)) {
-                ArrayValue array;
-                array.indexWidth = ArrayIndexWidth(node.id);
-                array.elementWidth = ArrayElementWidth(node.id);
-                array.defaultKnown = false;
-                array.defaultValue = BitValue::Unknown(array.elementWidth);
-                return Value::Array(std::move(array));
-            }
             auto it = m_frames[m_time].inputs.find(node.id);
             return Value::BV(it == m_frames[m_time].inputs.end()
                                  ? BitValue::Known(NodeWidth(node.id), 0)
@@ -687,7 +663,6 @@ class WLSimulator::Impl {
         BitValue result = missIt == m_frames[m_time].readMisses.end()
                               ? BitValue::Known(elementWidth, 0)
                               : missIt->second;
-        if (memoryId < 0) return Value::BV(result);
 
         Value addressValue = EvalAbstract(read.args[1]);
         if (!addressValue.bits.known)
@@ -759,7 +734,6 @@ class WLSimulator::Impl {
             int64_t rhs = FindMemory(node.args[2]);
             return lhs == rhs ? lhs : 0;
         }
-        if (node.tag == BTOR2_TAG_input) return -node.id;
         return 0;
     }
 
@@ -785,7 +759,7 @@ class WLSimulator::Impl {
     std::unordered_map<int64_t, size_t> m_statePosition;
     std::unordered_map<int64_t, int64_t> m_init;
     std::unordered_map<int64_t, int64_t> m_next;
-    std::vector<int64_t> m_bad;
+    int64_t m_bad{0};
     std::vector<int64_t> m_constraints;
     std::vector<int64_t> m_reads;
     std::unordered_map<int64_t, int64_t> m_readMemory;
