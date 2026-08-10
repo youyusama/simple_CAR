@@ -21,7 +21,6 @@ struct WLModelBuildResult {
     // Completed WL pipeline result before constructing the bit-level Model.
     std::shared_ptr<aiger> aig;
     bool sourceHasArrays{false};
-    std::vector<WLArrayRead> arrayReads;
     WLTraceMap traceMap;
 };
 
@@ -35,7 +34,6 @@ class WLModel {
     const Model &BitModel() const { return *m_model; }
 
     bool SourceHasArrays() const { return m_sourceHasArrays; }
-    const std::vector<WLArrayRead> &ArrayReads() const { return m_arrayReads; }
     const WLTraceMap &TraceMap() const { return m_traceMap; }
     const std::string &InputPath() const { return m_inputPath; }
 
@@ -54,7 +52,6 @@ class WLModel {
     std::shared_ptr<aiger> m_aig;
     std::unique_ptr<Model> m_model;
     bool m_sourceHasArrays{false};
-    std::vector<WLArrayRead> m_arrayReads;
     WLTraceMap m_traceMap;
 };
 

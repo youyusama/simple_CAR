@@ -25,12 +25,15 @@ struct WLReadMismatch {
 
 class WLSimulator {
   public:
+    enum class ReplayKind {
+        ConcreteCounterexample,
+        SpuriousCounterexample
+    };
+
     struct Result {
-        // Unsafe is accepted only when replay reaches a concrete bad state.
-        bool concreteCounterexample{false};
-        bool incomplete{false};
+        ReplayKind kind{ReplayKind::SpuriousCounterexample};
         unsigned badTime{0};
-        std::vector<WLReadMismatch> mismatches;
+        std::vector<WLReadMismatch> refinementReads;
     };
 
     explicit WLSimulator(const Btor2IR &ir);

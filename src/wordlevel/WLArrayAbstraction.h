@@ -11,7 +11,6 @@ namespace car {
 struct WLArrayAbstractionResult {
     Btor2IR ir;
     std::vector<WLMemoryPair> tracePairs;
-    std::vector<WLArrayRead> reads;
     WLIRTraceMap traceSources;
 };
 

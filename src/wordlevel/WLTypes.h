@@ -17,13 +17,6 @@ struct WLMemoryPair {
     unsigned delay{0};
 };
 
-struct WLArrayRead {
-    // Preserve the original read relation for simulator-directed refinement.
-    int64_t readNodeId{0};
-    int64_t memoryStateId{0};
-    int64_t addressNodeId{0};
-};
-
 enum class WLTraceBitKind {
     None,
     OriginalInput,

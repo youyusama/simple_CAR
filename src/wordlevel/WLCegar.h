@@ -36,7 +36,7 @@ class WLCegar {
     bool WriteCounterexample(const std::string &path);
 
   private:
-    void AddPair(const WLMemoryPair &pair);
+    bool AddPair(const WLMemoryPair &pair);
     unsigned MaxDelay() const;
     bool ReloadModel();
     std::unique_ptr<BaseAlg> CreateBitLevelChecker(Model &model, Log &log);
@@ -46,6 +46,7 @@ class WLCegar {
     WLModel &m_model;
     std::unique_ptr<BaseAlg> m_checker;
     std::vector<WLMemoryPair> m_memoryPairs;
+    std::vector<std::pair<Cube, Cube>> m_cexTrace;
     std::unique_ptr<Btor2IR> m_ir;
     bool m_concreteCounterexample{false};
 };

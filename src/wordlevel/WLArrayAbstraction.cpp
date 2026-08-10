@@ -22,11 +22,11 @@ class Builder {
         DeclareTrackedSlotStates();
         RewriteBitVectorLogicAndReads();
         BuildTrackedSlotTransitions();
+        BuildUninitializedSlotConsistency();
         BuildProperties();
         m_output.SetHasArrays(false);
         return {std::move(m_output),
                 std::move(m_tracePairs),
-                std::move(m_reads),
                 std::move(m_traceSources)};
     }
 
@@ -72,8 +72,6 @@ class Builder {
             case BTOR2_TAG_read: {
                 int64_t memoryId = FindMemory(node.args[0]);
                 m_readMemory[node.id] = memoryId;
-                m_reads.push_back(
-                    {node.id, memoryId, node.args[1]});
                 break;
             }
             default: break;
@@ -149,13 +147,15 @@ class Builder {
                         arraySort.indexSort,
                         {},
                         0,
-                        "wl.mem." + std::to_string(memoryId) + ".selector");
+                        "wl.mem." + std::to_string(memoryId) + ".slot." +
+                            std::to_string(slot.pairIndex) + ".selector");
                 AddNode(slot.contentId,
                         BTOR2_TAG_state,
                         arraySort.elementSort,
                         {},
                         0,
-                        "wl.mem." + std::to_string(memoryId) + ".content");
+                        "wl.mem." + std::to_string(memoryId) + ".slot." +
+                            std::to_string(slot.pairIndex) + ".content");
                 m_traceSources[slot.selectorId] = {
                     WLTraceBitKind::SelectorState,
                     memoryId,
@@ -244,6 +244,40 @@ class Builder {
                             arraySort.elementSort,
                             slot.contentId,
                             CloneBitVectorNode(initIt->second));
+            }
+        }
+    }
+
+    void BuildUninitializedSlotConsistency() {
+        // An uninitialized memory is one arbitrary function: equal selected
+        // addresses must therefore denote equal initial contents.
+        const int64_t boolSort = EnsureBitVectorSort(1);
+        for (const auto &[memoryId, slots] : m_slots) {
+            if (m_inits.count(memoryId)) continue;
+            for (size_t i = 0; i < slots.size(); ++i) {
+                for (size_t j = i + 1; j < slots.size(); ++j) {
+                    int64_t sameSelector = AddExpression(
+                        BTOR2_TAG_eq,
+                        boolSort,
+                        {slots[i].selectorId, slots[j].selectorId, 0},
+                        2);
+                    int64_t sameContent = AddExpression(
+                        BTOR2_TAG_eq,
+                        boolSort,
+                        {slots[i].contentId, slots[j].contentId, 0},
+                        2);
+                    int64_t consistent = AddExpression(
+                        BTOR2_TAG_implies,
+                        boolSort,
+                        {sameSelector, sameContent, 0},
+                        2);
+                    AddNode(m_output.FreshId(),
+                            BTOR2_TAG_constraint,
+                            boolSort,
+                            {consistent, 0, 0},
+                            1,
+                            {});
+                }
             }
         }
     }
@@ -489,7 +523,6 @@ class Builder {
     const std::vector<WLMemoryPair> &m_pairs;
     Btor2IR m_output;
     std::vector<WLMemoryPair> m_tracePairs;
-    std::vector<WLArrayRead> m_reads;
     WLIRTraceMap m_traceSources;
     std::unordered_map<int64_t, int64_t> m_bitVectorMap;
     std::unordered_map<int64_t, int64_t> m_inits;

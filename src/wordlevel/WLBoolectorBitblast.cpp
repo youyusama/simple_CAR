@@ -74,7 +74,7 @@ class BoolectorModel {
         for (uint32_t bit = 0; bit < width; ++bit) {
             bits.push_back({source.kind,
                             source.nodeId,
-                            bit,
+                            width - bit - 1,
                             source.pairIndex,
                             source.originalBitOffset,
                             source.originalSegmentWidth
@@ -369,12 +369,6 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
             model.next.count(id) ? model.next.at(id) : nullptr;
         BoolectorNode *init =
             model.init.count(id) ? model.init.at(id) : nullptr;
-        if (init && !next) {
-            boolector_aig_delete(manager);
-            throw std::runtime_error(
-                "initialized state without a next function is unsupported");
-        }
-
         const size_t width = boolector_get_width(model.btor, state);
         uint64_t *stateBits = boolector_aig_get_bits(manager, state);
         uint64_t *nextBits =
@@ -392,6 +386,10 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
                     inputOrder.push_back(traceIt->second[i]);
                 else
                     inputOrder.push_back({});
+                // A state without next is a per-frame nondeterministic input;
+                // its optional init still constrains the first frame.
+                if (initBits)
+                    symbolicInits.emplace_back(stateBits[i], initBits[i]);
                 continue;
             }
             aiger_add_latch(aig, stateBits[i], nextBits[i], name ? name : "");

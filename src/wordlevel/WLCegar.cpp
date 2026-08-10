@@ -15,10 +15,57 @@
 #include "WLSimulator.h"
 
 #include <algorithm>
-#include <iostream>
 #include <stdexcept>
+#include <vector>
 
 namespace car {
+namespace {
+
+void CompleteReplaySeed(
+    Model &model,
+    std::vector<std::pair<Cube, Cube>> &trace) {
+    if (trace.empty())
+        throw std::runtime_error("checker returned an empty bit-level trace");
+
+    auto complete = [](Cube &cube,
+                       const std::vector<Var> &required,
+                       size_t frame,
+                       const char *kind) {
+        Var maxVar = 0;
+        for (Var var : required) maxVar = std::max(maxVar, var);
+        std::vector<char> allowed(static_cast<size_t>(maxVar) + 1, 0);
+        std::vector<int> values(static_cast<size_t>(maxVar) + 1, -1);
+        for (Var var : required) allowed[var] = 1;
+        for (Lit literal : cube) {
+            Var var = VarOf(literal);
+            if (var >= allowed.size() || !allowed[var]) continue;
+            int value = Sign(literal) ? 0 : 1;
+            if (values[var] != -1 && values[var] != value) {
+                throw std::runtime_error(
+                    "checker trace has contradictory " + std::string(kind) +
+                    " variable " + std::to_string(var) + " at frame " +
+                    std::to_string(frame));
+            }
+            values[var] = value;
+        }
+        for (Var var : required) {
+            if (values[var] == -1) cube.push_back(~MkLit(var));
+        }
+    };
+
+    for (size_t frame = 0; frame < trace.size(); ++frame) {
+        complete(trace[frame].first,
+                 model.GetModelInputs(),
+                 frame,
+                 "input");
+    }
+    complete(trace.front().second,
+             model.GetModelLatches(),
+             0,
+             "initial latch");
+}
+
+} // namespace
 
 WLCegar::WLCegar(const Settings &settings,
                  Log &log,
@@ -44,9 +91,9 @@ WLCegar::WLCegar(const Settings &settings,
 
 WLCegar::~WLCegar() = default;
 
-void WLCegar::AddPair(const WLMemoryPair &pair) {
+bool WLCegar::AddPair(const WLMemoryPair &pair) {
     // Refinement pairs are unique by memory, address expression, and delay.
-    if (pair.memoryStateId <= 0) return;
+    if (pair.memoryStateId <= 0) return false;
     auto duplicate = std::find_if(
         m_memoryPairs.begin(),
         m_memoryPairs.end(),
@@ -55,8 +102,11 @@ void WLCegar::AddPair(const WLMemoryPair &pair) {
                    existing.addressNodeId == pair.addressNodeId &&
                    existing.delay == pair.delay;
         });
-    if (duplicate == m_memoryPairs.end())
+    if (duplicate == m_memoryPairs.end()) {
         m_memoryPairs.push_back(pair);
+        return true;
+    }
+    return false;
 }
 
 unsigned WLCegar::MaxDelay() const {
@@ -110,6 +160,7 @@ CheckResult WLCegar::Run() {
     CheckResult res = CheckResult::Unknown;
     int refinements = 0;
     m_concreteCounterexample = false;
+    m_cexTrace.clear();
 
     while (true) {
         // Each iteration proves or refutes the current finite abstraction.
@@ -118,40 +169,41 @@ CheckResult WLCegar::Run() {
 
         if (res == CheckResult::Unsafe) {
             // Simulator replay distinguishes concrete and spurious abstract traces.
-            const auto &trace = m_checker->GetCexTrace();
-            unsigned depth =
-                trace.empty() ? 0 : static_cast<unsigned>(trace.size() - 1);
+            auto trace = m_checker->GetCexTrace();
+            CompleteReplaySeed(m_model.BitModel(), trace);
             WLSimulator simulator(*m_ir);
             WLSimulator::Result replay =
                 simulator.Replay(trace, m_model.TraceMap());
-            if (replay.concreteCounterexample) {
+            if (replay.kind ==
+                WLSimulator::ReplayKind::ConcreteCounterexample) {
                 m_concreteCounterexample = true;
+                m_cexTrace = std::move(trace);
                 break;
             }
 
-            // Prefer mismatch-directed refinement from the simulator.
-            size_t oldSize = m_memoryPairs.size();
-            for (const WLReadMismatch &mismatch : replay.mismatches) {
-                AddPair({mismatch.memoryStateId,
-                         mismatch.addressNodeId,
-                         mismatch.delay});
-            }
-            // Fall back to tracking every read address through the trace depth.
-            if (m_memoryPairs.size() == oldSize) {
-                for (const WLArrayRead &read : m_model.ArrayReads()) {
-                    if (read.memoryStateId <= 0) continue;
-                    for (unsigned delay = 0; delay <= depth; ++delay) {
-                        AddPair({read.memoryStateId, read.addressNodeId, delay});
-                    }
-                }
-            }
-            if (m_memoryPairs.size() == oldSize) {
+            // Every spurious trace must produce a new simulator-derived pair.
+            bool refined = false;
+            for (const WLReadMismatch &mismatch : replay.refinementReads) {
                 LOG_L(m_log,
-                      0,
-                      "word-level memory abstraction could not refine the counterexample.");
-                res = CheckResult::Unknown;
-                break;
+                      2,
+                      "word-level erroneous read: read=",
+                      mismatch.readNodeId,
+                      " memory=",
+                      mismatch.memoryStateId,
+                      " address=",
+                      mismatch.addressNodeId,
+                      " time=",
+                      mismatch.time,
+                      " delay=",
+                      mismatch.delay);
+                refined |= AddPair({mismatch.memoryStateId,
+                                    mismatch.addressNodeId,
+                                    mismatch.delay});
             }
+            if (!refined)
+                throw std::runtime_error(
+                    "spurious word-level counterexample produced no new "
+                    "memory refinement pair");
 
             ++refinements;
             LOG_L(m_log,
@@ -187,16 +239,11 @@ CheckResult WLCegar::Run() {
         break;
     }
 
-    if (res == CheckResult::Unsafe && !m_concreteCounterexample) {
-        LOG_L(m_log,
-              0,
-              "word-level transformed counterexample could not be reproduced by simulator.");
-        res = CheckResult::Unknown;
-    }
     return res;
 }
 
 std::vector<std::pair<Cube, Cube>> WLCegar::GetCexTrace() {
+    if (m_concreteCounterexample) return m_cexTrace;
     if (!m_checker) return {};
     return m_checker->GetCexTrace();
 }
@@ -207,11 +254,12 @@ int WLCegar::GetSafeDepth() const {
 }
 
 bool WLCegar::WriteCounterexample(const std::string &path) {
-    if (!m_concreteCounterexample || !m_checker) return false;
+    if (!m_concreteCounterexample) return false;
     WLSimulator simulator(*m_ir);
     WLSimulator::Result replay = simulator.Replay(
-        m_checker->GetCexTrace(), m_model.TraceMap());
-    if (!replay.concreteCounterexample) return false;
+        m_cexTrace, m_model.TraceMap());
+    if (replay.kind != WLSimulator::ReplayKind::ConcreteCounterexample)
+        return false;
     return simulator.WriteCounterexample(path);
 }
 

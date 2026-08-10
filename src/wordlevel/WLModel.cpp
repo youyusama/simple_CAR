@@ -140,7 +140,6 @@ void WLModel::Build(const std::vector<WLMemoryPair> &memoryPairs) {
     // Re-run the complete WL pipeline after each CEGAR refinement.
     WLModelBuildResult result = BuildFromBtor2(memoryPairs);
     m_sourceHasArrays = result.sourceHasArrays;
-    m_arrayReads = std::move(result.arrayReads);
     m_traceMap = std::move(result.traceMap);
     m_aig = std::move(result.aig);
 
@@ -168,7 +167,6 @@ WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
 
     Btor2IR processedIr;
     std::vector<WLMemoryPair> tracePairs;
-    std::vector<WLArrayRead> reads;
     WLIRTraceMap traceSources;
 
     // Stage 3: normal checking abstracts arrays; export mode is array-free.
@@ -183,7 +181,6 @@ WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
         }
         processedIr = std::move(abstraction.ir);
         tracePairs = std::move(abstraction.tracePairs);
-        reads = std::move(abstraction.reads);
         traceSources = std::move(abstraction.traceSources);
     }
 
@@ -199,7 +196,6 @@ WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
 
     return {std::move(aig),
             sourceHasArrays,
-            std::move(reads),
             std::move(traceMap)};
 }
 

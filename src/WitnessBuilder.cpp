@@ -243,7 +243,8 @@ bool WitnessBuilder::WriteBtor2Counterexample(
         WLSimulator simulator(ir);
         WLSimulator::Result replay =
             simulator.Replay(trace, *m_wlTraceMap);
-        if (!replay.concreteCounterexample) {
+        if (replay.kind !=
+            WLSimulator::ReplayKind::ConcreteCounterexample) {
             LOG_L(m_log,
                   1,
                   "WitnessBuilder: BTOR2 counterexample could not be reproduced.");
