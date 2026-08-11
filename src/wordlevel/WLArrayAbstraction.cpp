@@ -121,12 +121,14 @@ class Builder {
                 continue;
             m_output.AddNode(node);
             m_bitVectorMap[node.id] = node.id;
-            m_traceSources[node.id] = {
-                node.tag == BTOR2_TAG_input
-                    ? WLTraceBitKind::OriginalInput
-                    : WLTraceBitKind::OriginalState,
+            m_traceSources.insert_or_assign(
                 node.id,
-                0};
+                WLValueOrigin{
+                    node.tag == BTOR2_TAG_input
+                        ? WLTraceKind::OriginalInput
+                        : WLTraceKind::OriginalState,
+                    node.id,
+                    0});
         }
     }
 
@@ -156,14 +158,18 @@ class Builder {
                         0,
                         "wl.mem." + std::to_string(memoryId) + ".slot." +
                             std::to_string(slot.pairIndex) + ".content");
-                m_traceSources[slot.selectorId] = {
-                    WLTraceBitKind::SelectorState,
-                    memoryId,
-                    slot.pairIndex};
-                m_traceSources[slot.contentId] = {
-                    WLTraceBitKind::ContentState,
-                    memoryId,
-                    slot.pairIndex};
+                m_traceSources.insert_or_assign(
+                    slot.selectorId,
+                    WLValueOrigin{
+                        WLTraceKind::SelectorState,
+                        memoryId,
+                        slot.pairIndex});
+                m_traceSources.insert_or_assign(
+                    slot.contentId,
+                    WLValueOrigin{
+                        WLTraceKind::ContentState,
+                        memoryId,
+                        slot.pairIndex});
                 m_tracePairs.push_back(pair);
 
                 // Selectors are stable state; only the tracked content is updated.
@@ -304,10 +310,6 @@ class Builder {
                             {},
                             0,
                             "wl.guard." + std::to_string(delayId));
-                    m_traceSources[delayId] = {
-                        WLTraceBitKind::GuardState,
-                        slot.pair.addressNodeId,
-                        slot.pairIndex};
                     AddMetaNode(
                         BTOR2_TAG_next, boolSort, delayId, guard);
                     guard = delayId;
@@ -400,8 +402,10 @@ class Builder {
                     {},
                     0,
                     "wl.read." + std::to_string(read.id) + ".miss");
-            m_traceSources[read.id] = {
-                WLTraceBitKind::AbstractReadInput, read.id, 0};
+            m_traceSources.insert_or_assign(
+                read.id,
+                WLValueOrigin{
+                    WLTraceKind::AbstractReadInput, read.id, 0});
             m_bitVectorMap[read.id] = read.id;
             return read.id;
         }
@@ -413,8 +417,10 @@ class Builder {
                 {},
                 0,
                 "wl.read." + std::to_string(read.id) + ".miss");
-        m_traceSources[result] = {
-            WLTraceBitKind::AbstractReadInput, read.id, 0};
+        m_traceSources.insert_or_assign(
+            result,
+            WLValueOrigin{
+                WLTraceKind::AbstractReadInput, read.id, 0});
 
         // Build a priority ITE chain that returns concrete content on selector hits.
         auto &slots = slotsIt->second;

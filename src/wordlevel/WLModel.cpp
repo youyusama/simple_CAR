@@ -7,9 +7,7 @@
 #include "WLPackageResize.h"
 
 #include <cstdlib>
-#include <map>
 #include <stdexcept>
-#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -162,58 +160,55 @@ WLBitVector &EnsurePairValue(
     return it->second;
 }
 
-void SetReplayBit(const Btor2IR &ir,
-                  WLReplayStep &step,
-                  const WLTraceBit &descriptor,
-                  bool bit) {
-    const uint32_t originalBit =
-        descriptor.originalBitOffset + descriptor.bit;
-    WLBitVector *value = nullptr;
-    switch (descriptor.kind) {
-    case WLTraceBitKind::OriginalInput:
-        value = &EnsureNodeValue(step.inputValues,
-                                 descriptor.nodeId,
-                                 NodeWidth(ir, descriptor.nodeId));
-        break;
-    case WLTraceBitKind::OriginalState:
-        value = &EnsureNodeValue(step.stateValues,
-                                 descriptor.nodeId,
-                                 NodeWidth(ir, descriptor.nodeId));
-        break;
-    case WLTraceBitKind::AbstractReadInput:
-        value = &EnsureNodeValue(step.abstractReadValues,
-                                 descriptor.nodeId,
-                                 NodeWidth(ir, descriptor.nodeId));
-        break;
-    case WLTraceBitKind::SelectorState:
-        value = &EnsurePairValue(step.selectorValues,
-                                 descriptor.pairIndex,
-                                 ArrayIndexWidth(ir, descriptor.nodeId));
-        break;
-    case WLTraceBitKind::ContentState:
-        value = &EnsurePairValue(step.contentValues,
-                                 descriptor.pairIndex,
-                                 ArrayElementWidth(ir, descriptor.nodeId));
-        break;
-    default: return;
+WLBitVector &ReplayDestination(const Btor2IR &ir,
+                               WLReplayStep &step,
+                               const WLValueOrigin &origin) {
+    switch (origin.kind) {
+    case WLTraceKind::OriginalInput:
+        return EnsureNodeValue(step.inputValues,
+                               origin.nodeId,
+                               NodeWidth(ir, origin.nodeId));
+    case WLTraceKind::OriginalState:
+        return EnsureNodeValue(step.stateValues,
+                               origin.nodeId,
+                               NodeWidth(ir, origin.nodeId));
+    case WLTraceKind::AbstractReadInput:
+        return EnsureNodeValue(step.abstractReadValues,
+                               origin.nodeId,
+                               NodeWidth(ir, origin.nodeId));
+    case WLTraceKind::SelectorState:
+        return EnsurePairValue(step.selectorValues,
+                               origin.pairIndex,
+                               ArrayIndexWidth(ir, origin.nodeId));
+    case WLTraceKind::ContentState:
+        return EnsurePairValue(step.contentValues,
+                               origin.pairIndex,
+                               ArrayElementWidth(ir, origin.nodeId));
     }
-    value->SetBit(originalBit, bit);
+    throw std::runtime_error("unknown word-level trace origin");
 }
 
 void SetReplaySegment(const Btor2IR &ir,
                       WLReplayStep &step,
-                      const WLTraceBit &descriptor,
+                      const WLTraceSpan &span,
                       const WLBitVector &encoded) {
-    const bool expandsToOnes = encoded.IsOnes();
-    for (uint32_t bit = 0; bit < descriptor.originalSegmentWidth; ++bit) {
-        WLTraceBit decoded = descriptor;
-        decoded.bit = bit;
-        decoded.resized = false;
-        SetReplayBit(ir,
-                     step,
-                     decoded,
-                     expandsToOnes ||
-                         (bit < encoded.Width() && encoded.GetBit(bit)));
+    const WLValueOrigin &origin = span.origin;
+    WLBitVector &destination = ReplayDestination(ir, step, origin);
+    if (encoded.Width() != span.encodedWidth ||
+        span.encodedWidth > origin.originalSegmentWidth ||
+        origin.originalBitOffset + origin.originalSegmentWidth >
+            destination.Width()) {
+        throw std::runtime_error("invalid word-level replay span");
+    }
+
+    // A compact all-ones package denotes the original segment's all-ones value.
+    const bool resized = span.encodedWidth < origin.originalSegmentWidth;
+    const bool expandsToOnes = resized && encoded.IsOnes();
+    for (uint32_t bit = 0; bit < origin.originalSegmentWidth; ++bit) {
+        const bool value =
+            expandsToOnes ||
+            (bit < encoded.Width() && encoded.GetBit(bit));
+        destination.SetBit(origin.originalBitOffset + bit, value);
     }
 }
 
@@ -224,44 +219,22 @@ void DecodeReplayStep(const Btor2IR &ir,
                       bool loadInitialLatches) {
     const auto inputValues = CubeValues(bitStep.first);
     const auto latchValues = CubeValues(bitStep.second);
-    using SegmentKey =
-        std::tuple<int, int64_t, size_t, uint32_t, uint32_t, uint32_t>;
-    struct EncodedSegment {
-        WLTraceBit descriptor;
-        WLBitVector value;
-    };
-    std::map<SegmentKey, EncodedSegment> encodedSegments;
 
-    auto decode = [&](const auto &descriptors, const auto &bitValues) {
-        for (const auto &[var, descriptor] : descriptors) {
-            auto found = bitValues.find(var);
-            const bool bit = found != bitValues.end() && found->second;
-            if (!descriptor.resized) {
-                SetReplayBit(ir, step, descriptor, bit);
-                continue;
+    auto decode = [&](const std::vector<WLTraceSpan> &spans,
+                      const auto &bitValues) {
+        for (const WLTraceSpan &span : spans) {
+            WLBitVector encoded = WLBitVector::Zero(span.encodedWidth);
+            for (uint32_t bit = 0; bit < span.encodedWidth; ++bit) {
+                auto found = bitValues.find(span.firstAigVar + bit);
+                if (found != bitValues.end() && found->second)
+                    encoded.SetBit(bit, true);
             }
-            SegmentKey key{static_cast<int>(descriptor.kind),
-                           descriptor.nodeId,
-                           descriptor.pairIndex,
-                           descriptor.originalBitOffset,
-                           descriptor.originalSegmentWidth,
-                           descriptor.encodedSegmentWidth};
-            auto [it, inserted] = encodedSegments.emplace(
-                key,
-                EncodedSegment{
-                    descriptor,
-                    WLBitVector::Zero(descriptor.encodedSegmentWidth)});
-            (void)inserted;
-            if (bit) it->second.value.SetBit(descriptor.bit, true);
+            SetReplaySegment(ir, step, span, encoded);
         }
     };
 
-    decode(traceMap.inputBits, inputValues);
-    if (loadInitialLatches) decode(traceMap.latchBits, latchValues);
-    for (const auto &[key, segment] : encodedSegments) {
-        (void)key;
-        SetReplaySegment(ir, step, segment.descriptor, segment.value);
-    }
+    decode(traceMap.inputSpans, inputValues);
+    if (loadInitialLatches) decode(traceMap.latchSpans, latchValues);
 }
 
 } // namespace

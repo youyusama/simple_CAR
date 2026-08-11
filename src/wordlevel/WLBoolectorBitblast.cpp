@@ -65,31 +65,16 @@ class BoolectorModel {
         }
     }
 
-    void SetTraceBits(BoolectorNode *node,
-                      const WLIRTraceSource &source,
-                      uint32_t width) {
-        // Expand node-level provenance into one descriptor per generated bit.
-        std::vector<WLTraceBit> bits;
-        bits.reserve(width);
-        for (uint32_t bit = 0; bit < width; ++bit) {
-            bits.push_back({source.kind,
-                            source.nodeId,
-                            width - bit - 1,
-                            source.pairIndex,
-                            source.originalBitOffset,
-                            source.originalSegmentWidth
-                                ? source.originalSegmentWidth
-                                : width,
-                            width,
-                            source.resized});
-        }
-        traceBits[node] = std::move(bits);
+    void SetTraceSource(BoolectorNode *node,
+                        const WLValueOrigin &source) {
+        // Keep word-level provenance attached to the complete variable.
+        traceSources[node] = source;
     }
 
     Btor *btor;
     std::vector<BoolectorNode *> inputs;
     std::vector<std::pair<int64_t, BoolectorNode *>> states;
-    std::unordered_map<BoolectorNode *, std::vector<WLTraceBit>> traceBits;
+    std::unordered_map<BoolectorNode *, WLValueOrigin> traceSources;
     std::unordered_map<int64_t, BoolectorNode *> init;
     std::unordered_map<int64_t, BoolectorNode *> next;
     BoolectorNode *bad{nullptr};
@@ -142,8 +127,7 @@ class Lowering {
             m_model.AddNode(node.id, var);
             auto trace = m_traceSources.find(node.id);
             if (trace != m_traceSources.end()) {
-                m_model.SetTraceBits(
-                    var, trace->second, m_ir.Sort(node.sortId).width);
+                m_model.SetTraceSource(var, trace->second);
             }
             if (node.tag == BTOR2_TAG_input)
                 m_model.inputs.push_back(var);
@@ -291,29 +275,82 @@ void VisitAig(void *state,
     aiger_add_and(visitor->aig, node, child0, child1);
 }
 
-void AddInput(Btor *btor,
-              BoolectorAIGMgr *manager,
-              aiger *aig,
-              BoolectorNode *input,
-              std::vector<WLTraceBit> &inputOrder,
-              const std::unordered_map<BoolectorNode *,
-                                       std::vector<WLTraceBit>> &traceBits) {
-    // Preserve Boolector bit order while recording the corresponding trace source.
+struct PendingTraceSpan {
+    WLValueOrigin origin;
+    uint32_t firstInterfaceIndex{0};
+    uint32_t encodedWidth{0};
+};
+
+void RecordTraceSpan(
+    BoolectorNode *node,
+    uint32_t firstInterfaceIndex,
+    uint32_t width,
+    const std::unordered_map<BoolectorNode *, WLValueOrigin> &traceSources,
+    std::vector<PendingTraceSpan> &spans) {
+    auto trace = traceSources.find(node);
+    if (trace == traceSources.end()) return;
+    spans.push_back({trace->second, firstInterfaceIndex, width});
+}
+
+void AddInput(
+    Btor *btor,
+    BoolectorAIGMgr *manager,
+    aiger *aig,
+    BoolectorNode *input,
+    std::vector<PendingTraceSpan> &inputSpans,
+    const std::unordered_map<BoolectorNode *, WLValueOrigin> &traceSources) {
+    // Emit each word-level input contiguously from logical LSB to MSB.
     const size_t width = boolector_get_width(btor, input);
+    const uint32_t firstInput = aig->num_inputs;
     uint64_t *bits = boolector_aig_get_bits(manager, input);
-    auto traceIt = traceBits.find(input);
-    for (size_t i = 0; i < width; ++i) {
+    for (size_t bit = 0; bit < width; ++bit) {
+        const size_t i = width - bit - 1;
         aiger_add_input(aig,
                         bits[i],
                         boolector_aig_get_symbol(manager, bits[i])
                             ? boolector_aig_get_symbol(manager, bits[i])
                             : "");
-        if (traceIt != traceBits.end() && i < traceIt->second.size())
-            inputOrder.push_back(traceIt->second[i]);
-        else
-            inputOrder.push_back({});
     }
+    RecordTraceSpan(input,
+                    firstInput,
+                    static_cast<uint32_t>(width),
+                    traceSources,
+                    inputSpans);
     boolector_aig_free_bits(manager, bits, width);
+}
+
+std::vector<WLTraceSpan>
+FinalizeTraceSpans(const aiger_symbol *symbols,
+                   uint32_t symbolCount,
+                   const std::vector<PendingTraceSpan> &pending) {
+    // Resolve interface offsets after AIGER reencoding and verify contiguity.
+    std::vector<WLTraceSpan> result;
+    result.reserve(pending.size());
+    for (const PendingTraceSpan &span : pending) {
+        if (!span.encodedWidth ||
+            span.firstInterfaceIndex + span.encodedWidth > symbolCount) {
+            throw std::runtime_error("invalid AIGER trace span");
+        }
+        const uint32_t firstVar =
+            symbols[span.firstInterfaceIndex].lit / 2;
+        for (uint32_t bit = 0; bit < span.encodedWidth; ++bit) {
+            const uint32_t var =
+                symbols[span.firstInterfaceIndex + bit].lit / 2;
+            if (var != firstVar + bit) {
+                throw std::runtime_error(
+                    "AIGER trace span is not contiguous in LSB-first order");
+            }
+        }
+        const uint32_t originalWidth =
+            span.origin.originalSegmentWidth
+                ? span.origin.originalSegmentWidth
+                : span.encodedWidth;
+        WLValueOrigin origin = span.origin;
+        origin.originalSegmentWidth = originalWidth;
+        result.push_back(
+            {std::move(origin), firstVar, span.encodedWidth});
+    }
+    return result;
 }
 
 unsigned MakeAnd(aiger *aig, unsigned lhs, unsigned rhs) {
@@ -337,8 +374,8 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
     BoolectorAIGMgr *manager = boolector_aig_new(model.btor);
     AigVisitor visitor{aig, {}};
     std::vector<std::pair<uint64_t, uint64_t>> symbolicInits;
-    std::vector<WLTraceBit> inputOrder;
-    std::vector<WLTraceBit> latchOrder;
+    std::vector<PendingTraceSpan> inputSpans;
+    std::vector<PendingTraceSpan> latchSpans;
 
     auto bitblast = [&](BoolectorNode *node) {
         boolector_aig_bitblast(manager, node);
@@ -348,7 +385,12 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
     // Emit primary input bits before latches to establish stable CNF variable order.
     for (BoolectorNode *input : model.inputs) {
         boolector_aig_bitblast(manager, input);
-        AddInput(model.btor, manager, aig, input, inputOrder, model.traceBits);
+        AddInput(model.btor,
+                 manager,
+                 aig,
+                 input,
+                 inputSpans,
+                 model.traceSources);
     }
     // Emit state bits as latches, or as inputs when no next function is defined.
     for (const auto &[id, state] : model.states) {
@@ -375,17 +417,14 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
             next ? boolector_aig_get_bits(manager, next) : nullptr;
         uint64_t *initBits =
             init ? boolector_aig_get_bits(manager, init) : nullptr;
-        auto traceIt = model.traceBits.find(state);
-        for (size_t i = 0; i < width; ++i) {
+        const uint32_t firstInput = aig->num_inputs;
+        const uint32_t firstLatch = aig->num_latches;
+        for (size_t bit = 0; bit < width; ++bit) {
+            const size_t i = width - bit - 1;
             const char *name =
                 boolector_aig_get_symbol(manager, stateBits[i]);
             if (!nextBits) {
                 aiger_add_input(aig, stateBits[i], name ? name : "");
-                if (traceIt != model.traceBits.end() &&
-                    i < traceIt->second.size())
-                    inputOrder.push_back(traceIt->second[i]);
-                else
-                    inputOrder.push_back({});
                 // A state without next is a per-step nondeterministic input;
                 // its optional init still constrains the initial step.
                 if (initBits)
@@ -393,10 +432,6 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
                 continue;
             }
             aiger_add_latch(aig, stateBits[i], nextBits[i], name ? name : "");
-            if (traceIt != model.traceBits.end() && i < traceIt->second.size())
-                latchOrder.push_back(traceIt->second[i]);
-            else
-                latchOrder.push_back({});
             if (!initBits || initBits[i] == 0 || initBits[i] == 1) {
                 aiger_add_reset(
                     aig, stateBits[i], initBits ? initBits[i] : stateBits[i]);
@@ -405,6 +440,11 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
                 symbolicInits.emplace_back(stateBits[i], initBits[i]);
             }
         }
+        RecordTraceSpan(state,
+                        next ? firstLatch : firstInput,
+                        static_cast<uint32_t>(width),
+                        model.traceSources,
+                        next ? latchSpans : inputSpans);
         boolector_aig_free_bits(manager, stateBits, width);
         if (nextBits) boolector_aig_free_bits(manager, nextBits, width);
         if (initBits) boolector_aig_free_bits(manager, initBits, width);
@@ -426,7 +466,6 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
     if (!symbolicInits.empty()) {
         unsigned initialStep = (aig->maxvar + 1) * 2;
         aiger_add_latch(aig, initialStep, 0, "btor2.initial_step");
-        latchOrder.push_back({WLTraceBitKind::GuardState, 0, 0, 0});
         aiger_add_reset(aig, initialStep, 1);
         for (const auto &[stateBit, initBit] : symbolicInits) {
             unsigned equal = MakeEq(aig, stateBit, initBit);
@@ -443,18 +482,11 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
     }
     if (!aiger_is_reencoded(aig)) aiger_reencode(aig);
 
-    // Translate ordered provenance vectors to final AIGER variable identifiers.
-    traceMap.inputBits.clear();
-    traceMap.latchBits.clear();
-    for (size_t i = 0; i < inputOrder.size(); ++i) {
-        traceMap.inputBits.emplace(
-            static_cast<uint32_t>(i + 1), inputOrder[i]);
-    }
-    for (size_t i = 0; i < latchOrder.size() && i < aig->num_latches; ++i) {
-        traceMap.latchBits.emplace(
-            static_cast<uint32_t>(aig->latches[i].lit / 2),
-            latchOrder[i]);
-    }
+    // Store one final AIGER range for each word-level segment.
+    traceMap.inputSpans = FinalizeTraceSpans(
+        aig->inputs, aig->num_inputs, inputSpans);
+    traceMap.latchSpans = FinalizeTraceSpans(
+        aig->latches, aig->num_latches, latchSpans);
     return result;
 }
 

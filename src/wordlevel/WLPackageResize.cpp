@@ -1084,11 +1084,10 @@ class SegmentIRRewriter {
             result.push_back(
                 {segment.lo, segment.hi, width, id, segment.classId});
             if (trace != m_inputTraceSources.end()) {
-                WLIRTraceSource source = trace->second;
+                WLValueOrigin source = trace->second;
                 source.originalBitOffset += segment.lo;
                 source.originalSegmentWidth = originalWidth;
-                source.resized = width < originalWidth;
-                m_outputTraceSources[id] = source;
+                m_outputTraceSources.insert_or_assign(id, source);
             }
         }
         return result;

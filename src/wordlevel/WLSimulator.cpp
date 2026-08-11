@@ -3,6 +3,7 @@
 
 #include <btorsim/btorsimbv.h>
 
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <unordered_set>
@@ -253,12 +254,27 @@ class WLSimulator::Impl {
                     continue;
                 }
                 WLWitnessArrayValue array;
+                std::map<std::string, WLWitnessArrayEntry> entries;
+                auto addEntry = [&](const std::string &index,
+                                    const BitValue &data) {
+                    entries.insert_or_assign(
+                        index,
+                        WLWitnessArrayEntry{
+                            WLBitVector::FromBinary(
+                                value.array.indexWidth, index),
+                            data.value});
+                };
                 if (value.array.initial)
                     for (const auto &[index, data] :
                          value.array.initial->entries)
-                        array.entries[index] = data.value;
+                        addEntry(index, data);
                 for (const auto &[index, data] : value.array.entries)
-                    array.entries[index] = data.value;
+                    addEntry(index, data);
+                array.entries.reserve(entries.size());
+                for (auto &[index, entry] : entries) {
+                    (void)index;
+                    array.entries.push_back(std::move(entry));
+                }
                 if (!array.entries.empty())
                     step.arrayStateValues.emplace(stateId,
                                                   std::move(array));

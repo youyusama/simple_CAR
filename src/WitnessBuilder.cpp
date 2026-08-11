@@ -11,7 +11,6 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
-#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -269,12 +268,9 @@ bool WitnessBuilder::WriteBtor2Counterexample(
             }
             auto array = step.arrayStateValues.find(stateId);
             if (array == step.arrayStateValues.end()) continue;
-            std::map<std::string, WLBitVector> ordered(
-                array->second.entries.begin(),
-                array->second.entries.end());
-            for (const auto &[index, value] : ordered)
-                output << position << " [" << index << "] "
-                       << value.ToBinary() << "\n";
+            for (const WLWitnessArrayEntry &entry : array->second.entries)
+                output << position << " [" << entry.index.ToBinary()
+                       << "] " << entry.value.ToBinary() << "\n";
         }
 
         output << "@" << time << "\n";

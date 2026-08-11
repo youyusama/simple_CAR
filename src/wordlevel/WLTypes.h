@@ -5,7 +5,6 @@
 
 #include <cstdint>
 #include <cstddef>
-#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -20,46 +19,37 @@ struct WLMemoryPair {
     unsigned delay{0};
 };
 
-enum class WLTraceBitKind {
-    None,
+enum class WLTraceKind {
     OriginalInput,
     OriginalState,
     AbstractReadInput,
     SelectorState,
-    ContentState,
-    GuardState
+    ContentState
 };
 
-// Provenance of one final AIGER bit used to decode checker traces.
-struct WLTraceBit {
-    WLTraceBitKind kind{WLTraceBitKind::None};
-    int64_t nodeId{0};
-    // Bit position in the encoded segment emitted by the transformed model.
-    uint32_t bit{0};
-    size_t pairIndex{0};
-    // Segment metadata used to inject compact package values into original words.
-    uint32_t originalBitOffset{0};
-    uint32_t originalSegmentWidth{0};
-    uint32_t encodedSegmentWidth{0};
-    bool resized{false};
-};
-
-// Provenance attached to a word-level IR variable before bitblasting.
-struct WLIRTraceSource {
-    WLTraceBitKind kind{WLTraceBitKind::None};
+// Original word-level value and segment represented by a transformed variable.
+struct WLValueOrigin {
+    WLTraceKind kind;
     int64_t nodeId{0};
     size_t pairIndex{0};
     uint32_t originalBitOffset{0};
     uint32_t originalSegmentWidth{0};
-    bool resized{false};
 };
 
-using WLIRTraceMap = std::unordered_map<int64_t, WLIRTraceSource>;
+using WLIRTraceMap = std::unordered_map<int64_t, WLValueOrigin>;
 
-// Mapping from final AIGER variables back to original word-level values.
+// One contiguous, least-significant-bit-first AIGER interface range belonging
+// to a word-level segment.  Package metadata is stored once per segment.
+struct WLTraceSpan {
+    WLValueOrigin origin;
+    uint32_t firstAigVar{0};
+    uint32_t encodedWidth{0};
+};
+
+// Mapping from final AIGER interface ranges back to word-level segments.
 struct WLTraceMap {
-    std::unordered_map<uint32_t, WLTraceBit> inputBits;
-    std::unordered_map<uint32_t, WLTraceBit> latchBits;
+    std::vector<WLTraceSpan> inputSpans;
+    std::vector<WLTraceSpan> latchSpans;
     std::vector<WLMemoryPair> memoryPairs;
 };
 
@@ -81,10 +71,15 @@ struct WLReplayTrace {
     std::vector<WLMemoryPair> memoryPairs;
 };
 
-// Sparse concrete array value used by the BTOR2 witness serializer.  Entries
-// not listed here retain the model's initialized or default value.
+// One concrete array assignment retained for BTOR2 witness serialization.
+struct WLWitnessArrayEntry {
+    WLBitVector index;
+    WLBitVector value;
+};
+
+// Sparse concrete array value; omitted indices keep their initialized/default value.
 struct WLWitnessArrayValue {
-    std::unordered_map<std::string, WLBitVector> entries;
+    std::vector<WLWitnessArrayEntry> entries;
 };
 
 // Concrete values already established by checker/simulator processing.
