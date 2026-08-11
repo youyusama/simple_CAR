@@ -92,11 +92,6 @@ std::vector<std::pair<Cube, Cube>> WLChecker::GetCexTrace() {
     return m_checker->GetCexTrace();
 }
 
-int WLChecker::GetSafeDepth() const {
-    if (m_cegar) return m_cegar->GetSafeDepth();
-    return m_checker->GetSafeDepth();
-}
-
 const WLWitnessTrace &WLChecker::GetWitnessTrace() {
     if (m_cegar) return m_cegar->GetWitnessTrace();
     if (m_witnessTrace.steps.empty()) {

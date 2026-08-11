@@ -26,7 +26,6 @@ class WLChecker : public BaseAlg {
 
     CheckResult Run() override;
     std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
-    int GetSafeDepth() const override;
     const WLWitnessTrace &GetWitnessTrace();
 
   private:

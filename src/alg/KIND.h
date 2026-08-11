@@ -20,9 +20,6 @@ class KIND : public BaseAlg {
 
     CheckResult Run() override;
     std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
-    int GetSafeDepth() const override {
-        return m_checkResult == CheckResult::Safe ? m_safeK : -1;
-    }
     bool SupportsWitness() const override { return true; }
     void RefineWitnessPropertyLit(WitnessBuilder &builder) const override;
 

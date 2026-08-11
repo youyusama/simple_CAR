@@ -15,8 +15,8 @@ class Model;
 class WLModel;
 
 // CEGAR engine for selected-slot word-level memory abstraction.  It drives an
-// ordinary bit-level checker, simulator replay, refinement, and safe-depth
-// checks.  WLChecker owns this engine when the input contains word-level arrays.
+// ordinary bit-level checker, simulator replay, and refinement.  WLChecker
+// owns this engine when the input contains word-level arrays.
 class WLCegar {
   public:
     WLCegar(const Settings &settings,
@@ -27,14 +27,12 @@ class WLCegar {
     // Run checker/replay/refinement iterations until a definitive result.
     CheckResult Run();
     std::vector<std::pair<Cube, Cube>> GetCexTrace();
-    int GetSafeDepth() const;
     const WLWitnessTrace &GetWitnessTrace() const {
         return m_witnessTrace;
     }
 
   private:
     bool AddPair(const WLMemoryPair &pair);
-    unsigned MaxDelay() const;
     bool ReloadModel();
     std::unique_ptr<BaseAlg> CreateBitLevelChecker(Model &model, Log &log);
 

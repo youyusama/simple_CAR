@@ -52,13 +52,6 @@ bool WLCegar::AddPair(const WLMemoryPair &pair) {
     return false;
 }
 
-unsigned WLCegar::MaxDelay() const {
-    unsigned maxDelay = 0;
-    for (const WLMemoryPair &pair : m_memoryPairs)
-        maxDelay = std::max(maxDelay, pair.delay);
-    return maxDelay;
-}
-
 std::unique_ptr<BaseAlg>
 WLCegar::CreateBitLevelChecker(Model &model, Log &log) {
     // Each abstraction revision uses the same user-selected bit-level algorithm.
@@ -166,20 +159,8 @@ CheckResult WLCegar::Run() {
         }
 
         if (res == CheckResult::Safe) {
-            // The proof must cover every delayed guard introduced by abstraction.
-            unsigned maxDelay = MaxDelay();
-            int safeDepth = m_checker->GetSafeDepth();
-            if (safeDepth < 0 ||
-                static_cast<unsigned>(safeDepth) < maxDelay) {
-                LOG_L(m_log,
-                      0,
-                      "word-level memory abstraction safe proof depth ",
-                      safeDepth,
-                      " is smaller than MaxDelay ",
-                      maxDelay,
-                      "; returning Unknown.");
-                res = CheckResult::Unknown;
-            }
+            // Safe abstraction results await a dedicated word-level proof rule.
+            res = CheckResult::Unknown;
         }
         break;
     }
@@ -191,11 +172,6 @@ std::vector<std::pair<Cube, Cube>> WLCegar::GetCexTrace() {
     if (m_concreteCounterexample) return m_cexTrace;
     if (!m_checker) return {};
     return m_checker->GetCexTrace();
-}
-
-int WLCegar::GetSafeDepth() const {
-    if (!m_checker) return -1;
-    return m_checker->GetSafeDepth();
 }
 
 } // namespace car
