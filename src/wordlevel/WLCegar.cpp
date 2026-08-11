@@ -2,7 +2,6 @@
 
 #include "BCAR.h"
 #include "BMC.h"
-#include "Btor2Frontend.h"
 #include "FCAR.h"
 #include "IC3.h"
 #include "KFAIR.h"
@@ -19,53 +18,6 @@
 #include <vector>
 
 namespace car {
-namespace {
-
-void CompleteReplaySeed(
-    Model &model,
-    std::vector<std::pair<Cube, Cube>> &trace) {
-    if (trace.empty())
-        throw std::runtime_error("checker returned an empty bit-level trace");
-
-    auto complete = [](Cube &cube,
-                       const std::vector<Var> &required,
-                       size_t frame,
-                       const char *kind) {
-        Var maxVar = 0;
-        for (Var var : required) maxVar = std::max(maxVar, var);
-        std::vector<char> allowed(static_cast<size_t>(maxVar) + 1, 0);
-        std::vector<int> values(static_cast<size_t>(maxVar) + 1, -1);
-        for (Var var : required) allowed[var] = 1;
-        for (Lit literal : cube) {
-            Var var = VarOf(literal);
-            if (var >= allowed.size() || !allowed[var]) continue;
-            int value = Sign(literal) ? 0 : 1;
-            if (values[var] != -1 && values[var] != value) {
-                throw std::runtime_error(
-                    "checker trace has contradictory " + std::string(kind) +
-                    " variable " + std::to_string(var) + " at frame " +
-                    std::to_string(frame));
-            }
-            values[var] = value;
-        }
-        for (Var var : required) {
-            if (values[var] == -1) cube.push_back(~MkLit(var));
-        }
-    };
-
-    for (size_t frame = 0; frame < trace.size(); ++frame) {
-        complete(trace[frame].first,
-                 model.GetModelInputs(),
-                 frame,
-                 "input");
-    }
-    complete(trace.front().second,
-             model.GetModelLatches(),
-             0,
-             "initial latch");
-}
-
-} // namespace
 
 WLCegar::WLCegar(const Settings &settings,
                  Log &log,
@@ -73,15 +25,6 @@ WLCegar::WLCegar(const Settings &settings,
     : m_settings(settings),
       m_log(log),
       m_model(model) {
-    try {
-        // Replay always uses the original concrete BTOR2 model.
-        m_ir =
-            std::make_unique<Btor2IR>(
-                Btor2Frontend::LoadIR(m_model.InputPath()));
-    } catch (const std::exception &error) {
-        throw std::runtime_error("word-level CEGAR parse error: " +
-                                 std::string(error.what()));
-    }
     m_checker = CreateBitLevelChecker(m_model.BitModel(), m_log);
     if (!m_checker) {
         throw std::runtime_error(
@@ -161,6 +104,7 @@ CheckResult WLCegar::Run() {
     int refinements = 0;
     m_concreteCounterexample = false;
     m_cexTrace.clear();
+    m_witnessTrace = {};
 
     while (true) {
         // Each iteration proves or refutes the current finite abstraction.
@@ -170,14 +114,15 @@ CheckResult WLCegar::Run() {
         if (res == CheckResult::Unsafe) {
             // Simulator replay distinguishes concrete and spurious abstract traces.
             auto trace = m_checker->GetCexTrace();
-            CompleteReplaySeed(m_model.BitModel(), trace);
-            WLSimulator simulator(*m_ir);
+            WLReplayTrace replayTrace = m_model.DecodeBitTrace(trace);
+            WLSimulator simulator(m_model.SourceIR());
             WLSimulator::Result replay =
-                simulator.Replay(trace, m_model.TraceMap());
+                simulator.Replay(replayTrace);
             if (replay.kind ==
                 WLSimulator::ReplayKind::ConcreteCounterexample) {
                 m_concreteCounterexample = true;
                 m_cexTrace = std::move(trace);
+                m_witnessTrace = std::move(replay.witnessTrace);
                 break;
             }
 
@@ -251,16 +196,6 @@ std::vector<std::pair<Cube, Cube>> WLCegar::GetCexTrace() {
 int WLCegar::GetSafeDepth() const {
     if (!m_checker) return -1;
     return m_checker->GetSafeDepth();
-}
-
-bool WLCegar::WriteCounterexample(const std::string &path) {
-    if (!m_concreteCounterexample) return false;
-    WLSimulator simulator(*m_ir);
-    WLSimulator::Result replay = simulator.Replay(
-        m_cexTrace, m_model.TraceMap());
-    if (replay.kind != WLSimulator::ReplayKind::ConcreteCounterexample)
-        return false;
-    return simulator.WriteCounterexample(path);
 }
 
 } // namespace car

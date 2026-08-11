@@ -6,12 +6,10 @@
 #include "WLTypes.h"
 
 #include <memory>
-#include <string>
 #include <vector>
 
 namespace car {
 
-class Btor2IR;
 class Log;
 class Model;
 class WLModel;
@@ -30,10 +28,9 @@ class WLCegar {
     CheckResult Run();
     std::vector<std::pair<Cube, Cube>> GetCexTrace();
     int GetSafeDepth() const;
-    bool HasConcreteCounterexample() const {
-        return m_concreteCounterexample;
+    const WLWitnessTrace &GetWitnessTrace() const {
+        return m_witnessTrace;
     }
-    bool WriteCounterexample(const std::string &path);
 
   private:
     bool AddPair(const WLMemoryPair &pair);
@@ -47,7 +44,7 @@ class WLCegar {
     std::unique_ptr<BaseAlg> m_checker;
     std::vector<WLMemoryPair> m_memoryPairs;
     std::vector<std::pair<Cube, Cube>> m_cexTrace;
-    std::unique_ptr<Btor2IR> m_ir;
+    WLWitnessTrace m_witnessTrace;
     bool m_concreteCounterexample{false};
 };
 

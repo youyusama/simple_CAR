@@ -386,8 +386,8 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
                     inputOrder.push_back(traceIt->second[i]);
                 else
                     inputOrder.push_back({});
-                // A state without next is a per-frame nondeterministic input;
-                // its optional init still constrains the first frame.
+                // A state without next is a per-step nondeterministic input;
+                // its optional init still constrains the initial step.
                 if (initBits)
                     symbolicInits.emplace_back(stateBits[i], initBits[i]);
                 continue;
@@ -422,16 +422,16 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
     aiger_add_bad(aig, badBits[0], "");
     boolector_aig_free_bits(manager, badBits, 1);
 
-    // Encode symbolic resets as constraints active only in the first frame.
+    // Encode symbolic resets as constraints active only in the initial step.
     if (!symbolicInits.empty()) {
-        unsigned firstFrame = (aig->maxvar + 1) * 2;
-        aiger_add_latch(aig, firstFrame, 0, "btor2.first_frame");
+        unsigned initialStep = (aig->maxvar + 1) * 2;
+        aiger_add_latch(aig, initialStep, 0, "btor2.initial_step");
         latchOrder.push_back({WLTraceBitKind::GuardState, 0, 0, 0});
-        aiger_add_reset(aig, firstFrame, 1);
+        aiger_add_reset(aig, initialStep, 1);
         for (const auto &[stateBit, initBit] : symbolicInits) {
             unsigned equal = MakeEq(aig, stateBit, initBit);
             unsigned constraint =
-                aiger_not(MakeAnd(aig, firstFrame, aiger_not(equal)));
+                aiger_not(MakeAnd(aig, initialStep, aiger_not(equal)));
             aiger_add_constraint(aig, constraint, "");
         }
     }

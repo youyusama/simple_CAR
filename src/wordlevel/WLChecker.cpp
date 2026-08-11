@@ -16,6 +16,21 @@
 #include <stdexcept>
 
 namespace car {
+namespace {
+
+WLWitnessTrace ToSparseWitnessTrace(WLReplayTrace replay) {
+    WLWitnessTrace witness;
+    witness.steps.resize(replay.steps.size());
+    for (size_t time = 0; time < replay.steps.size(); ++time) {
+        witness.steps[time].inputValues =
+            std::move(replay.steps[time].inputValues);
+        witness.steps[time].stateValues =
+            std::move(replay.steps[time].stateValues);
+    }
+    return witness;
+}
+
+} // namespace
 
 WLChecker::WLChecker(const Settings &settings,
                      WLModel &model,
@@ -67,6 +82,7 @@ std::unique_ptr<BaseAlg> WLChecker::CreateBitLevelChecker(Model &model,
 }
 
 CheckResult WLChecker::Run() {
+    m_witnessTrace = {};
     if (m_cegar) return m_cegar->Run();
     return m_checker->Run();
 }
@@ -79,6 +95,15 @@ std::vector<std::pair<Cube, Cube>> WLChecker::GetCexTrace() {
 int WLChecker::GetSafeDepth() const {
     if (m_cegar) return m_cegar->GetSafeDepth();
     return m_checker->GetSafeDepth();
+}
+
+const WLWitnessTrace &WLChecker::GetWitnessTrace() {
+    if (m_cegar) return m_cegar->GetWitnessTrace();
+    if (m_witnessTrace.steps.empty()) {
+        m_witnessTrace = ToSparseWitnessTrace(
+            m_model.DecodeBitTrace(m_checker->GetCexTrace()));
+    }
+    return m_witnessTrace;
 }
 
 } // namespace car

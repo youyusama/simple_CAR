@@ -124,7 +124,13 @@ CheckResult SimpleCAR::Prove() {
                 LOG_L(*m_log, 1, "Failed to write safe witness.");
             }
         } else if (res == CheckResult::Unsafe) {
-            if (!witness_builder.WriteCounterexample(m_checker->GetCexTrace())) {
+            bool written = m_wmodel
+                               ? witness_builder.WriteCounterexample(
+                                     static_cast<WLChecker &>(*m_checker)
+                                         .GetWitnessTrace())
+                               : witness_builder.WriteCounterexample(
+                                     m_checker->GetCexTrace());
+            if (!written) {
                 LOG_L(*m_log, 1, "Failed to write counterexample witness.");
             }
         }

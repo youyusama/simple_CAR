@@ -7,7 +7,9 @@
 #include "WLPackageResize.h"
 
 #include <cstdlib>
+#include <map>
 #include <stdexcept>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -116,12 +118,180 @@ Btor2IR ReduceToPropertyCoi(const Btor2IR &ir) {
     return PropertyCoiReducer(ir).Run();
 }
 
+unsigned NodeWidth(const Btor2IR &ir, int64_t id) {
+    return ir.Sort(ir.Node(id).sortId).width;
+}
+
+unsigned ArrayIndexWidth(const Btor2IR &ir, int64_t memoryId) {
+    const Btor2IRSort &sort = ir.Sort(ir.Node(memoryId).sortId);
+    return ir.Sort(sort.indexSort).width;
+}
+
+unsigned ArrayElementWidth(const Btor2IR &ir, int64_t memoryId) {
+    const Btor2IRSort &sort = ir.Sort(ir.Node(memoryId).sortId);
+    return ir.Sort(sort.elementSort).width;
+}
+
+std::unordered_map<Var, bool> CubeValues(const Cube &cube) {
+    std::unordered_map<Var, bool> values;
+    for (Lit literal : cube) {
+        const bool value = !Sign(literal);
+        auto [it, inserted] = values.emplace(VarOf(literal), value);
+        if (!inserted && it->second != value)
+            throw std::runtime_error(
+                "checker trace contains contradictory literals");
+    }
+    return values;
+}
+
+WLBitVector &EnsureNodeValue(
+    std::unordered_map<int64_t, WLBitVector> &values,
+    int64_t id,
+    unsigned width) {
+    auto [it, inserted] = values.emplace(id, WLBitVector::Zero(width));
+    (void)inserted;
+    return it->second;
+}
+
+WLBitVector &EnsurePairValue(
+    std::unordered_map<size_t, WLBitVector> &values,
+    size_t index,
+    unsigned width) {
+    auto [it, inserted] = values.emplace(index, WLBitVector::Zero(width));
+    (void)inserted;
+    return it->second;
+}
+
+void SetReplayBit(const Btor2IR &ir,
+                  WLReplayStep &step,
+                  const WLTraceBit &descriptor,
+                  bool bit) {
+    const uint32_t originalBit =
+        descriptor.originalBitOffset + descriptor.bit;
+    WLBitVector *value = nullptr;
+    switch (descriptor.kind) {
+    case WLTraceBitKind::OriginalInput:
+        value = &EnsureNodeValue(step.inputValues,
+                                 descriptor.nodeId,
+                                 NodeWidth(ir, descriptor.nodeId));
+        break;
+    case WLTraceBitKind::OriginalState:
+        value = &EnsureNodeValue(step.stateValues,
+                                 descriptor.nodeId,
+                                 NodeWidth(ir, descriptor.nodeId));
+        break;
+    case WLTraceBitKind::AbstractReadInput:
+        value = &EnsureNodeValue(step.abstractReadValues,
+                                 descriptor.nodeId,
+                                 NodeWidth(ir, descriptor.nodeId));
+        break;
+    case WLTraceBitKind::SelectorState:
+        value = &EnsurePairValue(step.selectorValues,
+                                 descriptor.pairIndex,
+                                 ArrayIndexWidth(ir, descriptor.nodeId));
+        break;
+    case WLTraceBitKind::ContentState:
+        value = &EnsurePairValue(step.contentValues,
+                                 descriptor.pairIndex,
+                                 ArrayElementWidth(ir, descriptor.nodeId));
+        break;
+    default: return;
+    }
+    value->SetBit(originalBit, bit);
+}
+
+void SetReplaySegment(const Btor2IR &ir,
+                      WLReplayStep &step,
+                      const WLTraceBit &descriptor,
+                      const WLBitVector &encoded) {
+    const bool expandsToOnes = encoded.IsOnes();
+    for (uint32_t bit = 0; bit < descriptor.originalSegmentWidth; ++bit) {
+        WLTraceBit decoded = descriptor;
+        decoded.bit = bit;
+        decoded.resized = false;
+        SetReplayBit(ir,
+                     step,
+                     decoded,
+                     expandsToOnes ||
+                         (bit < encoded.Width() && encoded.GetBit(bit)));
+    }
+}
+
+void DecodeReplayStep(const Btor2IR &ir,
+                      const std::pair<Cube, Cube> &bitStep,
+                      const WLTraceMap &traceMap,
+                      WLReplayStep &step,
+                      bool loadInitialLatches) {
+    const auto inputValues = CubeValues(bitStep.first);
+    const auto latchValues = CubeValues(bitStep.second);
+    using SegmentKey =
+        std::tuple<int, int64_t, size_t, uint32_t, uint32_t, uint32_t>;
+    struct EncodedSegment {
+        WLTraceBit descriptor;
+        WLBitVector value;
+    };
+    std::map<SegmentKey, EncodedSegment> encodedSegments;
+
+    auto decode = [&](const auto &descriptors, const auto &bitValues) {
+        for (const auto &[var, descriptor] : descriptors) {
+            auto found = bitValues.find(var);
+            const bool bit = found != bitValues.end() && found->second;
+            if (!descriptor.resized) {
+                SetReplayBit(ir, step, descriptor, bit);
+                continue;
+            }
+            SegmentKey key{static_cast<int>(descriptor.kind),
+                           descriptor.nodeId,
+                           descriptor.pairIndex,
+                           descriptor.originalBitOffset,
+                           descriptor.originalSegmentWidth,
+                           descriptor.encodedSegmentWidth};
+            auto [it, inserted] = encodedSegments.emplace(
+                key,
+                EncodedSegment{
+                    descriptor,
+                    WLBitVector::Zero(descriptor.encodedSegmentWidth)});
+            (void)inserted;
+            if (bit) it->second.value.SetBit(descriptor.bit, true);
+        }
+    };
+
+    decode(traceMap.inputBits, inputValues);
+    if (loadInitialLatches) decode(traceMap.latchBits, latchValues);
+    for (const auto &[key, segment] : encodedSegments) {
+        (void)key;
+        SetReplaySegment(ir, step, segment.descriptor, segment.value);
+    }
+}
+
 } // namespace
 
 WLModel::WLModel(const Settings &settings, Log &log)
     : m_settings(settings), m_log(log), m_inputPath(settings.aigFilePath) {
+    m_sourceIr =
+        std::make_unique<Btor2IR>(Btor2Frontend::LoadIR(m_inputPath));
     // The initial abstraction tracks no memory/address pairs.
     Build({});
+}
+
+WLModel::~WLModel() = default;
+
+WLReplayTrace WLModel::DecodeBitTrace(
+    const std::vector<std::pair<Cube, Cube>> &trace) const {
+    if (trace.empty())
+        throw std::runtime_error("checker returned an empty bit-level trace");
+
+    WLReplayTrace replay;
+    replay.steps.resize(trace.size());
+    replay.memoryPairs = m_traceMap.memoryPairs;
+    for (size_t time = 0; time < trace.size(); ++time) {
+        DecodeReplayStep(*m_sourceIr,
+                         trace[time],
+                         m_traceMap,
+                         replay.steps[time],
+                         time == 0);
+    }
+    return replay;
 }
 
 void WLModel::WriteBitblastAig() const {
@@ -153,8 +323,8 @@ void WLModel::Build(const std::vector<WLMemoryPair> &memoryPairs) {
 
 WLModelBuildResult
 WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
-    // Stage 1: parse and validate the format-specific source model.
-    Btor2IR ir = Btor2Frontend::LoadIR(m_inputPath);
+    // Stage 1: start from the validated format-specific source model.
+    Btor2IR ir = *m_sourceIr;
     const bool sourceHasArrays = ir.HasArrays();
     const bool bitblastOnly = !m_settings.wlBitblastOutputPath.empty();
     if (bitblastOnly && sourceHasArrays) {

@@ -6,6 +6,7 @@ extern "C" {
 }
 
 #include "Settings.h"
+#include "CarTypes.h"
 #include "WLTypes.h"
 
 #include <memory>
@@ -16,6 +17,7 @@ namespace car {
 
 class Log;
 class Model;
+class Btor2IR;
 
 struct WLModelBuildResult {
     // Completed WL pipeline result before constructing the bit-level Model.
@@ -29,13 +31,17 @@ struct WLModelBuildResult {
 class WLModel {
   public:
     WLModel(const Settings &settings, Log &log);
+    ~WLModel();
 
     Model &BitModel() { return *m_model; }
     const Model &BitModel() const { return *m_model; }
 
     bool SourceHasArrays() const { return m_sourceHasArrays; }
-    const WLTraceMap &TraceMap() const { return m_traceMap; }
-    const std::string &InputPath() const { return m_inputPath; }
+    const Btor2IR &SourceIR() const { return *m_sourceIr; }
+
+    // Decode the bit-level checker interface into a word-level replay seed.
+    WLReplayTrace DecodeBitTrace(
+        const std::vector<std::pair<Cube, Cube>> &trace) const;
 
     void WriteBitblastAig() const;
 
@@ -49,6 +55,7 @@ class WLModel {
     const Settings &m_settings;
     Log &m_log;
     std::string m_inputPath;
+    std::unique_ptr<Btor2IR> m_sourceIr;
     std::shared_ptr<aiger> m_aig;
     std::unique_ptr<Model> m_model;
     bool m_sourceHasArrays{false};

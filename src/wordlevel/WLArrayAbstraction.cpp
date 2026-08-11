@@ -283,7 +283,7 @@ class Builder {
     }
 
     void BuildProperties() {
-        // Delay address-match guards so a tracked pair constrains its requested frame.
+        // Delay address-match guards to constrain the requested time step.
         const int64_t boolSort = EnsureBitVectorSort(1);
         std::vector<int64_t> guards;
         for (auto &[memoryId, slots] : m_slots) {

@@ -3,11 +3,8 @@
 
 #include <btorsim/btorsimbv.h>
 
-#include <fstream>
-#include <map>
 #include <memory>
 #include <stdexcept>
-#include <tuple>
 #include <unordered_set>
 
 namespace car {
@@ -62,14 +59,6 @@ class WLSimulator::Impl {
         }
     };
 
-    struct Frame {
-        std::unordered_map<int64_t, BitValue> inputs;
-        std::unordered_map<int64_t, BitValue> states;
-        std::unordered_map<int64_t, BitValue> readMisses;
-        std::unordered_map<size_t, BitValue> selectors;
-        std::unordered_map<size_t, BitValue> contents;
-    };
-
     struct TimedKey {
         int64_t id{0};
         unsigned time{0};
@@ -88,22 +77,17 @@ class WLSimulator::Impl {
 
     explicit Impl(const Btor2IR &ir) : m_ir(ir) { Index(); }
 
-    void SetTracePairs(const std::vector<WLMemoryPair> &pairs) {
-        m_tracePairs = pairs;
-    }
+    WLSimulator::Result Replay(const WLReplayTrace &trace) {
+        if (trace.steps.empty())
+            throw std::runtime_error("word-level replay trace is empty");
 
-    WLSimulator::Result Replay(
-        const std::vector<std::pair<Cube, Cube>> &trace,
-        const WLTraceMap &traceMap) {
-        if (trace.empty())
-            throw std::runtime_error("word-level checker returned an empty trace");
-
-        DecodeTrace(trace, traceMap);
+        m_steps = trace.steps;
+        m_tracePairs = trace.memoryPairs;
         m_abstractReads.clear();
         m_concreteReads.clear();
         m_representedReads.clear();
 
-        // Recompute the complete abstract execution from frame-zero state and
+        // Recompute the complete abstract execution from the initial state and
         // checker inputs. Intermediate checker latch cubes are not a replay
         // contract and may remain generalized.
         const std::unordered_set<TimedKey, TimedKeyHash> noCorrections;
@@ -121,10 +105,10 @@ class WLSimulator::Impl {
         std::vector<WLReadMismatch> mismatches;
         bool constraintsHold = true;
         const unsigned failureTime =
-            static_cast<unsigned>(m_frames.size() - 1);
+            static_cast<unsigned>(m_steps.size() - 1);
 
-        for (m_time = 0; m_time < m_frames.size(); ++m_time) {
-            ClearFrameCaches();
+        for (m_time = 0; m_time < m_steps.size(); ++m_time) {
+            ClearStepCaches();
 
             for (int64_t readId : m_reads) {
                 BitValue concreteValue = EvalConcrete(readId).bits;
@@ -154,10 +138,11 @@ class WLSimulator::Impl {
                 WLSimulator::Result result;
                 result.kind = ReplayKind::ConcreteCounterexample;
                 result.badTime = m_time;
+                result.witnessTrace = BuildWitnessTrace(m_time);
                 return result;
             }
 
-            if (m_time + 1 < m_frames.size()) StepConcrete();
+            if (m_time + 1 < m_steps.size()) StepConcrete();
         }
 
         if (mismatches.empty())
@@ -190,31 +175,6 @@ class WLSimulator::Impl {
             throw std::runtime_error(
                 "greedy read refinement produced an empty correction set");
         return result;
-    }
-
-    bool WriteCounterexample(const std::string &path) const {
-        if (m_frames.empty() || m_stateTrace.empty()) return false;
-        std::ofstream out(path);
-        if (!out) return false;
-        out << "sat\nb0\n";
-        for (size_t time = 0; time < m_frames.size(); ++time) {
-            out << "#" << time << "\n";
-            for (size_t i = 0; i < m_states.size(); ++i) {
-                auto state = m_stateTrace.find(
-                    {m_states[i], static_cast<unsigned>(time)});
-                if (state != m_stateTrace.end())
-                    WriteWitnessValue(out, i, state->second);
-            }
-            out << "@" << time << "\n";
-            for (size_t i = 0; i < m_inputs.size(); ++i) {
-                BitValue input = LookupBits(m_frames[time].inputs,
-                                            m_inputs[i],
-                                            NodeWidth(m_inputs[i]));
-                out << i << " " << input.value.ToBinary() << "\n";
-            }
-        }
-        out << ".\n";
-        return true;
     }
 
   private:
@@ -261,147 +221,50 @@ class WLSimulator::Impl {
     }
 
     static BitValue LookupBits(
-        const std::unordered_map<int64_t, BitValue> &values,
+        const std::unordered_map<int64_t, WLBitVector> &values,
         int64_t id,
         unsigned width) {
         auto it = values.find(id);
-        return it == values.end() ? BitValue::Zero(width) : it->second;
+        return it == values.end() ? BitValue::Zero(width)
+                                  : BitValue{it->second};
     }
 
     static BitValue LookupPairBits(
-        const std::unordered_map<size_t, BitValue> &values,
+        const std::unordered_map<size_t, WLBitVector> &values,
         size_t id,
         unsigned width) {
         auto it = values.find(id);
-        return it == values.end() ? BitValue::Zero(width) : it->second;
+        return it == values.end() ? BitValue::Zero(width)
+                                  : BitValue{it->second};
     }
 
-    static BitValue &EnsureBits(
-        std::unordered_map<int64_t, BitValue> &values,
-        int64_t id,
-        unsigned width) {
-        auto [it, inserted] = values.emplace(id, BitValue::Zero(width));
-        (void)inserted;
-        return it->second;
-    }
-
-    static BitValue &EnsurePairBits(
-        std::unordered_map<size_t, BitValue> &values,
-        size_t id,
-        unsigned width) {
-        auto [it, inserted] = values.emplace(id, BitValue::Zero(width));
-        (void)inserted;
-        return it->second;
-    }
-
-    void SetTraceBit(Frame &frame, const WLTraceBit &desc, bool bit) const {
-        const uint32_t originalBit = desc.originalBitOffset + desc.bit;
-        BitValue *value = nullptr;
-        switch (desc.kind) {
-        case WLTraceBitKind::OriginalInput:
-            value = &EnsureBits(
-                frame.inputs, desc.nodeId, NodeWidth(desc.nodeId));
-            break;
-        case WLTraceBitKind::OriginalState:
-            value = &EnsureBits(
-                frame.states, desc.nodeId, NodeWidth(desc.nodeId));
-            break;
-        case WLTraceBitKind::AbstractReadInput:
-            value = &EnsureBits(
-                frame.readMisses, desc.nodeId, NodeWidth(desc.nodeId));
-            break;
-        case WLTraceBitKind::SelectorState:
-            value = &EnsurePairBits(frame.selectors,
-                                    desc.pairIndex,
-                                    ArrayIndexWidth(desc.nodeId));
-            break;
-        case WLTraceBitKind::ContentState:
-            value = &EnsurePairBits(frame.contents,
-                                    desc.pairIndex,
-                                    ArrayElementWidth(desc.nodeId));
-            break;
-        default: return;
-        }
-        value->value.SetBit(originalBit, bit);
-    }
-
-    void SetTraceSegment(Frame &frame,
-                         const WLTraceBit &desc,
-                         const WLBitVector &encoded) const {
-        const bool expandsToOnes = encoded.IsOnes();
-        for (uint32_t bit = 0; bit < desc.originalSegmentWidth; ++bit) {
-            WLTraceBit decoded = desc;
-            decoded.bit = bit;
-            decoded.resized = false;
-            SetTraceBit(frame,
-                        decoded,
-                        expandsToOnes ||
-                            (bit < encoded.Width() && encoded.GetBit(bit)));
-        }
-    }
-
-    static std::unordered_map<Var, bool> CubeValues(const Cube &cube) {
-        std::unordered_map<Var, bool> values;
-        for (Lit lit : cube) {
-            const bool value = !Sign(lit);
-            auto [it, inserted] = values.emplace(VarOf(lit), value);
-            if (!inserted && it->second != value)
-                throw std::runtime_error(
-                    "checker trace contains contradictory literals");
-        }
-        return values;
-    }
-
-    void DecodeTrace(const std::vector<std::pair<Cube, Cube>> &trace,
-                     const WLTraceMap &traceMap) {
-        m_frames.clear();
-        m_frames.resize(trace.size());
-        for (size_t time = 0; time < trace.size(); ++time)
-            LoadTraceFrame(
-                trace[time], traceMap, m_frames[time], time == 0);
-    }
-
-    void LoadTraceFrame(const std::pair<Cube, Cube> &traceFrame,
-                        const WLTraceMap &traceMap,
-                        Frame &frame,
-                        bool loadInitialLatches) const {
-        auto inputValues = CubeValues(traceFrame.first);
-        auto latchValues = CubeValues(traceFrame.second);
-        using SegmentKey =
-            std::tuple<int, int64_t, size_t, uint32_t, uint32_t, uint32_t>;
-        struct EncodedSegment {
-            WLTraceBit descriptor;
-            WLBitVector value;
-        };
-        std::map<SegmentKey, EncodedSegment> encodedSegments;
-        auto load = [&](const auto &descriptors, const auto &values) {
-            for (const auto &[var, desc] : descriptors) {
-                auto found = values.find(var);
-                const bool bit = found != values.end() && found->second;
-                if (!desc.resized) {
-                    SetTraceBit(frame, desc, bit);
+    WLWitnessTrace BuildWitnessTrace(unsigned lastTime) const {
+        WLWitnessTrace trace;
+        trace.steps.resize(static_cast<size_t>(lastTime) + 1);
+        for (unsigned time = 0; time <= lastTime; ++time) {
+            WLWitnessStep &step = trace.steps[time];
+            step.inputValues = m_steps[time].inputValues;
+            for (int64_t stateId : m_states) {
+                auto state = m_stateTrace.find({stateId, time});
+                if (state == m_stateTrace.end()) continue;
+                const Value &value = state->second;
+                if (!value.isArray) {
+                    step.stateValues.emplace(stateId, value.bits.value);
                     continue;
                 }
-                SegmentKey key{static_cast<int>(desc.kind),
-                               desc.nodeId,
-                               desc.pairIndex,
-                               desc.originalBitOffset,
-                               desc.originalSegmentWidth,
-                               desc.encodedSegmentWidth};
-                auto [it, inserted] = encodedSegments.emplace(
-                    key,
-                    EncodedSegment{
-                        desc, WLBitVector::Zero(desc.encodedSegmentWidth)});
-                (void)inserted;
-                if (bit) it->second.value.SetBit(desc.bit, true);
+                WLWitnessArrayValue array;
+                if (value.array.initial)
+                    for (const auto &[index, data] :
+                         value.array.initial->entries)
+                        array.entries[index] = data.value;
+                for (const auto &[index, data] : value.array.entries)
+                    array.entries[index] = data.value;
+                if (!array.entries.empty())
+                    step.arrayStateValues.emplace(stateId,
+                                                  std::move(array));
             }
-        };
-        load(traceMap.inputBits, inputValues);
-        if (loadInitialLatches) load(traceMap.latchBits, latchValues);
-        for (const auto &[key, segment] : encodedSegments) {
-            (void)key;
-            SetTraceSegment(frame, segment.descriptor, segment.value);
         }
+        return trace;
     }
 
     ArrayValue NewArray(int64_t stateId) const {
@@ -431,10 +294,10 @@ class WLSimulator::Impl {
                 m_state[stateId] = Value::Array(NewArray(stateId));
             else
                 m_state[stateId] = Value::BV(LookupBits(
-                    m_frames[0].states, stateId, NodeWidth(stateId)));
+                    m_steps[0].stateValues, stateId, NodeWidth(stateId)));
         }
 
-        ClearFrameCaches();
+        ClearStepCaches();
         for (int64_t stateId : m_states) {
             auto init = m_init.find(stateId);
             if (init == m_init.end()) continue;
@@ -466,10 +329,10 @@ class WLSimulator::Impl {
                 throw std::runtime_error(
                     "tracked pair references an unavailable memory state");
             ArrayValue &array = memory->second.array;
-            BitValue selector = LookupPairBits(m_frames[0].selectors,
+            BitValue selector = LookupPairBits(m_steps[0].selectorValues,
                                                index,
                                                array.indexWidth);
-            BitValue content = LookupPairBits(m_frames[0].contents,
+            BitValue content = LookupPairBits(m_steps[0].contentValues,
                                               index,
                                               array.elementWidth);
             const std::string address = selector.value.ToBinary();
@@ -497,7 +360,7 @@ class WLSimulator::Impl {
                 m_nextState[stateId] = m_state.at(stateId);
             } else {
                 m_nextState[stateId] = Value::BV(LookupBits(
-                    m_frames[m_time + 1].states,
+                    m_steps[m_time + 1].stateValues,
                     stateId,
                     NodeWidth(stateId)));
             }
@@ -506,7 +369,7 @@ class WLSimulator::Impl {
         m_state.swap(m_nextState);
     }
 
-    void ClearFrameCaches() {
+    void ClearStepCaches() {
         m_cache.clear();
         m_abstractCache.clear();
         m_hybridCache.clear();
@@ -543,14 +406,18 @@ class WLSimulator::Impl {
                                                           : m_state;
             if (mode == EvalMode::Abstract && !IsArraySort(node.sortId))
                 return Value::BV(LookupBits(
-                    m_frames[m_time].states, node.id, NodeWidth(node.id)));
+                    m_steps[m_time].stateValues,
+                    node.id,
+                    NodeWidth(node.id)));
             auto found = states.find(node.id);
             if (found != states.end()) return found->second;
             throw EvaluationError(node, "state has no simulated value");
         }
         if (node.tag == BTOR2_TAG_input)
             return Value::BV(LookupBits(
-                m_frames[m_time].inputs, node.id, NodeWidth(node.id)));
+                m_steps[m_time].inputValues,
+                node.id,
+                NodeWidth(node.id)));
         if (node.tag == BTOR2_TAG_read) {
             if (mode == EvalMode::Abstract) return EvalAbstractRead(node);
             if (mode == EvalMode::Hybrid) return EvalHybridRead(node);
@@ -775,7 +642,7 @@ class WLSimulator::Impl {
 
     Value EvalAbstractRead(const Btor2IRNode &read) {
         const int64_t memoryId = m_readMemory.at(read.id);
-        BitValue result = LookupBits(m_frames[m_time].readMisses,
+        BitValue result = LookupBits(m_steps[m_time].abstractReadValues,
                                      read.id,
                                      ArrayElementWidth(memoryId));
         const BitValue address = EvalAbstract(read.args[1]).bits;
@@ -783,12 +650,14 @@ class WLSimulator::Impl {
         // indices dominate when selectors alias.
         for (size_t index = m_tracePairs.size(); index-- > 0;) {
             if (m_tracePairs[index].memoryStateId != memoryId) continue;
-            BitValue selector = LookupPairBits(m_frames[m_time].selectors,
-                                               index,
-                                               ArrayIndexWidth(memoryId));
-            BitValue content = LookupPairBits(m_frames[m_time].contents,
-                                              index,
-                                              ArrayElementWidth(memoryId));
+            BitValue selector = LookupPairBits(
+                m_steps[m_time].selectorValues,
+                index,
+                ArrayIndexWidth(memoryId));
+            BitValue content = LookupPairBits(
+                m_steps[m_time].contentValues,
+                index,
+                ArrayElementWidth(memoryId));
             if (selector.value == address.value)
                 result = EvalArrayAt(read.args[0],
                                      memoryId,
@@ -811,7 +680,7 @@ class WLSimulator::Impl {
         }
 
         const int64_t memoryId = m_readMemory.at(read.id);
-        BitValue result = LookupBits(m_frames[m_time].readMisses,
+        BitValue result = LookupBits(m_steps[m_time].abstractReadValues,
                                      read.id,
                                      ArrayElementWidth(memoryId));
         const BitValue address = EvalHybrid(read.args[1]).bits;
@@ -868,7 +737,7 @@ class WLSimulator::Impl {
         for (int64_t stateId : m_states) {
             if (IsArraySort(m_ir.Node(stateId).sortId)) continue;
             m_hybridState[stateId] = Value::BV(LookupBits(
-                m_frames[0].states, stateId, NodeWidth(stateId)));
+                m_steps[0].stateValues, stateId, NodeWidth(stateId)));
         }
         m_time = 0;
         m_hybridCache.clear();
@@ -886,23 +755,23 @@ class WLSimulator::Impl {
         for (size_t index = 0; index < m_tracePairs.size(); ++index) {
             const int64_t memoryId = m_tracePairs[index].memoryStateId;
             m_hybridSelectors.push_back(LookupPairBits(
-                m_frames[0].selectors,
+                m_steps[0].selectorValues,
                 index,
                 ArrayIndexWidth(memoryId)));
             m_hybridContents.push_back(LookupPairBits(
-                m_frames[0].contents,
+                m_steps[0].contentValues,
                 index,
                 ArrayElementWidth(memoryId)));
         }
 
         std::vector<std::unordered_map<int64_t, BitValue>> addressHistory(
-            m_frames.size());
+            m_steps.size());
         bool constraintsHold = true;
         bool badSeen = false;
         bool guardFailure = false;
         bool counterexampleSeen = false;
         m_hybridFailure.clear();
-        for (m_time = 0; m_time < m_frames.size(); ++m_time) {
+        for (m_time = 0; m_time < m_steps.size(); ++m_time) {
             m_hybridCache.clear();
             for (int64_t readId : m_reads) {
                 BitValue value = EvalHybrid(readId).bits;
@@ -920,7 +789,7 @@ class WLSimulator::Impl {
                     if (m_hybridFailure.empty())
                         m_hybridFailure =
                             "constraint " + std::to_string(constraint) +
-                            " is false at frame " + std::to_string(m_time);
+                            " is false at time step " + std::to_string(m_time);
                 }
             }
             if (EvalHybrid(m_bad).bits.IsOne()) {
@@ -935,7 +804,7 @@ class WLSimulator::Impl {
                 }
             }
 
-            if (m_time + 1 < m_frames.size()) StepHybrid();
+            if (m_time + 1 < m_steps.size()) StepHybrid();
         }
         if (counterexampleSeen) return true;
         if (m_hybridFailure.empty()) {
@@ -944,7 +813,7 @@ class WLSimulator::Impl {
             else if (guardFailure)
                 m_hybridFailure = "a selector guard is false";
             else
-                m_hybridFailure = "no valid bad frame was found";
+                m_hybridFailure = "no valid bad time step was found";
         }
         return false;
     }
@@ -974,7 +843,7 @@ class WLSimulator::Impl {
             auto next = m_next.find(stateId);
             if (next == m_next.end()) {
                 nextState[stateId] = Value::BV(LookupBits(
-                    m_frames[m_time + 1].states,
+                    m_steps[m_time + 1].stateValues,
                     stateId,
                     NodeWidth(stateId)));
             } else {
@@ -1022,23 +891,6 @@ class WLSimulator::Impl {
             " (id " + std::to_string(node.id) + "): " + message);
     }
 
-    static void WriteWitnessValue(std::ofstream &out,
-                                  size_t position,
-                                  const Value &value) {
-        if (!value.isArray) {
-            out << position << " " << value.bits.value.ToBinary() << "\n";
-            return;
-        }
-        std::unordered_map<std::string, BitValue> entries;
-        if (value.array.initial)
-            entries = value.array.initial->entries;
-        for (const auto &[index, data] : value.array.entries)
-            entries[index] = data;
-        for (const auto &[index, data] : entries)
-            out << position << " [" << index << "] "
-                << data.value.ToBinary() << "\n";
-    }
-
     const Btor2IR &m_ir;
     std::vector<int64_t> m_inputs;
     std::vector<int64_t> m_states;
@@ -1051,7 +903,7 @@ class WLSimulator::Impl {
     std::vector<WLMemoryPair> m_tracePairs;
 
     unsigned m_time{0};
-    std::vector<Frame> m_frames;
+    std::vector<WLReplayStep> m_steps;
     std::unordered_map<int64_t, Value> m_state;
     std::unordered_map<int64_t, Value> m_nextState;
     std::unordered_map<int64_t, Value> m_hybridState;
@@ -1075,14 +927,8 @@ WLSimulator::WLSimulator(const Btor2IR &ir)
 WLSimulator::~WLSimulator() = default;
 
 WLSimulator::Result
-WLSimulator::Replay(const std::vector<std::pair<Cube, Cube>> &trace,
-                    const WLTraceMap &traceMap) {
-    m_impl->SetTracePairs(traceMap.memoryPairs);
-    return m_impl->Replay(trace, traceMap);
-}
-
-bool WLSimulator::WriteCounterexample(const std::string &path) const {
-    return m_impl->WriteCounterexample(path);
+WLSimulator::Replay(const WLReplayTrace &trace) {
+    return m_impl->Replay(trace);
 }
 
 } // namespace car
