@@ -126,12 +126,18 @@ class CnfFormula {
 #ifdef KISSAT
 class RawKissat {
   public:
-    explicit RawKissat(const CnfFormula &formula)
+    RawKissat(const CnfFormula &formula, int queryLiteral)
         : m_solver(kissat_init()) {
         if (!m_solver) throw std::runtime_error("failed to initialize Kissat");
         kissat_reserve(m_solver, static_cast<int>(formula.NumVars()));
         for (const auto &clause : formula.Clauses()) {
             for (int literal : clause) kissat_add(m_solver, literal);
+            kissat_add(m_solver, 0);
+        }
+        // The current bad property is a temporary unit query, not base CNF.
+        if (queryLiteral != CnfFormula::kTrue) {
+            if (queryLiteral != CnfFormula::kFalse)
+                kissat_add(m_solver, queryLiteral);
             kissat_add(m_solver, 0);
         }
     }
@@ -171,8 +177,9 @@ class WLMemoryBMC::Impl {
         (void)witness;
         throw std::runtime_error("WL memory BMC requires Kissat support");
 #else
-        BuildBound(target);
-        EncodeAigGates();
+        ExtendTo(target);
+        int badLiteral = BooleanLiteral(Evaluate(m_bad, target));
+        EncodeNewAigGates();
 
         LOG_L(m_log,
               1,
@@ -181,10 +188,11 @@ class WLMemoryBMC::Impl {
               ": ",
               m_cnf.NumVars(),
               " variables, ",
-              m_cnf.Clauses().size(),
+              m_cnf.Clauses().size() +
+                  (badLiteral == CnfFormula::kTrue ? 0 : 1),
               " clauses");
 
-        RawKissat kissatEngine(m_cnf);
+        RawKissat kissatEngine(m_cnf, badLiteral);
         int result = kissatEngine.Solve();
         if (result == 20) return Result::Unsat;
         if (result != 10)
@@ -253,61 +261,58 @@ class WLMemoryBMC::Impl {
         }
     }
 
-    void BuildBound(unsigned target) {
-        // Materialize scalar variables and expressions at every time step.
-        for (unsigned time = 0; time <= target; ++time) {
-            for (int64_t input : m_inputs) Evaluate(input, time);
-            for (int64_t state : m_scalarStates) Evaluate(state, time);
-            for (const Btor2IRNode &node : m_ir.Nodes()) {
-                if (!node.sortId ||
-                    m_ir.Sort(node.sortId).tag != BTOR2_TAG_SORT_bitvec)
-                    continue;
-                switch (node.tag) {
-                case BTOR2_TAG_init:
-                case BTOR2_TAG_next:
-                case BTOR2_TAG_bad:
-                case BTOR2_TAG_constraint:
-                case BTOR2_TAG_output:
-                case BTOR2_TAG_fair:
-                case BTOR2_TAG_justice:
-                    continue;
-                default: Evaluate(node.id, time); break;
-                }
+    void ExtendTo(unsigned target) {
+        while (m_builtSteps <= target) {
+            ExtendOneStep(m_builtSteps);
+            ++m_builtSteps;
+        }
+    }
+
+    void ExtendOneStep(unsigned time) {
+        // Materialize only the newly reached time step.
+        for (int64_t input : m_inputs) Evaluate(input, time);
+        for (int64_t state : m_scalarStates) Evaluate(state, time);
+        for (const Btor2IRNode &node : m_ir.Nodes()) {
+            if (!node.sortId ||
+                m_ir.Sort(node.sortId).tag != BTOR2_TAG_SORT_bitvec)
+                continue;
+            switch (node.tag) {
+            case BTOR2_TAG_init:
+            case BTOR2_TAG_next:
+            case BTOR2_TAG_bad:
+            case BTOR2_TAG_constraint:
+            case BTOR2_TAG_output:
+            case BTOR2_TAG_fair:
+            case BTOR2_TAG_justice:
+                continue;
+            default: Evaluate(node.id, time); break;
             }
         }
 
-        // Scalar state equations retain BTOR2's symbolic init/next semantics.
+        // Add each scalar init or transition equation exactly once.
         for (int64_t state : m_scalarStates) {
-            auto init = m_init.find(state);
-            if (init != m_init.end())
-                RequireEqual(Evaluate(state, 0), Evaluate(init->second, 0));
-            auto next = m_next.find(state);
-            if (next != m_next.end()) {
-                for (unsigned time = 0; time < target; ++time)
-                    RequireEqual(Evaluate(state, time + 1),
-                                 Evaluate(next->second, time));
+            if (time == 0) {
+                auto init = m_init.find(state);
+                if (init != m_init.end())
+                    RequireEqual(Evaluate(state, 0),
+                                 Evaluate(init->second, 0));
+                continue;
             }
+            auto next = m_next.find(state);
+            if (next != m_next.end())
+                RequireEqual(Evaluate(state, time),
+                             Evaluate(next->second, time - 1));
         }
 
-        // Each dynamic read receives exact forwarding constraints.
-        for (unsigned time = 0; time <= target; ++time) {
-            for (int64_t read : m_reads) EncodeRead(read, time);
-        }
-        EncodeInitialMemoryConsistency();
+        // Add the new step's memory forwarding and environmental constraints.
+        for (int64_t read : m_reads) EncodeRead(read, time);
+        for (int64_t constraint : m_constraints)
+            RequireTrue(Evaluate(constraint, time));
 
-        // Constraints hold at every visited time; bad is queried at target.
-        for (unsigned time = 0; time <= target; ++time) {
-            for (int64_t constraint : m_constraints)
-                RequireTrue(Evaluate(constraint, time));
-        }
-        RequireTrue(Evaluate(m_bad, target));
-
-        // Reserve every value needed for a witness before Kissat sees the CNF.
-        for (unsigned time = 0; time <= target; ++time) {
-            for (int64_t input : m_inputs) Bits(Evaluate(input, time));
-            for (int64_t state : m_scalarStates) Bits(Evaluate(state, time));
-            for (int64_t read : m_reads) Bits(Evaluate(read, time));
-        }
+        // Reserve values needed to extract a SAT witness at this depth.
+        for (int64_t input : m_inputs) Bits(Evaluate(input, time));
+        for (int64_t state : m_scalarStates) Bits(Evaluate(state, time));
+        for (int64_t read : m_reads) Bits(Evaluate(read, time));
     }
 
     BoolectorNode *FreshValue(int64_t id,
@@ -432,10 +437,14 @@ class WLMemoryBMC::Impl {
     }
 
     void RequireTrue(BoolectorNode *node) {
+        m_cnf.AddClause({BooleanLiteral(node)});
+    }
+
+    int BooleanLiteral(BoolectorNode *node) {
         std::vector<int> bits = Bits(node);
         if (bits.size() != 1)
             throw std::runtime_error("expected one-bit BMC condition");
-        m_cnf.AddClause({bits.front()});
+        return bits.front();
     }
 
     void RequireEqual(BoolectorNode *lhs, BoolectorNode *rhs) {
@@ -495,38 +504,41 @@ class WLMemoryBMC::Impl {
         for (size_t bit = 0; bit < readData.size(); ++bit)
             initial.data.push_back(m_cnf.NewVar());
         EncodeSelectedData(initial.select, readData, initial.data);
-        m_initialReads.push_back(std::move(initial));
+        RegisterInitialRead(std::move(initial));
     }
 
-    void EncodeInitialMemoryConsistency() {
-        for (size_t i = 0; i < m_initialReads.size(); ++i) {
-            for (size_t j = i + 1; j < m_initialReads.size(); ++j) {
-                const InitialRead &lhs = m_initialReads[i];
-                const InitialRead &rhs = m_initialReads[j];
-                if (lhs.memoryId != rhs.memoryId) continue;
-                int sameAddress =
-                    m_cnf.AddressEqual(lhs.address, rhs.address);
-                for (size_t bit = 0; bit < lhs.data.size(); ++bit) {
-                    m_cnf.AddClause(
-                        {CnfFormula::Not(lhs.select),
-                         CnfFormula::Not(rhs.select),
-                         CnfFormula::Not(sameAddress),
-                         CnfFormula::Not(lhs.data[bit]),
-                         rhs.data[bit]});
-                    m_cnf.AddClause(
-                        {CnfFormula::Not(lhs.select),
-                         CnfFormula::Not(rhs.select),
-                         CnfFormula::Not(sameAddress),
-                         lhs.data[bit],
-                         CnfFormula::Not(rhs.data[bit])});
-                }
+    void RegisterInitialRead(InitialRead read) {
+        // Relate a new initial-memory observation only to prior observations.
+        for (const InitialRead &previous : m_initialReads) {
+            if (previous.memoryId != read.memoryId) continue;
+            if (previous.data.size() != read.data.size())
+                throw std::runtime_error("initial memory data width mismatch");
+            int sameAddress =
+                m_cnf.AddressEqual(previous.address, read.address);
+            for (size_t bit = 0; bit < previous.data.size(); ++bit) {
+                m_cnf.AddClause(
+                    {CnfFormula::Not(previous.select),
+                     CnfFormula::Not(read.select),
+                     CnfFormula::Not(sameAddress),
+                     CnfFormula::Not(previous.data[bit]),
+                     read.data[bit]});
+                m_cnf.AddClause(
+                    {CnfFormula::Not(previous.select),
+                     CnfFormula::Not(read.select),
+                     CnfFormula::Not(sameAddress),
+                     previous.data[bit],
+                     CnfFormula::Not(read.data[bit])});
             }
         }
+        m_initialReads.push_back(std::move(read));
     }
 
-    void EncodeAigGates() {
-        for (const WLAigGate &gate : m_bitblastor.Gates())
+    void EncodeNewAigGates() {
+        const std::vector<WLAigGate> &gates = m_bitblastor.Gates();
+        while (m_encodedGateCount < gates.size()) {
+            const WLAigGate &gate = gates[m_encodedGateCount++];
             m_cnf.AddAigAnd(gate.node, gate.child0, gate.child1);
+        }
     }
 
 #ifdef KISSAT
@@ -612,6 +624,8 @@ class WLMemoryBMC::Impl {
         m_scalarContexts;
     std::vector<InitialRead> m_initialReads;
     CnfFormula m_cnf;
+    unsigned m_builtSteps{0};
+    size_t m_encodedGateCount{0};
 };
 
 WLMemoryBMC::WLMemoryBMC(const Settings &settings,
@@ -625,10 +639,10 @@ WLMemoryBMC::~WLMemoryBMC() = default;
 
 CheckResult WLMemoryBMC::Run(unsigned bound) {
     m_witnessTrace = {};
+    m_impl = std::make_unique<Impl>(m_model.PropertyIR(), m_log);
 
     for (unsigned depth = 0;; ++depth) {
-        // Kissat is non-incremental, so every depth receives a fresh formula.
-        m_impl = std::make_unique<Impl>(m_model.PropertyIR(), m_log);
+        // The encoding grows incrementally; Kissat receives a fresh snapshot.
         Impl::Result result = m_impl->Check(depth, m_witnessTrace);
         if (result == Impl::Result::Sat) return CheckResult::Unsafe;
         if (depth == bound) break;
