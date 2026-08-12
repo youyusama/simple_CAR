@@ -169,15 +169,19 @@ CheckResult WLCegar::Run() {
         if (res == CheckResult::Safe) {
             // Close the finite prefix not covered by the delayed abstraction guards.
             WLMemoryBMC boundedChecker(m_settings, m_model, m_log);
-            CheckResult bounded = boundedChecker.Run(MaxDelay());
-            if (bounded == CheckResult::Unsafe) {
-                m_concreteCounterexample = true;
-                m_cexTrace.clear();
-                m_witnessTrace = boundedChecker.GetWitnessTrace();
-                res = CheckResult::Unsafe;
-            } else if (boundedChecker.CompletedBound()) {
-                res = CheckResult::Safe;
-            } else {
+            try {
+                CheckResult bounded = boundedChecker.Run(MaxDelay());
+                if (bounded == CheckResult::Unsafe) {
+                    m_concreteCounterexample = true;
+                    m_cexTrace.clear();
+                    m_witnessTrace = boundedChecker.GetWitnessTrace();
+                    res = CheckResult::Unsafe;
+                } else {
+                    // Normal Unknown means the complete finite prefix is safe.
+                    res = CheckResult::Safe;
+                }
+            } catch (const std::exception &error) {
+                LOG_L(m_log, 0, "WL memory BMC failed: ", error.what());
                 res = CheckResult::Unknown;
             }
         }

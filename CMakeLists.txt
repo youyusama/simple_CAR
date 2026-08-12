@@ -93,7 +93,7 @@ set(SRCS
     src/wordlevel/WLChecker.cpp
     src/wordlevel/WLCegar.cpp
     src/wordlevel/WLMemoryBMC.cpp
-    src/wordlevel/model/WLBoolectorBitblast.cpp
+    src/wordlevel/model/WLBitblastor.cpp
     btor2/deps/btor2tools/src/btor2parser/btor2parser.c
     btor2/deps/btor2tools/src/btorsim/btorsimbv.c
     btor2/deps/btor2tools/src/btorsim/btorsimrng.c

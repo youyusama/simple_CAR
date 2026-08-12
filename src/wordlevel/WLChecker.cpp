@@ -93,8 +93,15 @@ std::unique_ptr<BaseAlg> WLChecker::CreateBitLevelChecker(Model &model,
 
 CheckResult WLChecker::Run() {
     m_witnessTrace = {};
-    if (m_memoryBmc)
-        return m_memoryBmc->Run(static_cast<unsigned>(m_settings.bmcK));
+    if (m_memoryBmc) {
+        try {
+            return m_memoryBmc->Run(
+                static_cast<unsigned>(m_settings.bmcK));
+        } catch (const std::exception &error) {
+            LOG_L(m_log, 0, "WL memory BMC failed: ", error.what());
+            return CheckResult::Unknown;
+        }
+    }
     if (m_cegar) return m_cegar->Run();
     return m_checker->Run();
 }

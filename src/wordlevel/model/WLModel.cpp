@@ -3,7 +3,7 @@
 #include "Btor2Frontend.h"
 #include "Model.h"
 #include "WLArrayAbstraction.h"
-#include "WLBoolectorBitblast.h"
+#include "WLBitblastor.h"
 #include "WLPackageResize.h"
 
 #include <cstdlib>

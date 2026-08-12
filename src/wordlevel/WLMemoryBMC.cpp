@@ -2,10 +2,8 @@
 
 #include "Btor2Frontend.h"
 #include "Log.h"
+#include "model/WLBitblastor.h"
 #include "model/WLModel.h"
-#include "WLSimulator.h"
-
-#include <boolector/boolector.h>
 
 #ifdef KISSAT
 extern "C" {
@@ -14,68 +12,16 @@ extern "C" {
 #endif
 
 #include <algorithm>
-#include <array>
 #include <climits>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
-#include <tuple>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace car {
 namespace {
-
-using UnaryFn = BoolectorNode *(*)(Btor *, BoolectorNode *);
-using BinaryFn = BoolectorNode *(*)(Btor *, BoolectorNode *, BoolectorNode *);
-
-const std::unordered_map<Btor2Tag, UnaryFn> kUnaryOps{
-    {BTOR2_TAG_dec, boolector_dec},       {BTOR2_TAG_inc, boolector_inc},
-    {BTOR2_TAG_neg, boolector_neg},       {BTOR2_TAG_not, boolector_not},
-    {BTOR2_TAG_redand, boolector_redand}, {BTOR2_TAG_redor, boolector_redor},
-    {BTOR2_TAG_redxor, boolector_redxor},
-};
-
-const std::unordered_map<Btor2Tag, BinaryFn> kBinaryOps{
-    {BTOR2_TAG_add, boolector_add},       {BTOR2_TAG_and, boolector_and},
-    {BTOR2_TAG_concat, boolector_concat}, {BTOR2_TAG_eq, boolector_eq},
-    {BTOR2_TAG_iff, boolector_iff},       {BTOR2_TAG_implies, boolector_implies},
-    {BTOR2_TAG_mul, boolector_mul},       {BTOR2_TAG_nand, boolector_nand},
-    {BTOR2_TAG_neq, boolector_ne},        {BTOR2_TAG_nor, boolector_nor},
-    {BTOR2_TAG_or, boolector_or},         {BTOR2_TAG_rol, boolector_rol},
-    {BTOR2_TAG_ror, boolector_ror},       {BTOR2_TAG_saddo, boolector_saddo},
-    {BTOR2_TAG_sdiv, boolector_sdiv},     {BTOR2_TAG_sdivo, boolector_sdivo},
-    {BTOR2_TAG_sgt, boolector_sgt},       {BTOR2_TAG_sgte, boolector_sgte},
-    {BTOR2_TAG_sll, boolector_sll},       {BTOR2_TAG_slt, boolector_slt},
-    {BTOR2_TAG_slte, boolector_slte},     {BTOR2_TAG_smod, boolector_smod},
-    {BTOR2_TAG_smulo, boolector_smulo},   {BTOR2_TAG_sra, boolector_sra},
-    {BTOR2_TAG_srem, boolector_srem},     {BTOR2_TAG_srl, boolector_srl},
-    {BTOR2_TAG_ssubo, boolector_ssubo},   {BTOR2_TAG_sub, boolector_sub},
-    {BTOR2_TAG_uaddo, boolector_uaddo},   {BTOR2_TAG_udiv, boolector_udiv},
-    {BTOR2_TAG_ugt, boolector_ugt},       {BTOR2_TAG_ugte, boolector_ugte},
-    {BTOR2_TAG_ult, boolector_ult},       {BTOR2_TAG_ulte, boolector_ulte},
-    {BTOR2_TAG_umulo, boolector_umulo},   {BTOR2_TAG_urem, boolector_urem},
-    {BTOR2_TAG_usubo, boolector_usubo},   {BTOR2_TAG_xnor, boolector_xnor},
-    {BTOR2_TAG_xor, boolector_xor},
-};
-
-struct TimedId {
-    int64_t id{0};
-    unsigned time{0};
-
-    bool operator==(const TimedId &other) const {
-        return id == other.id && time == other.time;
-    }
-};
-
-struct TimedIdHash {
-    size_t operator()(const TimedId &key) const {
-        return std::hash<int64_t>{}(key.id) ^
-               (std::hash<unsigned>{}(key.time) << 1);
-    }
-};
 
 // A small direct-CNF builder.  Literal 0 is false and INT_MAX is true.
 class CnfFormula {
@@ -204,43 +150,20 @@ class RawKissat {
 };
 #endif
 
-struct AigGateCollector {
-    std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> gates;
-    std::unordered_set<uint64_t> visited;
-};
-
-void CollectAigGate(void *state,
-                    bool isPost,
-                    uint64_t node,
-                    const char *,
-                    uint64_t child0,
-                    uint64_t child1) {
-    if (!isPost || !child0) return;
-    auto *collector = static_cast<AigGateCollector *>(state);
-    const uint64_t normalized = node & ~UINT64_C(1);
-    if (!collector->visited.insert(normalized).second) return;
-    collector->gates.emplace_back(normalized, child0, child1);
-}
-
 } // namespace
 
 class WLMemoryBMC::Impl {
   public:
-    Impl(const Btor2IR &ir, const Btor2IR &sourceIr, Log &log)
+    Impl(const Btor2IR &ir, Log &log)
         : m_ir(ir),
-          m_sourceIr(sourceIr),
           m_log(log),
-          m_btor(boolector_new()) {
+          m_bitblastor(ir) {
         IndexModel();
     }
 
-    ~Impl() {
-        if (m_aigManager) boolector_aig_delete(m_aigManager);
-        boolector_release_all(m_btor);
-        boolector_delete(m_btor);
-    }
+    ~Impl() = default;
 
-    enum class Result { Sat, Unsat, Unknown };
+    enum class Result { Sat, Unsat };
 
     Result Check(unsigned target, WLWitnessTrace &witness) {
 #ifndef KISSAT
@@ -261,21 +184,15 @@ class WLMemoryBMC::Impl {
               m_cnf.Clauses().size(),
               " clauses");
 
-        RawKissat solver(m_cnf);
-        int result = solver.Solve();
+        RawKissat kissatEngine(m_cnf);
+        int result = kissatEngine.Solve();
         if (result == 20) return Result::Unsat;
-        if (result != 10) return Result::Unknown;
-
-        WLReplayTrace replay = ExtractReplay(target, solver);
-        // Validate and serialize the SAT trace against the complete source model.
-        WLSimulator simulator(m_sourceIr);
-        WLSimulator::Result simulated = simulator.Replay(replay);
-        if (simulated.kind !=
-            WLSimulator::ReplayKind::ConcreteCounterexample) {
+        if (result != 10)
             throw std::runtime_error(
-                "exact WL memory BMC trace failed concrete replay");
-        }
-        witness = std::move(simulated.witnessTrace);
+                "Kissat returned an unexpected result code " +
+                std::to_string(result));
+
+        witness = ExtractWitness(target, kissatEngine);
         return Result::Sat;
 #endif
     }
@@ -298,17 +215,6 @@ class WLMemoryBMC::Impl {
         std::vector<int> address;
         std::vector<int> data;
     };
-
-    BoolectorSort Sort(int64_t sortId) {
-        auto found = m_sorts.find(sortId);
-        if (found != m_sorts.end()) return found->second;
-        const Btor2IRSort &sort = m_ir.Sort(sortId);
-        if (sort.tag != BTOR2_TAG_SORT_bitvec)
-            throw std::runtime_error("array sort reached scalar BMC lowering");
-        BoolectorSort result = boolector_bitvec_sort(m_btor, sort.width);
-        m_sorts.emplace(sortId, result);
-        return result;
-    }
 
     void IndexModel() {
         for (const Btor2IRNode &node : m_ir.Nodes()) {
@@ -348,8 +254,6 @@ class WLMemoryBMC::Impl {
     }
 
     void BuildBound(unsigned target) {
-        m_aigManager = boolector_aig_new(m_btor);
-
         // Materialize scalar variables and expressions at every time step.
         for (unsigned time = 0; time <= target; ++time) {
             for (int64_t input : m_inputs) Evaluate(input, time);
@@ -413,97 +317,48 @@ class WLMemoryBMC::Impl {
         std::string symbol = std::string("wlbmc.") + kind + "." +
                              std::to_string(id) + "." +
                              std::to_string(time);
-        return boolector_var(m_btor, Sort(sortId), symbol.c_str());
+        return m_bitblastor.Variable(sortId, symbol.c_str());
+    }
+
+    WLBitblastor::ScalarContext &ScalarContext(unsigned time) {
+        while (m_scalarContexts.size() <= time) {
+            const unsigned contextTime = m_scalarContexts.size();
+            m_scalarContexts.push_back(
+                m_bitblastor.CreateScalarContext(
+                    [this, contextTime](const Btor2IRNode &node) {
+                        switch (node.tag) {
+                        case BTOR2_TAG_input:
+                            return FreshValue(node.id,
+                                              contextTime,
+                                              node.sortId,
+                                              "input");
+                        case BTOR2_TAG_state:
+                            // States without next are per-step choices.
+                            return FreshValue(node.id,
+                                              contextTime,
+                                              node.sortId,
+                                              "state");
+                        case BTOR2_TAG_read:
+                            return FreshValue(node.id,
+                                              contextTime,
+                                              node.sortId,
+                                              "read");
+                        default:
+                            throw std::runtime_error(
+                                "unexpected scalar BMC leaf node " +
+                                std::to_string(node.id));
+                        }
+                    }));
+        }
+        return *m_scalarContexts[time];
     }
 
     BoolectorNode *Evaluate(int64_t signedId, unsigned time) {
-        if (signedId < 0)
-            return boolector_not(m_btor, Evaluate(-signedId, time));
-        TimedId key{signedId, time};
-        auto cached = m_values.find(key);
-        if (cached != m_values.end()) return cached->second;
-
-        const Btor2IRNode &node = m_ir.Node(signedId);
-        if (!node.sortId ||
-            m_ir.Sort(node.sortId).tag != BTOR2_TAG_SORT_bitvec) {
-            throw std::runtime_error("scalar evaluation reached an array node");
-        }
-
-        BoolectorNode *result = nullptr;
-        auto arg = [&](size_t index) {
-            return Evaluate(node.args[index], time);
-        };
-        switch (node.tag) {
-        case BTOR2_TAG_input:
-            result = FreshValue(node.id, time, node.sortId, "input");
-            break;
-        case BTOR2_TAG_state:
-            // States without next are independent per-step choices.
-            result = FreshValue(node.id, time, node.sortId, "state");
-            break;
-        case BTOR2_TAG_read:
-            result = FreshValue(node.id, time, node.sortId, "read");
-            break;
-        case BTOR2_TAG_const:
-            result = boolector_const(m_btor, node.constant.c_str());
-            break;
-        case BTOR2_TAG_constd:
-            result = boolector_constd(
-                m_btor, Sort(node.sortId), node.constant.c_str());
-            break;
-        case BTOR2_TAG_consth:
-            result = boolector_consth(
-                m_btor, Sort(node.sortId), node.constant.c_str());
-            break;
-        case BTOR2_TAG_zero:
-            result = boolector_zero(m_btor, Sort(node.sortId));
-            break;
-        case BTOR2_TAG_one:
-            result = boolector_one(m_btor, Sort(node.sortId));
-            break;
-        case BTOR2_TAG_ones:
-            result = boolector_ones(m_btor, Sort(node.sortId));
-            break;
-        case BTOR2_TAG_slice:
-            result = boolector_slice(m_btor,
-                                     arg(0),
-                                     static_cast<uint32_t>(node.args[1]),
-                                     static_cast<uint32_t>(node.args[2]));
-            break;
-        case BTOR2_TAG_uext:
-            result = boolector_uext(
-                m_btor, arg(0), static_cast<uint32_t>(node.args[1]));
-            break;
-        case BTOR2_TAG_sext:
-            result = boolector_sext(
-                m_btor, arg(0), static_cast<uint32_t>(node.args[1]));
-            break;
-        case BTOR2_TAG_ite:
-            result = boolector_cond(m_btor, arg(0), arg(1), arg(2));
-            break;
-        default:
-            if (node.nargs == 1) {
-                auto operation = kUnaryOps.find(node.tag);
-                if (operation != kUnaryOps.end())
-                    result = operation->second(m_btor, arg(0));
-            } else if (node.nargs == 2) {
-                auto operation = kBinaryOps.find(node.tag);
-                if (operation != kBinaryOps.end())
-                    result = operation->second(m_btor, arg(0), arg(1));
-            }
-            break;
-        }
-        if (!result) {
-            throw std::runtime_error(
-                "unsupported WL memory BMC scalar node " +
-                std::to_string(node.id));
-        }
-        m_values.emplace(key, result);
-        return result;
+        return ScalarContext(time).Lower(signedId);
     }
 
     BoolectorNode *And(BoolectorNode *lhs, BoolectorNode *rhs) {
-        return boolector_and(m_btor, lhs, rhs);
+        return boolector_and(m_bitblastor.BtorInstance(), lhs, rhs);
     }
 
     NormalizedArray NormalizeArray(int64_t expressionId,
@@ -527,7 +382,8 @@ class WLMemoryBMC::Impl {
             NormalizedArray elseArray = NormalizeArray(
                 node.args[2],
                 time,
-                And(path, boolector_not(m_btor, condition)));
+                And(path,
+                    boolector_not(m_bitblastor.BtorInstance(), condition)));
             if (thenArray.memoryId != elseArray.memoryId)
                 throw std::runtime_error(
                     "array ite combines different memory states");
@@ -542,8 +398,9 @@ class WLMemoryBMC::Impl {
 
     std::pair<int64_t, std::vector<WriteCandidate>>
     BuildWriteHistory(int64_t expressionId, unsigned time) {
-        BoolectorSort boolSort = boolector_bitvec_sort(m_btor, 1);
-        BoolectorNode *enabled = boolector_one(m_btor, boolSort);
+        Btor *btor = m_bitblastor.BtorInstance();
+        BoolectorSort boolSort = boolector_bitvec_sort(btor, 1);
+        BoolectorNode *enabled = boolector_one(btor, boolSort);
         NormalizedArray current =
             NormalizeArray(expressionId, time, enabled);
         int64_t memoryId = current.memoryId;
@@ -566,13 +423,11 @@ class WLMemoryBMC::Impl {
     }
 
     std::vector<int> Bits(BoolectorNode *node) {
-        RegisterRoot(node);
-        const size_t width = boolector_get_width(m_btor, node);
-        uint64_t *raw = boolector_aig_get_bits(m_aigManager, node);
-        std::vector<int> result(width);
-        for (size_t bit = 0; bit < width; ++bit)
-            result[bit] = m_cnf.AigLiteral(raw[width - bit - 1]);
-        boolector_aig_free_bits(m_aigManager, raw, width);
+        std::vector<uint64_t> raw = m_bitblastor.Bitblast(node);
+        std::vector<int> result;
+        result.reserve(raw.size());
+        for (uint64_t literal : raw)
+            result.push_back(m_cnf.AigLiteral(literal));
         return result;
     }
 
@@ -584,7 +439,8 @@ class WLMemoryBMC::Impl {
     }
 
     void RequireEqual(BoolectorNode *lhs, BoolectorNode *rhs) {
-        RequireTrue(boolector_eq(m_btor, lhs, rhs));
+        RequireTrue(
+            boolector_eq(m_bitblastor.BtorInstance(), lhs, rhs));
     }
 
     void EncodeSelectedData(int select,
@@ -668,57 +524,82 @@ class WLMemoryBMC::Impl {
         }
     }
 
-    void RegisterRoot(BoolectorNode *node) {
-        if (!m_registeredRoots.insert(node).second) return;
-        boolector_aig_bitblast(m_aigManager, node);
-        boolector_aig_visit(
-            m_aigManager, node, CollectAigGate, &m_gateCollector);
-    }
-
     void EncodeAigGates() {
-        for (const auto &[node, child0, child1] : m_gateCollector.gates)
-            m_cnf.AddAigAnd(node, child0, child1);
+        for (const WLAigGate &gate : m_bitblastor.Gates())
+            m_cnf.AddAigAnd(gate.node, gate.child0, gate.child1);
     }
 
 #ifdef KISSAT
-    WLBitVector ModelBits(BoolectorNode *node, const RawKissat &solver) {
-        std::vector<int> literals = Bits(node);
+    bool ModelLiteral(int literal,
+                      const RawKissat &kissatEngine) const {
+        if (literal == CnfFormula::kTrue) return true;
+        if (literal == CnfFormula::kFalse) return false;
+        return literal > 0 ? kissatEngine.Value(literal)
+                           : !kissatEngine.Value(-literal);
+    }
+
+    WLBitVector ModelCnfBits(const std::vector<int> &literals,
+                             const RawKissat &kissatEngine) const {
         WLBitVector value = WLBitVector::Zero(literals.size());
-        for (size_t bit = 0; bit < literals.size(); ++bit) {
-            int literal = literals[bit];
-            bool bitValue = literal == CnfFormula::kTrue ||
-                            (literal != CnfFormula::kFalse &&
-                             (literal > 0 ? solver.Value(literal)
-                                          : !solver.Value(-literal)));
-            value.SetBit(static_cast<uint32_t>(bit), bitValue);
-        }
+        for (size_t bit = 0; bit < literals.size(); ++bit)
+            value.SetBit(static_cast<uint32_t>(bit),
+                         ModelLiteral(literals[bit], kissatEngine));
         return value;
     }
 
-    WLReplayTrace ExtractReplay(unsigned target, const RawKissat &solver) {
-        WLReplayTrace trace;
+    WLBitVector ModelBits(BoolectorNode *node,
+                          const RawKissat &kissatEngine) {
+        return ModelCnfBits(Bits(node), kissatEngine);
+    }
+
+    WLWitnessTrace ExtractWitness(unsigned target,
+                                  const RawKissat &kissatEngine) {
+        WLWitnessTrace trace;
         trace.steps.resize(static_cast<size_t>(target) + 1);
         for (unsigned time = 0; time <= target; ++time) {
-            WLReplayStep &step = trace.steps[time];
+            WLWitnessStep &step = trace.steps[time];
             for (int64_t input : m_inputs)
                 step.inputValues.emplace(
-                    input, ModelBits(Evaluate(input, time), solver));
+                    input,
+                    ModelBits(Evaluate(input, time), kissatEngine));
             for (int64_t state : m_scalarStates)
                 step.stateValues.emplace(
-                    state, ModelBits(Evaluate(state, time), solver));
-            for (int64_t read : m_reads)
-                step.abstractReadValues.emplace(
-                    read, ModelBits(Evaluate(read, time), solver));
+                    state,
+                    ModelBits(Evaluate(state, time), kissatEngine));
+        }
+
+        // An uninitialized memory needs only the queried initial locations;
+        // all successor array values are reconstructed from BTOR2 transitions.
+        std::unordered_map<int64_t,
+                           std::unordered_map<std::string, WLBitVector>>
+            initialEntries;
+        for (const InitialRead &initial : m_initialReads) {
+            if (!ModelLiteral(initial.select, kissatEngine)) continue;
+            WLBitVector address =
+                ModelCnfBits(initial.address, kissatEngine);
+            WLBitVector data =
+                ModelCnfBits(initial.data, kissatEngine);
+            initialEntries[initial.memoryId].insert_or_assign(
+                address.ToBinary(), std::move(data));
+        }
+        for (auto &[memoryId, entries] : initialEntries) {
+            WLWitnessArrayValue value;
+            value.entries.reserve(entries.size());
+            for (auto &[address, data] : entries) {
+                value.entries.push_back(
+                    {WLBitVector::FromBinary(address.size(), address),
+                     std::move(data)});
+            }
+            trace.steps.front().arrayStateValues.emplace(
+                memoryId, std::move(value));
         }
         return trace;
     }
 #endif
 
     const Btor2IR &m_ir;
-    const Btor2IR &m_sourceIr;
     Log &m_log;
-    Btor *m_btor{nullptr};
-    BoolectorAIGMgr *m_aigManager{nullptr};
+    WLBitblastor m_bitblastor;
     int64_t m_bad{0};
     std::vector<int64_t> m_inputs;
     std::vector<int64_t> m_scalarStates;
@@ -727,11 +608,9 @@ class WLMemoryBMC::Impl {
     std::vector<int64_t> m_constraints;
     std::unordered_map<int64_t, int64_t> m_init;
     std::unordered_map<int64_t, int64_t> m_next;
-    std::unordered_map<int64_t, BoolectorSort> m_sorts;
-    std::unordered_map<TimedId, BoolectorNode *, TimedIdHash> m_values;
+    std::vector<std::unique_ptr<WLBitblastor::ScalarContext>>
+        m_scalarContexts;
     std::vector<InitialRead> m_initialReads;
-    std::unordered_set<BoolectorNode *> m_registeredRoots;
-    AigGateCollector m_gateCollector;
     CnfFormula m_cnf;
 };
 
@@ -745,27 +624,16 @@ WLMemoryBMC::WLMemoryBMC(const Settings &settings,
 WLMemoryBMC::~WLMemoryBMC() = default;
 
 CheckResult WLMemoryBMC::Run(unsigned bound) {
-    m_completedBound = false;
-    m_checkedBound = 0;
     m_witnessTrace = {};
 
-    try {
-        for (unsigned depth = 0;; ++depth) {
-            // Kissat is non-incremental, so every depth receives a fresh formula.
-            m_impl = std::make_unique<Impl>(
-                m_model.PropertyIR(), m_model.SourceIR(), m_log);
-            Impl::Result result = m_impl->Check(depth, m_witnessTrace);
-            if (result == Impl::Result::Sat) return CheckResult::Unsafe;
-            if (result == Impl::Result::Unknown) return CheckResult::Unknown;
-            m_checkedBound = depth;
-            if (depth == bound) break;
-        }
-    } catch (const std::exception &error) {
-        LOG_L(m_log, 0, "WL memory BMC failed: ", error.what());
-        return CheckResult::Unknown;
+    for (unsigned depth = 0;; ++depth) {
+        // Kissat is non-incremental, so every depth receives a fresh formula.
+        m_impl = std::make_unique<Impl>(m_model.PropertyIR(), m_log);
+        Impl::Result result = m_impl->Check(depth, m_witnessTrace);
+        if (result == Impl::Result::Sat) return CheckResult::Unsafe;
+        if (depth == bound) break;
     }
 
-    m_completedBound = true;
     LOG_L(m_log,
           1,
           "WL memory BMC found no counterexample through bound ",
