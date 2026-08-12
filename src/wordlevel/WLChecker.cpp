@@ -11,7 +11,8 @@
 #include "Model.h"
 #include "RLive.h"
 #include "WLCegar.h"
-#include "WLModel.h"
+#include "WLMemoryBMC.h"
+#include "model/WLModel.h"
 
 #include <stdexcept>
 
@@ -38,6 +39,15 @@ WLChecker::WLChecker(const Settings &settings,
     : m_settings(settings),
       m_log(log),
       m_model(model) {
+    if (m_settings.alg == MCAlgorithm::WLBMC) {
+        // Native memory BMC works directly on the source IR.
+        m_memoryBmc =
+            std::make_unique<WLMemoryBMC>(m_settings, m_model, m_log);
+        return;
+    }
+
+    // Ordinary word-level checking needs the optimized bit-level model.
+    m_model.Build({});
     if (m_model.SourceHasArrays()) {
         // Array CEGAR owns the checker lifecycle across abstraction rebuilds.
         m_cegar =
@@ -83,16 +93,20 @@ std::unique_ptr<BaseAlg> WLChecker::CreateBitLevelChecker(Model &model,
 
 CheckResult WLChecker::Run() {
     m_witnessTrace = {};
+    if (m_memoryBmc)
+        return m_memoryBmc->Run(static_cast<unsigned>(m_settings.bmcK));
     if (m_cegar) return m_cegar->Run();
     return m_checker->Run();
 }
 
 std::vector<std::pair<Cube, Cube>> WLChecker::GetCexTrace() {
+    if (m_memoryBmc) return {};
     if (m_cegar) return m_cegar->GetCexTrace();
     return m_checker->GetCexTrace();
 }
 
 const WLWitnessTrace &WLChecker::GetWitnessTrace() {
+    if (m_memoryBmc) return m_memoryBmc->GetWitnessTrace();
     if (m_cegar) return m_cegar->GetWitnessTrace();
     if (m_witnessTrace.steps.empty()) {
         m_witnessTrace = ToSparseWitnessTrace(

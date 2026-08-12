@@ -35,6 +35,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"fcar", MCAlgorithm::FCAR},
                 {"bcar", MCAlgorithm::BCAR},
                 {"bmc", MCAlgorithm::BMC},
+                {"wlbmc", MCAlgorithm::WLBMC},
                 {"kind", MCAlgorithm::KIND},
                 {"ic3", MCAlgorithm::IC3},
                 {"l2s", MCAlgorithm::L2S},
@@ -182,6 +183,18 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                     .extension() != ".aig") {
                 throw CLI::ValidationError(
                     "--wl-bitblast-only", "output path must end in .aig");
+            }
+        }
+
+        if (settings.alg == MCAlgorithm::WLBMC) {
+            if (std::filesystem::path(settings.aigFilePath).extension() !=
+                ".btor2") {
+                throw CLI::ValidationError(
+                    "-a", "wlbmc requires a .btor2 input file");
+            }
+            if (settings.bmcK < 0) {
+                throw CLI::ValidationError(
+                    "-k", "wlbmc requires a non-negative bound");
             }
         }
 

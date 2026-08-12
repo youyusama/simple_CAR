@@ -38,6 +38,7 @@ class WLModel {
 
     bool SourceHasArrays() const { return m_sourceHasArrays; }
     const Btor2IR &SourceIR() const { return *m_sourceIr; }
+    const Btor2IR &PropertyIR() const { return *m_propertyIr; }
 
     // Decode the bit-level checker interface into a word-level replay seed.
     WLReplayTrace DecodeBitTrace(
@@ -56,6 +57,7 @@ class WLModel {
     Log &m_log;
     std::string m_inputPath;
     std::unique_ptr<Btor2IR> m_sourceIr;
+    std::unique_ptr<Btor2IR> m_propertyIr;
     std::shared_ptr<aiger> m_aig;
     std::unique_ptr<Model> m_model;
     bool m_sourceHasArrays{false};

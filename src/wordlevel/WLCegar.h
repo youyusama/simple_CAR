@@ -33,6 +33,7 @@ class WLCegar {
 
   private:
     bool AddPair(const WLMemoryPair &pair);
+    unsigned MaxDelay() const;
     bool ReloadModel();
     std::unique_ptr<BaseAlg> CreateBitLevelChecker(Model &model, Log &log);
 

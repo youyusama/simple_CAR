@@ -243,8 +243,10 @@ WLModel::WLModel(const Settings &settings, Log &log)
     : m_settings(settings), m_log(log), m_inputPath(settings.aigFilePath) {
     m_sourceIr =
         std::make_unique<Btor2IR>(Btor2Frontend::LoadIR(m_inputPath));
-    // The initial abstraction tracks no memory/address pairs.
-    Build({});
+    m_sourceHasArrays = m_sourceIr->HasArrays();
+    m_propertyIr = std::make_unique<Btor2IR>(
+        m_settings.wlDisableCoi ? *m_sourceIr
+                                : ReduceToPropertyCoi(*m_sourceIr));
 }
 
 WLModel::~WLModel() = default;
@@ -296,8 +298,8 @@ void WLModel::Build(const std::vector<WLMemoryPair> &memoryPairs) {
 
 WLModelBuildResult
 WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
-    // Stage 1: start from the validated format-specific source model.
-    Btor2IR ir = *m_sourceIr;
+    // Stage 1: start from the cached property cone of the validated source model.
+    Btor2IR ir = *m_propertyIr;
     const bool sourceHasArrays = ir.HasArrays();
     const bool bitblastOnly = !m_settings.wlBitblastOutputPath.empty();
     if (bitblastOnly && sourceHasArrays) {
@@ -305,14 +307,11 @@ WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
             "--wl-bitblast-only accepts only array-free BTOR2 input");
     }
 
-    // Stage 2: discard logic outside the safety property/constraint COI.
-    if (!m_settings.wlDisableCoi) ir = ReduceToPropertyCoi(ir);
-
     Btor2IR processedIr;
     std::vector<WLMemoryPair> tracePairs;
     WLIRTraceMap traceSources;
 
-    // Stage 3: normal checking abstracts arrays; export mode is array-free.
+    // Stage 2: normal checking abstracts arrays; export mode is array-free.
     if (bitblastOnly) {
         processedIr = std::move(ir);
     } else {
@@ -327,11 +326,11 @@ WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
         traceSources = std::move(abstraction.traceSources);
     }
 
-    // Stage 4: compact safe finite-domain packages in the array-free IR.
+    // Stage 3: compact safe finite-domain packages in the array-free IR.
     if (!m_settings.wlDisablePackageResize)
         WLPackageResize::Run(processedIr, traceSources);
 
-    // Stage 5: standard bitblast produces the bit-level model and trace mapping.
+    // Stage 4: standard bitblast produces the bit-level model and trace mapping.
     WLTraceMap traceMap;
     traceMap.memoryPairs = std::move(tracePairs);
     std::shared_ptr<aiger> aig =

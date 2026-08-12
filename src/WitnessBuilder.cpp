@@ -3,7 +3,7 @@
 #include "Btor2Frontend.h"
 #include "Log.h"
 #include "Model.h"
-#include "WLModel.h"
+#include "model/WLModel.h"
 #include "WLTypes.h"
 
 #include <algorithm>
@@ -173,13 +173,7 @@ WitnessBuilder::WitnessBuilder(const Settings &settings,
                                const WLModel &model)
     : m_settings(settings),
       m_log(log),
-      m_model(&model.BitModel()),
-      m_wlModel(&model),
-      m_modelAig(model.BitModel().GetAiger().get()) {
-    assert(m_modelAig != nullptr);
-    m_numInputs = static_cast<int>(m_modelAig->num_inputs);
-    m_numLatches = static_cast<int>(m_modelAig->num_latches);
-}
+      m_wlModel(&model) {}
 
 void WitnessBuilder::BeginWitness() {
     m_witnessAigPtr = CloneBaseAig(m_modelAig);

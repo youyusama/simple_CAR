@@ -11,7 +11,7 @@
 #include "Model.h"
 #include "RLive.h"
 #include "WLChecker.h"
-#include "WLModel.h"
+#include "model/WLModel.h"
 #include "WitnessBuilder.h"
 #include <filesystem>
 #include <iostream>
@@ -82,6 +82,7 @@ bool SimpleCAR::LoadModel() {
     // AIG export stops after word-level lowering and does not create a checker.
     if (!m_settings.wlBitblastOutputPath.empty()) {
         try {
+            m_wmodel->Build({});
             m_wmodel->WriteBitblastAig();
         } catch (const std::exception &error) {
             std::cerr << error.what() << std::endl;
@@ -111,14 +112,13 @@ CheckResult SimpleCAR::Prove() {
     CheckResult res = m_checker->Run();
 
     if (!m_settings.witnessOutputDir.empty()) {
-        Model &bitModel = m_wmodel ? m_wmodel->BitModel() : *m_model;
         WitnessBuilder witness_builder =
             m_wmodel
                 ? WitnessBuilder(m_settings, *m_log, *m_wmodel)
                 : WitnessBuilder(m_settings, *m_log, *m_model);
         if (res == CheckResult::Safe && m_checker->SupportsWitness()) {
             witness_builder.BeginWitness();
-            bitModel.RefineWitnessPropertyLit(witness_builder);
+            m_model->RefineWitnessPropertyLit(witness_builder);
             m_checker->RefineWitnessPropertyLit(witness_builder);
             if (!witness_builder.WriteWitness()) {
                 LOG_L(*m_log, 1, "Failed to write safe witness.");

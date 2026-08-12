@@ -10,7 +10,8 @@
 #include "Log.h"
 #include "Model.h"
 #include "RLive.h"
-#include "WLModel.h"
+#include "model/WLModel.h"
+#include "WLMemoryBMC.h"
 #include "WLSimulator.h"
 
 #include <algorithm>
@@ -50,6 +51,13 @@ bool WLCegar::AddPair(const WLMemoryPair &pair) {
         return true;
     }
     return false;
+}
+
+unsigned WLCegar::MaxDelay() const {
+    unsigned result = 0;
+    for (const WLMemoryPair &pair : m_memoryPairs)
+        result = std::max(result, pair.delay);
+    return result;
 }
 
 std::unique_ptr<BaseAlg>
@@ -159,8 +167,19 @@ CheckResult WLCegar::Run() {
         }
 
         if (res == CheckResult::Safe) {
-            // Safe abstraction results await a dedicated word-level proof rule.
-            res = CheckResult::Unknown;
+            // Close the finite prefix not covered by the delayed abstraction guards.
+            WLMemoryBMC boundedChecker(m_settings, m_model, m_log);
+            CheckResult bounded = boundedChecker.Run(MaxDelay());
+            if (bounded == CheckResult::Unsafe) {
+                m_concreteCounterexample = true;
+                m_cexTrace.clear();
+                m_witnessTrace = boundedChecker.GetWitnessTrace();
+                res = CheckResult::Unsafe;
+            } else if (boundedChecker.CompletedBound()) {
+                res = CheckResult::Safe;
+            } else {
+                res = CheckResult::Unknown;
+            }
         }
         break;
     }

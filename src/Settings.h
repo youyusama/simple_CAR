@@ -11,6 +11,7 @@ namespace car {
 enum class MCAlgorithm { FCAR,
                          BCAR,
                          BMC,
+                         WLBMC,
                          KIND,
                          IC3,
                          L2S,
