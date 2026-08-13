@@ -15,7 +15,6 @@ BMC::BMC(Settings settings,
                      m_log(log) {
     State::num_inputs = model.GetNumInputs();
     State::num_latches = model.GetNumLatches();
-    global_log = &m_log;
     m_k = 0;
     m_maxK = m_settings.bmcK;
     m_checkResult = CheckResult::Unknown;

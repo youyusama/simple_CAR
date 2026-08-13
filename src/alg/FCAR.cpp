@@ -13,7 +13,6 @@ FCAR::FCAR(Settings settings,
     State::num_inputs = model.GetNumInputs();
     State::num_latches = model.GetNumLatches();
     m_lastState = nullptr;
-    global_log = &m_log;
     m_checkResult = CheckResult::Unknown;
 
     m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;

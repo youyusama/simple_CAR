@@ -13,7 +13,6 @@ BCAR::BCAR(Settings settings,
     State::num_inputs = model.GetNumInputs();
     State::num_latches = model.GetNumLatches();
     m_lastState = nullptr;
-    global_log = &m_log;
 }
 
 CheckResult BCAR::Run() {

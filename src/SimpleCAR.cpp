@@ -109,6 +109,11 @@ bool SimpleCAR::LoadModel() {
 CheckResult SimpleCAR::Prove() {
     if (!m_checker) return CheckResult::Unknown;
 
+    // Cover word-level preprocessing, CEGAR replay, and native memory BMC.
+    global_log = m_log.get();
+    signal(SIGINT, SignalHandler);
+    signal(SIGTERM, SignalHandler);
+
     CheckResult res = m_checker->Run();
 
     if (!m_settings.witnessOutputDir.empty()) {
