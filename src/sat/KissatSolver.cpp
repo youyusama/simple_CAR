@@ -62,9 +62,9 @@ pair<Cube, Cube> KissatSolver::GetAssignment(bool prime) {
     Unsupported("GetAssignment");
 }
 
-void KissatSolver::GetConflict(unordered_set<Lit, LitHash> &out) {
-    (void)out;
-    Unsupported("GetConflict");
+bool KissatSolver::Failed(Lit assumption) {
+    (void)assumption;
+    return false;
 }
 
 Var KissatSolver::GetNewVar() {

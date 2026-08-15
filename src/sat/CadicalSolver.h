@@ -17,7 +17,7 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
     pair<Cube, Cube> GetAssignment(bool prime) override;
-    void GetConflict(unordered_set<Lit, LitHash> &out) override;
+    bool Failed(Lit assumption) override;
     inline Var GetNewVar() override {
         return ++m_maxId;
     }

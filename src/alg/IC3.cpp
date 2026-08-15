@@ -559,11 +559,10 @@ void IC3::PrintALLStats() const {
 
 Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_UCore");
-    solver->GetConflict(m_conflictScratch);
     Cube core;
     if (!prime) {
         for (const auto &lit : fallbackCube) {
-            if (m_conflictScratch.count(lit)) {
+            if (solver->Failed(lit)) {
                 core.push_back(lit);
             }
         }
@@ -571,7 +570,7 @@ Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallback
     } else {
         for (const auto &lit : fallbackCube) {
             Lit lit_p = m_model.LookupPrime(lit);
-            if (m_conflictScratch.count(lit_p)) {
+            if (solver->Failed(lit_p)) {
                 core.push_back(lit);
             }
         }
@@ -582,20 +581,20 @@ Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallback
 
 bool IC3::GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_ShrinkCore");
-    bool res = solver->ShrinkConflict(m_conflictScratch, m_settings.shrink);
+    bool res = solver->ShrinkConflict(m_settings.shrink);
     if (!res) return false;
 
     core.clear();
     if (!prime) {
         for (const auto &lit : fallbackCube) {
-            if (m_conflictScratch.count(lit)) {
+            if (solver->Failed(lit)) {
                 core.push_back(lit);
             }
         }
     } else {
         for (const auto &lit : fallbackCube) {
             Lit lit_p = m_model.LookupPrime(lit);
-            if (m_conflictScratch.count(lit_p)) {
+            if (solver->Failed(lit_p)) {
                 core.push_back(lit);
             }
         }
@@ -1261,7 +1260,7 @@ Cube IC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fa
     repaired.reserve(core.size() + 1);
     for (Lit lit : fallbackCube) {
         Lit lit_p = m_model.LookupPrime(lit);
-        if (m_conflictScratch.count(lit_p) || lit == init_blocking_lit) {
+        if (solver->Failed(lit_p) || lit == init_blocking_lit) {
             repaired.push_back(lit);
         }
     }

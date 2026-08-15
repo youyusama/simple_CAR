@@ -195,10 +195,9 @@ bool RLive::PruneDead(const Cube &s) {
 
 
 Cube RLive::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions) {
-    solver->GetConflict(m_conflictScratch);
     Cube res;
     for (auto a : assumptions) {
-        if (m_conflictScratch.find(a) != m_conflictScratch.end())
+        if (solver->Failed(a))
             res.emplace_back(a);
     }
     return res;

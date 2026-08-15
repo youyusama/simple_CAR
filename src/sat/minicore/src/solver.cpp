@@ -31,6 +31,9 @@ Solver::Solver() : // Parameters (user settable):
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
     domain_set[temp_cls_act_var] = 1;
     domain_list.push_back(temp_cls_act_var);
+    analyze_stack.reserve(64);
+    learnt_clause_tmp.reserve(32);
+    analyze_toclear.reserve(64);
 }
 
 void Solver::reset() {
@@ -72,7 +75,7 @@ void Solver::reset() {
     if (solve_in_domain) solve_in_domain_runtime_flag = false;
 
     assumptions.clear();
-    conflict.clear();
+    clearFailed();
     last_result_ = l_Undef;
     state_ = SolverState::Ready;
 }
@@ -101,6 +104,7 @@ void Solver::newVarUntil(Var v) {
         assigns.resize(alloced_var, assign_Undef);
         vardata.resize(alloced_var, mkVarData(CRef_Undef, 0));
         seen.resize(alloced_var, 0);
+        failed_stamp.resize(static_cast<size_t>(2 * alloced_var), 0);
         polarity.resize(alloced_var, true);
         order_list.resize(alloced_var);
         trail.reserve(alloced_var);
@@ -356,7 +360,8 @@ bool Solver::litRedundant(Lit p) {
     assert(reason(var(p)) != CRef_Undef);
 
     Clause *c = &ca->get_clause(reason(var(p)));
-    std::vector<ShrinkStackElem> stack;
+    std::vector<ShrinkStackElem> &stack = analyze_stack;
+    stack.clear();
 
     for (uint32_t i = 1;; i++) {
         if (i < (uint32_t)c->size()) {
@@ -410,9 +415,25 @@ bool Solver::litRedundant(Lit p) {
 }
 
 
-void Solver::analyzeFinal(Lit p, std::unordered_set<Lit, LitHash> &out_conflict) {
-    out_conflict.clear();
-    out_conflict.insert(p);
+void Solver::clearFailed() {
+    has_failed = false;
+    if (++failed_epoch == 0) {
+        std::fill(failed_stamp.begin(), failed_stamp.end(), 0);
+        failed_epoch = 1;
+    }
+}
+
+
+void Solver::markFailed(Lit assumption) {
+    const size_t index = static_cast<size_t>(toInt(assumption));
+    assert(index < failed_stamp.size());
+    failed_stamp[index] = failed_epoch;
+    has_failed = true;
+}
+
+
+void Solver::analyzeFinal(Lit p) {
+    markFailed(~p);
 
     if (decisionLevel() == 0)
         return;
@@ -425,7 +446,7 @@ void Solver::analyzeFinal(Lit p, std::unordered_set<Lit, LitHash> &out_conflict)
         if (seen[x]) {
             if (reason(x) == CRef_Undef) {
                 assert(level(x) > 0);
-                out_conflict.insert(~trail[i]);
+                markFailed(trail[i]);
                 // std::cout << "decision var: " << (!sign(trail[i]) ? var(trail[i]) : -var(trail[i])) << std::endl;
             } else {
                 Clause &c = ca->get_clause(reason(x));
@@ -816,7 +837,7 @@ lbool Solver::search(int nof_conflicts) {
     assert(nof_conflicts >= 0);
     size_t backtrack_level;
     int conflictC = 0;
-    std::vector<Lit> learnt_clause;
+    std::vector<Lit> &learnt_clause = learnt_clause_tmp;
     starts++;
 
     for (;;) {
@@ -878,7 +899,7 @@ lbool Solver::search(int nof_conflicts) {
                     // Dummy decision level:
                     newDecisionLevel();
                 } else if (value(p) == l_False) {
-                    analyzeFinal(~p, conflict);
+                    analyzeFinal(~p);
                     return l_False;
                 } else {
                     next = p;
@@ -980,7 +1001,7 @@ lbool Solver::solve_() {
         curr_restarts++;
     }
 
-    if (status == l_False && conflict.size() == 0)
+    if (status == l_False && !has_failed)
         ok = false;
     last_result_ = status;
     state_ = SolverState::Solved;

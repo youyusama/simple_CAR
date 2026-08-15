@@ -9,7 +9,6 @@
 #include <assert.h>
 #include <iomanip>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace minicore {
 
@@ -61,6 +60,7 @@ class Solver {
     void reset();                                 // Reset solver to ready state after a solve.
     SolverState state() const { return state_; }
     lbool lastResult() const { return last_result_; }
+    bool failed(Lit assumption) const;
 
     void setRestartLimit(int limit); // Set the restart limit.
 
@@ -84,11 +84,6 @@ class Solver {
     //
     virtual void garbageCollect();
     void checkGarbage();
-
-    // Extra results: (read-only member variable)
-    //
-    std::unordered_set<Lit, LitHash> conflict; // If problem is unsatisfiable (possibly under assumptions),
-                                               // this vector represent the final conflict clause expressed in the assumptions.
 
     // Mode of operation:
     //
@@ -166,6 +161,11 @@ class Solver {
     //
     std::vector<char> seen;
     std::vector<Lit> analyze_toclear;
+    std::vector<ShrinkStackElem> analyze_stack;
+    std::vector<Lit> learnt_clause_tmp;
+    std::vector<uint32_t> failed_stamp;
+    bool has_failed{false};
+    uint32_t failed_epoch{1};
 
     double max_learnts;
     double learntsize_adjust_confl;
@@ -185,8 +185,9 @@ class Solver {
     void analyze(CRef confl,
                  std::vector<Lit> &out_learnt,
                  size_t &out_btlevel); // (bt = backtrack)
-    void analyzeFinal(Lit p,
-                      std::unordered_set<Lit, LitHash> &out_conflict);
+    void clearFailed();
+    void markFailed(Lit assumption);
+    void analyzeFinal(Lit p);
     bool litRedundant(Lit p);                    // (helper method for 'analyze()')
     lbool search(int nof_conflicts);             // Search for a given number of conflicts.
     lbool solve_();                              // Main solve method (assumptions given in 'assumptions').
@@ -305,6 +306,12 @@ inline size_t Solver::nAssigns() const { return trail.size(); }
 inline int Solver::nClauses() const { return num_clauses; }
 inline int Solver::nLearnts() const { return num_learnts; }
 inline int Solver::nVars() const { return next_var; }
+
+inline bool Solver::failed(Lit assumption) const {
+    const size_t index = static_cast<size_t>(toInt(assumption));
+    assert(index < failed_stamp.size());
+    return failed_stamp[index] == failed_epoch;
+}
 
 inline CRef Solver::propagate() {
     if (decisionLevel() == 0)

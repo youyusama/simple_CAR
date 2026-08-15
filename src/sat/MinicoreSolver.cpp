@@ -79,17 +79,12 @@ pair<Cube, Cube> MinicoreSolver::GetAssignment(bool prime) {
 }
 
 
-void MinicoreSolver::GetConflict(unordered_set<Lit, LitHash> &out) {
-    out.clear();
-    out.reserve(conflict.size());
-    for (minicore::Lit l : conflict) {
-        out.insert(~l);
-    }
+bool MinicoreSolver::Failed(Lit assumption) {
+    return failed(assumption);
 }
 
 
-bool MinicoreSolver::ShrinkConflict(unordered_set<Lit, LitHash> &out, int shrink) {
-    out.clear();
+bool MinicoreSolver::ShrinkConflict(int shrink) {
     if (shrink == 0) return false;
 
     // TODO: implement minicore-only shrink strategies 1/2/3.

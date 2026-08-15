@@ -95,14 +95,8 @@ pair<Cube, Cube> CadicalSolver::GetAssignment(bool prime) {
 }
 
 
-void CadicalSolver::GetConflict(unordered_set<Lit, LitHash> &out) {
-    out.clear();
-    out.reserve(m_assumptions.size());
-    for (auto v : m_assumptions) {
-        if (failed(ToSigned(v))) {
-            out.insert(v);
-        }
-    }
+bool CadicalSolver::Failed(Lit assumption) {
+    return failed(ToSigned(assumption));
 }
 
 void CadicalSolver::AddTempClause(const Cube &cls) {

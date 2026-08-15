@@ -10,12 +10,14 @@ MinisatSolver::MinisatSolver(Model &m) : m_model(m) {
 MinisatSolver::~MinisatSolver() {}
 
 bool MinisatSolver::Solve() {
+    ClearFailed();
     if (m_tempVar != 0) m_assumptions.push(GetLit(m_tempVar));
     Minisat::lbool result = solveLimited(m_assumptions);
     if (result == Minisat::l_True) {
         return true;
     } else {
         assert(result == Minisat::l_False);
+        CacheFailed();
         return false;
     }
 }
@@ -95,12 +97,27 @@ pair<Cube, Cube> MinisatSolver::GetAssignment(bool prime) {
     return pair<Cube, Cube>(inputs, latches);
 }
 
-void MinisatSolver::GetConflict(unordered_set<Lit, LitHash> &out) {
-    out.clear();
-    out.reserve(static_cast<size_t>(conflict.size()));
-    for (int i = 0; i < conflict.size(); ++i) {
-        out.insert(~GetLiteral(conflict[i]));
+void MinisatSolver::ClearFailed() {
+    if (++m_failedEpoch == 0) {
+        std::fill(m_failedStamp.begin(), m_failedStamp.end(), 0);
+        m_failedEpoch = 1;
     }
+}
+
+
+void MinisatSolver::CacheFailed() {
+    if (m_failedStamp.size() < static_cast<size_t>(2 * nVars()))
+        m_failedStamp.resize(static_cast<size_t>(2 * nVars()), 0);
+    for (int i = 0; i < conflict.size(); ++i) {
+        Lit assumption = ~GetLiteral(conflict[i]);
+        m_failedStamp[PackedIndex(assumption)] = m_failedEpoch;
+    }
+}
+
+
+bool MinisatSolver::Failed(Lit assumption) {
+    const size_t index = PackedIndex(assumption);
+    return index < m_failedStamp.size() && m_failedStamp[index] == m_failedEpoch;
 }
 
 

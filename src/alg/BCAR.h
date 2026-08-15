@@ -137,7 +137,6 @@ class BCAR : public BaseAlg {
     vector<shared_ptr<vector<int>>> m_rotation;
     shared_ptr<State> m_lastState;
     std::shared_ptr<Restart> m_restart;
-    unordered_set<Lit, LitHash> m_conflictScratch;
 
     std::vector<std::pair<Cube, Cube>> m_cexTrace;
 };

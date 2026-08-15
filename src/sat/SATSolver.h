@@ -33,12 +33,12 @@ class SATSolver {
         return m_slv->GetAssignment(prime);
     }
 
-    void GetConflict(unordered_set<Lit, LitHash> &out) {
-        m_slv->GetConflict(out);
+    bool Failed(Lit assumption) {
+        return m_slv->Failed(assumption);
     }
 
-    bool ShrinkConflict(unordered_set<Lit, LitHash> &out, int shrink) {
-        return m_slv->ShrinkConflict(out, shrink);
+    bool ShrinkConflict(int shrink) {
+        return m_slv->ShrinkConflict(shrink);
     }
 
     Var GetNewVar() {

@@ -17,7 +17,7 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
     pair<Cube, Cube> GetAssignment(bool prime) override;
-    void GetConflict(unordered_set<Lit, LitHash> &out) override;
+    bool Failed(Lit assumption) override;
     inline Var GetNewVar() override {
         return ++m_maxId;
     }
@@ -50,6 +50,11 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     Var m_maxId;
     Minisat::vec<Minisat::Lit> m_assumptions;
     Var m_tempVar{0};
+    vector<uint32_t> m_failedStamp;
+    uint32_t m_failedEpoch{1};
+
+    void ClearFailed();
+    void CacheFailed();
 };
 
 } // namespace car
