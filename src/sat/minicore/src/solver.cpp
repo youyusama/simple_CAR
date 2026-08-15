@@ -813,6 +813,7 @@ void Solver::simplify() {
 
 lbool Solver::search(int nof_conflicts) {
     assert(ok);
+    assert(nof_conflicts >= 0);
     size_t backtrack_level;
     int conflictC = 0;
     std::vector<Lit> learnt_clause;
@@ -857,9 +858,10 @@ lbool Solver::search(int nof_conflicts) {
 
         } else {
             // NO CONFLICT
-            if (nof_conflicts >= 0 && conflictC >= nof_conflicts) {
+            if (conflictC >= nof_conflicts &&
+                decisionLevel() >= assumptions.size()) {
                 // Reached bound on number of conflicts:
-                cancelUntil(0);
+                cancelUntil(assumptions.size());
                 return l_Undef;
             }
 
