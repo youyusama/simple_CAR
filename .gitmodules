@@ -10,3 +10,6 @@
 [submodule "src/sat/minisat"]
 	path = src/sat/minisat
 	url = https://github.com/niklasso/minisat.git
+[submodule "deps/btor2tools"]
+	path = deps/btor2tools
+	url = https://github.com/hwmcc/btor2tools.git

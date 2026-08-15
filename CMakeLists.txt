@@ -64,8 +64,8 @@ set(DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/minisat
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/btor2
     ${CMAKE_CURRENT_SOURCE_DIR}/src/wordlevel
-    ${CMAKE_CURRENT_SOURCE_DIR}/btor2/deps/btor2tools/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/btor2/deps/btor2tools/deps/install/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/deps/btor2tools/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/deps/btor2tools/deps/install/include
 )
 
 set(MINICORE_LIB_SRCS
@@ -94,9 +94,9 @@ set(SRCS
     src/wordlevel/WLCegar.cpp
     src/wordlevel/WLMemoryBMC.cpp
     src/wordlevel/model/WLBitblastor.cpp
-    btor2/deps/btor2tools/src/btor2parser/btor2parser.c
-    btor2/deps/btor2tools/src/btorsim/btorsimbv.c
-    btor2/deps/btor2tools/src/btorsim/btorsimrng.c
+    deps/btor2tools/src/btor2parser/btor2parser.c
+    deps/btor2tools/src/btorsim/btorsimbv.c
+    deps/btor2tools/src/btorsim/btorsimrng.c
     src/Settings.cpp
     src/Log.cpp
     src/WitnessBuilder.cpp
@@ -137,11 +137,11 @@ set(SRCS
 set(LIBS ${LIBS} ${CADICAL_LIB})
 
 set(BOOLECTOR_LIB
-    ${CMAKE_CURRENT_SOURCE_DIR}/btor2/deps/btor2tools/deps/install/lib/libboolector.a)
+    ${CMAKE_CURRENT_SOURCE_DIR}/deps/btor2tools/deps/install/lib/libboolector.a)
 set(BOOLECTOR_BTOR2PARSER_LIB
-    ${CMAKE_CURRENT_SOURCE_DIR}/btor2/deps/btor2tools/deps/boolector/deps/install/lib/libbtor2parser.a)
+    ${CMAKE_CURRENT_SOURCE_DIR}/deps/btor2tools/deps/boolector/deps/install/lib/libbtor2parser.a)
 set(BOOLECTOR_LINGELING_LIB
-    ${CMAKE_CURRENT_SOURCE_DIR}/btor2/deps/btor2tools/deps/boolector/deps/install/lib/liblgl.a)
+    ${CMAKE_CURRENT_SOURCE_DIR}/deps/btor2tools/deps/boolector/deps/install/lib/liblgl.a)
 if(NOT EXISTS ${BOOLECTOR_LIB})
     message(FATAL_ERROR "Native BTOR2 frontend requires '${BOOLECTOR_LIB}'")
 endif()

@@ -43,7 +43,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"fair", MCAlgorithm::FAIR},
                 {"kfair", MCAlgorithm::KFAIR},
                 {"rlive", MCAlgorithm::RLIVE}}))
-        ->default_val("fcar");
+        ->default_val("ic3");
 
     app.add_option("--sa", settings.safetyBaseAlg, "Safety base algorithm")
         ->transform(CLI::CheckedTransformer(
@@ -53,7 +53,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"bmc", MCAlgorithm::BMC},
                 {"kind", MCAlgorithm::KIND},
                 {"ic3", MCAlgorithm::IC3}}))
-        ->default_val("fcar");
+        ->default_val("ic3");
 
     // app.add_option("--su,--shoal-unroll", settings.shoalUnroll, "unroll shoals for K cycles in rlive")
     //     ->default_val(1);
@@ -69,7 +69,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                 {"minicore", MCSATSolver::minicore},
                 {"kissat", MCSATSolver::kissat},
             }))
-        ->default_val("minisat");
+        ->default_val("minicore");
 
     app.add_option("-k", settings.bmcK, "BMC bound")
         ->default_val(-1);
@@ -99,8 +99,8 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_flag("--rs", settings.referSkipping, "refer-skipping # i-good lemma")
         ->default_val(false);
 
-    app.add_flag("--is", settings.internalSignals, "internal signals")
-        ->default_val(false);
+    // app.add_flag("--is", settings.internalSignals, "internal signals")
+    //     ->default_val(false);
 
     app.add_flag("--restart", settings.restart, "enable restart mechanism")
         ->default_val(false);
@@ -144,9 +144,10 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
     app.add_option("--max_ob_act", settings.maxObligationAct, "max obligation activity")
         ->default_val(10.0);
 
-    app.add_flag("--sd", settings.satSolveInDomain, "solve SAT in domain")
-        ->default_val(false)
-        ->excludes("--is");
+    bool disableSatSolveInDomain = false;
+    app.add_flag("--nosd", disableSatSolveInDomain,
+                 "disable SAT solving in domain")
+        ->default_val(false);
 
     app.add_option("--shrink", settings.shrink,
                    "shrink unsat core strategy: 0 disabled, 1-3 enabled")
@@ -172,6 +173,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
 
     try {
         app.parse(argc, argv);
+        settings.satSolveInDomain = !disableSatSolveInDomain;
 
         if (!settings.wlBitblastOutputPath.empty()) {
             if (std::filesystem::path(settings.aigFilePath).extension() !=

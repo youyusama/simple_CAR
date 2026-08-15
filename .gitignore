@@ -80,6 +80,6 @@ __pycache__/
 build/
 build-asan/
 release/
-deps/
+refs/
 scripts/
 tests/
