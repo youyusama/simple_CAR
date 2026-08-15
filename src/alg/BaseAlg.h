@@ -18,7 +18,6 @@ class BaseAlg {
   public:
     virtual CheckResult Run() = 0;
     virtual std::vector<std::pair<Cube, Cube>> GetCexTrace() = 0;
-    virtual int GetSafeDepth() const { return -1; }
     virtual bool SupportsWitness() const { return false; }
     virtual void RefineWitnessPropertyLit(WitnessBuilder &) const {}
     virtual ~BaseAlg() = default;

@@ -85,14 +85,18 @@ set(SRCS
     src/model/Model.cpp
     src/model/DAGCNFSimplifier.cpp
     src/frontend/btor2/Btor2Frontend.cpp
-    src/wordlevel/WLArrayAbstraction.cpp
-    src/wordlevel/WLModel.cpp
-    src/wordlevel/WLPackageResize.cpp
+    src/wordlevel/model/WLArrayAbstraction.cpp
+    src/wordlevel/WLBitVector.cpp
+    src/wordlevel/model/WLModel.cpp
+    src/wordlevel/model/WLPackageResize.cpp
     src/wordlevel/WLSimulator.cpp
     src/wordlevel/WLChecker.cpp
     src/wordlevel/WLCegar.cpp
-    src/wordlevel/WLBoolectorBitblast.cpp
+    src/wordlevel/WLMemoryBMC.cpp
+    src/wordlevel/model/WLBitblastor.cpp
     btor2/deps/btor2tools/src/btor2parser/btor2parser.c
+    btor2/deps/btor2tools/src/btorsim/btorsimbv.c
+    btor2/deps/btor2tools/src/btorsim/btorsimrng.c
     src/Settings.cpp
     src/Log.cpp
     src/WitnessBuilder.cpp
@@ -147,15 +151,14 @@ set(LIBS ${LIBS}
     ${BOOLECTOR_LINGELING_LIB}
     pthread)
 
-# kissat
-if(KISSAT)
-    add_definitions(-DKISSAT)
-    set(SRCS
-        ${SRCS}
-        src/sat/KissatSolver.cpp
-    )
-    set(LIBS ${LIBS} ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/kissat/build/libkissat.a)
+# Kissat is required by the native word-level memory BMC.
+set(KISSAT_LIB ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/kissat/build/libkissat.a)
+if(NOT EXISTS ${KISSAT_LIB})
+    message(FATAL_ERROR "WL memory BMC requires '${KISSAT_LIB}'")
 endif()
+add_definitions(-DKISSAT)
+set(SRCS ${SRCS} src/sat/KissatSolver.cpp)
+set(LIBS ${LIBS} ${KISSAT_LIB})
 
 add_executable(simpleCAR ${SRCS})
 target_include_directories(simpleCAR PUBLIC ${DIRS})

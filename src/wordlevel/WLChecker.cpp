@@ -11,11 +11,27 @@
 #include "Model.h"
 #include "RLive.h"
 #include "WLCegar.h"
-#include "WLModel.h"
+#include "WLMemoryBMC.h"
+#include "model/WLModel.h"
 
 #include <stdexcept>
 
 namespace car {
+namespace {
+
+WLWitnessTrace ToSparseWitnessTrace(WLReplayTrace replay) {
+    WLWitnessTrace witness;
+    witness.steps.resize(replay.steps.size());
+    for (size_t time = 0; time < replay.steps.size(); ++time) {
+        witness.steps[time].inputValues =
+            std::move(replay.steps[time].inputValues);
+        witness.steps[time].stateValues =
+            std::move(replay.steps[time].stateValues);
+    }
+    return witness;
+}
+
+} // namespace
 
 WLChecker::WLChecker(const Settings &settings,
                      WLModel &model,
@@ -23,27 +39,26 @@ WLChecker::WLChecker(const Settings &settings,
     : m_settings(settings),
       m_log(log),
       m_model(model) {
-    // Every BTOR2 model ultimately delegates proof search to a bit-level checker.
-    auto checker = CreateBitLevelChecker(m_model.BitModel(), m_log);
-    if (!checker) {
-        throw std::runtime_error("word-level checker requires a bit-level checker.");
+    if (m_settings.alg == MCAlgorithm::WLBMC) {
+        // Native memory BMC works directly on the source IR.
+        m_memoryBmc =
+            std::make_unique<WLMemoryBMC>(m_settings, m_model, m_log);
+        return;
     }
 
-    if (m_model.HasArrays()) {
-        // Array inputs wrap the selected checker in simulator-based CEGAR.
-        WLCegar::CheckerFactory checkerFactory =
-            [this](Model &nextModel, Log &nextLog) {
-                return CreateBitLevelChecker(nextModel, nextLog);
-            };
-        m_cegar = std::make_unique<WLCegar>(
-            m_settings,
-            m_log,
-            m_model,
-            std::move(checker),
-            std::move(checkerFactory));
+    // Ordinary word-level checking needs the optimized bit-level model.
+    m_model.Build({});
+    if (m_model.SourceHasArrays()) {
+        // Array CEGAR owns the checker lifecycle across abstraction rebuilds.
+        m_cegar =
+            std::make_unique<WLCegar>(m_settings, m_log, m_model);
     } else {
         // Array-free BTOR2 models need only the standard checker wrapper.
-        m_checker = std::move(checker);
+        m_checker = CreateBitLevelChecker(m_model.BitModel(), m_log);
+        if (!m_checker) {
+            throw std::runtime_error(
+                "word-level checker requires a bit-level checker.");
+        }
     }
 }
 
@@ -77,18 +92,34 @@ std::unique_ptr<BaseAlg> WLChecker::CreateBitLevelChecker(Model &model,
 }
 
 CheckResult WLChecker::Run() {
+    m_witnessTrace = {};
+    if (m_memoryBmc) {
+        try {
+            return m_memoryBmc->Run(
+                static_cast<unsigned>(m_settings.bmcK));
+        } catch (const std::exception &error) {
+            LOG_L(m_log, 0, "WL memory BMC failed: ", error.what());
+            return CheckResult::Unknown;
+        }
+    }
     if (m_cegar) return m_cegar->Run();
     return m_checker->Run();
 }
 
 std::vector<std::pair<Cube, Cube>> WLChecker::GetCexTrace() {
+    if (m_memoryBmc) return {};
     if (m_cegar) return m_cegar->GetCexTrace();
     return m_checker->GetCexTrace();
 }
 
-int WLChecker::GetSafeDepth() const {
-    if (m_cegar) return m_cegar->GetSafeDepth();
-    return m_checker->GetSafeDepth();
+const WLWitnessTrace &WLChecker::GetWitnessTrace() {
+    if (m_memoryBmc) return m_memoryBmc->GetWitnessTrace();
+    if (m_cegar) return m_cegar->GetWitnessTrace();
+    if (m_witnessTrace.steps.empty()) {
+        m_witnessTrace = ToSparseWitnessTrace(
+            m_model.DecodeBitTrace(m_checker->GetCexTrace()));
+    }
+    return m_witnessTrace;
 }
 
 } // namespace car

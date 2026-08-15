@@ -8,6 +8,9 @@ int main(int argc, char **argv) {
 
     car::SimpleCAR app(settings);
     if (!app.LoadModel()) return EXIT_FAILURE;
+    if (!settings.wlBitblastOutputPath.empty()) {
+        return EXIT_SUCCESS;
+    }
     app.Prove();
     return 0;
 }

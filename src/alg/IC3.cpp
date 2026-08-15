@@ -15,7 +15,6 @@ IC3::IC3(Settings settings,
     State::num_inputs = model.GetNumInputs();
     State::num_latches = model.GetNumLatches();
     m_cexStart = nullptr;
-    global_log = &m_log;
     m_checkResult = CheckResult::Unknown;
 
     m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
@@ -52,8 +51,18 @@ void IC3::BuildCEXTrace() {
     }
     if (m_cexTrace.empty()) return;
 
-    // Concretize generalized obligation states.
-    if (m_initialState) m_cexTrace.front().second = m_initialState->latches;
+    // Preserve choices for uninitialized latches and add fixed reset values.
+    if (m_initialState) {
+        LitSet firstState;
+        firstState.NewSet(m_cexTrace.front().second);
+        for (Lit literal : m_initialState->latches) {
+            assert(!firstState.Has(~literal));
+            if (!firstState.Has(literal)) {
+                m_cexTrace.front().second.push_back(literal);
+                firstState.Insert(literal);
+            }
+        }
+    }
 
     auto slv = make_shared<SATSolver>(m_model, MCSATSolver::minicore);
     slv->AddTrans();

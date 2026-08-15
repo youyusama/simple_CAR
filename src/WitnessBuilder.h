@@ -17,7 +17,7 @@ namespace car {
 class Log;
 class Model;
 class WLModel;
-struct WLTraceMap;
+struct WLWitnessTrace;
 
 struct EquivalenceWitness {
     std::vector<Clause> equivalence_clauses;
@@ -38,6 +38,7 @@ class WitnessBuilder {
 
     bool WriteWitness();
     bool WriteCounterexample(const std::vector<std::pair<Cube, Cube>> &trace);
+    bool WriteCounterexample(const WLWitnessTrace &trace);
 
     unsigned GetPropertyLit() const { return m_propertyLit; }
     void SetPropertyLit(unsigned lit) { m_propertyLit = lit; }
@@ -62,16 +63,14 @@ class WitnessBuilder {
     bool WriteAigWitness(const aiger *model_aig, unsigned invariant_lit);
     bool WriteAigerCounterexample(
         const std::vector<std::pair<Cube, Cube>> &trace);
-    bool WriteBtor2Counterexample(
-        const std::vector<std::pair<Cube, Cube>> &trace);
+    bool WriteBtor2Counterexample(const WLWitnessTrace &trace);
     std::string CubeToInputString(const Cube &cube) const;
     std::string CubeToLatchString(const Cube &cube) const;
-    bool IsBtor2Input() const;
 
     const Settings &m_settings;
     Log &m_log;
     const Model *m_model{nullptr};
-    const WLTraceMap *m_wlTraceMap{nullptr};
+    const WLModel *m_wlModel{nullptr};
     const aiger *m_modelAig{nullptr};
     std::shared_ptr<aiger> m_witnessAigPtr;
     aiger *m_witnessAig{nullptr};

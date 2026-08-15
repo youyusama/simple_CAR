@@ -20,7 +20,6 @@ KIND::KIND(Settings settings,
                        m_useUnrollingCache(false) {
     State::num_inputs = model.GetNumInputs();
     State::num_latches = model.GetNumLatches();
-    global_log = &m_log;
 }
 
 CheckResult KIND::Run() {

@@ -3,9 +3,8 @@
 #include "Btor2Frontend.h"
 #include "Log.h"
 #include "Model.h"
-#include "WLModel.h"
+#include "model/WLModel.h"
 #include "WLTypes.h"
-#include "WLSimulator.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -174,13 +173,7 @@ WitnessBuilder::WitnessBuilder(const Settings &settings,
                                const WLModel &model)
     : m_settings(settings),
       m_log(log),
-      m_model(&model.BitModel()),
-      m_wlTraceMap(&model.TraceMap()),
-      m_modelAig(model.BitModel().GetAiger().get()) {
-    assert(m_modelAig != nullptr);
-    m_numInputs = static_cast<int>(m_modelAig->num_inputs);
-    m_numLatches = static_cast<int>(m_modelAig->num_latches);
-}
+      m_wlModel(&model) {}
 
 void WitnessBuilder::BeginWitness() {
     m_witnessAigPtr = CloneBaseAig(m_modelAig);
@@ -198,10 +191,11 @@ bool WitnessBuilder::WriteWitness() {
 
 
 bool WitnessBuilder::WriteCounterexample(const std::vector<std::pair<Cube, Cube>> &trace) {
-    if (IsBtor2Input()) {
-        return WriteBtor2Counterexample(trace);
-    }
     return WriteAigerCounterexample(trace);
+}
+
+bool WitnessBuilder::WriteCounterexample(const WLWitnessTrace &trace) {
+    return WriteBtor2Counterexample(trace);
 }
 
 bool WitnessBuilder::WriteAigerCounterexample(
@@ -228,35 +222,61 @@ bool WitnessBuilder::WriteAigerCounterexample(
 }
 
 bool WitnessBuilder::WriteBtor2Counterexample(
-    const std::vector<std::pair<Cube, Cube>> &trace) {
-    if (m_wlTraceMap == nullptr) {
-        LOG_L(m_log, 1, "WitnessBuilder: BTOR2 counterexample needs word-level trace map.");
+    const WLWitnessTrace &trace) {
+    if (m_wlModel == nullptr) {
+        LOG_L(m_log, 1, "WitnessBuilder: BTOR2 counterexample needs a word-level model.");
         return false;
     }
-    if (trace.empty()) {
+    if (trace.steps.empty()) {
         LOG_L(m_log, 1, "WitnessBuilder: counterexample trace is empty.");
         return false;
     }
 
-    try {
-        Btor2IR ir = Btor2Frontend::LoadIR(m_settings.aigFilePath);
-        WLSimulator simulator(ir);
-        WLSimulator::Result replay =
-            simulator.Replay(trace, *m_wlTraceMap);
-        if (!replay.concreteCounterexample) {
-            LOG_L(m_log,
-                  1,
-                  "WitnessBuilder: BTOR2 counterexample could not be reproduced.");
-            return false;
-        }
-        return simulator.WriteCounterexample(GetBtor2CounterexamplePath());
-    } catch (const std::exception &error) {
-        LOG_L(m_log,
-              1,
-              "WitnessBuilder: failed to write BTOR2 counterexample: ",
-              error.what());
+    const Btor2IR &ir = m_wlModel->SourceIR();
+    std::vector<int64_t> states;
+    std::vector<int64_t> inputs;
+    for (const Btor2IRNode &node : ir.Nodes()) {
+        if (node.tag == BTOR2_TAG_state)
+            states.push_back(node.id);
+        else if (node.tag == BTOR2_TAG_input)
+            inputs.push_back(node.id);
+    }
+
+    std::ofstream output(GetBtor2CounterexamplePath());
+    if (!output) {
+        LOG_L(m_log, 1, "WitnessBuilder: failed to open BTOR2 counterexample file.");
         return false;
     }
+
+    output << "sat\nb0\n";
+    for (size_t time = 0; time < trace.steps.size(); ++time) {
+        const WLWitnessStep &step = trace.steps[time];
+        output << "#" << time << "\n";
+        for (size_t position = 0; position < states.size(); ++position) {
+            const int64_t stateId = states[position];
+            auto scalar = step.stateValues.find(stateId);
+            if (scalar != step.stateValues.end()) {
+                output << position << " " << scalar->second.ToBinary()
+                       << "\n";
+                continue;
+            }
+            auto array = step.arrayStateValues.find(stateId);
+            if (array == step.arrayStateValues.end()) continue;
+            for (const WLWitnessArrayEntry &entry : array->second.entries)
+                output << position << " [" << entry.index.ToBinary()
+                       << "] " << entry.value.ToBinary() << "\n";
+        }
+
+        output << "@" << time << "\n";
+        for (size_t position = 0; position < inputs.size(); ++position) {
+            auto input = step.inputValues.find(inputs[position]);
+            if (input != step.inputValues.end())
+                output << position << " " << input->second.ToBinary()
+                       << "\n";
+        }
+    }
+    output << ".\n";
+    return static_cast<bool>(output);
 }
 
 unsigned WitnessBuilder::BuildCube(const Cube &cube) {
@@ -588,10 +608,6 @@ std::string WitnessBuilder::GetBtor2CounterexamplePath() const {
                              .string() +
                          ".cexb"))
         .string();
-}
-
-bool WitnessBuilder::IsBtor2Input() const {
-    return std::filesystem::path(m_settings.aigFilePath).extension() == ".btor2";
 }
 
 bool WitnessBuilder::WriteAigWitness(const aiger *model_aig, unsigned invariant_lit) {

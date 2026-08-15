@@ -2,12 +2,10 @@
 #define WL_SIMULATOR_H
 
 #include "Btor2Frontend.h"
-#include "CarTypes.h"
 #include "WLTypes.h"
 
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <vector>
 
 namespace car {
@@ -25,23 +23,23 @@ struct WLReadMismatch {
 
 class WLSimulator {
   public:
+    enum class ReplayKind {
+        ConcreteCounterexample,
+        SpuriousCounterexample
+    };
+
     struct Result {
-        // Unsafe is accepted only when replay reaches a concrete bad state.
-        bool concreteCounterexample{false};
-        bool incomplete{false};
+        ReplayKind kind{ReplayKind::SpuriousCounterexample};
         unsigned badTime{0};
-        std::vector<WLReadMismatch> mismatches;
+        std::vector<WLReadMismatch> refinementReads;
+        WLWitnessTrace witnessTrace;
     };
 
     explicit WLSimulator(const Btor2IR &ir);
     ~WLSimulator();
 
-    // Replay a checker trace on the original word-level transition system.
-    Result Replay(const std::vector<std::pair<Cube, Cube>> &trace,
-                  const WLTraceMap &traceMap);
-
-    // Write the most recently replayed concrete trace as a BTOR2 witness.
-    bool WriteCounterexample(const std::string &path) const;
+    // Replay a decoded word-level seed on the original transition system.
+    Result Replay(const WLReplayTrace &trace);
 
   private:
     class Impl;

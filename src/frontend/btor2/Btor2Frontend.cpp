@@ -1,9 +1,10 @@
 #include "Btor2Frontend.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <stdexcept>
-#include <unordered_set>
 
 namespace car {
 namespace {
@@ -56,9 +57,8 @@ Btor2IR Btor2IR::Parse(const std::string &path) {
             } else {
                 sort.indexSort = line->sort.array.index;
                 sort.elementSort = line->sort.array.element;
-                result.m_hasArrays = true;
             }
-            result.m_sorts.emplace(sort.id, sort);
+            result.AddSort(sort);
             continue;
         }
 
@@ -74,8 +74,7 @@ Btor2IR Btor2IR::Parse(const std::string &path) {
         }
         if (line->constant) node.constant = line->constant;
         if (line->symbol) node.symbol = line->symbol;
-        result.m_nodeIndex.emplace(node.id, result.m_nodes.size());
-        result.m_nodes.push_back(std::move(node));
+        result.AddNode(node);
     }
 
     btor2parser_delete(parser);
@@ -110,9 +109,11 @@ Btor2IRNode &Btor2IR::MutableNode(int64_t id) {
 }
 
 void Btor2IR::AddSort(const Btor2IRSort &sort) {
-    // Pass-generated sorts must remain globally unique within the transformed IR.
-    if (!m_sorts.emplace(sort.id, sort).second) {
-        throw std::runtime_error("duplicate word-level sort id " +
+    // BTOR2 sort and node declarations share one global positive ID space.
+    ObserveId(sort.id);
+    if (m_nodeIndex.count(sort.id) ||
+        !m_sorts.emplace(sort.id, sort).second) {
+        throw std::runtime_error("duplicate word-level id " +
                                  std::to_string(sort.id));
     }
     if (sort.tag == BTOR2_TAG_SORT_array) m_hasArrays = true;
@@ -120,14 +121,66 @@ void Btor2IR::AddSort(const Btor2IRSort &sort) {
 
 void Btor2IR::AddNode(const Btor2IRNode &node) {
     // Keep the vector order for traversal and an ID index for constant-time lookup.
-    if (!m_nodeIndex.emplace(node.id, m_nodes.size()).second) {
-        throw std::runtime_error("duplicate word-level node id " +
+    ObserveId(node.id);
+    if (m_sorts.count(node.id) ||
+        !m_nodeIndex.emplace(node.id, m_nodes.size()).second) {
+        throw std::runtime_error("duplicate word-level id " +
                                  std::to_string(node.id));
     }
     m_nodes.push_back(node);
 }
 
+void Btor2IR::ObserveId(int64_t id) {
+    if (id <= 0)
+        throw std::runtime_error("word-level IDs must be positive");
+    m_nextFreshId = std::max(
+        m_nextFreshId, static_cast<uint64_t>(id) + UINT64_C(1));
+}
+
+int64_t Btor2IR::FreshId() {
+    if (m_nextFreshId >
+        static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        throw std::runtime_error("word-level ID space exhausted");
+    }
+    return static_cast<int64_t>(m_nextFreshId++);
+}
+
+void Btor2IR::ReserveFreshIdsAfter(const Btor2IR &source) {
+    m_nextFreshId = std::max(m_nextFreshId, source.m_nextFreshId);
+}
+
 void Btor2Frontend::Validate(const Btor2IR &ir) {
+    const Btor2IRNode *badProperty = nullptr;
+
+    // Safety and fairness metadata always consumes a one-bit condition.
+    for (const Btor2IRNode &node : ir.Nodes()) {
+        if (node.tag == BTOR2_TAG_bad) {
+            if (badProperty) {
+                throw Unsupported(
+                    node,
+                    "multiple bad properties are unsupported; the first is "
+                    "at line " + std::to_string(badProperty->line));
+            }
+            badProperty = &node;
+        }
+        if (node.tag != BTOR2_TAG_bad &&
+            node.tag != BTOR2_TAG_constraint &&
+            node.tag != BTOR2_TAG_fair) {
+            continue;
+        }
+        const Btor2IRNode &condition = ir.Node(node.args[0]);
+        if (!condition.sortId ||
+            ir.Sort(condition.sortId).tag != BTOR2_TAG_SORT_bitvec ||
+            ir.Sort(condition.sortId).width != 1) {
+            throw Unsupported(node,
+                              "property condition must be a one-bit bitvector");
+        }
+    }
+    if (!badProperty) {
+        throw std::runtime_error(
+            "BTOR2 input must contain exactly one bad property");
+    }
+
     // Nested arrays are outside the selected-slot abstraction supported subset.
     for (const auto &[id, sort] : ir.Sorts()) {
         (void)id;
@@ -140,21 +193,7 @@ void Btor2Frontend::Validate(const Btor2IR &ir) {
 
     if (!ir.HasArrays()) return;
 
-    // Direct array next-state inputs are the only accepted nondeterministic arrays.
-    std::unordered_set<int64_t> allowedArrayInputs;
-
     // Restrict array-valued expressions to the remodellable state/write/ite form.
-    for (const Btor2IRNode &node : ir.Nodes()) {
-        if (node.tag == BTOR2_TAG_next) {
-            const Btor2IRNode &state = ir.Node(node.args[0]);
-            const Btor2IRNode &value = ir.Node(node.args[1]);
-            if (IsArray(ir, state.sortId) && value.tag == BTOR2_TAG_input) {
-                allowedArrayInputs.insert(value.id);
-            }
-        }
-    }
-
-    // Array equality requires reasoning not provided by the selected-slot model.
     for (const Btor2IRNode &node : ir.Nodes()) {
         if (!IsArray(ir, node.sortId)) continue;
         switch (node.tag) {
@@ -165,13 +204,7 @@ void Btor2Frontend::Validate(const Btor2IR &ir) {
         case BTOR2_TAG_next:
             break;
         case BTOR2_TAG_input:
-            if (!allowedArrayInputs.count(node.id)) {
-                throw Unsupported(
-                    node,
-                    "general array inputs are unsupported; only an array "
-                    "state's direct nondeterministic next value is allowed");
-            }
-            break;
+            throw Unsupported(node, "whole-array inputs are unsupported");
         default:
             throw Unsupported(node,
                               "array-valued operator is outside the supported "
@@ -202,13 +235,6 @@ void Btor2Frontend::Validate(const Btor2IR &ir) {
                 throw Unsupported(
                     node,
                     "array operand is used outside read/write/ite/init/next");
-            }
-
-            if (argument.tag == BTOR2_TAG_input &&
-                !(node.tag == BTOR2_TAG_next && i == 1)) {
-                throw Unsupported(
-                    node,
-                    "array input is used outside a direct state next value");
             }
         }
     }

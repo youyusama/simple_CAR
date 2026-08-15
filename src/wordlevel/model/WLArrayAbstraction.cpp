@@ -11,22 +11,22 @@ namespace {
 class Builder {
   public:
     Builder(const Btor2IR &input, const std::vector<WLMemoryPair> &pairs)
-        : m_input(input), m_pairs(pairs) {
+        : m_input(input), m_pairs(pairs) {}
+
+    WLArrayAbstractionResult Build() {
         // Build a fresh array-free IR instead of mutating the source BTOR2 model.
+        m_output.ReserveFreshIdsAfter(m_input);
         CopyBitVectorSorts();
         IndexModel();
-        CreateScalarVariables();
-        CreateTrackedSlots();
-        BuildScalarModel();
-        BuildMemories();
+        CreateBitVectorVariables();
+        DeclareTrackedSlotStates();
+        RewriteBitVectorLogicAndReads();
+        BuildTrackedSlotTransitions();
+        BuildUninitializedSlotConsistency();
         BuildProperties();
         m_output.SetHasArrays(false);
-    }
-
-    WLArrayAbstractionResult Finish() {
         return {std::move(m_output),
                 std::move(m_tracePairs),
-                std::move(m_reads),
                 std::move(m_traceSources)};
     }
 
@@ -40,7 +40,7 @@ class Builder {
     };
 
     void CopyBitVectorSorts() {
-        // Array sorts disappear after abstraction; scalar sorts retain their IDs.
+        // Array sorts disappear after abstraction; bit-vector sorts retain their IDs.
         for (const auto &[id, sort] : m_input.Sorts()) {
             (void)id;
             if (sort.tag == BTOR2_TAG_SORT_bitvec) m_output.AddSort(sort);
@@ -53,7 +53,7 @@ class Builder {
             if (sort.tag == BTOR2_TAG_SORT_bitvec && sort.width == width)
                 return id;
         }
-        int64_t id = NewSyntheticSortId();
+        int64_t id = m_output.FreshId();
         m_output.AddSort(
             {id, BTOR2_TAG_SORT_bitvec, width, 0, 0});
         return id;
@@ -65,15 +65,13 @@ class Builder {
             switch (node.tag) {
             case BTOR2_TAG_init: m_inits[node.args[0]] = node.args[1]; break;
             case BTOR2_TAG_next: m_next[node.args[0]] = node.args[1]; break;
-            case BTOR2_TAG_bad: m_badIds.push_back(node.id); break;
+            case BTOR2_TAG_bad: m_badId = node.id; break;
             case BTOR2_TAG_constraint:
                 m_constraintIds.push_back(node.id);
                 break;
             case BTOR2_TAG_read: {
                 int64_t memoryId = FindMemory(node.args[0]);
                 m_readMemory[node.id] = memoryId;
-                m_reads.push_back(
-                    {node.id, memoryId, node.args[1]});
                 break;
             }
             default: break;
@@ -108,14 +106,13 @@ class Builder {
             }
             return lhs;
         }
-        if (node.tag == BTOR2_TAG_input) return -node.id;
         throw std::runtime_error(
             "array expression is not remodellable at BTOR2 id " +
             std::to_string(node.id));
     }
 
-    void CreateScalarVariables() {
-        // Copy original scalar inputs/states and record their trace provenance.
+    void CreateBitVectorVariables() {
+        // Copy original bit-vector inputs/states and record their trace provenance.
         for (const Btor2IRNode &node : m_input.Nodes()) {
             if (node.tag != BTOR2_TAG_input && node.tag != BTOR2_TAG_state)
                 continue;
@@ -123,18 +120,20 @@ class Builder {
                 m_input.Sort(node.sortId).tag != BTOR2_TAG_SORT_bitvec)
                 continue;
             m_output.AddNode(node);
-            m_scalarMap[node.id] = node.id;
-            m_traceSources[node.id] = {
-                node.tag == BTOR2_TAG_input
-                    ? WLTraceBitKind::OriginalInput
-                    : WLTraceBitKind::OriginalState,
+            m_bitVectorMap[node.id] = node.id;
+            m_traceSources.insert_or_assign(
                 node.id,
-                0};
+                WLValueOrigin{
+                    node.tag == BTOR2_TAG_input
+                        ? WLTraceKind::OriginalInput
+                        : WLTraceKind::OriginalState,
+                    node.id,
+                    0});
         }
     }
 
-    void CreateTrackedSlots() {
-        // Replace each selected memory pair with selector/content bit-vector states.
+    void DeclareTrackedSlotStates() {
+        // Declare selector/content states before read and transition rewriting.
         for (const auto &[memoryId, requested] : m_requestedSlots) {
             const Btor2IRSort &arraySort =
                 m_input.Sort(m_input.Node(memoryId).sortId);
@@ -142,29 +141,35 @@ class Builder {
                 TrackedSlot slot;
                 slot.pair = pair;
                 slot.pairIndex = m_tracePairs.size();
-                slot.selectorId = NewSyntheticNodeId();
-                slot.contentId = NewSyntheticNodeId();
+                slot.selectorId = m_output.FreshId();
+                slot.contentId = m_output.FreshId();
 
                 AddNode(slot.selectorId,
                         BTOR2_TAG_state,
                         arraySort.indexSort,
                         {},
                         0,
-                        "wl.mem." + std::to_string(memoryId) + ".selector");
+                        "wl.mem." + std::to_string(memoryId) + ".slot." +
+                            std::to_string(slot.pairIndex) + ".selector");
                 AddNode(slot.contentId,
                         BTOR2_TAG_state,
                         arraySort.elementSort,
                         {},
                         0,
-                        "wl.mem." + std::to_string(memoryId) + ".content");
-                m_traceSources[slot.selectorId] = {
-                    WLTraceBitKind::SelectorState,
-                    memoryId,
-                    slot.pairIndex};
-                m_traceSources[slot.contentId] = {
-                    WLTraceBitKind::ContentState,
-                    memoryId,
-                    slot.pairIndex};
+                        "wl.mem." + std::to_string(memoryId) + ".slot." +
+                            std::to_string(slot.pairIndex) + ".content");
+                m_traceSources.insert_or_assign(
+                    slot.selectorId,
+                    WLValueOrigin{
+                        WLTraceKind::SelectorState,
+                        memoryId,
+                        slot.pairIndex});
+                m_traceSources.insert_or_assign(
+                    slot.contentId,
+                    WLValueOrigin{
+                        WLTraceKind::ContentState,
+                        memoryId,
+                        slot.pairIndex});
                 m_tracePairs.push_back(pair);
 
                 // Selectors are stable state; only the tracked content is updated.
@@ -177,8 +182,8 @@ class Builder {
         }
     }
 
-    void BuildScalarModel() {
-        // Clone all scalar expressions, replacing array reads on demand.
+    void RewriteBitVectorLogicAndReads() {
+        // Clone bit-vector logic and replace array reads with selected-slot muxes.
         for (const Btor2IRNode &node : m_input.Nodes()) {
             switch (node.tag) {
             case BTOR2_TAG_input:
@@ -197,10 +202,10 @@ class Builder {
             if (node.sortId &&
                 m_input.Sort(node.sortId).tag == BTOR2_TAG_SORT_array)
                 continue;
-            CloneScalar(node.id);
+            CloneBitVectorNode(node.id);
         }
 
-        // Recreate init/next metadata for original scalar states.
+        // Recreate init/next metadata for original bit-vector states.
         for (const Btor2IRNode &node : m_input.Nodes()) {
             if (node.tag != BTOR2_TAG_init && node.tag != BTOR2_TAG_next)
                 continue;
@@ -208,14 +213,14 @@ class Builder {
             if (m_input.Sort(state.sortId).tag == BTOR2_TAG_SORT_array)
                 continue;
             Btor2IRNode copy = node;
-            copy.args[0] = CloneScalar(node.args[0]);
-            copy.args[1] = CloneScalar(node.args[1]);
+            copy.args[0] = CloneBitVectorNode(node.args[0]);
+            copy.args[1] = CloneBitVectorNode(node.args[1]);
             m_output.AddNode(copy);
         }
     }
 
-    void BuildMemories() {
-        // Derive each content state's next/init expression at its selector address.
+    void BuildTrackedSlotTransitions() {
+        // Derive each tracked content state's init/next expression at its selector.
         for (auto &[memoryId, slots] : m_slots) {
             auto nextIt = m_next.find(memoryId);
             if (nextIt == m_next.end()) {
@@ -244,13 +249,47 @@ class Builder {
                 AddMetaNode(BTOR2_TAG_init,
                             arraySort.elementSort,
                             slot.contentId,
-                            CloneScalar(initIt->second));
+                            CloneBitVectorNode(initIt->second));
+            }
+        }
+    }
+
+    void BuildUninitializedSlotConsistency() {
+        // An uninitialized memory is one arbitrary function: equal selected
+        // addresses must therefore denote equal initial contents.
+        const int64_t boolSort = EnsureBitVectorSort(1);
+        for (const auto &[memoryId, slots] : m_slots) {
+            if (m_inits.count(memoryId)) continue;
+            for (size_t i = 0; i < slots.size(); ++i) {
+                for (size_t j = i + 1; j < slots.size(); ++j) {
+                    int64_t sameSelector = AddExpression(
+                        BTOR2_TAG_eq,
+                        boolSort,
+                        {slots[i].selectorId, slots[j].selectorId, 0},
+                        2);
+                    int64_t sameContent = AddExpression(
+                        BTOR2_TAG_eq,
+                        boolSort,
+                        {slots[i].contentId, slots[j].contentId, 0},
+                        2);
+                    int64_t consistent = AddExpression(
+                        BTOR2_TAG_implies,
+                        boolSort,
+                        {sameSelector, sameContent, 0},
+                        2);
+                    AddNode(m_output.FreshId(),
+                            BTOR2_TAG_constraint,
+                            boolSort,
+                            {consistent, 0, 0},
+                            1,
+                            {});
+                }
             }
         }
     }
 
     void BuildProperties() {
-        // Delay address-match guards so a tracked pair constrains its requested frame.
+        // Delay address-match guards to constrain the requested time step.
         const int64_t boolSort = EnsureBitVectorSort(1);
         std::vector<int64_t> guards;
         for (auto &[memoryId, slots] : m_slots) {
@@ -260,21 +299,17 @@ class Builder {
                     BTOR2_TAG_eq,
                     boolSort,
                     {slot.selectorId,
-                     CloneScalar(slot.pair.addressNodeId),
+                     CloneBitVectorNode(slot.pair.addressNodeId),
                      0},
                     2);
                 for (unsigned i = 0; i < slot.pair.delay; ++i) {
-                    int64_t delayId = NewSyntheticNodeId();
+                    int64_t delayId = m_output.FreshId();
                     AddNode(delayId,
                             BTOR2_TAG_state,
                             boolSort,
                             {},
                             0,
                             "wl.guard." + std::to_string(delayId));
-                    m_traceSources[delayId] = {
-                        WLTraceBitKind::GuardState,
-                        slot.pair.addressNodeId,
-                        slot.pairIndex};
                     AddMetaNode(
                         BTOR2_TAG_next, boolSort, delayId, guard);
                     guard = delayId;
@@ -295,62 +330,60 @@ class Builder {
                             : guard;
         }
 
-        // Rebuild bad nodes against the transformed scalar expressions.
-        for (int64_t badNodeId : m_badIds) {
-            const Btor2IRNode &badNode = m_input.Node(badNodeId);
-            int64_t bad = CloneScalar(badNode.args[0]);
-            if (allGuards) {
-                bad = AddExpression(
-                    BTOR2_TAG_and,
-                    boolSort,
-                    {bad, allGuards, 0},
-                    2);
-            }
-            Btor2IRNode copy = badNode;
-            copy.args[0] = bad;
-            m_output.AddNode(copy);
+        // Rebuild the single bad property against the transformed expressions.
+        const Btor2IRNode &badNode = m_input.Node(m_badId);
+        int64_t bad = CloneBitVectorNode(badNode.args[0]);
+        if (allGuards) {
+            bad = AddExpression(
+                BTOR2_TAG_and,
+                boolSort,
+                {bad, allGuards, 0},
+                2);
         }
+        Btor2IRNode badCopy = badNode;
+        badCopy.args[0] = bad;
+        m_output.AddNode(badCopy);
 
         // Constraints remain unconditional and are cloned without guard weakening.
         for (int64_t constraintNodeId : m_constraintIds) {
             const Btor2IRNode &constraint =
                 m_input.Node(constraintNodeId);
             Btor2IRNode copy = constraint;
-            copy.args[0] = CloneScalar(constraint.args[0]);
+            copy.args[0] = CloneBitVectorNode(constraint.args[0]);
             m_output.AddNode(copy);
         }
     }
 
-    int64_t CloneScalar(int64_t signedId) {
-        // Memoized recursive clone preserves original scalar node IDs where possible.
-        if (signedId < 0) return -CloneScalar(-signedId);
-        auto mapped = m_scalarMap.find(signedId);
-        if (mapped != m_scalarMap.end()) return mapped->second;
+    int64_t CloneBitVectorNode(int64_t signedId) {
+        // Memoized recursive clone preserves original bit-vector node IDs where possible.
+        if (signedId < 0) return -CloneBitVectorNode(-signedId);
+        auto mapped = m_bitVectorMap.find(signedId);
+        if (mapped != m_bitVectorMap.end()) return mapped->second;
 
         const Btor2IRNode &node = m_input.Node(signedId);
         if (node.tag == BTOR2_TAG_read) return CloneRead(node);
         if (node.sortId &&
             m_input.Sort(node.sortId).tag == BTOR2_TAG_SORT_array) {
             throw std::runtime_error(
-                "array-valued node reached scalar abstraction");
+                "array-valued node reached bit-vector rewriting");
         }
 
         Btor2IRNode copy = node;
         switch (node.tag) {
         case BTOR2_TAG_slice:
-            copy.args[0] = CloneScalar(node.args[0]);
+            copy.args[0] = CloneBitVectorNode(node.args[0]);
             break;
         case BTOR2_TAG_uext:
         case BTOR2_TAG_sext:
-            copy.args[0] = CloneScalar(node.args[0]);
+            copy.args[0] = CloneBitVectorNode(node.args[0]);
             break;
         default:
             for (uint32_t i = 0; i < node.nargs; ++i)
-                copy.args[i] = CloneScalar(node.args[i]);
+                copy.args[i] = CloneBitVectorNode(node.args[i]);
             break;
         }
         m_output.AddNode(copy);
-        m_scalarMap[signedId] = copy.id;
+        m_bitVectorMap[signedId] = copy.id;
         return copy.id;
     }
 
@@ -358,33 +391,36 @@ class Builder {
         // Start with a nondeterministic miss value and overlay tracked slot hits.
         int64_t memoryId = m_readMemory.at(read.id);
         const Btor2IRSort &arraySort =
-            m_input.Sort(m_input.Node(std::abs(memoryId)).sortId);
-        int64_t address = CloneScalar(read.args[1]);
+            m_input.Sort(m_input.Node(memoryId).sortId);
+        int64_t address = CloneBitVectorNode(read.args[1]);
         auto slotsIt = m_slots.find(memoryId);
         // An untracked read is represented entirely by its abstract miss input.
-        if (memoryId < 0 || slotsIt == m_slots.end() ||
-            slotsIt->second.empty()) {
+        if (slotsIt == m_slots.end() || slotsIt->second.empty()) {
             AddNode(read.id,
                     BTOR2_TAG_input,
                     arraySort.elementSort,
                     {},
                     0,
                     "wl.read." + std::to_string(read.id) + ".miss");
-            m_traceSources[read.id] = {
-                WLTraceBitKind::AbstractReadInput, read.id, 0};
-            m_scalarMap[read.id] = read.id;
+            m_traceSources.insert_or_assign(
+                read.id,
+                WLValueOrigin{
+                    WLTraceKind::AbstractReadInput, read.id, 0});
+            m_bitVectorMap[read.id] = read.id;
             return read.id;
         }
 
-        int64_t result = NewSyntheticNodeId();
+        int64_t result = m_output.FreshId();
         AddNode(result,
                 BTOR2_TAG_input,
                 arraySort.elementSort,
                 {},
                 0,
                 "wl.read." + std::to_string(read.id) + ".miss");
-        m_traceSources[result] = {
-            WLTraceBitKind::AbstractReadInput, read.id, 0};
+        m_traceSources.insert_or_assign(
+            result,
+            WLValueOrigin{
+                WLTraceKind::AbstractReadInput, read.id, 0});
 
         // Build a priority ITE chain that returns concrete content on selector hits.
         auto &slots = slotsIt->second;
@@ -399,7 +435,7 @@ class Builder {
                 {address, slot.selectorId, 0},
                 2);
             int64_t id =
-                index == 0 ? read.id : NewSyntheticNodeId();
+                index == 0 ? read.id : m_output.FreshId();
             AddNode(id,
                     BTOR2_TAG_ite,
                     arraySort.elementSort,
@@ -408,7 +444,7 @@ class Builder {
                     {});
             result = id;
         }
-        m_scalarMap[read.id] = read.id;
+        m_bitVectorMap[read.id] = read.id;
         return read.id;
     }
 
@@ -429,36 +465,22 @@ class Builder {
             int64_t hit = AddExpression(
                 BTOR2_TAG_eq,
                 EnsureBitVectorSort(1),
-                {slot.selectorId, CloneScalar(node.args[1]), 0},
+                {slot.selectorId, CloneBitVectorNode(node.args[1]), 0},
                 2);
             return AddExpression(
                 BTOR2_TAG_ite,
                 m_input.Sort(node.sortId).elementSort,
-                {hit, CloneScalar(node.args[2]), old},
+                {hit, CloneBitVectorNode(node.args[2]), old},
                 3);
         }
         case BTOR2_TAG_ite:
             return AddExpression(
                 BTOR2_TAG_ite,
                 m_input.Sort(node.sortId).elementSort,
-                {CloneScalar(node.args[0]),
+                {CloneBitVectorNode(node.args[0]),
                  EvaluateArrayAt(node.args[1], memoryId, slot),
                  EvaluateArrayAt(node.args[2], memoryId, slot)},
                 3);
-        case BTOR2_TAG_input: {
-            // A nondeterministic whole-array next value becomes one scalar input per slot.
-            const Btor2IRSort &arraySort = m_input.Sort(node.sortId);
-            int64_t inputId = NewSyntheticNodeId();
-            AddNode(inputId,
-                    BTOR2_TAG_input,
-                    arraySort.elementSort,
-                    {},
-                    0,
-                    "wl.array_input." + std::to_string(node.id));
-            m_traceSources[inputId] = {
-                WLTraceBitKind::ArrayNextInput, node.id, 0};
-            return inputId;
-        }
         default:
             throw std::runtime_error(
                 "array expression is outside the remodellable subset");
@@ -469,8 +491,8 @@ class Builder {
                           int64_t sortId,
                           std::array<int64_t, 3> args,
                           uint32_t nargs) {
-        // Expression helpers allocate synthetic IDs above the BTOR2 input ID range.
-        int64_t id = NewSyntheticNodeId();
+        // Expression helpers allocate IDs above the complete source ID space.
+        int64_t id = m_output.FreshId();
         AddNode(id, tag, sortId, args, nargs, {});
         return id;
     }
@@ -479,7 +501,7 @@ class Builder {
                      int64_t sortId,
                      int64_t lhs,
                      int64_t rhs) {
-        AddNode(NewSyntheticNodeId(),
+        AddNode(m_output.FreshId(),
                 tag,
                 sortId,
                 {lhs, rhs, 0},
@@ -503,21 +525,15 @@ class Builder {
         m_output.AddNode(node);
     }
 
-    int64_t NewSyntheticNodeId() { return m_nextSyntheticNodeId++; }
-    int64_t NewSyntheticSortId() { return m_nextSyntheticSortId++; }
-
     const Btor2IR &m_input;
     const std::vector<WLMemoryPair> &m_pairs;
     Btor2IR m_output;
     std::vector<WLMemoryPair> m_tracePairs;
-    std::vector<WLArrayRead> m_reads;
     WLIRTraceMap m_traceSources;
-    int64_t m_nextSyntheticNodeId{INT64_C(1) << 50};
-    int64_t m_nextSyntheticSortId{INT64_C(1) << 49};
-    std::unordered_map<int64_t, int64_t> m_scalarMap;
+    std::unordered_map<int64_t, int64_t> m_bitVectorMap;
     std::unordered_map<int64_t, int64_t> m_inits;
     std::unordered_map<int64_t, int64_t> m_next;
-    std::vector<int64_t> m_badIds;
+    int64_t m_badId{0};
     std::vector<int64_t> m_constraintIds;
     std::unordered_map<int64_t, int64_t> m_readMemory;
     std::unordered_map<int64_t, std::vector<WLMemoryPair>> m_requestedSlots;
@@ -529,7 +545,7 @@ class Builder {
 WLArrayAbstractionResult
 WLArrayAbstraction::Run(const Btor2IR &ir,
                         const std::vector<WLMemoryPair> &pairs) {
-    return Builder(ir, pairs).Finish();
+    return Builder(ir, pairs).Build();
 }
 
 } // namespace car

@@ -13,7 +13,6 @@ FCAR::FCAR(Settings settings,
     State::num_inputs = model.GetNumInputs();
     State::num_latches = model.GetNumLatches();
     m_lastState = nullptr;
-    global_log = &m_log;
     m_checkResult = CheckResult::Unknown;
 
     m_settings.satSolveInDomain = m_settings.satSolveInDomain && m_settings.solver == MCSATSolver::minicore;
@@ -1080,8 +1079,17 @@ void FCAR::BuildCEXTrace() {
     }
     m_cexTrace.emplace_back(pair<Cube, Cube>(state->inputs, state->latches));
 
+    // Preserve choices for uninitialized latches and add fixed reset values.
     if (!m_cexTrace.empty()) {
-        m_cexTrace[0].second = m_initialState->latches;
+        LitSet firstState;
+        firstState.NewSet(m_cexTrace.front().second);
+        for (Lit literal : m_initialState->latches) {
+            assert(!firstState.Has(~literal));
+            if (!firstState.Has(literal)) {
+                m_cexTrace.front().second.push_back(literal);
+                firstState.Insert(literal);
+            }
+        }
     }
 
     LOG_L(m_log, 3, "Build CEX Trace:");

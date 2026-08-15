@@ -11,7 +11,7 @@
 #include "Model.h"
 #include "RLive.h"
 #include "WLChecker.h"
-#include "WLModel.h"
+#include "model/WLModel.h"
 #include "WitnessBuilder.h"
 #include <filesystem>
 #include <iostream>
@@ -79,6 +79,18 @@ bool SimpleCAR::LoadModel() {
         return false;
     }
 
+    // AIG export stops after word-level lowering and does not create a checker.
+    if (!m_settings.wlBitblastOutputPath.empty()) {
+        try {
+            m_wmodel->Build({});
+            m_wmodel->WriteBitblastAig();
+        } catch (const std::exception &error) {
+            std::cerr << error.what() << std::endl;
+            return false;
+        }
+        return true;
+    }
+
     // create checker
     try {
         if (m_wmodel) {
@@ -97,23 +109,33 @@ bool SimpleCAR::LoadModel() {
 CheckResult SimpleCAR::Prove() {
     if (!m_checker) return CheckResult::Unknown;
 
+    // Cover word-level preprocessing, CEGAR replay, and native memory BMC.
+    global_log = m_log.get();
+    signal(SIGINT, SignalHandler);
+    signal(SIGTERM, SignalHandler);
+
     CheckResult res = m_checker->Run();
 
     if (!m_settings.witnessOutputDir.empty()) {
-        Model &bitModel = m_wmodel ? m_wmodel->BitModel() : *m_model;
         WitnessBuilder witness_builder =
             m_wmodel
                 ? WitnessBuilder(m_settings, *m_log, *m_wmodel)
                 : WitnessBuilder(m_settings, *m_log, *m_model);
         if (res == CheckResult::Safe && m_checker->SupportsWitness()) {
             witness_builder.BeginWitness();
-            bitModel.RefineWitnessPropertyLit(witness_builder);
+            m_model->RefineWitnessPropertyLit(witness_builder);
             m_checker->RefineWitnessPropertyLit(witness_builder);
             if (!witness_builder.WriteWitness()) {
                 LOG_L(*m_log, 1, "Failed to write safe witness.");
             }
         } else if (res == CheckResult::Unsafe) {
-            if (!witness_builder.WriteCounterexample(m_checker->GetCexTrace())) {
+            bool written = m_wmodel
+                               ? witness_builder.WriteCounterexample(
+                                     static_cast<WLChecker &>(*m_checker)
+                                         .GetWitnessTrace())
+                               : witness_builder.WriteCounterexample(
+                                     m_checker->GetCexTrace());
+            if (!written) {
                 LOG_L(*m_log, 1, "Failed to write counterexample witness.");
             }
         }
