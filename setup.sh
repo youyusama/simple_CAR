@@ -43,7 +43,16 @@ fi
 echo "[setup] building cadical"
 (
     cd "$ROOT_DIR/src/sat/cadical"
-    ./configure --competition
+    CADICAL_PREFIX_HEADER="../../cadical-kitten-symbol-prefix.h"
+    CADICAL_FORCE_INCLUDE="-include $CADICAL_PREFIX_HEADER"
+    CADICAL_CFLAGS="$CADICAL_FORCE_INCLUDE${CFLAGS:+ $CFLAGS}"
+    CADICAL_CXXFLAGS="$CADICAL_FORCE_INCLUDE${CXXFLAGS:+ $CXXFLAGS}"
+    # CaDiCaL's generated makefile does not track compiler flag changes.
+    if [[ -f makefile ]]; then
+        make clean
+    fi
+    CFLAGS="$CADICAL_CFLAGS" CXXFLAGS="$CADICAL_CXXFLAGS" \
+        ./configure --competition
     make -j"$JOBS"
 )
 
