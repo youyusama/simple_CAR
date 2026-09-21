@@ -5,8 +5,8 @@ extern "C" {
 #include "aiger.h"
 }
 
-#include "Settings.h"
 #include "CarTypes.h"
+#include "Settings.h"
 #include "WLTypes.h"
 
 #include <memory>
@@ -38,7 +38,8 @@ class WLModel {
 
     bool SourceHasArrays() const { return m_sourceHasArrays; }
     const Btor2IR &SourceIR() const { return *m_sourceIr; }
-    const Btor2IR &PropertyIR() const { return *m_propertyIr; }
+
+    const Btor2IR &PropertyIR();
 
     // Decode the bit-level checker interface into a word-level replay seed.
     WLReplayTrace DecodeBitTrace(
@@ -50,6 +51,8 @@ class WLModel {
     void Build(const std::vector<WLMemoryPair> &memoryPairs);
 
   private:
+    void PreparePropertyIR();
+
     WLModelBuildResult
     BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs);
 

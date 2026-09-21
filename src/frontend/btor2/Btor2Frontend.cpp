@@ -16,14 +16,9 @@ std::runtime_error Unsupported(const Btor2IRNode &node,
                               reason);
 }
 
-bool IsArray(const Btor2IR &ir, int64_t sortId) {
-    return sortId && ir.Sort(sortId).tag == BTOR2_TAG_SORT_array;
-}
-
 } // namespace
 
 Btor2IR Btor2Frontend::LoadIR(const std::string &path) {
-    // Every frontend consumer receives a parsed and supported-subset-validated IR.
     Btor2IR ir = Btor2IR::Parse(path);
     Validate(ir);
     return ir;
@@ -159,7 +154,8 @@ void Btor2Frontend::Validate(const Btor2IR &ir) {
                 throw Unsupported(
                     node,
                     "multiple bad properties are unsupported; the first is "
-                    "at line " + std::to_string(badProperty->line));
+                    "at line " +
+                        std::to_string(badProperty->line));
             }
             badProperty = &node;
         }
@@ -179,64 +175,6 @@ void Btor2Frontend::Validate(const Btor2IR &ir) {
     if (!badProperty) {
         throw std::runtime_error(
             "BTOR2 input must contain exactly one bad property");
-    }
-
-    // Nested arrays are outside the selected-slot abstraction supported subset.
-    for (const auto &[id, sort] : ir.Sorts()) {
-        (void)id;
-        if (sort.tag != BTOR2_TAG_SORT_array) continue;
-        if (ir.Sort(sort.indexSort).tag != BTOR2_TAG_SORT_bitvec ||
-            ir.Sort(sort.elementSort).tag != BTOR2_TAG_SORT_bitvec) {
-            throw std::runtime_error("nested BTOR2 arrays are unsupported");
-        }
-    }
-
-    if (!ir.HasArrays()) return;
-
-    // Restrict array-valued expressions to the remodellable state/write/ite form.
-    for (const Btor2IRNode &node : ir.Nodes()) {
-        if (!IsArray(ir, node.sortId)) continue;
-        switch (node.tag) {
-        case BTOR2_TAG_state:
-        case BTOR2_TAG_write:
-        case BTOR2_TAG_ite:
-        case BTOR2_TAG_init:
-        case BTOR2_TAG_next:
-            break;
-        case BTOR2_TAG_input:
-            throw Unsupported(node, "whole-array inputs are unsupported");
-        default:
-            throw Unsupported(node,
-                              "array-valued operator is outside the supported "
-                              "state/write/ite/next subset");
-        }
-    }
-
-    // Reject scalar operators that consume arrays outside the supported boundaries.
-    for (const Btor2IRNode &node : ir.Nodes()) {
-        if (node.tag != BTOR2_TAG_eq && node.tag != BTOR2_TAG_neq) continue;
-        if (IsArray(ir, ir.Node(node.args[0]).sortId)) {
-            throw Unsupported(node, "array equality and inequality are unsupported");
-        }
-    }
-
-    for (const Btor2IRNode &node : ir.Nodes()) {
-        for (uint32_t i = 0; i < node.nargs; ++i) {
-            const Btor2IRNode &argument = ir.Node(node.args[i]);
-            if (!IsArray(ir, argument.sortId)) continue;
-
-            bool allowed =
-                (node.tag == BTOR2_TAG_read && i == 0) ||
-                (node.tag == BTOR2_TAG_write && i == 0) ||
-                (node.tag == BTOR2_TAG_ite && (i == 1 || i == 2)) ||
-                (node.tag == BTOR2_TAG_init && (i == 0 || i == 1)) ||
-                (node.tag == BTOR2_TAG_next && (i == 0 || i == 1));
-            if (!allowed) {
-                throw Unsupported(
-                    node,
-                    "array operand is used outside read/write/ite/init/next");
-            }
-        }
     }
 }
 

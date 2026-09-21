@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <assert.h>
+#include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <stdint.h>

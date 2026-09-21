@@ -15,105 +15,139 @@
 namespace car {
 namespace {
 
-class PropertyCoiReducer {
-  public:
-    explicit PropertyCoiReducer(const Btor2IR &input) : m_input(input) {}
+std::runtime_error Unsupported(const Btor2IRNode &node,
+                               const std::string &reason) {
+    return std::runtime_error("BTOR2 line " + std::to_string(node.line) +
+                              " (id " + std::to_string(node.id) + "): " +
+                              reason);
+}
 
-    Btor2IR Run() {
-        IndexModel();
-        MarkLiveNodes();
-        return BuildReducedIr();
+bool IsArray(const Btor2IR &ir, int64_t sortId) {
+    return sortId && ir.Sort(sortId).tag == BTOR2_TAG_SORT_array;
+}
+
+void ValidateArraySupport(const Btor2IR &ir) {
+    // Nested arrays are outside the selected-slot abstraction supported subset.
+    for (const auto &[id, sort] : ir.Sorts()) {
+        (void)id;
+        if (sort.tag != BTOR2_TAG_SORT_array) continue;
+        if (ir.Sort(sort.indexSort).tag != BTOR2_TAG_SORT_bitvec ||
+            ir.Sort(sort.elementSort).tag != BTOR2_TAG_SORT_bitvec) {
+            throw std::runtime_error("nested BTOR2 arrays are unsupported");
+        }
     }
 
-  private:
-    void IndexModel() {
-        // Constraints are roots because dropping assumptions changes reachability.
-        for (const Btor2IRNode &node : m_input.Nodes()) {
-            switch (node.tag) {
-            case BTOR2_TAG_init:
-                m_initNodes[std::abs(node.args[0])] = node.id;
-                break;
-            case BTOR2_TAG_next:
-                m_nextNodes[std::abs(node.args[0])] = node.id;
-                break;
-            case BTOR2_TAG_bad:
-                m_worklist.push_back(node.id);
-                break;
-            case BTOR2_TAG_constraint:
-                m_worklist.push_back(node.id);
-                break;
-            default: break;
+    if (!ir.HasArrays()) return;
+
+    // Restrict array-valued expressions to the remodellable state/write/ite form.
+    for (const Btor2IRNode &node : ir.Nodes()) {
+        if (!IsArray(ir, node.sortId)) continue;
+        switch (node.tag) {
+        case BTOR2_TAG_state:
+        case BTOR2_TAG_write:
+        case BTOR2_TAG_ite:
+        case BTOR2_TAG_init:
+        case BTOR2_TAG_next:
+            break;
+        case BTOR2_TAG_input:
+            throw Unsupported(node, "whole-array inputs are unsupported");
+        default:
+            throw Unsupported(node,
+                              "array-valued operator is outside the supported "
+                              "state/write/ite/next subset");
+        }
+    }
+
+    // Reject scalar operators that consume arrays outside the supported boundaries.
+    for (const Btor2IRNode &node : ir.Nodes()) {
+        if (node.tag != BTOR2_TAG_eq && node.tag != BTOR2_TAG_neq) continue;
+        if (IsArray(ir, ir.Node(node.args[0]).sortId)) {
+            throw Unsupported(node, "array equality and inequality are unsupported");
+        }
+    }
+
+    for (const Btor2IRNode &node : ir.Nodes()) {
+        for (uint32_t i = 0; i < node.nargs; ++i) {
+            const Btor2IRNode &argument = ir.Node(node.args[i]);
+            if (!IsArray(ir, argument.sortId)) continue;
+
+            bool allowed =
+                (node.tag == BTOR2_TAG_read && i == 0) ||
+                (node.tag == BTOR2_TAG_write && i == 0) ||
+                (node.tag == BTOR2_TAG_ite && (i == 1 || i == 2)) ||
+                (node.tag == BTOR2_TAG_init && (i == 0 || i == 1)) ||
+                (node.tag == BTOR2_TAG_next && (i == 0 || i == 1));
+            if (!allowed) {
+                throw Unsupported(
+                    node,
+                    "array operand is used outside read/write/ite/init/next");
             }
         }
     }
-
-    void MarkLiveNodes() {
-        // Traverse iteratively so deep BTOR2 expression DAGs do not use the call stack.
-        while (!m_worklist.empty()) {
-            const int64_t id = std::abs(m_worklist.back());
-            m_worklist.pop_back();
-            if (!m_liveNodes.insert(id).second) continue;
-
-            const Btor2IRNode &node = m_input.Node(id);
-            for (uint32_t i = 0; i < node.nargs; ++i)
-                m_worklist.push_back(node.args[i]);
-
-            if (node.tag != BTOR2_TAG_state) continue;
-            auto init = m_initNodes.find(id);
-            if (init != m_initNodes.end()) m_worklist.push_back(init->second);
-            auto next = m_nextNodes.find(id);
-            if (next != m_nextNodes.end()) m_worklist.push_back(next->second);
-        }
-    }
-
-    void MarkSort(int64_t sortId) {
-        if (!sortId || !m_liveSorts.insert(sortId).second) return;
-        const Btor2IRSort &sort = m_input.Sort(sortId);
-        if (sort.tag != BTOR2_TAG_SORT_array) return;
-        MarkSort(sort.indexSort);
-        MarkSort(sort.elementSort);
-    }
-
-    void CopySort(int64_t sortId,
-                  Btor2IR &output,
-                  std::unordered_set<int64_t> &copied) const {
-        if (!sortId || !copied.insert(sortId).second) return;
-        const Btor2IRSort &sort = m_input.Sort(sortId);
-        if (sort.tag == BTOR2_TAG_SORT_array) {
-            CopySort(sort.indexSort, output, copied);
-            CopySort(sort.elementSort, output, copied);
-        }
-        output.AddSort(sort);
-    }
-
-    Btor2IR BuildReducedIr() {
-        // Retain only sorts reachable from live nodes, including array sub-sorts.
-        for (const Btor2IRNode &node : m_input.Nodes()) {
-            if (m_liveNodes.count(node.id)) MarkSort(node.sortId);
-        }
-
-        Btor2IR output;
-        std::unordered_set<int64_t> copiedSorts;
-        for (int64_t sortId : m_liveSorts)
-            CopySort(sortId, output, copiedSorts);
-
-        // Original order preserves the BTOR2 topological definition order and IDs.
-        for (const Btor2IRNode &node : m_input.Nodes()) {
-            if (m_liveNodes.count(node.id)) output.AddNode(node);
-        }
-        return output;
-    }
-
-    const Btor2IR &m_input;
-    std::vector<int64_t> m_worklist;
-    std::unordered_set<int64_t> m_liveNodes;
-    std::unordered_set<int64_t> m_liveSorts;
-    std::unordered_map<int64_t, int64_t> m_initNodes;
-    std::unordered_map<int64_t, int64_t> m_nextNodes;
-};
+}
 
 Btor2IR ReduceToPropertyCoi(const Btor2IR &ir) {
-    return PropertyCoiReducer(ir).Run();
+    std::unordered_map<int64_t, int64_t> initNodes;
+    std::unordered_map<int64_t, int64_t> nextNodes;
+    std::vector<int64_t> worklist;
+    std::unordered_set<int64_t> liveNodes;
+
+    // Constraints are roots because dropping assumptions changes reachability.
+    for (const Btor2IRNode &node : ir.Nodes()) {
+        switch (node.tag) {
+        case BTOR2_TAG_init:
+            initNodes[std::abs(node.args[0])] = node.id;
+            break;
+        case BTOR2_TAG_next:
+            nextNodes[std::abs(node.args[0])] = node.id;
+            break;
+        case BTOR2_TAG_bad:
+        case BTOR2_TAG_constraint:
+            worklist.push_back(node.id);
+            break;
+        default: break;
+        }
+    }
+
+    // Traverse iteratively so deep BTOR2 expression DAGs do not use the call stack.
+    while (!worklist.empty()) {
+        const int64_t id = std::abs(worklist.back());
+        worklist.pop_back();
+        if (!liveNodes.insert(id).second) continue;
+
+        const Btor2IRNode &node = ir.Node(id);
+        for (uint32_t i = 0; i < node.nargs; ++i)
+            worklist.push_back(node.args[i]);
+
+        if (node.tag != BTOR2_TAG_state) continue;
+        auto init = initNodes.find(id);
+        if (init != initNodes.end()) worklist.push_back(init->second);
+        auto next = nextNodes.find(id);
+        if (next != nextNodes.end()) worklist.push_back(next->second);
+    }
+
+    Btor2IR output;
+    std::unordered_set<int64_t> copiedSorts;
+    const auto copySort = [&](auto &&self, int64_t sortId) -> void {
+        if (!sortId || !copiedSorts.insert(sortId).second) return;
+        const Btor2IRSort &sort = ir.Sort(sortId);
+        if (sort.tag == BTOR2_TAG_SORT_array) {
+            self(self, sort.indexSort);
+            self(self, sort.elementSort);
+        }
+        output.AddSort(sort);
+    };
+
+    // Retain only sorts reachable from live nodes, including array sub-sorts.
+    for (const Btor2IRNode &node : ir.Nodes()) {
+        if (liveNodes.count(node.id)) copySort(copySort, node.sortId);
+    }
+
+    // Original order preserves the BTOR2 topological definition order and IDs.
+    for (const Btor2IRNode &node : ir.Nodes()) {
+        if (liveNodes.count(node.id)) output.AddNode(node);
+    }
+    return output;
 }
 
 unsigned NodeWidth(const Btor2IR &ir, int64_t id) {
@@ -243,13 +277,25 @@ WLModel::WLModel(const Settings &settings, Log &log)
     : m_settings(settings), m_log(log), m_inputPath(settings.aigFilePath) {
     m_sourceIr =
         std::make_unique<Btor2IR>(Btor2Frontend::LoadIR(m_inputPath));
+    // Replay still consumes SourceIR(), so validate before pruning its cone.
+    ValidateArraySupport(*m_sourceIr);
     m_sourceHasArrays = m_sourceIr->HasArrays();
+}
+
+WLModel::~WLModel() = default;
+
+void WLModel::PreparePropertyIR() {
+    if (m_propertyIr) return;
+
     m_propertyIr = std::make_unique<Btor2IR>(
         m_settings.wlDisableCoi ? *m_sourceIr
                                 : ReduceToPropertyCoi(*m_sourceIr));
 }
 
-WLModel::~WLModel() = default;
+const Btor2IR &WLModel::PropertyIR() {
+    PreparePropertyIR();
+    return *m_propertyIr;
+}
 
 WLReplayTrace WLModel::DecodeBitTrace(
     const std::vector<std::pair<Cube, Cube>> &trace) const {
@@ -298,7 +344,8 @@ void WLModel::Build(const std::vector<WLMemoryPair> &memoryPairs) {
 
 WLModelBuildResult
 WLModel::BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs) {
-    // Stage 1: start from the cached property cone of the validated source model.
+    // Stage 1: prepare the property cone once, on first build.
+    PreparePropertyIR();
     Btor2IR ir = *m_propertyIr;
     const bool sourceHasArrays = ir.HasArrays();
     const bool bitblastOnly = !m_settings.wlBitblastOutputPath.empty();

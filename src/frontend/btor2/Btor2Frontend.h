@@ -71,8 +71,7 @@ class Btor2IR {
     std::unordered_map<int64_t, size_t> m_nodeIndex;
 };
 
-// Complete BTOR2 frontend entry point: parse the input into Btor2IR and
-// validate that it belongs to the word-level subset supported by simpleCAR.
+// Parse BTOR2 into owned IR and validate the safety-property interface.
 class Btor2Frontend {
   public:
     static Btor2IR LoadIR(const std::string &path);
