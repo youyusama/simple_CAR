@@ -159,8 +159,7 @@ bool FCAR::Check() {
                 } else {
                     // Solver return UNSAT, get uc, then continue
                     LOG_L(m_log, 2, "Result >>> UNSAT <<<");
-                    auto uc = GetUnsatCore(task.frameLevel, task.state->latches);
-                    assert(uc.size() > 0);
+                    auto uc = GetAndValidateCore(task.frameLevel, task.state->latches);
                     LOG_L(m_log, 3, "Get UC: ", CubeToStr(uc));
                     Generalize(uc, task.frameLevel);
                     LOG_L(m_log, 2, "Get Generalized UC: ", CubeToStr(uc));
@@ -467,7 +466,7 @@ FCAR::ALLProveStatus FCAR::ActiveProve(OverSequenceSet::RefId targetRef) {
         m_transSolvers[ctp_level - 1]->SetTempDomainCOI(assumption);
 
         if (!IsReachable(ctp_level - 1, assumption, "SAT_FC_ALL_CTP")) {
-            auto core = GetUnsatCore(ctp_level - 1, ctp_cube);
+            auto core = GetAndValidateCore(ctp_level - 1, ctp_cube);
             Generalize(core, ctp_level - 1, 0);
             AddUnsatisfiableCore(core, ctp_level);
             PropagateUp(core, ctp_level);
@@ -803,7 +802,7 @@ bool FCAR::Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses) {
         m_transSolvers[frameLvl]->SetTempDomainCOI(assumption);
         // F_i & T & temp_uc'
         if (!IsReachable(frameLvl, assumption, "SAT_R_Down")) {
-            uc = GetUnsatCore(frameLvl, uc);
+            uc = GetAndValidateCore(frameLvl, uc);
             return true;
         }
 
@@ -841,7 +840,7 @@ bool FCAR::ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cu
     while (true) {
         m_transSolvers[frameLvl]->SetTempDomainCOI(cts_ass);
         if (!IsReachable(frameLvl, cts_ass, "SAT_R_CTS_B")) {
-            auto uc_cts = GetUnsatCore(frameLvl, cts->latches);
+            auto uc_cts = GetAndValidateCore(frameLvl, cts->latches);
             LOG_L(m_log, 3, "CTG Get UC:", CubeToStr(uc_cts));
             Generalize(uc_cts, frameLvl, recLvl + 1);
             LOG_L(m_log, 3, "CTG Get Generalized UC:", CubeToStr(uc_cts));
@@ -956,10 +955,9 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
         LOG_L(m_log, 2, "Result >>> UNSAT <<<");
         Cube uc;
         if (m_searchFromInitSucc)
-            uc = GetUnsatCore(0, s->latches);
+            uc = GetAndValidateCore(0, s->latches);
         else
             uc = GetUnsatAssumption(m_transSolvers[0], assumption);
-        assert(uc.size() > 0);
         OrderAssumption(uc);
 
         // Generalization
@@ -977,7 +975,7 @@ bool FCAR::CheckInit(shared_ptr<State> s) {
             if (!result) {
                 Cube new_uc;
                 if (m_searchFromInitSucc)
-                    new_uc = GetUnsatCore(0, uc);
+                    new_uc = GetAndValidateCore(0, uc);
                 else
                     new_uc = GetUnsatAssumption(m_transSolvers[0], assumption);
                 uc.swap(new_uc);
@@ -1008,7 +1006,7 @@ bool FCAR::Propagate(const Cube &c, int lvl) {
     GetPrimed(assumption);
     m_transSolvers[lvl]->SetTempDomainCOI(assumption);
     if (!IsReachable(lvl, assumption, "SAT_R_Prop")) {
-        auto uc = GetUnsatCore(lvl, c);
+        auto uc = GetAndValidateCore(lvl, c);
         AddUnsatisfiableCore(uc, lvl + 1);
         result = true;
     } else {
@@ -1042,7 +1040,7 @@ pair<Cube, Cube> FCAR::GetInputAndState(int lvl) {
 }
 
 
-Cube FCAR::GetUnsatCore(int lvl, const Cube &state) {
+Cube FCAR::GetAndValidateCore(int lvl, const Cube &state) {
     [[maybe_unused]] auto scoped = m_log.Section("DS_UCore");
     Cube res;
     for (auto l : state) {
@@ -1050,6 +1048,8 @@ Cube FCAR::GetUnsatCore(int lvl, const Cube &state) {
         if (m_transSolvers[lvl]->Failed(p))
             res.emplace_back(l);
     }
+    if (res.size() == 0)
+        res = state;
     return res;
 }
 

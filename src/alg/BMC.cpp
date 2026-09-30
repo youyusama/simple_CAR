@@ -51,15 +51,18 @@ std::vector<std::pair<Cube, Cube>> BMC::GetCexTrace() {
 
     trace.reserve(m_k + 1);
     for (int k = 0; k <= m_k; k++) {
+        // Unrolling may return a complemented literal; preserve its polarity.
         Cube inputs;
         for (auto i : m_model.GetModelInputs()) {
             Lit ip = m_model.EnsurePrimeK(MkLit(i), k);
-            inputs.emplace_back(m_solver->GetModel(VarOf(ip)) == T_TRUE ? MkLit(i) : ~MkLit(i));
+            const auto value = m_solver->GetModel(VarOf(ip));
+            inputs.emplace_back(MkLit(i, (value != T_TRUE) != Sign(ip)));
         }
         Cube latches;
         for (auto l : m_model.GetModelLatches()) {
             Lit lp = m_model.EnsurePrimeK(MkLit(l), k);
-            latches.emplace_back(m_solver->GetModel(VarOf(lp)) == T_TRUE ? MkLit(l) : ~MkLit(l));
+            const auto value = m_solver->GetModel(VarOf(lp));
+            latches.emplace_back(MkLit(l, (value != T_TRUE) != Sign(lp)));
         }
         trace.emplace_back(pair<Cube, Cube>(inputs, latches));
     }

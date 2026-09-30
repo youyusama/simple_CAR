@@ -135,7 +135,7 @@ class FCAR : public IncrAlg {
 
     pair<Cube, Cube> GetInputAndState(int lvl);
 
-    Cube GetUnsatCore(int lvl, const Cube &state);
+    Cube GetAndValidateCore(int lvl, const Cube &state);
 
     Cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions);
 
