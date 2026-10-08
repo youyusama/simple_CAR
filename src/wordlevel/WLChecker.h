@@ -3,9 +3,9 @@
 
 #include "BaseAlg.h"
 #include "WLTypes.h"
+#include "model/WLBitblastor.h"
 
 #include <memory>
-#include <string>
 
 namespace car {
 
@@ -14,8 +14,9 @@ class Model;
 class WLCegar;
 class WLMemoryBMC;
 class WLModel;
+class WLPackageResize;
 
-// Word-level checker wrapper for BTOR2 inputs.  It keeps BTOR2-specific witness
+// Word-level checker wrapper for BTOR2 inputs. It keeps BTOR2-specific trace
 // handling and array CEGAR out of SimpleCAR while still delegating the bit-level
 // proof work to the selected ordinary checker.
 class WLChecker : public BaseAlg {
@@ -27,18 +28,23 @@ class WLChecker : public BaseAlg {
 
     CheckResult Run() override;
     std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
-    const WLWitnessTrace &GetWitnessTrace();
+    const WLTrace &GetTrace();
 
   private:
-    std::unique_ptr<BaseAlg> CreateBitLevelChecker(Model &model, Log &log);
+    void BuildScalarModel();
 
     const Settings &m_settings;
     Log &m_log;
     WLModel &m_model;
+    // Scalar checking owns its encoding; it needs no array abstraction or round.
+    std::shared_ptr<aiger> m_aig;
+    WLWordLayout m_layout;
+    std::unique_ptr<WLPackageResize> m_resize;
+    std::unique_ptr<Model> m_bitModel;
     std::unique_ptr<BaseAlg> m_checker;
     std::unique_ptr<WLCegar> m_cegar;
     std::unique_ptr<WLMemoryBMC> m_memoryBmc;
-    WLWitnessTrace m_witnessTrace;
+    WLTrace m_trace;
 };
 
 } // namespace car

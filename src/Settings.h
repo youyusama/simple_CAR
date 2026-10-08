@@ -41,12 +41,14 @@ enum class MCSATSolver { minisat,
                          minicore,
                          kissat };
 
+
 struct Settings {
     int verbosity = 0;
     string aigFilePath;
     string witnessOutputDir = "";
     bool wlDisableCoi = false;
     bool wlDisablePackageResize = false;
+    bool wlValidateAigTrace = false;
     string wlBitblastOutputPath = "";
 
     MCSATSolver solver = MCSATSolver::minicore;

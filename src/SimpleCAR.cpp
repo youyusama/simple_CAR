@@ -1,15 +1,8 @@
 #include "SimpleCAR.h"
+#include "CheckerFactory.h"
 
-#include "BCAR.h"
-#include "BMC.h"
-#include "FCAR.h"
-#include "IC3.h"
-#include "KFAIR.h"
-#include "KIND.h"
-#include "L2S.h"
 #include "Log.h"
 #include "Model.h"
-#include "RLive.h"
 #include "WLChecker.h"
 #include "model/WLModel.h"
 #include "WitnessBuilder.h"
@@ -23,33 +16,6 @@ static bool IsBtor2Input(const Settings &settings) {
     return std::filesystem::path(settings.aigFilePath).extension() == ".btor2";
 }
 
-static std::unique_ptr<BaseAlg> CreateChecker(
-    const Settings &settings,
-    Model &model,
-    Log &log) {
-    switch (settings.alg) {
-    case MCAlgorithm::FCAR:
-        return std::make_unique<FCAR>(settings, model, log);
-    case MCAlgorithm::BCAR:
-        return std::make_unique<BCAR>(settings, model, log);
-    case MCAlgorithm::BMC:
-        return std::make_unique<BMC>(settings, model, log);
-    case MCAlgorithm::KIND:
-        return std::make_unique<KIND>(settings, model, log);
-    case MCAlgorithm::IC3:
-        return std::make_unique<IC3>(settings, model, log);
-    case MCAlgorithm::L2S:
-        return std::make_unique<L2S>(settings, model, log);
-    case MCAlgorithm::KLIVE:
-    case MCAlgorithm::FAIR:
-    case MCAlgorithm::KFAIR:
-        return std::make_unique<KFAIR>(settings, model, log);
-    case MCAlgorithm::RLIVE:
-        return std::make_unique<RLive>(settings, model, log);
-    default:
-        return nullptr;
-    }
-}
 
 SimpleCAR::SimpleCAR(const Settings &settings) : m_settings(settings) {}
 
@@ -82,8 +48,8 @@ bool SimpleCAR::LoadModel() {
     // AIG export stops after word-level lowering and does not create a checker.
     if (!m_settings.wlBitblastOutputPath.empty()) {
         try {
-            m_wmodel->Build({});
-            m_wmodel->WriteBitblastAig();
+            m_wmodel->WriteScalarAig(m_settings.wlBitblastOutputPath,
+                                    !m_settings.wlDisablePackageResize);
         } catch (const std::exception &error) {
             std::cerr << error.what() << std::endl;
             return false;
@@ -97,7 +63,7 @@ bool SimpleCAR::LoadModel() {
             m_checker = std::make_unique<WLChecker>(
                 m_settings, *m_wmodel, *m_log);
         } else {
-            m_checker = CreateChecker(m_settings, *m_model, *m_log);
+            m_checker = CreateBitLevelChecker(m_settings, *m_model, *m_log);
         }
     } catch (const std::exception &error) {
         std::cerr << error.what() << std::endl;
@@ -132,7 +98,7 @@ CheckResult SimpleCAR::Prove() {
             bool written = m_wmodel
                                ? witness_builder.WriteCounterexample(
                                      static_cast<WLChecker &>(*m_checker)
-                                         .GetWitnessTrace())
+                                         .GetTrace())
                                : witness_builder.WriteCounterexample(
                                      m_checker->GetCexTrace());
             if (!written) {

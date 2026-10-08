@@ -4,6 +4,7 @@
 
 #include <boolector/boolector.h>
 
+#include <algorithm>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -259,16 +260,10 @@ class BoolectorModel {
   public:
     explicit BoolectorModel(const Btor2IR &ir) : bitblastor(ir) {}
 
-    void SetTraceSource(BoolectorNode *node,
-                        const WLValueOrigin &source) {
-        // Keep word-level provenance attached to the complete variable.
-        traceSources[node] = source;
-    }
-
     WLBitblastor bitblastor;
     std::vector<BoolectorNode *> inputs;
     std::vector<std::pair<int64_t, BoolectorNode *>> states;
-    std::unordered_map<BoolectorNode *, WLValueOrigin> traceSources;
+    std::unordered_map<BoolectorNode *, int64_t> portIds;
     std::unordered_map<int64_t, BoolectorNode *> init;
     std::unordered_map<int64_t, BoolectorNode *> next;
     BoolectorNode *bad{nullptr};
@@ -278,9 +273,8 @@ class BoolectorModel {
 
 class Lowering {
   public:
-    Lowering(const Btor2IR &ir, const WLIRTraceMap &traceSources)
+    explicit Lowering(const Btor2IR &ir)
         : m_ir(ir),
-          m_traceSources(traceSources),
           m_model(ir) {
         if (m_ir.HasArrays()) {
             throw std::runtime_error(
@@ -315,10 +309,7 @@ class Lowering {
                 m_model.bitblastor.Variable(node.sortId, symbol);
             if (!m_model.variables.emplace(node.id, var).second)
                 throw std::runtime_error("duplicate word-level node id");
-            auto trace = m_traceSources.find(node.id);
-            if (trace != m_traceSources.end()) {
-                m_model.SetTraceSource(var, trace->second);
-            }
+            m_model.portIds.emplace(var, node.id);
             if (node.tag == BTOR2_TAG_input)
                 m_model.inputs.push_back(var);
             else
@@ -367,26 +358,23 @@ class Lowering {
     }
 
     const Btor2IR &m_ir;
-    const WLIRTraceMap &m_traceSources;
     BoolectorModel m_model;
     std::unique_ptr<WLBitblastor::ScalarContext> m_scalar;
 };
 
 struct PendingTraceSpan {
-    WLValueOrigin origin;
+    int64_t nodeId;
     uint32_t firstInterfaceIndex{0};
-    uint32_t encodedWidth{0};
+    uint32_t width{0};
 };
 
 void RecordTraceSpan(
     BoolectorNode *node,
     uint32_t firstInterfaceIndex,
     uint32_t width,
-    const std::unordered_map<BoolectorNode *, WLValueOrigin> &traceSources,
+    const std::unordered_map<BoolectorNode *, int64_t> &portIds,
     std::vector<PendingTraceSpan> &spans) {
-    auto trace = traceSources.find(node);
-    if (trace == traceSources.end()) return;
-    spans.push_back({trace->second, firstInterfaceIndex, width});
+    spans.push_back({portIds.at(node), firstInterfaceIndex, width});
 }
 
 void AddInput(
@@ -394,7 +382,7 @@ void AddInput(
     aiger *aig,
     BoolectorNode *input,
     std::vector<PendingTraceSpan> &inputSpans,
-    const std::unordered_map<BoolectorNode *, WLValueOrigin> &traceSources) {
+    const std::unordered_map<BoolectorNode *, int64_t> &portIds) {
     // Emit each word-level input contiguously from logical LSB to MSB.
     const size_t width =
         boolector_get_width(bitblastor.BtorInstance(), input);
@@ -410,25 +398,25 @@ void AddInput(
     RecordTraceSpan(input,
                     firstInput,
                     static_cast<uint32_t>(width),
-                    traceSources,
+                    portIds,
                     inputSpans);
 }
 
-std::vector<WLTraceSpan>
+std::vector<WLWordSpan>
 FinalizeTraceSpans(const aiger_symbol *symbols,
                    uint32_t symbolCount,
                    const std::vector<PendingTraceSpan> &pending) {
     // Resolve interface offsets after AIGER reencoding and verify contiguity.
-    std::vector<WLTraceSpan> result;
+    std::vector<WLWordSpan> result;
     result.reserve(pending.size());
     for (const PendingTraceSpan &span : pending) {
-        if (!span.encodedWidth ||
-            span.firstInterfaceIndex + span.encodedWidth > symbolCount) {
+        if (!span.width ||
+            span.firstInterfaceIndex + span.width > symbolCount) {
             throw std::runtime_error("invalid AIGER trace span");
         }
         const uint32_t firstVar =
             symbols[span.firstInterfaceIndex].lit / 2;
-        for (uint32_t bit = 0; bit < span.encodedWidth; ++bit) {
+        for (uint32_t bit = 0; bit < span.width; ++bit) {
             const uint32_t var =
                 symbols[span.firstInterfaceIndex + bit].lit / 2;
             if (var != firstVar + bit) {
@@ -436,14 +424,7 @@ FinalizeTraceSpans(const aiger_symbol *symbols,
                     "AIGER trace span is not contiguous in LSB-first order");
             }
         }
-        const uint32_t originalWidth =
-            span.origin.originalSegmentWidth
-                ? span.origin.originalSegmentWidth
-                : span.encodedWidth;
-        WLValueOrigin origin = span.origin;
-        origin.originalSegmentWidth = originalWidth;
-        result.push_back(
-            {std::move(origin), firstVar, span.encodedWidth});
+        result.push_back({span.nodeId, firstVar, span.width});
     }
     return result;
 }
@@ -462,7 +443,7 @@ unsigned MakeEq(aiger *aig, unsigned lhs, unsigned rhs) {
 }
 
 std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
-                               WLTraceMap &traceMap) {
+                               WLWordLayout &traceMap) {
     // Bitblast the complete Boolector transition system into one in-memory AIGER.
     std::shared_ptr<aiger> result(aiger_init(), AigerDeleter);
     aiger *aig = result.get();
@@ -478,7 +459,7 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
                  aig,
                  input,
                  inputSpans,
-                 model.traceSources);
+                 model.portIds);
     }
     // Emit state bits as latches, or as inputs when no next function is defined.
     for (const auto &[id, state] : model.states) {
@@ -535,7 +516,7 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
         RecordTraceSpan(state,
                         next ? firstLatch : firstInput,
                         static_cast<uint32_t>(width),
-                        model.traceSources,
+                        model.portIds,
                         next ? latchSpans : inputSpans);
     }
 
@@ -570,7 +551,7 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
     }
     if (!aiger_is_reencoded(aig)) aiger_reencode(aig);
 
-    // Store one final AIGER range for each word-level segment.
+    // Store one final AIGER range for each word-level input/state node.
     traceMap.inputSpans = FinalizeTraceSpans(
         aig->inputs, aig->num_inputs, inputSpans);
     traceMap.latchSpans = FinalizeTraceSpans(
@@ -581,10 +562,185 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
 } // namespace
 
 std::shared_ptr<aiger> GenerateWLAig(const Btor2IR &ir,
-                                     const WLIRTraceMap &traceSources,
-                                     WLTraceMap &traceMap) {
-    Lowering lowering(ir, traceSources);
+                                   WLWordLayout &traceMap) {
+    Lowering lowering(ir);
     return Bitblast(lowering.Model(), traceMap);
+}
+
+namespace {
+
+std::unordered_map<Var, bool> CubeValues(const Cube &cube) {
+    std::unordered_map<Var, bool> values;
+    for (Lit literal : cube) {
+        const bool value = !Sign(literal);
+        auto [it, inserted] = values.emplace(VarOf(literal), value);
+        if (!inserted && it->second != value)
+            throw std::runtime_error(
+                "checker trace contains contradictory literals");
+    }
+    return values;
+}
+
+template<class WordValues>
+void DecodeWordStep(const std::pair<Cube, Cube> &bitStep,
+                      const WLWordLayout &traceMap,
+                      WordValues wordValues,
+                      bool loadLatches) {
+    const auto inputValues = CubeValues(bitStep.first);
+    const auto latchValues = CubeValues(bitStep.second);
+
+    auto decode = [&](const std::vector<WLWordSpan> &spans,
+                      const auto &bitValues) {
+        for (const WLWordSpan &span : spans) {
+            if (!span.width)
+                throw std::runtime_error("empty word-level port span");
+            WLBitVector value = WLBitVector::Zero(span.width);
+            for (uint32_t bit = 0; bit < span.width; ++bit) {
+                auto found = bitValues.find(span.firstAigVar + bit);
+                if (found == bitValues.end())
+                    throw std::runtime_error("decoder requires complete port bits");
+                value.SetBit(bit, found->second);
+            }
+            if (!wordValues(span.nodeId).emplace(span.nodeId, std::move(value)).second)
+                throw std::runtime_error("duplicate word-level port span");
+        }
+    };
+
+    decode(traceMap.inputSpans, inputValues);
+    if (loadLatches) decode(traceMap.latchSpans, latchValues);
+}
+
+} // namespace
+
+WLTrace RecoverWLCheckerChoices(
+    const Btor2IR &ir, const aiger &aig,
+    const std::unordered_map<Var, Lit> &equivalences, Var trueId,
+    const WLWordLayout &layout,
+    const std::vector<std::pair<Cube, Cube>> &partial, bool validateAig) {
+    if (partial.empty())
+        throw std::runtime_error("checker returned an empty bit-level trace");
+    if (validateAig && (aig.num_bad != 1 || aig.num_justice || aig.num_fairness ||
+                       !aiger_is_reencoded(&aig)))
+        throw std::runtime_error("AIG trace validation requires a reencoded safety AIG");
+    std::unordered_map<Var, unsigned> latches;
+    std::unordered_set<Var> inputs, gates;
+    Var maxChoiceVar = 0;
+    for (unsigned i = 0; i < aig.num_inputs; ++i) {
+        const Var var = aig.inputs[i].lit / 2;
+        inputs.insert(var);
+        maxChoiceVar = std::max(maxChoiceVar, var);
+    }
+    for (unsigned i = 0; i < aig.num_latches; ++i) {
+        const Var var = aig.latches[i].lit / 2;
+        latches.emplace(var, i);
+        maxChoiceVar = std::max(maxChoiceVar, var);
+    }
+    if (validateAig)
+        for (unsigned i = 0; i < aig.num_ands; ++i) gates.insert(aig.ands[i].lhs / 2);
+    // GenerateWLAig validates the layout at construction. Recovery needs only
+    // primary port storage; allocate gate values and next-state storage for replay.
+    std::vector<bool> values((validateAig ? aig.maxvar : maxChoiceVar) + 1);
+    std::vector<bool> next(validateAig ? aig.num_latches : 0);
+    auto value = [&](unsigned lit) {
+        if (lit / 2 > aig.maxvar) throw std::runtime_error("invalid AIG literal");
+        return bool(values[lit / 2]) != bool(lit & 1);
+    };
+    WLTrace result;
+    result.steps.resize(partial.size());
+    for (size_t time = 0; time < partial.size(); ++time) {
+        try {
+            std::unordered_map<Var, bool> pins;
+            auto collect = [&](const Cube &cube, bool inputCube) {
+                for (Lit literal : cube) {
+                    const Var var = VarOf(literal);
+                    const bool val = !Sign(literal);
+                    if (var == trueId) {
+                        if (!val) throw std::runtime_error("checker trace contradicts CNF true");
+                        continue;
+                    }
+                    if (!var) {
+                        // AIG/car constant true is literal 1, hence !Sign == false.
+                        if (val) throw std::runtime_error("checker trace contains false");
+                        continue;
+                    }
+                    if (inputCube) {
+                        if (!inputs.count(var))
+                            throw std::runtime_error("checker trace variable is outside the original AIG interface");
+                    } else if (!latches.count(var)) {
+                        if (!validateAig) continue;
+                        if (!gates.count(var))
+                            throw std::runtime_error("checker trace variable is outside the original AIG interface");
+                    }
+                    auto [it, added] = pins.emplace(var, val);
+                    if (!added && it->second != val) throw std::runtime_error("contradictory checker trace pins");
+                }
+            };
+            collect(partial[time].first, true);
+            if (validateAig || !time) collect(partial[time].second, false);
+            // Only primary choices may be filled arbitrarily. No successor or
+            // gate value is taken from a sparse cube as an independent choice.
+            for (auto var : inputs) {
+                auto pin = pins.find(var);
+                values[var] = pin != pins.end() && pin->second;
+            }
+            if (!time) {
+                std::unordered_set<Var> active, done;
+                std::function<bool(Var)> initial = [&](Var var) -> bool {
+                    if (done.count(var)) return values[var];
+                    if (!active.insert(var).second) throw std::runtime_error("cyclic initial equivalence");
+                    auto latch = latches.find(var);
+                    if (latch == latches.end()) throw std::runtime_error("initial equivalence is not a latch");
+                    const auto reset = aig.latches[latch->second].reset;
+                    bool bit = false;
+                    if (reset <= 1) bit = reset == 1;
+                    else if (reset != 2 * var) throw std::runtime_error("unsupported AIG reset");
+                    else if (auto pin = pins.find(var); pin != pins.end()) bit = pin->second;
+                    else if (auto eq = equivalences.find(var); eq != equivalences.end()) {
+                        const Lit rep = eq->second;
+                        bit = IsConst(rep) ? IsConstTrue(rep) : initial(VarOf(rep)) != Sign(rep);
+                    }
+                    values[var] = bit;
+                    active.erase(var); done.insert(var);
+                    return bit;
+                };
+                for (const auto &[var, index] : latches) initial(var);
+            } else if (validateAig) {
+                for (const auto &[var, index] : latches) values[var] = next[index];
+            }
+            // The original reencoded AIG is topologically ordered, so this
+            // replay uses linear work and no recursive gate traversal or SAT.
+            if (validateAig) {
+                for (unsigned i = 0; i < aig.num_ands; ++i) {
+                    const auto &g = aig.ands[i];
+                    values[g.lhs / 2] = value(g.rhs0) && value(g.rhs1);
+                }
+                for (const auto &[var, pin] : pins)
+                    if (bool(values[var]) != pin)
+                        throw std::runtime_error("checker pin disagrees with simulated AIG variable " + std::to_string(var));
+                for (unsigned i = 0; i < aig.num_constraints; ++i)
+                    if (!value(aig.constraints[i].lit)) throw std::runtime_error("recovered choices violate an AIG constraint");
+                if (time + 1 == partial.size() && !value(aig.bad[0].lit))
+                    throw std::runtime_error("recovered choices do not reach final AIG bad");
+            }
+            std::pair<Cube, Cube> ports;
+            for (auto var : inputs) ports.first.push_back(MkLit(var, !values[var]));
+            if (!time)
+                for (const auto &[var, index] : latches) ports.second.push_back(MkLit(var, !values[var]));
+            DecodeWordStep(ports, layout, [&](int64_t word) -> auto & {
+                const auto &node = ir.Node(word);
+                if (ir.Sort(node.sortId).tag != BTOR2_TAG_SORT_bitvec)
+                    throw std::runtime_error("decoded execution choice is not a bit-vector");
+                if (node.tag == BTOR2_TAG_input) return result.steps[time].inputValues;
+                if (node.tag == BTOR2_TAG_state) return result.steps[time].stateValues;
+                throw std::runtime_error("decoded execution choice is not an input or state");
+            }, !time);
+            if (validateAig && time + 1 < partial.size())
+                for (unsigned i = 0; i < aig.num_latches; ++i) next[i] = value(aig.latches[i].next);
+        } catch (const std::exception &error) {
+            throw std::runtime_error("checker trace recovery at frame " + std::to_string(time) + ": " + error.what());
+        }
+    }
+    return result;
 }
 
 } // namespace car

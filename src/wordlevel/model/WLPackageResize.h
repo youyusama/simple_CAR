@@ -6,10 +6,37 @@
 
 namespace car {
 
-// Complete segment-level selective bitblasting and finite-domain resizing pass.
+// One segment-level finite-domain resizing pass. Owns its output IR and the
+// private correspondence needed to restore execution choices to its input IR.
 class WLPackageResize {
   public:
-    static void Run(Btor2IR &ir, WLIRTraceMap &traceSources);
+    explicit WLPackageResize(const Btor2IR &ir);
+
+    const Btor2IR &IR() const { return m_ir; }
+    // Lift choices for IR() back to the input IR. An omitted port stays omitted;
+    // a supplied split port must include all its segments. Derived states and
+    // intermediate expressions are left to simulation in the input IR.
+    WLTrace RestoreTrace(const WLTrace &trace) const;
+
+  private:
+    class Rewriter;
+    struct Segment {
+        int64_t nodeId;
+        uint32_t offset;
+        uint32_t originalWidth;
+    };
+    struct Port {
+        int64_t nodeId;
+        uint32_t width;
+        std::vector<Segment> segments;
+    };
+    void RestorePorts(const std::vector<Port> &ports,
+                      const std::unordered_map<int64_t, WLBitVector> &values,
+                      std::unordered_map<int64_t, WLBitVector> &restored) const;
+
+    Btor2IR m_ir;
+    std::vector<Port> m_inputs;
+    std::vector<Port> m_states;
 };
 
 } // namespace car

@@ -86,6 +86,9 @@ set(SRCS
     src/model/DAGCNFSimplifier.cpp
     src/frontend/btor2/Btor2Frontend.cpp
     src/wordlevel/model/WLArrayAbstraction.cpp
+    src/wordlevel/model/WLArraySimplifier.cpp
+    src/wordlevel/model/WLArrayEqualityEncoder.cpp
+    src/wordlevel/model/WLBoundedUnroller.cpp
     src/wordlevel/WLBitVector.cpp
     src/wordlevel/model/WLModel.cpp
     src/wordlevel/model/WLPackageResize.cpp
@@ -100,6 +103,7 @@ set(SRCS
     src/Settings.cpp
     src/Log.cpp
     src/WitnessBuilder.cpp
+    src/alg/CheckerFactory.cpp
     src/alg/BCAR.cpp
     src/alg/FCAR.cpp
     src/alg/BMC.cpp
@@ -151,12 +155,11 @@ set(LIBS ${LIBS}
     ${BOOLECTOR_LINGELING_LIB}
     pthread)
 
-# Kissat is required by the native word-level memory BMC.
+# Kissat is required by native memory BMC and abstract Boolean trace completion.
 set(KISSAT_LIB ${CMAKE_CURRENT_SOURCE_DIR}/src/sat/kissat/build/libkissat.a)
 if(NOT EXISTS ${KISSAT_LIB})
     message(FATAL_ERROR "WL memory BMC requires '${KISSAT_LIB}'")
 endif()
-add_definitions(-DKISSAT)
 set(SRCS ${SRCS} src/sat/KissatSolver.cpp)
 set(LIBS ${LIBS} ${KISSAT_LIB})
 

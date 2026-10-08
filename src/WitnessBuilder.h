@@ -17,7 +17,7 @@ namespace car {
 class Log;
 class Model;
 class WLModel;
-struct WLWitnessTrace;
+struct WLTrace;
 
 struct EquivalenceWitness {
     std::vector<Clause> equivalence_clauses;
@@ -38,7 +38,7 @@ class WitnessBuilder {
 
     bool WriteWitness();
     bool WriteCounterexample(const std::vector<std::pair<Cube, Cube>> &trace);
-    bool WriteCounterexample(const WLWitnessTrace &trace);
+    bool WriteCounterexample(const WLTrace &trace);
 
     unsigned GetPropertyLit() const { return m_propertyLit; }
     void SetPropertyLit(unsigned lit) { m_propertyLit = lit; }
@@ -63,7 +63,7 @@ class WitnessBuilder {
     bool WriteAigWitness(const aiger *model_aig, unsigned invariant_lit);
     bool WriteAigerCounterexample(
         const std::vector<std::pair<Cube, Cube>> &trace);
-    bool WriteBtor2Counterexample(const WLWitnessTrace &trace);
+    bool WriteBtor2Counterexample(const WLTrace &trace);
     std::string CubeToInputString(const Cube &cube) const;
     std::string CubeToLatchString(const Cube &cube) const;
 

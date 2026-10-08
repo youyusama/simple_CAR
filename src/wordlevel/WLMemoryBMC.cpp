@@ -2,21 +2,25 @@
 
 #include "Btor2Frontend.h"
 #include "Log.h"
+#include "WLSimulator.h"
+#include "model/WLArrayEqualityEncoder.h"
+#include "model/WLBoundedUnroller.h"
 #include "model/WLBitblastor.h"
 #include "model/WLModel.h"
 
-#ifdef KISSAT
 extern "C" {
 #include "kissat/src/kissat.h"
 }
-#endif
 
 #include <algorithm>
 #include <climits>
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -29,7 +33,11 @@ class CnfFormula {
     static constexpr int kFalse = 0;
     static constexpr int kTrue = INT_MAX;
 
-    int NewVar() { return ++m_maxVar; }
+    int NewVar() {
+        if (m_maxVar >= INT_MAX - 1)
+            throw std::runtime_error("WL memory BMC exhausted CNF variable IDs");
+        return ++m_maxVar;
+    }
 
     static int Not(int lit) {
         if (lit == kFalse) return kTrue;
@@ -58,28 +66,30 @@ class CnfFormula {
         m_clauses.push_back(std::move(clause));
     }
 
-    int MakeAnd(int lhs, int rhs) {
-        if (lhs == kFalse || rhs == kFalse) return kFalse;
-        if (lhs == kTrue) return rhs;
-        if (rhs == kTrue) return lhs;
-        if (lhs == rhs) return lhs;
-        if (lhs == -rhs) return kFalse;
-        int result = NewVar();
-        DefineAnd(result, lhs, rhs);
-        return result;
-    }
-
     void DefineAnd(int result, int lhs, int rhs) {
         AddClause({-result, lhs});
         AddClause({-result, rhs});
         AddClause({result, Not(lhs), Not(rhs)});
     }
 
+    int And(int lhs, int rhs) {
+        if (lhs == kFalse || rhs == kFalse || lhs == Not(rhs)) return kFalse;
+        if (lhs == kTrue || lhs == rhs) return rhs;
+        if (rhs == kTrue) return lhs;
+        const int result = NewVar();
+        DefineAnd(result, lhs, rhs);
+        return result;
+    }
+
+    int Or(int lhs, int rhs) { return Not(And(Not(lhs), Not(rhs))); }
+
     int AddressEqual(const std::vector<int> &lhs,
                      const std::vector<int> &rhs) {
         if (lhs.size() != rhs.size())
             throw std::runtime_error("memory address width mismatch");
-        if (lhs.empty()) return kTrue;
+        if (lhs == rhs) return kTrue;
+        for (size_t bit = 0; bit < lhs.size(); ++bit)
+            if (lhs[bit] == Not(rhs[bit])) return kFalse;
 
         // This is the paper's 4m+1-clause address-equality encoding.
         int equal = NewVar();
@@ -123,7 +133,6 @@ class CnfFormula {
     std::unordered_map<uint64_t, int> m_aigVars;
 };
 
-#ifdef KISSAT
 class RawKissat {
   public:
     RawKissat(const CnfFormula &formula, int queryLiteral)
@@ -134,7 +143,7 @@ class RawKissat {
             for (int literal : clause) kissat_add(m_solver, literal);
             kissat_add(m_solver, 0);
         }
-        // The current bad property is a temporary unit query, not base CNF.
+        // The bad property is asserted only for this query.
         if (queryLiteral != CnfFormula::kTrue) {
             if (queryLiteral != CnfFormula::kFalse)
                 kissat_add(m_solver, queryLiteral);
@@ -154,277 +163,260 @@ class RawKissat {
   private:
     kissat *m_solver;
 };
-#endif
 
-} // namespace
-
-class WLMemoryBMC::Impl {
+// One equality-free, already unrolled formula. All IDs belong to that IR;
+// this encoder neither interprets state transitions nor reconstructs time steps.
+class MemoryQuery {
   public:
-    Impl(const Btor2IR &ir, Log &log)
-        : m_ir(ir),
-          m_log(log),
-          m_bitblastor(ir) {
+    MemoryQuery(const Btor2IR &ir, Log &log)
+        : m_ir(ir), m_log(log), m_bitblastor(ir) {
         IndexModel();
+        m_scalar = m_bitblastor.CreateScalarContext(
+            [this](const Btor2IRNode &node) {
+                const std::string name = "wlbmc.value." + std::to_string(node.id);
+                switch (node.tag) {
+                case BTOR2_TAG_input:
+                    return m_bitblastor.Variable(node.sortId, name.c_str());
+                case BTOR2_TAG_read: {
+                    auto *value = m_bitblastor.Variable(node.sortId, name.c_str());
+                    m_readRequests.push_back({node.id, value});
+                    return value;
+                }
+                default:
+                    throw std::runtime_error("unexpected bounded scalar leaf " +
+                                             std::to_string(node.id));
+                }
+            });
     }
 
-    ~Impl() = default;
+    enum class Result { Sat, Unsat, Unknown };
 
-    enum class Result { Sat, Unsat };
+    Result Check(WLTraceStep &flat,
+                 const std::vector<int64_t> &observations,
+                 std::map<int64_t, WLBitVector> &observedValues,
+                 bool recoverArrays) {
+        LowerRequiredValues(observations);
+        for (int64_t constraint : m_constraints)
+            RequireTrue(Evaluate(constraint));
+        for (int64_t input : m_inputs)
+            m_inputBits.emplace(input, Bits(Evaluate(input)));
+        std::map<int64_t, std::vector<int>> modelBits;
+        for (int64_t id : observations)
+            modelBits.emplace(id, Bits(Evaluate(id)));
+        const int queryLiteral = BooleanLiteral(Evaluate(m_bad));
+        DrainReadRequests();
+        EncodeAigGates();
 
-    Result Check(unsigned target, WLWitnessTrace &witness) {
-#ifndef KISSAT
-        (void)target;
-        (void)witness;
-        throw std::runtime_error("WL memory BMC requires Kissat support");
-#else
-        ExtendTo(target);
-        int badLiteral = BooleanLiteral(Evaluate(m_bad, target));
-        EncodeNewAigGates();
-
-        LOG_L(m_log,
-              1,
-              "WL memory BMC bound ",
-              target,
-              ": ",
-              m_cnf.NumVars(),
-              " variables, ",
-              m_cnf.Clauses().size() +
-                  (badLiteral == CnfFormula::kTrue ? 0 : 1),
-              " clauses");
-
-        RawKissat kissatEngine(m_cnf, badLiteral);
-        int result = kissatEngine.Solve();
+        LOG_L(m_log, 1, "WL memory BMC formula: ", m_cnf.NumVars(),
+              " variables, ", m_cnf.Clauses().size() +
+                  (queryLiteral == CnfFormula::kTrue ? 0 : 1),
+              " clauses, ", m_arrayCount, " array DAG nodes, ",
+              m_rootReads.size(), " root reads");
+        RawKissat kissatEngine(m_cnf, queryLiteral);
+        const int result = kissatEngine.Solve();
         if (result == 20) return Result::Unsat;
+        if (result == 0) return Result::Unknown;
         if (result != 10)
-            throw std::runtime_error(
-                "Kissat returned an unexpected result code " +
-                std::to_string(result));
-
-        witness = ExtractWitness(target, kissatEngine);
+            throw std::runtime_error("Kissat returned an unexpected result code " +
+                                     std::to_string(result));
+        observedValues.clear();
+        for (const auto &[id, bits] : modelBits)
+            observedValues.emplace(id, ModelCnfBits(bits, kissatEngine));
+        flat = {};
+        for (const auto &[id, bits] : m_inputBits)
+            flat.inputValues.emplace(id, ModelCnfBits(bits, kissatEngine));
+        if (recoverArrays) CompleteArrayValues(flat, kissatEngine);
         return Result::Sat;
-#endif
     }
 
   private:
-    struct WriteCandidate {
-        BoolectorNode *enable{nullptr};
-        BoolectorNode *address{nullptr};
-        BoolectorNode *data{nullptr};
-    };
+    friend struct EMMEncodingTestAccess;
 
-    struct NormalizedArray {
-        int64_t memoryId{0};
-        std::vector<WriteCandidate> writes;
-    };
+    void LowerRequiredValues(const std::vector<int64_t> &observations) {
+        std::vector<int64_t> work = observations;
+        work.push_back(m_bad);
+        work.insert(work.end(), m_constraints.begin(), m_constraints.end());
+        work.insert(work.end(), m_inputs.begin(), m_inputs.end());
+        // Uniform initializers may themselves read arrays. Keep their equations
+        // even if the initialized array is not read by the property.
+        for (const auto &[array, data] : m_uniformData) work.push_back(data);
+        std::unordered_set<int64_t> needed;
+        while (!work.empty()) {
+            const int64_t id = std::abs(work.back());
+            work.pop_back();
+            if (!needed.insert(id).second) continue;
+            const auto &node = m_ir.Node(id);
+            // Follow array operands too: EMM will need their write addresses,
+            // write data and choice conditions when it drains a required read.
+            for (uint32_t i = 0; i < node.nargs; ++i) work.push_back(node.args[i]);
+        }
+        // Retain declaration order, so scalar dependencies are normally cached
+        // before their consumers reach the recursive scalar lowering API.
+        for (const auto &node : m_ir.Nodes())
+            if (needed.count(node.id) && node.sortId && node.tag != BTOR2_TAG_init &&
+                m_ir.Sort(node.sortId).tag == BTOR2_TAG_SORT_bitvec)
+                Evaluate(node.id);
+    }
 
-    struct InitialRead {
-        int64_t memoryId{0};
-        int select{CnfFormula::kFalse};
+    struct RootRead {
+        int64_t root;
+        int select;
         std::vector<int> address;
         std::vector<int> data;
     };
+    struct ReadRequest {
+        int64_t nodeId;
+        BoolectorNode *result;
+    };
 
     void IndexModel() {
-        for (const Btor2IRNode &node : m_ir.Nodes()) {
+        for (const auto &node : m_ir.Nodes()) {
+            if ((node.tag == BTOR2_TAG_eq || node.tag == BTOR2_TAG_neq) &&
+                m_ir.Sort(m_ir.Node(node.args[0]).sortId).tag == BTOR2_TAG_SORT_array)
+                throw std::runtime_error("EMM requires equality-free IR");
+            const bool array = node.sortId &&
+                m_ir.Sort(node.sortId).tag == BTOR2_TAG_SORT_array;
+            if (array && node.tag != BTOR2_TAG_init) ++m_arrayCount;
             switch (node.tag) {
+            case BTOR2_TAG_next:
+                throw std::runtime_error("EMM requires bounded IR without next");
             case BTOR2_TAG_state:
-                if (m_ir.Sort(node.sortId).tag == BTOR2_TAG_SORT_array)
-                    m_arrayStates.push_back(node.id);
-                else
-                    m_scalarStates.push_back(node.id);
+                if (!array)
+                    throw std::runtime_error("EMM requires bounded IR without scalar states");
                 break;
-            case BTOR2_TAG_input: m_inputs.push_back(node.id); break;
-            case BTOR2_TAG_read: m_reads.push_back(node.id); break;
-            case BTOR2_TAG_init: m_init[node.args[0]] = node.args[1]; break;
-            case BTOR2_TAG_next: m_next[node.args[0]] = node.args[1]; break;
+            case BTOR2_TAG_init:
+                if (!array ||
+                    m_ir.Node(node.args[0]).tag != BTOR2_TAG_state ||
+                    m_ir.Node(node.args[0]).sortId != node.sortId ||
+                    m_ir.Node(node.args[1]).sortId != m_ir.Sort(node.sortId).elementSort)
+                    throw std::runtime_error("bounded init must describe a uniform array");
+                m_uniformData.emplace(node.args[0], node.args[1]);
+                break;
+            case BTOR2_TAG_input:
+                (array ? m_arrayInputs : m_inputs).push_back(node.id);
+                break;
             case BTOR2_TAG_bad: m_bad = node.args[0]; break;
-            case BTOR2_TAG_constraint:
-                m_constraints.push_back(node.args[0]);
-                break;
+            case BTOR2_TAG_constraint: m_constraints.push_back(node.args[0]); break;
             default: break;
             }
         }
+        for (const auto &node : m_ir.Nodes())
+            if (node.tag == BTOR2_TAG_state && !m_uniformData.count(node.id))
+                throw std::runtime_error("bounded array state must describe a uniform array");
         if (!m_bad) throw std::runtime_error("WL memory BMC has no bad property");
-
-        for (int64_t memoryId : m_arrayStates) {
-            if (!m_next.count(memoryId)) {
-                throw std::runtime_error(
-                    "WL memory BMC requires array states to have next functions");
-            }
-            auto init = m_init.find(memoryId);
-            if (init != m_init.end() &&
-                m_ir.Sort(m_ir.Node(init->second).sortId).tag ==
-                    BTOR2_TAG_SORT_array) {
-                throw std::runtime_error(
-                    "WL memory BMC does not support non-uniform array init");
-            }
-        }
     }
 
-    void ExtendTo(unsigned target) {
-        while (m_builtSteps <= target) {
-            ExtendOneStep(m_builtSteps);
-            ++m_builtSteps;
+    BoolectorNode *Evaluate(int64_t id) { return m_scalar->Lower(id); }
+
+    std::vector<int64_t> ArrayOrder(int64_t array) const {
+        // Reverse postorder puts every write/choice before its array operands.
+        // All incoming path conditions are therefore available before a shared
+        // node is encoded. Visit DAG nodes once, never enumerate their paths.
+        std::vector<int64_t> order;
+        std::vector<int64_t> stack{array};
+        std::unordered_set<int64_t> active{array};
+        std::unordered_set<int64_t> visited;
+        while (!stack.empty()) {
+            const auto &node = m_ir.Node(stack.back());
+            const unsigned first = node.tag == BTOR2_TAG_write ? 0 : 1;
+            const unsigned end = node.tag == BTOR2_TAG_write ? 1 :
+                                 node.tag == BTOR2_TAG_ite ? 3 : first;
+            bool pending = false;
+            for (unsigned arg = first; arg < end; ++arg) {
+                const int64_t child = node.args[arg];
+                if (visited.count(child)) continue;
+                if (!active.insert(child).second)
+                    throw std::runtime_error("cyclic bounded array expression");
+                stack.push_back(child);
+                pending = true;
+                break;
+            }
+            if (pending) continue;
+            order.push_back(node.id);
+            visited.insert(node.id);
+            active.erase(node.id);
+            stack.pop_back();
         }
+        std::reverse(order.begin(), order.end());
+        return order;
     }
 
-    void ExtendOneStep(unsigned time) {
-        // Materialize only the newly reached time step.
-        for (int64_t input : m_inputs) Evaluate(input, time);
-        for (int64_t state : m_scalarStates) Evaluate(state, time);
-        for (const Btor2IRNode &node : m_ir.Nodes()) {
-            if (!node.sortId ||
-                m_ir.Sort(node.sortId).tag != BTOR2_TAG_SORT_bitvec)
+    void EncodeRead(const ReadRequest &request) {
+        const auto &read = m_ir.Node(request.nodeId);
+        const auto address = Bits(Evaluate(read.args[1]));
+        const auto data = Bits(request.result);
+        const auto order = ArrayOrder(read.args[0]);
+        std::unordered_map<int64_t, int> enabled{{read.args[0], CnfFormula::kTrue}};
+        auto enable = [&](int64_t array, int condition) {
+            auto [it, inserted] = enabled.emplace(array, condition);
+            if (!inserted) it->second = m_cnf.Or(it->second, condition);
+        };
+
+        // Ganai et al., equations (3)-(4): match is s, prefix is PS and
+        // select is S. BTOR2 reads are total, so the read enable starts at true.
+        // Path conditions act as write enables. They do NOT include write misses:
+        // the shared prefix excludes all earlier (higher-priority) candidates.
+        // For each assignment, enabled candidates lie on one array ancestry path;
+        // parent-before-operand order therefore gives the newest write priority.
+        int prefix = CnfFormula::kTrue;
+        std::vector<int> sources;
+        auto selectSource = [&](int match) {
+            const int select = m_cnf.And(prefix, match);
+            prefix = m_cnf.And(prefix, CnfFormula::Not(match));
+            if (select != CnfFormula::kFalse) sources.push_back(select);
+            return select;
+        };
+        for (int64_t id : order) {
+            if (prefix == CnfFormula::kFalse) break;
+            const auto found = enabled.find(id);
+            if (found == enabled.end() || found->second == CnfFormula::kFalse)
                 continue;
+            const int path = found->second;
+            const auto &node = m_ir.Node(id);
             switch (node.tag) {
-            case BTOR2_TAG_init:
-            case BTOR2_TAG_next:
-            case BTOR2_TAG_bad:
-            case BTOR2_TAG_constraint:
-            case BTOR2_TAG_output:
-            case BTOR2_TAG_fair:
-            case BTOR2_TAG_justice:
-                continue;
-            default: Evaluate(node.id, time); break;
+            case BTOR2_TAG_input: {
+                const int select = selectSource(path);
+                // When selected, the final read value is an observation of this
+                // root. Inactive candidates must not constrain its contents.
+                if (select != CnfFormula::kFalse)
+                    RegisterRootRead({node.id, select, address, data});
+                break;
+            }
+            case BTOR2_TAG_state:
+                EncodeSelectedData(selectSource(path), data,
+                                   Bits(Evaluate(m_uniformData.at(node.id))));
+                break;
+            case BTOR2_TAG_write: {
+                const int equal =
+                    m_cnf.AddressEqual(address, Bits(Evaluate(node.args[1])));
+                const int match = m_cnf.And(path, equal);
+                EncodeSelectedData(selectSource(match), data,
+                                   Bits(Evaluate(node.args[2])));
+                enable(node.args[0], path);
+                break;
+            }
+            case BTOR2_TAG_ite: {
+                const int condition = BooleanLiteral(Evaluate(node.args[0]));
+                enable(node.args[1], m_cnf.And(path, condition));
+                enable(node.args[2], m_cnf.And(path, CnfFormula::Not(condition)));
+                break;
+            }
+            default:
+                throw std::runtime_error("unsupported bounded array source " +
+                                         std::to_string(node.id));
             }
         }
+        // The paper's read-validity clause: exactly one source must supply RD.
+        // At-most-one follows from the shared prefix, without pairwise clauses.
+        m_cnf.AddClause(std::move(sources));
+    }
 
-        // Add each scalar init or transition equation exactly once.
-        for (int64_t state : m_scalarStates) {
-            if (time == 0) {
-                auto init = m_init.find(state);
-                if (init != m_init.end())
-                    RequireEqual(Evaluate(state, 0),
-                                 Evaluate(init->second, 0));
-                continue;
-            }
-            auto next = m_next.find(state);
-            if (next != m_next.end())
-                RequireEqual(Evaluate(state, time),
-                             Evaluate(next->second, time - 1));
+    void DrainReadRequests() {
+        while (m_encodedReads < m_readRequests.size()) {
+            // Evaluate may append more requests, so do not retain queue references.
+            const ReadRequest request = m_readRequests[m_encodedReads++];
+            EncodeRead(request);
         }
-
-        // Add the new step's memory forwarding and environmental constraints.
-        for (int64_t read : m_reads) EncodeRead(read, time);
-        for (int64_t constraint : m_constraints)
-            RequireTrue(Evaluate(constraint, time));
-
-        // Reserve values needed to extract a SAT witness at this depth.
-        for (int64_t input : m_inputs) Bits(Evaluate(input, time));
-        for (int64_t state : m_scalarStates) Bits(Evaluate(state, time));
-        for (int64_t read : m_reads) Bits(Evaluate(read, time));
-    }
-
-    BoolectorNode *FreshValue(int64_t id,
-                              unsigned time,
-                              int64_t sortId,
-                              const char *kind) {
-        std::string symbol = std::string("wlbmc.") + kind + "." +
-                             std::to_string(id) + "." +
-                             std::to_string(time);
-        return m_bitblastor.Variable(sortId, symbol.c_str());
-    }
-
-    WLBitblastor::ScalarContext &ScalarContext(unsigned time) {
-        while (m_scalarContexts.size() <= time) {
-            const unsigned contextTime = m_scalarContexts.size();
-            m_scalarContexts.push_back(
-                m_bitblastor.CreateScalarContext(
-                    [this, contextTime](const Btor2IRNode &node) {
-                        switch (node.tag) {
-                        case BTOR2_TAG_input:
-                            return FreshValue(node.id,
-                                              contextTime,
-                                              node.sortId,
-                                              "input");
-                        case BTOR2_TAG_state:
-                            // States without next are per-step choices.
-                            return FreshValue(node.id,
-                                              contextTime,
-                                              node.sortId,
-                                              "state");
-                        case BTOR2_TAG_read:
-                            return FreshValue(node.id,
-                                              contextTime,
-                                              node.sortId,
-                                              "read");
-                        default:
-                            throw std::runtime_error(
-                                "unexpected scalar BMC leaf node " +
-                                std::to_string(node.id));
-                        }
-                    }));
-        }
-        return *m_scalarContexts[time];
-    }
-
-    BoolectorNode *Evaluate(int64_t signedId, unsigned time) {
-        return ScalarContext(time).Lower(signedId);
-    }
-
-    BoolectorNode *And(BoolectorNode *lhs, BoolectorNode *rhs) {
-        return boolector_and(m_bitblastor.BtorInstance(), lhs, rhs);
-    }
-
-    NormalizedArray NormalizeArray(int64_t expressionId,
-                                   unsigned time,
-                                   BoolectorNode *path) {
-        const Btor2IRNode &node = m_ir.Node(expressionId);
-        if (node.tag == BTOR2_TAG_state) return {node.id, {}};
-        if (node.tag == BTOR2_TAG_write) {
-            NormalizedArray result =
-                NormalizeArray(node.args[0], time, path);
-            result.writes.insert(result.writes.begin(),
-                                 {path,
-                                  Evaluate(node.args[1], time),
-                                  Evaluate(node.args[2], time)});
-            return result;
-        }
-        if (node.tag == BTOR2_TAG_ite) {
-            BoolectorNode *condition = Evaluate(node.args[0], time);
-            NormalizedArray thenArray = NormalizeArray(
-                node.args[1], time, And(path, condition));
-            NormalizedArray elseArray = NormalizeArray(
-                node.args[2],
-                time,
-                And(path,
-                    boolector_not(m_bitblastor.BtorInstance(), condition)));
-            if (thenArray.memoryId != elseArray.memoryId)
-                throw std::runtime_error(
-                    "array ite combines different memory states");
-            thenArray.writes.insert(thenArray.writes.end(),
-                                    elseArray.writes.begin(),
-                                    elseArray.writes.end());
-            return thenArray;
-        }
-        throw std::runtime_error(
-            "WL memory BMC encountered unsupported array expression");
-    }
-
-    std::pair<int64_t, std::vector<WriteCandidate>>
-    BuildWriteHistory(int64_t expressionId, unsigned time) {
-        Btor *btor = m_bitblastor.BtorInstance();
-        BoolectorSort boolSort = boolector_bitvec_sort(btor, 1);
-        BoolectorNode *enabled = boolector_one(btor, boolSort);
-        NormalizedArray current =
-            NormalizeArray(expressionId, time, enabled);
-        int64_t memoryId = current.memoryId;
-        std::vector<WriteCandidate> writes = std::move(current.writes);
-
-        while (time > 0) {
-            --time;
-            auto next = m_next.find(memoryId);
-            if (next == m_next.end()) continue;
-            NormalizedArray previous =
-                NormalizeArray(next->second, time, enabled);
-            if (previous.memoryId != memoryId)
-                throw std::runtime_error(
-                    "array next expression changes underlying memory state");
-            writes.insert(writes.end(),
-                          previous.writes.begin(),
-                          previous.writes.end());
-        }
-        return {memoryId, std::move(writes)};
     }
 
     std::vector<int> Bits(BoolectorNode *node) {
@@ -447,16 +439,12 @@ class WLMemoryBMC::Impl {
         return bits.front();
     }
 
-    void RequireEqual(BoolectorNode *lhs, BoolectorNode *rhs) {
-        RequireTrue(
-            boolector_eq(m_bitblastor.BtorInstance(), lhs, rhs));
-    }
-
     void EncodeSelectedData(int select,
                             const std::vector<int> &readData,
                             const std::vector<int> &sourceData) {
         if (readData.size() != sourceData.size())
             throw std::runtime_error("memory data width mismatch");
+        if (select == CnfFormula::kFalse) return;
         for (size_t bit = 0; bit < readData.size(); ++bit) {
             m_cnf.AddClause(
                 {CnfFormula::Not(select),
@@ -469,79 +457,30 @@ class WLMemoryBMC::Impl {
         }
     }
 
-    void EncodeRead(int64_t readId, unsigned time) {
-        const Btor2IRNode &read = m_ir.Node(readId);
-        std::vector<int> readData = Bits(Evaluate(readId, time));
-        std::vector<int> readAddress = Bits(Evaluate(read.args[1], time));
-        auto [memoryId, writes] = BuildWriteHistory(read.args[0], time);
-
-        int prefix = CnfFormula::kTrue;
-        for (const WriteCandidate &write : writes) {
-            int addressEqual =
-                m_cnf.AddressEqual(Bits(write.address), readAddress);
-            std::vector<int> enableBits = Bits(write.enable);
-            if (enableBits.size() != 1)
-                throw std::runtime_error("memory write enable is not Boolean");
-            int match = m_cnf.MakeAnd(enableBits.front(), addressEqual);
-            int select = m_cnf.MakeAnd(match, prefix);
-            EncodeSelectedData(select, readData, Bits(write.data));
-            prefix = m_cnf.MakeAnd(CnfFormula::Not(match), prefix);
-        }
-
-        auto init = m_init.find(memoryId);
-        if (init != m_init.end()) {
-            EncodeSelectedData(prefix,
-                               readData,
-                               Bits(Evaluate(init->second, 0)));
-            return;
-        }
-
-        InitialRead initial;
-        initial.memoryId = memoryId;
-        initial.select = prefix;
-        initial.address = std::move(readAddress);
-        initial.data.reserve(readData.size());
-        for (size_t bit = 0; bit < readData.size(); ++bit)
-            initial.data.push_back(m_cnf.NewVar());
-        EncodeSelectedData(initial.select, readData, initial.data);
-        RegisterInitialRead(std::move(initial));
-    }
-
-    void RegisterInitialRead(InitialRead read) {
-        // Relate a new initial-memory observation only to prior observations.
-        for (const InitialRead &previous : m_initialReads) {
-            if (previous.memoryId != read.memoryId) continue;
-            if (previous.data.size() != read.data.size())
-                throw std::runtime_error("initial memory data width mismatch");
+    void RegisterRootRead(RootRead read) {
+        // Enforce congruence only when both reads select this free root.
+        // The unroller has already distinguished roots from different frames.
+        auto &prior = m_readsByRoot[read.root];
+        for (size_t index : prior) {
+            const RootRead &previous = m_rootReads[index];
+            int selected = m_cnf.And(previous.select, read.select);
+            if (selected == CnfFormula::kFalse) continue;
             int sameAddress =
                 m_cnf.AddressEqual(previous.address, read.address);
-            for (size_t bit = 0; bit < previous.data.size(); ++bit) {
-                m_cnf.AddClause(
-                    {CnfFormula::Not(previous.select),
-                     CnfFormula::Not(read.select),
-                     CnfFormula::Not(sameAddress),
-                     CnfFormula::Not(previous.data[bit]),
-                     read.data[bit]});
-                m_cnf.AddClause(
-                    {CnfFormula::Not(previous.select),
-                     CnfFormula::Not(read.select),
-                     CnfFormula::Not(sameAddress),
-                     previous.data[bit],
-                     CnfFormula::Not(read.data[bit])});
-            }
+            EncodeSelectedData(m_cnf.And(selected, sameAddress),
+                               read.data, previous.data);
         }
-        m_initialReads.push_back(std::move(read));
+        prior.push_back(m_rootReads.size());
+        m_rootReads.push_back(std::move(read));
     }
 
-    void EncodeNewAigGates() {
+    void EncodeAigGates() {
         const std::vector<WLAigGate> &gates = m_bitblastor.Gates();
-        while (m_encodedGateCount < gates.size()) {
-            const WLAigGate &gate = gates[m_encodedGateCount++];
+        for (const WLAigGate &gate : gates) {
             m_cnf.AddAigAnd(gate.node, gate.child0, gate.child1);
         }
     }
 
-#ifdef KISSAT
     bool ModelLiteral(int literal,
                       const RawKissat &kissatEngine) const {
         if (literal == CnfFormula::kTrue) return true;
@@ -559,100 +498,132 @@ class WLMemoryBMC::Impl {
         return value;
     }
 
-    WLBitVector ModelBits(BoolectorNode *node,
-                          const RawKissat &kissatEngine) {
-        return ModelCnfBits(Bits(node), kissatEngine);
-    }
-
-    WLWitnessTrace ExtractWitness(unsigned target,
-                                  const RawKissat &kissatEngine) {
-        WLWitnessTrace trace;
-        trace.steps.resize(static_cast<size_t>(target) + 1);
-        for (unsigned time = 0; time <= target; ++time) {
-            WLWitnessStep &step = trace.steps[time];
-            for (int64_t input : m_inputs)
-                step.inputValues.emplace(
-                    input,
-                    ModelBits(Evaluate(input, time), kissatEngine));
-            for (int64_t state : m_scalarStates)
-                step.stateValues.emplace(
-                    state,
-                    ModelBits(Evaluate(state, time), kissatEngine));
+    void CompleteArrayValues(WLTraceStep &flat, const RawKissat &kissatEngine) {
+        for (int64_t input : m_arrayInputs) {
+            const auto &sort = m_ir.Sort(m_ir.Node(input).sortId);
+            flat.arrayInputValues[input].defaultValue =
+                WLBitVector::Zero(m_ir.Sort(sort.elementSort).width);
         }
-
-        // An uninitialized memory needs only the queried initial locations;
-        // all successor array values are reconstructed from BTOR2 transitions.
-        std::unordered_map<int64_t,
-                           std::unordered_map<std::string, WLBitVector>>
-            initialEntries;
-        for (const InitialRead &initial : m_initialReads) {
-            if (!ModelLiteral(initial.select, kissatEngine)) continue;
-            WLBitVector address =
-                ModelCnfBits(initial.address, kissatEngine);
-            WLBitVector data =
-                ModelCnfBits(initial.data, kissatEngine);
-            initialEntries[initial.memoryId].insert_or_assign(
-                address.ToBinary(), std::move(data));
+        std::map<int64_t, std::map<std::string, WLBitVector>> entriesByRoot;
+        for (const RootRead &read : m_rootReads) {
+            if (!ModelLiteral(read.select, kissatEngine)) continue;
+            const auto address = ModelCnfBits(read.address, kissatEngine);
+            const auto data = ModelCnfBits(read.data, kissatEngine);
+            auto [entry, inserted] = entriesByRoot[read.root].emplace(address.ToBinary(), data);
+            if (!inserted && entry->second != data)
+                throw std::runtime_error("SAT model has inconsistent root reads");
         }
-        for (auto &[memoryId, entries] : initialEntries) {
-            WLWitnessArrayValue value;
-            value.entries.reserve(entries.size());
-            for (auto &[address, data] : entries) {
+        for (auto &[root, entries] : entriesByRoot) {
+            auto &value = flat.arrayInputValues.at(root);
+            for (auto &[address, data] : entries)
                 value.entries.push_back(
-                    {WLBitVector::FromBinary(address.size(), address),
-                     std::move(data)});
-            }
-            trace.steps.front().arrayStateValues.emplace(
-                memoryId, std::move(value));
+                    {WLBitVector::FromBinary(address.size(), address), std::move(data)});
         }
-        return trace;
     }
-#endif
 
     const Btor2IR &m_ir;
     Log &m_log;
     WLBitblastor m_bitblastor;
+    std::unique_ptr<WLBitblastor::ScalarContext> m_scalar;
     int64_t m_bad{0};
-    std::vector<int64_t> m_inputs;
-    std::vector<int64_t> m_scalarStates;
-    std::vector<int64_t> m_arrayStates;
-    std::vector<int64_t> m_reads;
-    std::vector<int64_t> m_constraints;
-    std::unordered_map<int64_t, int64_t> m_init;
-    std::unordered_map<int64_t, int64_t> m_next;
-    std::vector<std::unique_ptr<WLBitblastor::ScalarContext>>
-        m_scalarContexts;
-    std::vector<InitialRead> m_initialReads;
+    std::vector<int64_t> m_inputs, m_arrayInputs, m_constraints;
+    // Synthetic state/init pairs are just the bounded IR's uniform-array syntax.
+    std::unordered_map<int64_t, int64_t> m_uniformData;
+    size_t m_arrayCount{0};
+    std::vector<RootRead> m_rootReads;
+    std::unordered_map<int64_t, std::vector<size_t>> m_readsByRoot;
+    std::vector<ReadRequest> m_readRequests;
+    size_t m_encodedReads{0};
+    std::map<int64_t, std::vector<int>> m_inputBits;
     CnfFormula m_cnf;
-    unsigned m_builtSteps{0};
-    size_t m_encodedGateCount{0};
 };
 
-WLMemoryBMC::WLMemoryBMC(const Settings &settings,
-                         WLModel &model,
+} // namespace
+
+WLMemoryBMC::WLMemoryBMC(WLModel &model,
                          Log &log)
-    : m_settings(settings),
-      m_model(model),
+    : m_model(model),
       m_log(log) {}
 
-WLMemoryBMC::~WLMemoryBMC() = default;
-
-CheckResult WLMemoryBMC::Run(unsigned bound) {
-    m_witnessTrace = {};
-    m_impl = std::make_unique<Impl>(m_model.PropertyIR(), m_log);
-
-    for (unsigned depth = 0;; ++depth) {
-        // The encoding grows incrementally; Kissat receives a fresh snapshot.
-        Impl::Result result = m_impl->Check(depth, m_witnessTrace);
-        if (result == Impl::Result::Sat) return CheckResult::Unsafe;
-        if (depth == bound) break;
+WLBoundedResult WLMemoryBMC::CheckThrough(unsigned bound) {
+    m_trace = {};
+    WLBoundedResult result;
+    const char *phase = "property preparation";
+    unsigned depth = 0;
+    try {
+        // WLModel validates the full SourceIR before preparing its property cone.
+        const Btor2IR &source = m_model.PropertyIR();
+        for (;; ++depth) {
+            LOG_L(m_log, 1, "WL memory BMC bound ", depth, ":");
+            phase = "bounded unrolling";
+            WLBoundedUnroller unrolled(source, depth);
+            std::unique_ptr<WLArrayEqualityEncoder> equality;
+            if (WLArrayEqualityEncoder::HasArrayComparisons(unrolled.IR())) {
+                // Equality auxiliaries belong to this finite formula. Rebuild
+                // them per query so background witnesses never restrict later bounds.
+                phase = "equality elimination";
+                equality = std::make_unique<WLArrayEqualityEncoder>(unrolled.IR());
+                const auto &stats = equality->Stats();
+                LOG_L(m_log, 1, "WL array equality bound ", depth, ": ",
+                      stats.comparisons, " comparisons, ", stats.points, " points, ",
+                      stats.queries, " address closures, ", stats.implications,
+                      " implications; equality-free IR");
+            }
+            phase = "EMM encoding/query";
+            MemoryQuery emm(equality ? equality->IR() : unrolled.IR(), m_log);
+            WLTraceStep flat;
+            std::map<int64_t, WLBitVector> values;
+            const auto query = emm.Check(flat,
+                equality ? equality->ModelTerms() : std::vector<int64_t>{},
+                values, !equality);
+            if (query == MemoryQuery::Result::Sat) {
+                if (equality) {
+                    phase = "equality model recovery";
+                    const auto arrays = equality->Complete(
+                        [&](int64_t id) { return values.at(id); });
+                    // Retain only ports of the pre-elimination bounded IR.
+                    // EMM-private root reads must not constrain this completion.
+                    for (const auto &node : unrolled.IR().Nodes())
+                        if (node.tag == BTOR2_TAG_input &&
+                            unrolled.IR().Sort(node.sortId).tag == BTOR2_TAG_SORT_array)
+                            flat.arrayInputValues.emplace(node.id, arrays.at(node.id));
+                }
+                phase = "trace decoding";
+                m_trace = unrolled.DecodeTrace(flat);
+                phase = "SourceIR verification";
+                m_model.RestoreSourceTrace(m_trace);
+                WLSimulator simulator(m_model.SourceIR());
+                const auto verified = simulator.Verify(m_trace);
+                if (verified.kind != WLSimulator::VerificationKind::Confirmed)
+                    throw std::runtime_error(
+                        "concrete replay failed at frame " + std::to_string(verified.time) +
+                        " (node " + std::to_string(verified.nodeId) + "): " + verified.reason);
+                LOG_L(m_log, 1, "WL memory BMC concrete replay confirmed at depth ", depth);
+                result.status = WLBoundedStatus::Counterexample;
+                result.badDepth = depth;
+                return result;
+            }
+            if (query == MemoryQuery::Result::Unknown) {
+                result.reason = "SAT solver did not complete depth " +
+                                std::to_string(depth);
+                return result;
+            }
+            result.checkedThrough = depth;
+            if (depth == bound) break;
+        }
+    } catch (const std::exception &error) {
+        m_trace = {};
+        result.reason = std::string("memory BMC / ") + phase + " at depth " +
+                        std::to_string(depth) + ": " + error.what();
+        return result;
     }
 
+    result.status = WLBoundedStatus::PrefixSafe;
     LOG_L(m_log,
           1,
           "WL memory BMC found no counterexample through bound ",
           bound);
-    return CheckResult::Unknown;
+    return result;
 }
 
 } // namespace car

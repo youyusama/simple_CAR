@@ -1,98 +1,89 @@
 #include "WLCegar.h"
+#include "CheckerFactory.h"
 
-#include "BCAR.h"
-#include "BMC.h"
-#include "FCAR.h"
-#include "IC3.h"
-#include "KFAIR.h"
-#include "KIND.h"
-#include "L2S.h"
 #include "Log.h"
 #include "Model.h"
-#include "RLive.h"
 #include "model/WLModel.h"
 #include "WLMemoryBMC.h"
 #include "WLSimulator.h"
+#include "model/WLBitblastor.h"
+#include "model/WLPackageResize.h"
 
 #include <algorithm>
+#include <chrono>
 #include <stdexcept>
 #include <vector>
 
 namespace car {
+
+struct WLCegar::AbstractionContext {
+    explicit AbstractionContext(WLArrayAbstraction::BuildResult build)
+        : build(std::move(build)) {}
+    WLWordLayout layout;
+    WLArrayAbstraction::BuildResult build;
+    std::unique_ptr<WLPackageResize> resize;
+    // Destroy checker before Model, which owns the AIG; metadata outlives both.
+    std::unique_ptr<Model> model;
+    std::unique_ptr<BaseAlg> checker;
+};
 
 WLCegar::WLCegar(const Settings &settings,
                  Log &log,
                  WLModel &model)
     : m_settings(settings),
       m_log(log),
-      m_model(model) {
-    m_checker = CreateBitLevelChecker(m_model.BitModel(), m_log);
-    if (!m_checker) {
-        throw std::runtime_error(
-            "word-level CEGAR requires a bit-level checker.");
-    }
+      m_model(model), m_abstraction(model.PropertyIR()) {
+    if (GetMCAlgorithmProperty(m_settings.alg) != MCAlgorithmProperty::Safety)
+        throw std::runtime_error("shared-array CEGAR requires a safety checker");
+    m_abstractionContext = BuildAbstractionContext({});
+}
+
+std::unique_ptr<WLCegar::AbstractionContext> WLCegar::BuildAbstractionContext(
+    WLArrayAbstraction::Precision precision) {
+    const auto start = std::chrono::steady_clock::now();
+    if (!m_settings.wlBitblastOutputPath.empty())
+        throw std::runtime_error("checking build cannot be used for AIG export");
+    auto context = std::make_unique<AbstractionContext>(m_abstraction.Build(precision));
+    if (context->build.IR().HasArrays())
+        throw std::runtime_error("array abstraction produced an array-valued word-level model");
+    if (!m_settings.wlDisablePackageResize)
+        context->resize = std::make_unique<WLPackageResize>(context->build.IR());
+    const auto &bitblastIR = context->resize ? context->resize->IR() : context->build.IR();
+    auto aig = GenerateWLAig(bitblastIR, context->layout);
+    context->model = std::make_unique<Model>(m_settings, m_log, std::move(aig));
+    LOG_L(m_log, 1, "word-level model build: ms=",
+          std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count(),
+          " selectors=", m_abstraction.SelectorCount(context->build),
+          " slots=", m_abstraction.SlotCount(context->build));
+    context->checker = CreateBitLevelChecker(m_settings, *context->model, m_log);
+    if (!context->checker) throw std::runtime_error("word-level CEGAR requires a bit-level checker.");
+    return context;
+}
+
+WLTrace WLCegar::RecoverChoices(
+    const std::vector<std::pair<Cube, Cube>> &trace) const {
+    const auto &context = *m_abstractionContext;
+    const auto &bitblastIR = context.resize ? context.resize->IR() : context.build.IR();
+    auto choices = RecoverWLCheckerChoices(bitblastIR, *context.model->GetAiger(),
+        context.model->GetEquivalenceMap(), context.model->TrueId(),
+        context.layout, trace, m_settings.wlValidateAigTrace);
+    if (context.resize) choices = context.resize->RestoreTrace(choices);
+    return choices;
 }
 
 WLCegar::~WLCegar() = default;
 
-bool WLCegar::AddPair(const WLMemoryPair &pair) {
-    // Refinement pairs are unique by memory, address expression, and delay.
-    if (pair.memoryStateId <= 0) return false;
-    auto duplicate = std::find_if(
-        m_memoryPairs.begin(),
-        m_memoryPairs.end(),
-        [&](const WLMemoryPair &existing) {
-            return existing.memoryStateId == pair.memoryStateId &&
-                   existing.addressNodeId == pair.addressNodeId &&
-                   existing.delay == pair.delay;
-        });
-    if (duplicate == m_memoryPairs.end()) {
-        m_memoryPairs.push_back(pair);
-        return true;
-    }
-    return false;
-}
-
 unsigned WLCegar::MaxDelay() const {
-    unsigned result = 0;
-    for (const WLMemoryPair &pair : m_memoryPairs)
-        result = std::max(result, pair.delay);
-    return result;
+    return m_abstraction.MaxDelay(m_abstractionContext->build);
 }
 
-std::unique_ptr<BaseAlg>
-WLCegar::CreateBitLevelChecker(Model &model, Log &log) {
-    // Each abstraction revision uses the same user-selected bit-level algorithm.
-    switch (m_settings.alg) {
-    case MCAlgorithm::FCAR:
-        return std::make_unique<FCAR>(m_settings, model, log);
-    case MCAlgorithm::BCAR:
-        return std::make_unique<BCAR>(m_settings, model, log);
-    case MCAlgorithm::BMC:
-        return std::make_unique<BMC>(m_settings, model, log);
-    case MCAlgorithm::KIND:
-        return std::make_unique<KIND>(m_settings, model, log);
-    case MCAlgorithm::IC3:
-        return std::make_unique<IC3>(m_settings, model, log);
-    case MCAlgorithm::L2S:
-        return std::make_unique<L2S>(m_settings, model, log);
-    case MCAlgorithm::KLIVE:
-    case MCAlgorithm::FAIR:
-    case MCAlgorithm::KFAIR:
-        return std::make_unique<KFAIR>(m_settings, model, log);
-    case MCAlgorithm::RLIVE:
-        return std::make_unique<RLive>(m_settings, model, log);
-    default:
-        return nullptr;
-    }
-}
-
-bool WLCegar::ReloadModel() {
+bool WLCegar::ReloadModel(const std::vector<WLArrayAbstraction::TrackingTarget> &targets) {
     try {
-        // Rebuild the abstraction and recreate the selected checker on its new AIG.
-        m_model.Build(m_memoryPairs);
-        m_checker = CreateBitLevelChecker(m_model.BitModel(), m_log);
-        if (!m_checker) return false;
+        auto precision = m_abstraction.ExtendPrecision(
+            m_abstractionContext->build, targets);
+        if (!precision) return false;
+        auto replacement = BuildAbstractionContext(std::move(*precision));
+        m_abstractionContext.swap(replacement);
     } catch (const std::exception &error) {
         LOG_L(m_log, 0, "word-level refinement reload failed: ", error.what());
         return false;
@@ -102,83 +93,80 @@ bool WLCegar::ReloadModel() {
 
 CheckResult WLCegar::Run() {
     CheckResult res = CheckResult::Unknown;
-    int refinements = 0;
-    m_concreteCounterexample = false;
-    m_cexTrace.clear();
-    m_witnessTrace = {};
+    unsigned refinements = 0;
+    m_trace = {};
 
+    const auto confirm = [&](WLTrace candidate) {
+        m_model.RestoreSourceTrace(candidate);
+        const auto verified = WLSimulator(m_model.SourceIR()).Verify(candidate);
+        if (verified.kind != WLSimulator::VerificationKind::Confirmed) {
+            LOG_L(m_log, 0, "word-level SourceIR verification Unknown at frame ",
+                  verified.time, " node ", verified.nodeId, ": ", verified.reason);
+            return CheckResult::Unknown;
+        }
+        LOG_L(m_log, 1, "word-level concrete counterexample confirmed by SourceIR Verify at depth ", candidate.steps.size() - 1);
+        m_trace = std::move(candidate);
+        return CheckResult::Unsafe;
+    };
+    const auto elapsed = [](auto start) {
+        return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    };
     while (true) {
         // Each iteration proves or refutes the current finite abstraction.
-        if (!m_checker) return CheckResult::Unknown;
-        res = m_checker->Run();
+        if (!m_abstractionContext->checker) return CheckResult::Unknown;
+        const auto checkerStart = std::chrono::steady_clock::now();
+        res = m_abstractionContext->checker->Run();
+        LOG_L(m_log, 1, "word-level checker: ms=", elapsed(checkerStart));
 
         if (res == CheckResult::Unsafe) {
-            // Simulator replay distinguishes concrete and spurious abstract traces.
-            auto trace = m_checker->GetCexTrace();
-            WLReplayTrace replayTrace = m_model.DecodeBitTrace(trace);
-            WLSimulator simulator(m_model.SourceIR());
-            WLSimulator::Result replay =
-                simulator.Replay(replayTrace);
-            if (replay.kind ==
-                WLSimulator::ReplayKind::ConcreteCounterexample) {
-                m_concreteCounterexample = true;
-                m_cexTrace = std::move(trace);
-                m_witnessTrace = std::move(replay.witnessTrace);
-                break;
-            }
-
-            // Every spurious trace must produce a new simulator-derived pair.
-            bool refined = false;
-            for (const WLReadMismatch &mismatch : replay.refinementReads) {
-                LOG_L(m_log,
-                      2,
-                      "word-level erroneous read: read=",
-                      mismatch.readNodeId,
-                      " memory=",
-                      mismatch.memoryStateId,
-                      " address=",
-                      mismatch.addressNodeId,
-                      " time=",
-                      mismatch.time,
-                      " delay=",
-                      mismatch.delay);
-                refined |= AddPair({mismatch.memoryStateId,
-                                    mismatch.addressNodeId,
-                                    mismatch.delay});
-            }
-            if (!refined)
-                throw std::runtime_error(
-                    "spurious word-level counterexample produced no new "
-                    "memory refinement pair");
-
-            ++refinements;
-            LOG_L(m_log,
-                  1,
-                  "word-level memory refinement ",
-                  refinements,
-                  ": ",
-                  m_memoryPairs.size(),
-                  " tracked address/delay pairs.");
-            if (!ReloadModel()) {
-                res = CheckResult::Unknown;
-                break;
+            // Recover the current abstract AIG choices for unified IR simulation.
+            // Only a verified concrete SourceIR trace is Unsafe.
+            try {
+                auto trace = m_abstractionContext->checker->GetCexTrace();
+                auto simulationStart = std::chrono::steady_clock::now();
+                auto choices = RecoverChoices(trace);
+                auto analysis = m_abstraction.AnalyzeCounterexample(m_abstractionContext->build, choices);
+                LOG_L(m_log, 1, "word-level greedy: ms=", elapsed(simulationStart),
+                      " read_corrections=", analysis.readCorrections,
+                      " comparison_corrections=", analysis.comparisonCorrections,
+                      " trials=", analysis.trials);
+                if (analysis.kind == WLArrayAbstraction::AnalysisResult::Kind::ConcreteCandidate)
+                    return confirm(std::move(analysis.trace));
+                if (analysis.kind == WLArrayAbstraction::AnalysisResult::Kind::Unknown) {
+                    LOG_L(m_log, 0, "word-level greedy Unknown: ", analysis.reason);
+                    return CheckResult::Unknown;
+                }
+                if (!ReloadModel(analysis.targets)) return CheckResult::Unknown;
+                ++refinements;
+                LOG_L(m_log, 1, "word-level array refinement ", refinements,
+                      " targets=", analysis.targets.size(),
+                      " selectors=", m_abstraction.SelectorCount(m_abstractionContext->build),
+                      " slots=", m_abstraction.SlotCount(m_abstractionContext->build), " max_delay=", MaxDelay());
+            } catch (const std::exception &error) {
+                LOG_L(m_log, 0, "word-level simulation/analysis Unknown: ", error.what());
+                return CheckResult::Unknown;
             }
             continue;
         }
 
         if (res == CheckResult::Safe) {
+            if (MaxDelay() == 0) break;
             // Close the finite prefix not covered by the delayed abstraction guards.
-            WLMemoryBMC boundedChecker(m_settings, m_model, m_log);
+            WLMemoryBMC boundedChecker(m_model, m_log);
             try {
-                CheckResult bounded = boundedChecker.Run(MaxDelay());
-                if (bounded == CheckResult::Unsafe) {
-                    m_concreteCounterexample = true;
-                    m_cexTrace.clear();
-                    m_witnessTrace = boundedChecker.GetWitnessTrace();
+                LOG_L(m_log, 1, "word-level guard prefix check through ", MaxDelay() - 1);
+                const auto prefixStart = std::chrono::steady_clock::now();
+                const auto bounded = boundedChecker.CheckThrough(MaxDelay() - 1);
+                LOG_L(m_log, 1, "word-level guard prefix: ms=", elapsed(prefixStart));
+                if (bounded.status == WLBoundedStatus::Counterexample) {
+                    m_trace = boundedChecker.GetTrace();
                     res = CheckResult::Unsafe;
-                } else {
-                    // Normal Unknown means the complete finite prefix is safe.
+                } else if (bounded.status == WLBoundedStatus::PrefixSafe &&
+                           bounded.checkedThrough && *bounded.checkedThrough >= MaxDelay() - 1) {
                     res = CheckResult::Safe;
+                } else {
+                    LOG_L(m_log, 0, "WL memory BMC incomplete: ", bounded.reason);
+                    res = CheckResult::Unknown;
                 }
             } catch (const std::exception &error) {
                 LOG_L(m_log, 0, "WL memory BMC failed: ", error.what());
@@ -189,12 +177,6 @@ CheckResult WLCegar::Run() {
     }
 
     return res;
-}
-
-std::vector<std::pair<Cube, Cube>> WLCegar::GetCexTrace() {
-    if (m_concreteCounterexample) return m_cexTrace;
-    if (!m_checker) return {};
-    return m_checker->GetCexTrace();
 }
 
 } // namespace car

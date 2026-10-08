@@ -2,9 +2,7 @@
 #define SATSOLVER_H
 
 #include "CadicalSolver.h"
-#ifdef KISSAT
 #include "KissatSolver.h"
-#endif
 #include "ISolver.h"
 #include "MinicoreSolver.h"
 #include "MinisatSolver.h"

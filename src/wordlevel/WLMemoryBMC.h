@@ -1,36 +1,40 @@
 #ifndef WL_MEMORY_BMC_H
 #define WL_MEMORY_BMC_H
 
-#include "BaseAlg.h"
 #include "WLTypes.h"
 
-#include <memory>
+#include <optional>
+#include <string>
 
 namespace car {
 
 class Log;
 class WLModel;
-struct Settings;
 
-// Exact bounded checker for BTOR2 memories.  It keeps memories word-level and
-// encodes only the read/write forwarding relations needed by a finite trace.
+enum class WLBoundedStatus { Counterexample, PrefixSafe, Unknown };
+
+struct WLBoundedResult {
+    WLBoundedStatus status{WLBoundedStatus::Unknown};
+    // Largest depth of the contiguous UNSAT prefix, not just a visited depth.
+    std::optional<unsigned> checkedThrough;
+    std::optional<unsigned> badDepth;
+    std::string reason;
+};
+
+// Exact bounded checker: shared bounded unrolling, optional array equality
+// elimination, then EMM on the resulting single-frame equality-free IR.
 class WLMemoryBMC {
   public:
-    WLMemoryBMC(const Settings &settings, WLModel &model, Log &log);
-    ~WLMemoryBMC();
+    WLMemoryBMC(WLModel &model, Log &log);
 
-    // BMC finds a bounded counterexample or returns Unknown after exhausting k.
-    CheckResult Run(unsigned bound);
-    const WLWitnessTrace &GetWitnessTrace() const { return m_witnessTrace; }
+    // Inclusive: check F_0, ..., F_bound. PrefixSafe is not unbounded Safe.
+    WLBoundedResult CheckThrough(unsigned bound);
+    const WLTrace &GetTrace() const { return m_trace; }
 
   private:
-    class Impl;
-
-    const Settings &m_settings;
     WLModel &m_model;
     Log &m_log;
-    std::unique_ptr<Impl> m_impl;
-    WLWitnessTrace m_witnessTrace;
+    WLTrace m_trace;
 };
 
 } // namespace car

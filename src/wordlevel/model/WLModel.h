@@ -1,72 +1,32 @@
-#ifndef WL_MODEL_H
-#define WL_MODEL_H
+#pragma once
 
-extern "C" {
-#include "aiger.h"
-}
-
-#include "CarTypes.h"
+#include "Btor2Frontend.h"
 #include "Settings.h"
 #include "WLTypes.h"
-
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace car {
-
 class Log;
-class Model;
-class Btor2IR;
+class WLArraySimplifier;
 
-struct WLModelBuildResult {
-    // Completed WL pipeline result before constructing the bit-level Model.
-    std::shared_ptr<aiger> aig;
-    bool sourceHasArrays{false};
-    WLTraceMap traceMap;
-};
-
-// Entry point for word-level model processing.  Format-specific frontends
-// provide IRs; this module applies WL abstraction/optimization/lowering.
+// Fixed input semantics. Checking sessions own their precision and encodings.
 class WLModel {
   public:
     WLModel(const Settings &settings, Log &log);
     ~WLModel();
-
-    Model &BitModel() { return *m_model; }
-    const Model &BitModel() const { return *m_model; }
-
-    bool SourceHasArrays() const { return m_sourceHasArrays; }
-    const Btor2IR &SourceIR() const { return *m_sourceIr; }
-
-    const Btor2IR &PropertyIR();
-
-    // Decode the bit-level checker interface into a word-level replay seed.
-    WLReplayTrace DecodeBitTrace(
-        const std::vector<std::pair<Cube, Cube>> &trace) const;
-
-    void WriteBitblastAig() const;
-
-    // Run the complete WL pipeline using the current CEGAR memory pairs.
-    void Build(const std::vector<WLMemoryPair> &memoryPairs);
+    bool SourceHasArrays() const { return m_sourceIr.HasArrays(); }
+    const Btor2IR &SourceIR() const { return m_sourceIr; }
+    const Btor2IR &PropertyIR() const;
+    void RestoreSourceTrace(WLTrace &trace) const;
+    // Export a transformed copy; fixed source/property semantics stay intact.
+    void WriteScalarAig(const std::string &path, bool resize) const;
 
   private:
-    void PreparePropertyIR();
-
-    WLModelBuildResult
-    BuildFromBtor2(const std::vector<WLMemoryPair> &memoryPairs);
-
-    const Settings &m_settings;
+    Btor2IR m_sourceIr;
+    bool m_disableCoi;
     Log &m_log;
-    std::string m_inputPath;
-    std::unique_ptr<Btor2IR> m_sourceIr;
-    std::unique_ptr<Btor2IR> m_propertyIr;
-    std::shared_ptr<aiger> m_aig;
-    std::unique_ptr<Model> m_model;
-    bool m_sourceHasArrays{false};
-    WLTraceMap m_traceMap;
+    mutable std::unique_ptr<WLArraySimplifier> m_arraySimplifier;
+    mutable std::unique_ptr<Btor2IR> m_propertyIr;
 };
-
 } // namespace car
-
-#endif

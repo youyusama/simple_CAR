@@ -154,11 +154,7 @@ std::vector<bool> ConstantBits(const Btor2IR &ir,
 // negative references, and every multi-bit constant use gets a private node.
 Btor2IR NormalizeForPackageAnalysis(const Btor2IR &input) {
     Btor2IR output;
-    output.ReserveFreshIdsAfter(input);
-    for (const auto &[id, sort] : input.Sorts()) {
-        (void)id;
-        output.AddSort(sort);
-    }
+    output.CopySortsFrom(input);
     for (const Btor2IRNode &node : input.Nodes()) {
         Btor2IRNode copy = node;
         const uint32_t operands = DataOperandCount(node.tag);
@@ -957,18 +953,19 @@ class PackageSizer {
     std::unordered_map<size_t, ComparisonGraph> m_graphs;
 };
 
-class SegmentIRRewriter {
-  public:
-    SegmentIRRewriter(const Btor2IR &input,
-                      const SegmentAnalyzer &analysis,
-                      const std::unordered_map<size_t, uint32_t> &widths,
-                      const WLIRTraceMap &traceSources)
-        : m_input(input),
-          m_analysis(analysis),
-          m_widths(widths),
-          m_inputTraceSources(traceSources) {}
+} // namespace
 
-    std::pair<Btor2IR, WLIRTraceMap> Run() {
+class WLPackageResize::Rewriter {
+  public:
+    Rewriter(WLPackageResize &resize,
+             const Btor2IR &input,
+             const SegmentAnalyzer &analysis,
+             const std::unordered_map<size_t, uint32_t> &widths)
+        : m_resize(resize), m_input(input),
+          m_analysis(analysis),
+          m_widths(widths) {}
+
+    Btor2IR Run() {
         // Rewrite in source topological order so very deep bit-level cones do not
         // consume the C++ call stack. Constant proxies are inserted before use.
         for (const Btor2IRNode &node : m_input.Nodes()) {
@@ -993,7 +990,7 @@ class SegmentIRRewriter {
             }
         }
         m_output.SetHasArrays(false);
-        return {std::move(m_output), std::move(m_outputTraceSources)};
+        return std::move(m_output);
     }
 
   private:
@@ -1008,8 +1005,8 @@ class SegmentIRRewriter {
     int64_t EnsureSort(uint32_t width) {
         auto found = m_sorts.find(width);
         if (found != m_sorts.end()) return found->second;
-        const int64_t id = m_output.FreshId();
-        m_output.AddSort({id, BTOR2_TAG_SORT_bitvec, width, 0, 0});
+        const int64_t id = m_output.AddSort(
+            {m_output.FreshId(), BTOR2_TAG_SORT_bitvec, width, 0, 0});
         m_sorts[width] = id;
         return id;
     }
@@ -1070,7 +1067,7 @@ class SegmentIRRewriter {
 
     std::vector<Piece> BuildVariable(const Btor2IRNode &node) {
         std::vector<Piece> result;
-        const auto trace = m_inputTraceSources.find(node.id);
+        Port port{node.id, m_input.Sort(node.sortId).width, {}};
         for (const SegmentView &segment : m_analysis.Ranges(node.id)) {
             const uint32_t originalWidth = segment.hi - segment.lo;
             const uint32_t width = TargetWidth(segment);
@@ -1083,13 +1080,10 @@ class SegmentIRRewriter {
                 node.tag, width, {}, 0, symbol);
             result.push_back(
                 {segment.lo, segment.hi, width, id, segment.classId});
-            if (trace != m_inputTraceSources.end()) {
-                WLValueOrigin source = trace->second;
-                source.originalBitOffset += segment.lo;
-                source.originalSegmentWidth = originalWidth;
-                m_outputTraceSources.insert_or_assign(id, source);
-            }
+            port.segments.push_back({id, segment.lo, originalWidth});
         }
+        auto &ports = node.tag == BTOR2_TAG_input ? m_resize.m_inputs : m_resize.m_states;
+        ports.push_back(std::move(port));
         return result;
     }
 
@@ -1279,7 +1273,7 @@ class SegmentIRRewriter {
                                 {full,
                                  static_cast<int64_t>(segment.hi - 1),
                                  static_cast<int64_t>(segment.lo)},
-                                3);
+                                1); // Slice bounds are immediates, not node operands.
             }
             result.push_back(
                 {segment.lo, segment.hi, width, piece, segment.classId});
@@ -1329,37 +1323,79 @@ class SegmentIRRewriter {
         AddNode(node.tag, 1, {expression, 0, 0}, 1, node.symbol);
     }
 
+    WLPackageResize &m_resize;
     const Btor2IR &m_input;
     const SegmentAnalyzer &m_analysis;
     const std::unordered_map<size_t, uint32_t> &m_widths;
-    const WLIRTraceMap &m_inputTraceSources;
     Btor2IR m_output;
-    WLIRTraceMap m_outputTraceSources;
     std::unordered_map<uint32_t, int64_t> m_sorts;
     std::unordered_map<int64_t, std::vector<Piece>> m_pieces;
     std::unordered_map<int64_t, int64_t> m_whole;
 };
 
-} // namespace
-
-void WLPackageResize::Run(Btor2IR &ir, WLIRTraceMap &traceSources) {
+WLPackageResize::WLPackageResize(const Btor2IR &ir) {
     if (ir.HasArrays()) {
         throw std::runtime_error(
             "segment-level word reduction requires array-free IR");
     }
 
     // Establish the normalized operand invariants used by all later passes.
-    ir = NormalizeForPackageAnalysis(ir);
-    SegmentAnalyzer analyzer(ir);
+    const auto normalized = NormalizeForPackageAnalysis(ir);
+    SegmentAnalyzer analyzer(normalized);
     analyzer.Run();
 
-    PackageSizer sizer(ir, analyzer);
+    PackageSizer sizer(normalized, analyzer);
     const auto widths = sizer.Run();
 
-    SegmentIRRewriter rewriter(ir, analyzer, widths, traceSources);
-    auto rewritten = rewriter.Run();
-    ir = std::move(rewritten.first);
-    traceSources = std::move(rewritten.second);
+    Rewriter rewriter(*this, normalized, analyzer, widths);
+    m_ir = rewriter.Run();
+}
+
+void WLPackageResize::RestorePorts(
+    const std::vector<Port> &ports,
+    const std::unordered_map<int64_t, WLBitVector> &values,
+    std::unordered_map<int64_t, WLBitVector> &restored) const {
+    if (values.empty()) return;
+    size_t consumed = 0;
+    for (const auto &port : ports) {
+        size_t present = 0;
+        for (const auto &segment : port.segments)
+            present += values.count(segment.nodeId);
+        if (!present) continue;
+        if (present != port.segments.size())
+            throw std::runtime_error("resize trace contains an incomplete split port");
+
+        auto value = WLBitVector::Zero(port.width);
+        for (const auto &segment : port.segments) {
+            const auto &encoded = values.at(segment.nodeId);
+            const auto width = m_ir.Sort(m_ir.Node(segment.nodeId).sortId).width;
+            if (encoded.Width() != width)
+                throw std::runtime_error("resize trace port width does not match output IR");
+            // Compact all-ones denotes the original segment's all-ones value.
+            // Other finite-domain representatives are zero-extended.
+            const bool ones = width < segment.originalWidth && encoded.IsOnes();
+            for (uint32_t bit = 0; bit < segment.originalWidth; ++bit)
+                value.SetBit(segment.offset + bit,
+                             ones || (bit < width && encoded.GetBit(bit)));
+        }
+        restored.emplace(port.nodeId, std::move(value));
+        consumed += present;
+    }
+    if (consumed != values.size())
+        throw std::runtime_error("resize trace contains a foreign or misclassified port");
+}
+
+WLTrace WLPackageResize::RestoreTrace(const WLTrace &trace) const {
+    WLTrace result;
+    result.steps.resize(trace.steps.size());
+    for (size_t time = 0; time < trace.steps.size(); ++time) {
+        const auto &step = trace.steps[time];
+        if (!step.arrayInputValues.empty() || !step.arrayStateValues.empty())
+            throw std::runtime_error("resize trace requires array-free execution choices");
+        RestorePorts(m_inputs, step.inputValues, result.steps[time].inputValues);
+        RestorePorts(m_states, step.stateValues, result.steps[time].stateValues);
+    }
+    return result;
 }
 
 } // namespace car

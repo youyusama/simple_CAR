@@ -2,6 +2,7 @@
 #define WL_BITBLASTOR_H
 
 #include "Btor2Frontend.h"
+#include "CarTypes.h"
 #include "WLTypes.h"
 
 extern "C" {
@@ -13,9 +14,25 @@ extern "C" {
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace car {
+
+// A complete input/state word in the IR passed to GenerateWLAig. Bits are
+// contiguous in LSB-first order after AIGER reencoding.
+struct WLWordSpan {
+    int64_t nodeId{0};
+    uint32_t firstAigVar{0};
+    uint32_t width{0};
+};
+
+struct WLWordLayout {
+    // Physical AIG ports: a no-next IR state is represented by AIG inputs.
+    std::vector<WLWordSpan> inputSpans;
+    std::vector<WLWordSpan> latchSpans;
+};
 
 struct WLAigGate {
     uint64_t node{0};
@@ -70,8 +87,21 @@ class WLBitblastor {
 
 // Standard lowering of an optimized, array-free word-level IR to AIGER.
 std::shared_ptr<aiger> GenerateWLAig(const Btor2IR &ir,
-                                     const WLIRTraceMap &traceSources,
-                                     WLTraceMap &traceMap);
+                                   WLWordLayout &traceMap);
+
+// Reverse the port mapping of GenerateWLAig into this IR's execution choices.
+// The IR, original AIG and layout must belong to the same bitblast build.
+// Equivalences and trueId describe the checker's preprocessing of that AIG.
+// Restore initial latches, fill absent free choices with zero, and omit derived
+// successor states. No-next IR states remain per-frame choices, encoded as inputs.
+// Optional AIG replay checks constraints/bad/pins; without it callers validate
+// the recovered choices in the corresponding word-level IR. No SAT completion,
+// resize restoration or live WLBitblastor/Boolector instance is needed here.
+WLTrace RecoverWLCheckerChoices(
+    const Btor2IR &ir, const aiger &aig,
+    const std::unordered_map<Var, Lit> &equivalences, Var trueId,
+    const WLWordLayout &layout,
+    const std::vector<std::pair<Cube, Cube>> &partial, bool validateAig = true);
 
 } // namespace car
 

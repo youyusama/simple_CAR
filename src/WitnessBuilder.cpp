@@ -3,8 +3,8 @@
 #include "Btor2Frontend.h"
 #include "Log.h"
 #include "Model.h"
-#include "model/WLModel.h"
 #include "WLTypes.h"
+#include "model/WLModel.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -194,7 +194,7 @@ bool WitnessBuilder::WriteCounterexample(const std::vector<std::pair<Cube, Cube>
     return WriteAigerCounterexample(trace);
 }
 
-bool WitnessBuilder::WriteCounterexample(const WLWitnessTrace &trace) {
+bool WitnessBuilder::WriteCounterexample(const WLTrace &trace) {
     return WriteBtor2Counterexample(trace);
 }
 
@@ -222,9 +222,14 @@ bool WitnessBuilder::WriteAigerCounterexample(
 }
 
 bool WitnessBuilder::WriteBtor2Counterexample(
-    const WLWitnessTrace &trace) {
+    const WLTrace &trace) {
     if (m_wlModel == nullptr) {
         LOG_L(m_log, 1, "WitnessBuilder: BTOR2 counterexample needs a word-level model.");
+        return false;
+    }
+    // Array traces are retained for internal verification, not file export.
+    if (m_wlModel->SourceHasArrays()) {
+        LOG_L(m_log, 1, "WitnessBuilder: witness export for BTOR2 models with arrays is unsupported.");
         return false;
     }
     if (trace.steps.empty()) {
@@ -248,32 +253,22 @@ bool WitnessBuilder::WriteBtor2Counterexample(
         return false;
     }
 
+    const auto writeValues = [&](const std::vector<int64_t> &ids,
+                                 const auto &values) {
+        for (size_t position = 0; position < ids.size(); ++position) {
+            auto value = values.find(ids[position]);
+            if (value != values.end())
+                output << position << " " << value->second.ToBinary() << "\n";
+        }
+    };
+
     output << "sat\nb0\n";
     for (size_t time = 0; time < trace.steps.size(); ++time) {
-        const WLWitnessStep &step = trace.steps[time];
+        const WLTraceStep &step = trace.steps[time];
         output << "#" << time << "\n";
-        for (size_t position = 0; position < states.size(); ++position) {
-            const int64_t stateId = states[position];
-            auto scalar = step.stateValues.find(stateId);
-            if (scalar != step.stateValues.end()) {
-                output << position << " " << scalar->second.ToBinary()
-                       << "\n";
-                continue;
-            }
-            auto array = step.arrayStateValues.find(stateId);
-            if (array == step.arrayStateValues.end()) continue;
-            for (const WLWitnessArrayEntry &entry : array->second.entries)
-                output << position << " [" << entry.index.ToBinary()
-                       << "] " << entry.value.ToBinary() << "\n";
-        }
-
+        writeValues(states, step.stateValues);
         output << "@" << time << "\n";
-        for (size_t position = 0; position < inputs.size(); ++position) {
-            auto input = step.inputValues.find(inputs[position]);
-            if (input != step.inputValues.end())
-                output << position << " " << input->second.ToBinary()
-                       << "\n";
-        }
+        writeValues(inputs, step.inputValues);
     }
     output << ".\n";
     return static_cast<bool>(output);

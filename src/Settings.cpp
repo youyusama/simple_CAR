@@ -25,6 +25,10 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                  "Disable word-level package resizing")
         ->default_val(false);
 
+    app.add_flag("--wl-validate-aig-trace", settings.wlValidateAigTrace,
+                 "Replay the abstract AIG to validate array CEGAR traces (diagnostic)")
+        ->default_val(false);
+
     app.add_option("--wl-bitblast-only", settings.wlBitblastOutputPath,
                    "Preprocess an array-free BTOR2 model and write the resulting .aig")
         ->type_name("OUTPUT.aig");

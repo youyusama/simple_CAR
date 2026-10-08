@@ -4,6 +4,7 @@
 #include "BaseAlg.h"
 #include "Settings.h"
 #include "WLTypes.h"
+#include "model/WLArrayAbstraction.h"
 
 #include <memory>
 #include <vector>
@@ -15,7 +16,7 @@ class Model;
 class WLModel;
 
 // CEGAR engine for selected-slot word-level memory abstraction.  It drives an
-// ordinary bit-level checker, simulator replay, and refinement.  WLChecker
+// ordinary bit-level checker and unified greedy array refinement. WLChecker
 // owns this engine when the input contains word-level arrays.
 class WLCegar {
   public:
@@ -24,27 +25,26 @@ class WLCegar {
             WLModel &model);
     ~WLCegar();
 
-    // Run checker/replay/refinement iterations until a definitive result.
+    // Run checker/simulation/refinement; incomplete or no new target is Unknown.
     CheckResult Run();
-    std::vector<std::pair<Cube, Cube>> GetCexTrace();
-    const WLWitnessTrace &GetWitnessTrace() const {
-        return m_witnessTrace;
+    const WLTrace &GetTrace() const {
+        return m_trace;
     }
 
   private:
-    bool AddPair(const WLMemoryPair &pair);
     unsigned MaxDelay() const;
-    bool ReloadModel();
-    std::unique_ptr<BaseAlg> CreateBitLevelChecker(Model &model, Log &log);
+    bool ReloadModel(const std::vector<WLArrayAbstraction::TrackingTarget> &targets);
 
     const Settings &m_settings;
     Log &m_log;
     WLModel &m_model;
-    std::unique_ptr<BaseAlg> m_checker;
-    std::vector<WLMemoryPair> m_memoryPairs;
-    std::vector<std::pair<Cube, Cube>> m_cexTrace;
-    WLWitnessTrace m_witnessTrace;
-    bool m_concreteCounterexample{false};
+    struct AbstractionContext;
+    std::unique_ptr<AbstractionContext> BuildAbstractionContext(WLArrayAbstraction::Precision precision);
+    WLTrace RecoverChoices(
+        const std::vector<std::pair<Cube, Cube>> &trace) const;
+    WLArrayAbstraction m_abstraction;
+    std::unique_ptr<AbstractionContext> m_abstractionContext;
+    WLTrace m_trace;
 };
 
 } // namespace car
