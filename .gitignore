@@ -67,19 +67,7 @@ bld/
 .vs/
 .vscode/
 
-.codex
-codex.md
-
-[Cc]ase/
-[Ss]afe/
-[Uu]nsafe/
-
-__pycache__/
-*.pyc
-
 build/
 build-asan/
-release/
 refs/
-scripts/
 tests/
