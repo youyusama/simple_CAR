@@ -19,3 +19,7 @@ cmake --build build -j 4
 ```
 
 Run `./build/carat -h` to see all available options.
+
+## Portfolio runs (Linux, Python 3.8+)
+
+Run `python3 scripts/portfolio.py --type <safety|array|liveness> <model-file>` for parallel portfolio verification, or use `--help` for options.

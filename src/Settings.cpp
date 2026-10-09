@@ -160,7 +160,7 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
 
     app.add_option("--eq", settings.eq,
                    "equivalent variable checking ( 0: none,\n\
-                    1 : combination of 2 and 3,\n\
+                    1 : combination of 2 and 4,\n\
                     2 : ternary simulation,\n\
                     3 : random simulation,\n\
                     4 : SAT-based latch simulation) ")
