@@ -1,4 +1,4 @@
-#include "SimpleCAR.h"
+#include "Carat.h"
 #include "CheckerFactory.h"
 
 #include "Log.h"
@@ -17,13 +17,13 @@ static bool IsBtor2Input(const Settings &settings) {
 }
 
 
-SimpleCAR::SimpleCAR(const Settings &settings) : m_settings(settings) {}
+Carat::Carat(const Settings &settings) : m_settings(settings) {}
 
-SimpleCAR::~SimpleCAR() {
+Carat::~Carat() {
     global_log = nullptr;
 }
 
-bool SimpleCAR::LoadModel() {
+bool Carat::LoadModel() {
     if (m_log || m_model || m_wmodel || m_checker) {
         std::cerr << "LoadModel can only be called once." << std::endl;
         return false;
@@ -72,7 +72,7 @@ bool SimpleCAR::LoadModel() {
     return static_cast<bool>(m_checker);
 }
 
-CheckResult SimpleCAR::Prove() {
+CheckResult Carat::Prove() {
     if (!m_checker) return CheckResult::Unknown;
 
     // Cover word-level preprocessing, CEGAR replay, and native memory BMC.

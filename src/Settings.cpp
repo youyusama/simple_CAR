@@ -5,7 +5,7 @@
 namespace car {
 
 bool ParseSettings(int argc, char **argv, Settings &settings) {
-    CLI::App app{"simpleCAR: a Bit-Level CAR Model Checker"};
+    CLI::App app{"Carat Model Checker"};
 
     app.add_option("-v", settings.verbosity, "Verbosity")
         ->default_val(0);

@@ -16,7 +16,7 @@ class WLModel;
 class PackageResize;
 
 // Word-level checker wrapper for BTOR2 inputs. It keeps BTOR2-specific trace
-// handling and array CEGAR out of SimpleCAR while still delegating the bit-level
+// handling and array CEGAR out of Carat while still delegating the bit-level
 // proof work to the selected ordinary checker.
 class WLChecker : public BaseAlg {
   public:

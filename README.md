@@ -1,4 +1,6 @@
-# SimpleCAR
+# Carat
+
+Carat is a bit- and word-level model checker for AIGER and BTOR2 models.
 
 ## Build
 
@@ -10,10 +12,10 @@ cmake --build build -j 4
 
 ## Run
 
-`<model-file>` may be an AIGER (`.aig`) or BTOR2 (`.btor2`) model.
+`<model-file>` may be an AIGER (`.aig`, `.aag`) or BTOR2 (`.btor2`) model.
 
 ```bash
-./build/simpleCAR <model-file>
+./build/carat <model-file>
 ```
 
-Run `./build/simpleCAR -h` to see all available options.
+Run `./build/carat -h` to see all available options.

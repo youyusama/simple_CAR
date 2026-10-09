@@ -273,7 +273,7 @@ void BMC::WriteDimacs(const std::vector<Clause> &clauses, const std::string &pat
         throw std::runtime_error("failed to open CNF output file: " + path);
     }
 
-    cnf_file << "c simpleCAR BMC CNF" << std::endl;
+    cnf_file << "c Carat BMC CNF" << std::endl;
     cnf_file << "c source " << m_settings.aigFilePath << std::endl;
     cnf_file << "c k " << m_settings.bmcCnfK << std::endl;
     cnf_file << "p cnf " << max_var << " " << dimacs_clauses.size() << std::endl;

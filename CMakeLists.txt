@@ -6,7 +6,7 @@ if(NOT DEFINED CMAKE_C_COMPILER AND NOT DEFINED CMAKE_CXX_COMPILER)
     set(CMAKE_CXX_COMPILER clang++ CACHE STRING "CXX compiler" FORCE)
 endif()
 
-project(simpleCAR VERSION 0.1 LANGUAGES C CXX)
+project(Carat VERSION 0.9 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -115,7 +115,7 @@ set(SRCS
     src/alg/RLive.cpp
     src/sat/SATSolver.cpp
     src/IncrCheckerHelpers.cpp
-    src/SimpleCAR.cpp
+    src/Carat.cpp
     src/main.cpp
     # minisat
     src/sat/MinisatSolver.cpp
@@ -164,8 +164,8 @@ endif()
 set(SRCS ${SRCS} src/sat/KissatSolver.cpp)
 set(LIBS ${LIBS} ${KISSAT_LIB})
 
-add_executable(simpleCAR ${SRCS})
-target_include_directories(simpleCAR PUBLIC ${DIRS})
+add_executable(carat ${SRCS})
+target_include_directories(carat PUBLIC ${DIRS})
 add_library(minicore_lib STATIC ${MINICORE_LIB_SRCS})
 target_include_directories(minicore_lib PUBLIC ${DIRS})
 
@@ -173,14 +173,14 @@ add_executable(minicore ${MINICORE_CLI_SRCS})
 target_include_directories(minicore PUBLIC ${DIRS})
 target_link_libraries(minicore PUBLIC minicore_lib)
 
-target_link_libraries(simpleCAR PUBLIC ${LIBS} minicore_lib)
+target_link_libraries(carat PUBLIC ${LIBS} minicore_lib)
 
 if(APPLE)
     # On macOS, avoid -static (causes missing crt0.o); keep strip and LTO.
-    target_link_options(simpleCAR PUBLIC $<$<CONFIG:Release>:-s>)
+    target_link_options(carat PUBLIC $<$<CONFIG:Release>:-s>)
 else()
     # On other Unices we may use static linking for release builds.
-    target_link_options(simpleCAR PUBLIC $<$<CONFIG:Release>:-s -static>)
+    target_link_options(carat PUBLIC $<$<CONFIG:Release>:-s -static>)
 endif()
 
 message(STATUS "C compiler:   ${CMAKE_C_COMPILER}")

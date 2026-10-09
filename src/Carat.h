@@ -10,10 +10,10 @@ class Log;
 class Model;
 class WLModel;
 
-class SimpleCAR {
+class Carat {
   public:
-    explicit SimpleCAR(const Settings &settings);
-    ~SimpleCAR();
+    explicit Carat(const Settings &settings);
+    ~Carat();
 
     bool LoadModel();
     CheckResult Prove();
