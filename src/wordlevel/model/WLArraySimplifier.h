@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Btor2Frontend.h"
-#include "WLTypes.h"
+#include "Btor2IR.h"
+#include "WLTrace.h"
 #include <map>
 #include <string>
 #include <vector>

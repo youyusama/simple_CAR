@@ -1,5 +1,5 @@
-#ifndef WL_TYPES_H
-#define WL_TYPES_H
+#ifndef WL_TRACE_H
+#define WL_TRACE_H
 
 #include "WLBitVector.h"
 

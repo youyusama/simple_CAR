@@ -1,8 +1,8 @@
 #ifndef WL_ARRAY_ABSTRACTION_H
 #define WL_ARRAY_ABSTRACTION_H
 
-#include "Btor2Frontend.h"
-#include "WLTypes.h"
+#include "Btor2IR.h"
+#include "WLTrace.h"
 
 #include <cstddef>
 #include <cstdint>

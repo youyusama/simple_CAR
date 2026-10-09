@@ -1,9 +1,9 @@
 #ifndef WL_BITBLASTOR_H
 #define WL_BITBLASTOR_H
 
-#include "Btor2Frontend.h"
+#include "Btor2IR.h"
 #include "CarTypes.h"
-#include "WLTypes.h"
+#include "WLTrace.h"
 
 extern "C" {
 #include "aiger.h"

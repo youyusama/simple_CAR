@@ -1,8 +1,8 @@
 #ifndef WL_SIMULATOR_H
 #define WL_SIMULATOR_H
 
-#include "Btor2Frontend.h"
-#include "WLTypes.h"
+#include "model/Btor2IR.h"
+#include "WLTrace.h"
 
 #include <cstdint>
 #include <functional>

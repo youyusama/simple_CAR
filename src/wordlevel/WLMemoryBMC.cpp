@@ -1,6 +1,6 @@
 #include "WLMemoryBMC.h"
 
-#include "Btor2Frontend.h"
+#include "model/Btor2IR.h"
 #include "Log.h"
 #include "WLSimulator.h"
 #include "model/WLArrayEqualityEncoder.h"

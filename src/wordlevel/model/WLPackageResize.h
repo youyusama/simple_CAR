@@ -1,8 +1,8 @@
 #ifndef WL_PACKAGE_RESIZE_H
 #define WL_PACKAGE_RESIZE_H
 
-#include "Btor2Frontend.h"
-#include "WLTypes.h"
+#include "Btor2IR.h"
+#include "WLTrace.h"
 
 namespace car {
 

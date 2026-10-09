@@ -3,7 +3,7 @@
 
 #include "BaseAlg.h"
 #include "Settings.h"
-#include "WLTypes.h"
+#include "WLTrace.h"
 #include "model/WLArrayAbstraction.h"
 
 #include <memory>

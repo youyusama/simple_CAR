@@ -2,7 +2,7 @@
 #define WL_CHECKER_H
 
 #include "BaseAlg.h"
-#include "WLTypes.h"
+#include "WLTrace.h"
 #include "model/WLBitblastor.h"
 
 #include <memory>

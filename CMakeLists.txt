@@ -85,6 +85,7 @@ set(SRCS
     src/model/Model.cpp
     src/model/DAGCNFSimplifier.cpp
     src/frontend/btor2/Btor2Frontend.cpp
+    src/wordlevel/model/Btor2IR.cpp
     src/wordlevel/model/WLArrayAbstraction.cpp
     src/wordlevel/model/WLArraySimplifier.cpp
     src/wordlevel/model/WLArrayEqualityEncoder.cpp

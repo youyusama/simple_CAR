@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Btor2Frontend.h"
+#include "Btor2IR.h"
 #include "Settings.h"
-#include "WLTypes.h"
+#include "WLTrace.h"
 #include <memory>
 #include <string>
 

@@ -1,9 +1,9 @@
 #include "WitnessBuilder.h"
 
-#include "Btor2Frontend.h"
+#include "model/Btor2IR.h"
 #include "Log.h"
 #include "Model.h"
-#include "WLTypes.h"
+#include "WLTrace.h"
 #include "model/WLModel.h"
 
 #include <algorithm>

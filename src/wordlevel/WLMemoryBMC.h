@@ -1,7 +1,7 @@
 #ifndef WL_MEMORY_BMC_H
 #define WL_MEMORY_BMC_H
 
-#include "WLTypes.h"
+#include "WLTrace.h"
 
 #include <optional>
 #include <string>
