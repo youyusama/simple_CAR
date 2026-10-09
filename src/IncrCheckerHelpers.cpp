@@ -257,7 +257,7 @@ void OverSequenceSet::AttachParent(RefId childRef, RefId parentRef) {
     DetachFromParent(childRef);
     m_refs[childRef].parentRef = parentRef;
     auto &children = m_refs[parentRef].childRefs;
-    if (find(children.begin(), children.end(), childRef) == children.end()) {
+    if (std::find(children.begin(), children.end(), childRef) == children.end()) {
         children.emplace_back(childRef);
     }
 }
@@ -503,31 +503,31 @@ bool OverSequenceSet::GetParentCube(const Cube &cube, int parentLevel, Cube &par
 }
 
 
-string OverSequenceSet::FramesInfo() {
-    string res;
-    res += "Frames " + to_string(m_frames.size() - 1) + "\n";
+std::string OverSequenceSet::FramesInfo() {
+    std::string res;
+    res += "Frames " + std::to_string(m_frames.size() - 1) + "\n";
     for (int i = 0; i < static_cast<int>(m_frames.size()); ++i) {
-        res += to_string(FrameSize(i)) + " ";
+        res += std::to_string(FrameSize(i)) + " ";
     }
     return res;
 }
 
 
-string OverSequenceSet::FramesDetail() {
-    string res;
+std::string OverSequenceSet::FramesDetail() {
+    std::string res;
     for (int i = 0; i < static_cast<int>(m_frames.size()); ++i) {
-        res += "Frame " + to_string(i) + "\n";
+        res += "Frame " + std::to_string(i) + "\n";
         if (i != 0) {
             for (RefId ref : m_frames[i].refs) {
                 if (!RefAliveInFrame(ref, i)) continue;
                 const Cube &uc = CubeOfRef(ref);
                 for (auto j : uc) {
-                    res += to_string(ToSigned(j)) + " ";
+                    res += std::to_string(ToSigned(j)) + " ";
                 }
                 res += "\n";
             }
         }
-        res += "size: " + to_string(FrameSize(i)) + "\n";
+        res += "size: " + std::to_string(FrameSize(i)) + "\n";
     }
     return res;
 }
@@ -977,8 +977,8 @@ int State::num_inputs = -1;
 int State::num_latches = -1;
 
 
-string State::GetLatchesString() {
-    string result = "";
+std::string State::GetLatchesString() {
+    std::string result = "";
     result.reserve(num_latches);
     int j = 0;
     for (int i = 0; i < num_latches; ++i) {
@@ -993,8 +993,8 @@ string State::GetLatchesString() {
 }
 
 
-string State::GetInputsString() {
-    string result = "";
+std::string State::GetInputsString() {
+    std::string result = "";
     result.reserve(num_inputs);
     int j = 0;
     for (int i = 1; i <= num_inputs; ++i) {

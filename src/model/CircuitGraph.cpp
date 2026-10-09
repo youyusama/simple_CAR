@@ -6,7 +6,7 @@ void AigerDeleter(aiger *aig) {
     aiger_reset(aig);
 }
 
-CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
+CircuitGraph::CircuitGraph(const std::shared_ptr<aiger> aig) {
     // number of variables
     numVar = aig->maxvar;
     numInputs = aig->num_inputs;
@@ -61,7 +61,7 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
     }
 
     // get gates
-    unordered_set<unsigned> coi_lits;
+    std::unordered_set<unsigned> coi_lits;
     for (int i = 0; i < aig->num_latches; i++)
         coi_lits.emplace(aiger_strip(aig->latches[i].next));
     for (int i = 0; i < aig->num_latches; i++)
@@ -105,7 +105,7 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
 
 void CircuitGraph::CollectPropertyCOIInputs() {
     propertyCOIInputs.clear();
-    unordered_set<Var> coi_ids;
+    std::unordered_set<Var> coi_ids;
     for (Lit id : constraints)
         coi_ids.emplace(VarOf(id));
     for (Lit id : bad)
@@ -122,13 +122,13 @@ void CircuitGraph::CollectPropertyCOIInputs() {
             propertyCOIInputs.emplace_back(id);
         }
     }
-    sort(propertyCOIInputs.begin(), propertyCOIInputs.end());
+    std::sort(propertyCOIInputs.begin(), propertyCOIInputs.end());
 }
 
 
 void CircuitGraph::COIRefine() {
-    unordered_set<Var> coi_ids;
-    vector<Var> todo_stack;
+    std::unordered_set<Var> coi_ids;
+    std::vector<Var> todo_stack;
 
     for (Lit id : constraints) {
         coi_ids.emplace(VarOf(id));
@@ -184,32 +184,32 @@ void CircuitGraph::COIRefine() {
 
 
     // refine model inputs, latches, and gates
-    vector<Var> new_model_inputs;
+    std::vector<Var> new_model_inputs;
     for (Var id : modelInputs) {
         if (coi_ids.find(id) != coi_ids.end()) {
             new_model_inputs.emplace_back(id);
         }
     }
     modelInputs = new_model_inputs;
-    sort(modelInputs.begin(), modelInputs.end());
+    std::sort(modelInputs.begin(), modelInputs.end());
 
-    vector<Var> new_model_latches;
+    std::vector<Var> new_model_latches;
     for (Var id : modelLatches) {
         if (coi_ids.find(id) != coi_ids.end()) {
             new_model_latches.emplace_back(id);
         }
     }
     modelLatches = new_model_latches;
-    sort(modelLatches.begin(), modelLatches.end());
+    std::sort(modelLatches.begin(), modelLatches.end());
 
-    vector<Var> new_model_gates;
+    std::vector<Var> new_model_gates;
     for (Var id : modelGates) {
         if (coi_ids.find(id) != coi_ids.end()) {
             new_model_gates.emplace_back(id);
         }
     }
     modelGates = new_model_gates;
-    sort(modelGates.begin(), modelGates.end());
+    std::sort(modelGates.begin(), modelGates.end());
 }
 
 
@@ -251,7 +251,7 @@ Var CircuitGraph::NewAndGate(Lit a, Lit b) {
     return id;
 }
 
-bool CircuitGraph::TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits) {
+bool CircuitGraph::TryMakeXORGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits) {
     aiger_and *aa = aiger_is_and(aig.get(), a);
     assert(aa != nullptr);
 
@@ -287,7 +287,7 @@ bool CircuitGraph::TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a,
     return false;
 }
 
-bool CircuitGraph::TryMakeITEGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits) {
+bool CircuitGraph::TryMakeITEGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits) {
     aiger_and *aa = aiger_is_and(aig.get(), a);
     assert(aa != nullptr);
 
@@ -334,7 +334,7 @@ bool CircuitGraph::TryMakeITEGate(const shared_ptr<aiger> aig, const unsigned a,
 }
 
 
-bool CircuitGraph::MakeAndGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits) {
+bool CircuitGraph::MakeAndGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits) {
     aiger_and *aa = aiger_is_and(aig.get(), a);
     assert(aa != nullptr);
 

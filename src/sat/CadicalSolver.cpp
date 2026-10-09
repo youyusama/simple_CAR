@@ -43,7 +43,7 @@ void CadicalSolver::AddClause(const Cube &cls) {
 }
 
 
-pair<Cube, Cube> CadicalSolver::GetAssignment(bool prime) {
+std::pair<Cube, Cube> CadicalSolver::GetAssignment(bool prime) {
     Cube inputs;
     Cube latches;
     inputs.reserve(m_model.GetNumInputs());
@@ -91,7 +91,7 @@ pair<Cube, Cube> CadicalSolver::GetAssignment(bool prime) {
             }
         }
     }
-    return pair<Cube, Cube>(inputs, latches);
+    return std::pair<Cube, Cube>(inputs, latches);
 }
 
 

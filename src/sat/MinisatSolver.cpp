@@ -44,7 +44,7 @@ void MinisatSolver::AddClause(const Cube &cls) {
 }
 
 
-pair<Cube, Cube> MinisatSolver::GetAssignment(bool prime) {
+std::pair<Cube, Cube> MinisatSolver::GetAssignment(bool prime) {
     assert(m_model.GetNumInputs() < nVars());
     Cube inputs;
     Cube latches;
@@ -94,7 +94,7 @@ pair<Cube, Cube> MinisatSolver::GetAssignment(bool prime) {
             }
         }
     }
-    return pair<Cube, Cube>(inputs, latches);
+    return std::pair<Cube, Cube>(inputs, latches);
 }
 
 void MinisatSolver::ClearFailed() {

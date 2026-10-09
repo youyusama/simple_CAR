@@ -26,7 +26,7 @@ class SATSolver {
     bool Solve();
     bool Solve(const Cube &assumption);
 
-    pair<Cube, Cube> GetAssignment(bool prime) {
+    std::pair<Cube, Cube> GetAssignment(bool prime) {
         return m_slv->GetAssignment(prime);
     }
 
@@ -109,14 +109,14 @@ class SATSolver {
   protected:
     Model &m_model;
     MCSATSolver m_slvKind;
-    shared_ptr<ISolver> m_slv;
+    std::shared_ptr<ISolver> m_slv;
     bool m_solveInDomain;
 
   private:
-    shared_ptr<MinicoreSolver> GetMinicoreSolver() const;
-    void AddPermanentVars(shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi);
-    void AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi);
-    void ResetTemporaryVars(shared_ptr<MinicoreSolver> solver);
+    std::shared_ptr<MinicoreSolver> GetMinicoreSolver() const;
+    void AddPermanentVars(std::shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi);
+    void AddTemporaryVars(std::shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi);
+    void ResetTemporaryVars(std::shared_ptr<MinicoreSolver> solver);
 
     Var m_trueId;
     size_t m_fixedDomainSize;

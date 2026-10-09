@@ -3,8 +3,6 @@
 #include "CLI11.hpp"
 #include <string>
 
-using namespace std;
-
 namespace car {
 
 enum class MCAlgorithm { FCAR,
@@ -43,12 +41,12 @@ enum class MCSATSolver { minisat,
 
 struct Settings {
     int verbosity = 0;
-    string aigFilePath;
-    string witnessOutputDir = "";
+    std::string aigFilePath;
+    std::string witnessOutputDir = "";
     bool wlDisableCoi = false;
     bool wlDisablePackageResize = false;
     bool wlValidateAigTrace = false;
-    string wlBitblastOutputPath = "";
+    std::string wlBitblastOutputPath = "";
 
     MCSATSolver solver = MCSATSolver::minicore;
     MCAlgorithm alg = MCAlgorithm::IC3;
@@ -57,7 +55,7 @@ struct Settings {
     bool rlivePruneDead = false;
     int bmcK = -1;
     bool bmcCnf = false;
-    string bmcCnfDir = "";
+    std::string bmcCnfDir = "";
     int bmcCnfK = -1;
     bool dt = true;
     int branching = 1;

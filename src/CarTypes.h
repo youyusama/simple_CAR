@@ -5,7 +5,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <ostream>
 #include <type_traits>
 #include <vector>
 
@@ -154,21 +153,11 @@ inline bool CubeImplies(const Cube &a, const Cube &b) {
     return SubsumeSet(a, b_set);
 }
 
-inline std::ostream &operator<<(std::ostream &os, Lit lit) {
-    os << ToSigned(lit);
-    return os;
-}
-
 inline SignedVec ToSignedVec(const Cube &cube) {
     SignedVec out;
     out.reserve(cube.size());
     for (Lit lit : cube) out.emplace_back(ToSigned(lit));
     return out;
-}
-
-inline std::ostream &operator<<(std::ostream &os, const Cube &cb) {
-    for (auto &l : cb) os << l << " ";
-    return os;
 }
 
 inline Cube FromSignedVec(const SignedVec &cube) {

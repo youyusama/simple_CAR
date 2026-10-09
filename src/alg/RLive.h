@@ -38,7 +38,7 @@ class RLive : public BaseAlg {
     std::unique_ptr<IncrAlg> m_safeChecker;
     std::shared_ptr<SATSolver> m_pdSolver;
 
-    Cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions);
+    Cube GetUnsatAssumption(std::shared_ptr<SATSolver> solver, const Cube &assumptions);
 };
 
 } // namespace car

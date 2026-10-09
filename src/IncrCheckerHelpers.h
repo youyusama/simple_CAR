@@ -17,7 +17,7 @@
 namespace car {
 
 struct State {
-    State(shared_ptr<State> inPreState,
+    State(std::shared_ptr<State> inPreState,
           const Cube &inInputs,
           const Cube &inLatches,
           int inDepth) : depth(inDepth),
@@ -28,11 +28,11 @@ struct State {
     static int num_inputs;
     static int num_latches;
 
-    string GetLatchesString();
-    string GetInputsString();
+    std::string GetLatchesString();
+    std::string GetInputsString();
 
     int depth;
-    shared_ptr<State> preState = nullptr;
+    std::shared_ptr<State> preState = nullptr;
     Cube inputs;
     Cube latches;
     double dtScore;
@@ -48,13 +48,13 @@ struct State {
 
 struct Obligation {
     Obligation() = default;
-    Obligation(shared_ptr<State> s, int l, int d, double a = 0.0)
+    Obligation(std::shared_ptr<State> s, int l, int d, double a = 0.0)
         : state(s),
           level(l),
           depth(d),
           act(a) {}
 
-    shared_ptr<State> state;
+    std::shared_ptr<State> state;
     int level{0};
     int depth{0};
     double act{0.0};
@@ -257,9 +257,9 @@ class OverSequenceSet {
         return FrameSize(frameLevel) == 0;
     }
 
-    string FramesInfo();
+    std::string FramesInfo();
 
-    string FramesDetail();
+    std::string FramesDetail();
 
     std::vector<RefId> GetAncestorRefs(RefId ref) const;
     int RefineCountSinceALL(RefId ref) const;
@@ -327,12 +327,12 @@ class OverSequenceSet {
 
 struct Task {
   public:
-    Task(shared_ptr<State> inState, int inFrameLevel, bool isLocated)
+    Task(std::shared_ptr<State> inState, int inFrameLevel, bool isLocated)
         : state(inState),
           frameLevel(inFrameLevel),
           isLocated(isLocated) {};
     int frameLevel;
-    shared_ptr<State> state;
+    std::shared_ptr<State> state;
     bool isLocated;
 };
 
@@ -346,9 +346,9 @@ class UnderSequence {
         }
     }
 
-    void Push(shared_ptr<State> state) {
+    void Push(std::shared_ptr<State> state) {
         while (m_sequence.size() <= state->depth) {
-            m_sequence.emplace_back(vector<shared_ptr<State>>());
+            m_sequence.emplace_back(std::vector<std::shared_ptr<State>>());
         }
         m_sequence[state->depth].emplace_back(state);
     }
@@ -357,26 +357,26 @@ class UnderSequence {
 
     void Clear() { m_sequence.clear(); }
 
-    static bool StatePtrCmp(shared_ptr<State> s1, shared_ptr<State> s2) {
+    static bool StatePtrCmp(std::shared_ptr<State> s1, std::shared_ptr<State> s2) {
         return s1->dtScore > s2->dtScore;
     }
 
-    vector<shared_ptr<State>> GetSeqDT() {
-        vector<shared_ptr<State>> res;
+    std::vector<std::shared_ptr<State>> GetSeqDT() {
+        std::vector<std::shared_ptr<State>> res;
         for (int i = 0; i < m_sequence.size(); ++i) {
             for (int j = 0; j < m_sequence[i].size(); ++j) {
                 res.emplace_back(m_sequence[i][j]);
             }
         }
-        sort(res.begin(), res.end(), StatePtrCmp);
+        std::sort(res.begin(), res.end(), StatePtrCmp);
         res.resize(res.size() / 5);
         return res;
     }
 
-    vector<shared_ptr<State>> &operator[](int i) { return m_sequence[i]; }
+    std::vector<std::shared_ptr<State>> &operator[](int i) { return m_sequence[i]; }
 
   private:
-    vector<vector<shared_ptr<State>>> m_sequence;
+    std::vector<std::vector<std::shared_ptr<State>>> m_sequence;
 };
 
 struct Luby {

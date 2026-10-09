@@ -74,14 +74,14 @@ void TestTruthTables();
 
 class TernarySimulator {
   public:
-    TernarySimulator(shared_ptr<CircuitGraph> circuitGraph, Log &log);
+    TernarySimulator(std::shared_ptr<CircuitGraph> circuitGraph, Log &log);
     ~TernarySimulator() {};
 
     bool SetVal(Var id, Tbool v, int step);
 
     Tbool GetVal(Lit id, int step);
 
-    Tbool GetVal(Lit id, const vector<Tbool> &vmap);
+    Tbool GetVal(Lit id, const std::vector<Tbool> &vmap);
 
     void Simulate(int maxPreciseDepth);
 
@@ -89,28 +89,28 @@ class TernarySimulator {
 
     bool IsCycleReached() { return m_cycleStart != -1; };
 
-    const vector<vector<Tbool>> &GetValues() { return m_values; };
+    const std::vector<std::vector<Tbool>> &GetValues() { return m_values; };
 
-    const vector<Cube> &GetStates() { return m_states; };
+    const std::vector<Cube> &GetStates() { return m_states; };
 
-    const vector<Cube> &GetGateStates() { return m_gateStates; };
+    const std::vector<Cube> &GetGateStates() { return m_gateStates; };
 
   private:
     Log &m_log;
 
-    shared_ptr<CircuitGraph> m_circuitGraph;
+    std::shared_ptr<CircuitGraph> m_circuitGraph;
 
-    vector<vector<Tbool>> m_values;
+    std::vector<std::vector<Tbool>> m_values;
 
     void InitStepValues();
 
     void PushState(int step, Cube &state);
 
-    vector<Cube> m_states;
+    std::vector<Cube> m_states;
 
     void PushGateState(int step, Cube &gatestate);
 
-    vector<Cube> m_gateStates;
+    std::vector<Cube> m_gateStates;
 
     int m_randomSeed;
 
@@ -124,7 +124,7 @@ class TernarySimulator {
 
     int m_cycleStart;
 
-    string StepValuesToString(int step);
+    std::string StepValuesToString(int step);
 
     int AbstractCurrentState(int step);
 };

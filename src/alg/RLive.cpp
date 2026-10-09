@@ -194,7 +194,7 @@ bool RLive::PruneDead(const Cube &s) {
 }
 
 
-Cube RLive::GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions) {
+Cube RLive::GetUnsatAssumption(std::shared_ptr<SATSolver> solver, const Cube &assumptions) {
     Cube res;
     for (auto a : assumptions) {
         if (solver->Failed(a))

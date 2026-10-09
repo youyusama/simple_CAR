@@ -26,7 +26,7 @@ class KissatSolver : public ISolver {
     void AddClause(const Cube &cls) override;
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
-    pair<Cube, Cube> GetAssignment(bool prime) override;
+    std::pair<Cube, Cube> GetAssignment(bool prime) override;
     bool Failed(Lit assumption) override;
     Var GetNewVar() override;
     void AddTempClause(const Cube &cls) override;

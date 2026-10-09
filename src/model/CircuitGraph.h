@@ -14,8 +14,6 @@ extern "C" {
 #include <unordered_set>
 #include <vector>
 
-using namespace std;
-
 namespace car {
 
 void AigerDeleter(aiger *aig);
@@ -26,7 +24,7 @@ struct CircuitGate {
                     ITE };
     CircuitGate() {};
 
-    CircuitGate(GateType gateType, Var fanout, const vector<Lit> &fanins) {
+    CircuitGate(GateType gateType, Var fanout, const std::vector<Lit> &fanins) {
         this->gateType = gateType;
         this->fanout = fanout;
         this->fanins = fanins;
@@ -40,13 +38,13 @@ struct CircuitGate {
 
     GateType gateType;
     Var fanout;
-    vector<Lit> fanins;
+    std::vector<Lit> fanins;
 };
 
 
 class CircuitGraph {
   public:
-    CircuitGraph(const shared_ptr<aiger> aig);
+    CircuitGraph(const std::shared_ptr<aiger> aig);
     ~CircuitGraph() {};
 
     // variable numbers
@@ -61,23 +59,23 @@ class CircuitGraph {
     unsigned numFairness;
 
     // variables for tranverse
-    vector<Var> inputs;
-    vector<Var> latches;
+    std::vector<Var> inputs;
+    std::vector<Var> latches;
     Cube outputs;
-    vector<Var> ands;
+    std::vector<Var> ands;
     Cube bad;
     Cube constraints;
-    vector<Cube> justice;
+    std::vector<Cube> justice;
     Cube fairness;
 
     // variables for query
-    unordered_set<Var> inputsSet;
-    unordered_set<Var> latchesSet;
-    unordered_set<Var> andsSet;
+    std::unordered_set<Var> inputsSet;
+    std::unordered_set<Var> latchesSet;
+    std::unordered_set<Var> andsSet;
 
     // latch maps
-    unordered_map<Var, Lit> latchNextMap;
-    unordered_map<Var, Lit> latchResetMap;
+    std::unordered_map<Var, Lit> latchNextMap;
+    std::unordered_map<Var, Lit> latchResetMap;
 
     // refine the COI of property & constraints, get new model inputs, latches, and gates
     void COIRefine();
@@ -95,21 +93,21 @@ class CircuitGraph {
     Var NewAndGate(Lit a, Lit b);
 
     // variables really matter
-    vector<Var> modelInputs;
-    vector<Var> modelLatches;
-    vector<Var> modelGates;
+    std::vector<Var> modelInputs;
+    std::vector<Var> modelLatches;
+    std::vector<Var> modelGates;
 
     // inputs matter for property (but not for transition relation)
-    vector<Var> propertyCOIInputs;
+    std::vector<Var> propertyCOIInputs;
 
-    unordered_map<Var, CircuitGate> gatesMap; // gates in the COI of property & constraints & transition relation
+    std::unordered_map<Var, CircuitGate> gatesMap; // gates in the COI of property & constraints & transition relation
 
   private:
-    bool TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits);
+    bool TryMakeXORGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits);
 
-    bool TryMakeITEGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits);
+    bool TryMakeITEGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits);
 
-    bool MakeAndGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coiLits);
+    bool MakeAndGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits);
 };
 
 } // namespace car

@@ -5,8 +5,6 @@
 #include <memory>
 #include <vector>
 
-using namespace std;
-
 namespace car {
 
 class ISolver {
@@ -14,7 +12,7 @@ class ISolver {
     virtual void AddClause(const Cube &cls) = 0;
     virtual bool Solve() = 0;
     virtual bool Solve(const Cube &assumption) = 0;
-    virtual pair<Cube, Cube> GetAssignment(bool prime) = 0;
+    virtual std::pair<Cube, Cube> GetAssignment(bool prime) = 0;
     virtual bool Failed(Lit assumption) = 0;
     virtual bool ShrinkConflict(int shrink) {
         (void)shrink;

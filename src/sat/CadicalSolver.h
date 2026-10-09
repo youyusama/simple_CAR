@@ -15,7 +15,7 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     void AddClause(const Cube &cls) override;
     bool Solve() override;
     bool Solve(const Cube &assumption) override;
-    pair<Cube, Cube> GetAssignment(bool prime) override;
+    std::pair<Cube, Cube> GetAssignment(bool prime) override;
     bool Failed(Lit assumption) override;
     inline Var GetNewVar() override {
         return ++m_maxId;
@@ -33,8 +33,8 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
   protected:
     Model &m_model;
     Var m_maxId;
-    vector<Lit> m_assumptions;
-    vector<Lit> m_tempClause;
+    std::vector<Lit> m_assumptions;
+    std::vector<Lit> m_tempClause;
 };
 
 } // namespace car

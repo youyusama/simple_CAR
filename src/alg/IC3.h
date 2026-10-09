@@ -79,7 +79,7 @@ class IC3 : public IncrAlg {
 
     bool HandleObligations();
 
-    ObligationRef AddObligation(shared_ptr<State> state, int level, int depth, double act = 0.0);
+    ObligationRef AddObligation(std::shared_ptr<State> state, int level, int depth, double act = 0.0);
 
     bool PopObligation(ObligationRef &ob);
 
@@ -89,23 +89,23 @@ class IC3 : public IncrAlg {
 
     void Generalize(Cube &cb, int frameLvl, int recLvl = 0);
 
-    bool Down(Cube &c, int frameLvl, int recLvl, const LitSet &triedLits, const Cube &fullCube, vector<pair<LitSet, LitSet>> &cexCache);
+    bool Down(Cube &c, int frameLvl, int recLvl, const LitSet &triedLits, const Cube &fullCube, std::vector<std::pair<LitSet, LitSet>> &cexCache);
 
     bool ExCTGBlock(const Cube &cb, int frameLvl, int recLvl, int blockLimit);
 
-    void GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState);
+    void GeneralizePredecessor(const std::shared_ptr<State> &predecessorState, const std::shared_ptr<State> &successorState);
 
     inline void GetPrimed(Cube &p) {
         for (auto &x : p) {
             x = m_model.EnsurePrimeK(x, 1);
         }
     }
-    string FramesInfo() const;
+    std::string FramesInfo() const;
 
-    string FramesDetail() const;
+    std::string FramesDetail() const;
 
     struct LitOrder {
-        shared_ptr<Branching> branching;
+        std::shared_ptr<Branching> branching;
 
         LitOrder() {}
 
@@ -116,11 +116,11 @@ class IC3 : public IncrAlg {
 
     void OrderAssumption(Cube &c) {
         if (m_settings.randomSeed > 0) {
-            shuffle(c.begin(), c.end(), default_random_engine(m_settings.randomSeed));
+            std::shuffle(c.begin(), c.end(), std::default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        sort(c.begin(), c.end(), m_litOrder);
+        std::sort(c.begin(), c.end(), m_litOrder);
     }
 
     void Extend();
@@ -131,18 +131,18 @@ class IC3 : public IncrAlg {
 
     int PropagateUp(int lemmaId, int startLevel);
 
-    shared_ptr<State> EnumerateStartState();
+    std::shared_ptr<State> EnumerateStartState();
 
     void BuildCEXTrace();
 
-    Cube GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime);
-    bool IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv);
-    bool IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv);
-    Cube GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube);
+    Cube GetUnsatCore(const std::shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime);
+    bool IsReachable(const Cube &cb, const std::shared_ptr<SATSolver> &slv);
+    bool IsInductive(const Cube &cb, const std::shared_ptr<SATSolver> &slv);
+    Cube GetAndValidateCore(const std::shared_ptr<SATSolver> &solver, const Cube &fallbackCube);
     bool InitiationCheck(const Cube &cb);
     bool IsInitSuccessor(const Cube &cb);
 
-    bool GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime);
+    bool GetShrunkUnsatCore(const std::shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime);
 
     CheckResult m_checkResult;
 
@@ -151,18 +151,18 @@ class IC3 : public IncrAlg {
     Settings m_settings;
     Log &m_log;
     Model &m_model;
-    vector<shared_ptr<SATSolver>> m_transSolvers;
-    shared_ptr<SATSolver> m_liftSolver;
-    shared_ptr<SATSolver> m_initSolver;
-    shared_ptr<SATSolver> m_startSolver;
-    shared_ptr<SATSolver> m_badLiftSolver;
-    unordered_set<Lit, LitHash> m_initialStateSet;
+    std::vector<std::shared_ptr<SATSolver>> m_transSolvers;
+    std::shared_ptr<SATSolver> m_liftSolver;
+    std::shared_ptr<SATSolver> m_initSolver;
+    std::shared_ptr<SATSolver> m_startSolver;
+    std::shared_ptr<SATSolver> m_badLiftSolver;
+    std::unordered_set<Lit, LitHash> m_initialStateSet;
     LemmaForestManager m_lfm;
-    shared_ptr<State> m_initialState;
-    shared_ptr<State> m_cexStart;
+    std::shared_ptr<State> m_initialState;
+    std::shared_ptr<State> m_cexStart;
     int m_minUpdateLevel;
     int m_invariantLevel;
-    shared_ptr<Branching> m_branching;
+    std::shared_ptr<Branching> m_branching;
     std::set<ObligationRef, ObligationLess> m_obligations;
 
     // all stats

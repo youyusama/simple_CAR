@@ -69,7 +69,7 @@ class FCAR : public IncrAlg {
     bool IsInvariant(int frameLevel);
 
     struct LitOrder {
-        shared_ptr<Branching> branching;
+        std::shared_ptr<Branching> branching;
 
         LitOrder() {}
 
@@ -91,13 +91,13 @@ class FCAR : public IncrAlg {
     void OrderAssumption(Cube &c) {
         [[maybe_unused]] auto scoped = m_log.Section("DS_OrdAsm");
         if (m_settings.randomSeed > 0) {
-            shuffle(c.begin(), c.end(), default_random_engine(m_settings.randomSeed));
+            std::shuffle(c.begin(), c.end(), std::default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        stable_sort(c.begin(), c.end(), m_litOrder);
+        std::stable_sort(c.begin(), c.end(), m_litOrder);
         if (m_settings.internalSignals) {
-            stable_sort(c.begin(), c.end(), m_innOrder);
+            std::stable_sort(c.begin(), c.end(), m_innOrder);
         }
     }
 
@@ -109,54 +109,54 @@ class FCAR : public IncrAlg {
 
     int GetNewLevel(const Cube &states, int start = 0);
 
-    void GeneralizePredecessor(pair<Cube, Cube> &s, shared_ptr<State> t);
+    void GeneralizePredecessor(std::pair<Cube, Cube> &s, std::shared_ptr<State> t);
 
     void Generalize(Cube &uc, int frameLvl, int recLvl = 0);
 
-    bool Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses);
+    bool Down(Cube &uc, int frameLvl, int recLvl, std::vector<Cube> &failedCtses);
 
-    bool ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int blockLimit);
+    bool ExCTGBlock(std::shared_ptr<State> cts, int frameLvl, int recLvl, std::vector<Cube> &failedCtses, int blockLimit);
 
-    bool DownHasFailed(const Cube &s, const vector<Cube> &failedCtses);
+    bool DownHasFailed(const Cube &s, const std::vector<Cube> &failedCtses);
 
     bool Propagate(const Cube &c, int lvl);
 
     int PropagateUp(const Cube &c, int lvl);
 
-    bool IsReachable(int lvl, const Cube &assumption, const string &label);
+    bool IsReachable(int lvl, const Cube &assumption, const std::string &label);
 
-    shared_ptr<State> EnumerateStartState();
-    bool CheckInit(shared_ptr<State> s);
+    std::shared_ptr<State> EnumerateStartState();
+    bool CheckInit(std::shared_ptr<State> s);
 
     void AddConstraintOr(const Frame &f);
 
     Lit AddConstraintAnd(const Frame &f);
 
-    pair<Cube, Cube> GetInputAndState(int lvl);
+    std::pair<Cube, Cube> GetInputAndState(int lvl);
 
     Cube GetAndValidateCore(int lvl, const Cube &state);
 
-    Cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions);
+    Cube GetUnsatAssumption(std::shared_ptr<SATSolver> solver, const Cube &assumptions);
 
     void BuildCEXTrace();
 
     CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_k;
-    shared_ptr<OverSequenceSet> m_overSequence;
+    std::shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
     Log &m_log;
     Model &m_model;
-    shared_ptr<State> m_initialState;
-    vector<shared_ptr<SATSolver>> m_transSolvers;
-    shared_ptr<SATSolver> m_liftSolver;
-    shared_ptr<SATSolver> m_badLiftSolver;
-    shared_ptr<SATSolver> m_invSolver;
-    shared_ptr<SATSolver> m_startSolver;
-    shared_ptr<Branching> m_branching;
-    shared_ptr<State> m_lastState;
-    shared_ptr<Restart> m_restart;
+    std::shared_ptr<State> m_initialState;
+    std::vector<std::shared_ptr<SATSolver>> m_transSolvers;
+    std::shared_ptr<SATSolver> m_liftSolver;
+    std::shared_ptr<SATSolver> m_badLiftSolver;
+    std::shared_ptr<SATSolver> m_invSolver;
+    std::shared_ptr<SATSolver> m_startSolver;
+    std::shared_ptr<Branching> m_branching;
+    std::shared_ptr<State> m_lastState;
+    std::shared_ptr<Restart> m_restart;
 
     // liveness
     bool m_initialized{false};

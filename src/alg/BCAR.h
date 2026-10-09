@@ -55,7 +55,7 @@ class BCAR : public BaseAlg {
     bool IsInvariant(int frameLevel);
 
     struct LitOrder {
-        shared_ptr<Branching> branching;
+        std::shared_ptr<Branching> branching;
 
         LitOrder() {}
 
@@ -76,13 +76,13 @@ class BCAR : public BaseAlg {
 
     void OrderAssumption(Cube &uc) {
         if (m_settings.randomSeed > 0) {
-            shuffle(uc.begin(), uc.end(), default_random_engine(m_settings.randomSeed));
+            std::shuffle(uc.begin(), uc.end(), std::default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        stable_sort(uc.begin(), uc.end(), m_litOrder);
+        std::stable_sort(uc.begin(), uc.end(), m_litOrder);
         if (m_settings.internalSignals) {
-            stable_sort(uc.begin(), uc.end(), m_innOrder);
+            std::stable_sort(uc.begin(), uc.end(), m_innOrder);
         }
     }
 
@@ -94,27 +94,27 @@ class BCAR : public BaseAlg {
 
     void Generalize(Cube &uc, int frameLvl, int recLvl = 0);
 
-    bool Down(Cube &uc, int frameLvl, int recLvl, vector<Cube> &failedCtses);
+    bool Down(Cube &uc, int frameLvl, int recLvl, std::vector<Cube> &failedCtses);
 
-    bool ExCTGBlock(shared_ptr<State> cts, int frameLvl, int recLvl, vector<Cube> &failedCtses, int blockLimit);
+    bool ExCTGBlock(std::shared_ptr<State> cts, int frameLvl, int recLvl, std::vector<Cube> &failedCtses, int blockLimit);
 
-    bool DownHasFailed(const Cube &s, const vector<Cube> &failedCtses);
+    bool DownHasFailed(const Cube &s, const std::vector<Cube> &failedCtses);
 
     bool Propagate(const Cube &c, int lvl);
 
     int PropagateUp(const Cube &c, int lvl);
 
-    bool CheckBad(shared_ptr<State> s);
+    bool CheckBad(std::shared_ptr<State> s);
 
     void AddConstraintOr(const Frame &f);
 
     Lit AddConstraintAnd(const Frame &f);
 
-    bool IsReachable(int lvl, const Cube &assumption, const string &label);
+    bool IsReachable(int lvl, const Cube &assumption, const std::string &label);
 
-    Cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const Cube &assumptions);
+    Cube GetUnsatAssumption(std::shared_ptr<SATSolver> solver, const Cube &assumptions);
 
-    shared_ptr<State> EnumerateStartState();
+    std::shared_ptr<State> EnumerateStartState();
 
     void OverSequenceRefine(int lvl);
 
@@ -123,18 +123,18 @@ class BCAR : public BaseAlg {
     CheckResult m_checkResult;
     int m_minUpdateLevel;
     int m_k;
-    shared_ptr<Branching> m_branching;
-    shared_ptr<OverSequenceSet> m_overSequence;
+    std::shared_ptr<Branching> m_branching;
+    std::shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
     Log &m_log;
     Model &m_model;
-    vector<shared_ptr<SATSolver>> m_transSolvers;
-    shared_ptr<SATSolver> m_startSolver;
-    shared_ptr<SATSolver> m_badSolver;
-    shared_ptr<SATSolver> m_invSolver;
-    vector<shared_ptr<vector<int>>> m_rotation;
-    shared_ptr<State> m_lastState;
+    std::vector<std::shared_ptr<SATSolver>> m_transSolvers;
+    std::shared_ptr<SATSolver> m_startSolver;
+    std::shared_ptr<SATSolver> m_badSolver;
+    std::shared_ptr<SATSolver> m_invSolver;
+    std::vector<std::shared_ptr<std::vector<int>>> m_rotation;
+    std::shared_ptr<State> m_lastState;
     std::shared_ptr<Restart> m_restart;
 
     std::vector<std::pair<Cube, Cube>> m_cexTrace;

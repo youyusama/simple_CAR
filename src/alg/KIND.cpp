@@ -143,7 +143,7 @@ bool KIND::CheckBaseCase() {
     AddConstraintsK(m_baseSolver, m_k);
 
     Lit k_bad = GetBadK(m_k);
-    LOG_L(m_log, 3, "Assumption: ", k_bad);
+    LOG_L(m_log, 3, "Assumption: ", ToSigned(k_bad));
     bool sat = m_baseSolver->Solve(Cube{k_bad});
     if (sat) {
         m_cexSolver = m_baseSolver;
@@ -151,7 +151,7 @@ bool KIND::CheckBaseCase() {
     }
 
     m_baseSolver->AddClause({~k_bad});
-    LOG_L(m_log, 3, "Add Clause: ", ~k_bad);
+    LOG_L(m_log, 3, "Add Clause: ", ToSigned(~k_bad));
     return false;
 }
 
@@ -160,7 +160,7 @@ bool KIND::CheckInductiveStep() {
     AddConstraintsK(m_indSolver, m_k);
 
     Lit k_bad = GetBadK(m_k);
-    LOG_L(m_log, 3, "Assumption: ", k_bad);
+    LOG_L(m_log, 3, "Assumption: ", ToSigned(k_bad));
     bool sat = m_indSolver->Solve(Cube{k_bad});
     if (!sat) {
         return true;
@@ -178,7 +178,7 @@ bool KIND::CheckInductiveStep() {
     }
 
     m_indSolver->AddClause({~k_bad});
-    LOG_L(m_log, 3, "Add Clause: ", ~k_bad);
+    LOG_L(m_log, 3, "Add Clause: ", ToSigned(~k_bad));
     return false;
 }
 
@@ -279,14 +279,14 @@ void KIND::AddConstraintsK(std::shared_ptr<SATSolver> solver, int k) {
         Cube constraints = GetConstraintsK(k);
         for (Lit c : constraints) {
             solver->AddClause({c});
-            LOG_L(m_log, 3, "Add Clause: ", c);
+            LOG_L(m_log, 3, "Add Clause: ", ToSigned(c));
         }
         return;
     }
 
     for (Lit c : GetConstraintsKCached(k)) {
         solver->AddClause({c});
-        LOG_L(m_log, 3, "Add Clause: ", c);
+        LOG_L(m_log, 3, "Add Clause: ", ToSigned(c));
     }
 }
 

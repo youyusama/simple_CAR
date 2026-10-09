@@ -1,5 +1,6 @@
 #include "solver.h"
-using namespace minicore;
+
+namespace minicore {
 
 Solver::Solver() : // Parameters (user settable):
                    //
@@ -1164,3 +1165,5 @@ void Solver::printProgress() const {
               << std::setw(6) << std::fixed << std::setprecision(3) << progress << " % |"
               << std::endl;
 }
+
+} // namespace minicore

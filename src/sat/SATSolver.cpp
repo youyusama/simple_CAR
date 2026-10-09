@@ -7,16 +7,16 @@ SATSolver::SATSolver(Model &model, MCSATSolver slvKind)
 
     switch (m_slvKind) {
     case MCSATSolver::minisat:
-        m_slv = make_shared<MinisatSolver>(m_model);
+        m_slv = std::make_shared<MinisatSolver>(m_model);
         break;
     case MCSATSolver::cadical:
-        m_slv = make_shared<CadicalSolver>(m_model);
+        m_slv = std::make_shared<CadicalSolver>(m_model);
         break;
     case MCSATSolver::kissat:
-        m_slv = make_shared<KissatSolver>(m_model);
+        m_slv = std::make_shared<KissatSolver>(m_model);
         break;
     case MCSATSolver::minicore:
-        m_slv = make_shared<MinicoreSolver>(m_model);
+        m_slv = std::make_shared<MinicoreSolver>(m_model);
         break;
     default:
         assert(false);
@@ -36,9 +36,9 @@ bool SATSolver::Solve(const Cube &assumption) {
     return m_slv->Solve(assumption);
 }
 
-shared_ptr<MinicoreSolver> SATSolver::GetMinicoreSolver() const {
+std::shared_ptr<MinicoreSolver> SATSolver::GetMinicoreSolver() const {
     if (m_slvKind != MCSATSolver::minicore) return nullptr;
-    return static_pointer_cast<MinicoreSolver>(m_slv);
+    return std::static_pointer_cast<MinicoreSolver>(m_slv);
 }
 
 void SATSolver::SetSolveInDomain() {
@@ -50,14 +50,14 @@ void SATSolver::SetSolveInDomain() {
     m_fixedDomainSize = 1;
 }
 
-void SATSolver::AddPermanentVars(shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi) {
+void SATSolver::AddPermanentVars(std::shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi) {
     if (!solver) return;
     std::vector<char> &domain = solver->domainSet();
     std::vector<minicore::Var> &list = solver->domainList();
     auto &dep_map = m_model.GetDependencyVec();
     ResetTemporaryVars(solver);
 
-    vector<Var> work_stack;
+    std::vector<Var> work_stack;
     work_stack.emplace_back(m_trueId);
     for (Lit v : vars) {
         work_stack.emplace_back(VarOf(v));
@@ -85,14 +85,14 @@ void SATSolver::AddPermanentVars(shared_ptr<MinicoreSolver> solver, const Cube &
     }
 }
 
-void SATSolver::AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi) {
+void SATSolver::AddTemporaryVars(std::shared_ptr<MinicoreSolver> solver, const Cube &vars, bool useCoi) {
     if (!solver) return;
     std::vector<char> &domain = solver->domainSet();
     std::vector<minicore::Var> &list = solver->domainList();
     auto &dep_map = m_model.GetDependencyVec();
     ResetTemporaryVars(solver);
 
-    vector<Var> work_stack;
+    std::vector<Var> work_stack;
     work_stack.emplace_back(m_trueId);
     for (Lit v : vars) {
         work_stack.emplace_back(VarOf(v));
@@ -117,7 +117,7 @@ void SATSolver::AddTemporaryVars(shared_ptr<MinicoreSolver> solver, const Cube &
     }
 }
 
-void SATSolver::ResetTemporaryVars(shared_ptr<MinicoreSolver> solver) {
+void SATSolver::ResetTemporaryVars(std::shared_ptr<MinicoreSolver> solver) {
     if (!solver) return;
     std::vector<char> &domain = solver->domainSet();
     std::vector<minicore::Var> &list = solver->domainList();
@@ -172,12 +172,12 @@ void SATSolver::SetTempDomainCOI(const Cube &c) {
 // ================================================================================
 void SATSolver::AddTrans() {
     if (m_solveInDomain) {
-        vector<Clause> &clauses = m_model.GetClauses();
+        std::vector<Clause> &clauses = m_model.GetClauses();
         for (int i = 0; i < clauses.size(); ++i) {
             AddClause(clauses[i]);
         }
     } else {
-        vector<Clause> &clauses = m_model.GetSimpClauses();
+        std::vector<Clause> &clauses = m_model.GetSimpClauses();
         for (int i = 0; i < clauses.size(); ++i) {
             AddClause(clauses[i]);
         }
@@ -204,7 +204,7 @@ void SATSolver::AddConstraints() {
 // @output:
 // ================================================================================
 void SATSolver::AddTransK(int k) {
-    vector<Clause> &clauses = m_model.GetSimpClauses();
+    std::vector<Clause> &clauses = m_model.GetSimpClauses();
     for (int i = 0; i < clauses.size(); ++i) {
         Clause &ori = clauses[i];
         Clause cls_k;
@@ -250,7 +250,7 @@ Cube SATSolver::GetKUnrolled(const Cube &c, int k) {
 Lit SATSolver::AddInvAsLabelK(const FrameList &inv, int k) {
     Var sl = GetNewVar();
 
-    vector<Var> o_labels;
+    std::vector<Var> o_labels;
     o_labels.reserve(inv.size());
     for (const auto &f : inv) {
         Var ol = GetNewVar();

@@ -64,7 +64,7 @@ std::vector<std::pair<Cube, Cube>> BMC::GetCexTrace() {
             const auto value = m_solver->GetModel(VarOf(lp));
             latches.emplace_back(MkLit(l, (value != T_TRUE) != Sign(lp)));
         }
-        trace.emplace_back(pair<Cube, Cube>(inputs, latches));
+        trace.emplace_back(std::pair<Cube, Cube>(inputs, latches));
     }
 
     return trace;
@@ -76,7 +76,7 @@ void BMC::CNFGen() {
     const int target_k = m_settings.bmcCnfK;
     LOG_L(m_log, 1, "Generate BMC CNF at bound: ", target_k);
 
-    vector<Clause> clauses;
+    std::vector<Clause> clauses;
 
     for (Lit lit : m_model.GetInitialState()) {
         clauses.push_back(Clause{lit});
@@ -94,7 +94,7 @@ void BMC::CNFGen() {
 
     clauses.push_back(Clause{GetBadK(target_k)});
 
-    const string cnf_path = GetCNFPath(target_k);
+    const std::string cnf_path = GetCNFPath(target_k);
     fs::path out_dir = fs::path(cnf_path).parent_path();
     if (!out_dir.empty()) {
         fs::create_directories(out_dir);
@@ -112,7 +112,7 @@ bool BMC::Check() {
     while (true) {
         LOG_L(m_log, 1, "BMC Bound: ", m_k);
 
-        vector<Clause> clauses;
+        std::vector<Clause> clauses;
         GetClausesK(m_k, clauses);
 
         // & T^k
@@ -143,14 +143,14 @@ bool BMC::Check() {
             [[maybe_unused]] auto clause_scope = m_log.Section("Add_Cons_Cls");
             for (auto c : GetConstraintsK(m_k)) {
                 m_solver->AddClause({c});
-                LOG_L(m_log, 3, "Add Clause: ", c);
+                LOG_L(m_log, 3, "Add Clause: ", ToSigned(c));
             }
         }
         // & !bad^k
         {
             [[maybe_unused]] auto clause_scope = m_log.Section("Add_Prop_Cls");
             m_solver->AddClause({~k_bad});
-            LOG_L(m_log, 3, "Add Clause: ", ~k_bad);
+            LOG_L(m_log, 3, "Add Clause: ", ToSigned(~k_bad));
         }
         m_k++;
         if (m_maxK != -1 && m_k > m_maxK) return false;
@@ -180,7 +180,7 @@ bool BMC::CheckNonIncremental() {
         for (int s = 0; s < m_step; s++) {
             LOG_L(m_log, 1, "BMC Bound: ", m_k);
 
-            vector<Clause> clauses;
+            std::vector<Clause> clauses;
             GetClausesK(m_k, clauses);
 
             // & T^k
@@ -197,14 +197,14 @@ bool BMC::CheckNonIncremental() {
 
             bad_clause.push_back(k_bad);
             // m_Solver->AddClause({k_bad});
-            LOG_L(m_log, 3, "Add Clause: ", k_bad);
+            LOG_L(m_log, 3, "Add Clause: ", ToSigned(k_bad));
 
             {
                 [[maybe_unused]] auto clause_scope = m_log.Section("Add_Cons_Cls");
                 for (auto c : GetConstraintsK(m_k)) {
                     m_solver->AddClause({c});
                     m_clauses.push_back({c}); // store for further use
-                    LOG_L(m_log, 3, "Add Clause: ", c);
+                    LOG_L(m_log, 3, "Add Clause: ", ToSigned(c));
                 }
             }
 
@@ -233,15 +233,15 @@ bool BMC::CheckNonIncremental() {
 }
 
 
-string BMC::GetCNFPath(int k) const {
+std::string BMC::GetCNFPath(int k) const {
     const fs::path aig_path(m_settings.aigFilePath);
-    const string file_name = aig_path.stem().string() + ".bmc_k" + std::to_string(k) + ".cnf";
+    const std::string file_name = aig_path.stem().string() + ".bmc_k" + std::to_string(k) + ".cnf";
     return (fs::path(m_settings.bmcCnfDir) / file_name).string();
 }
 
 
-void BMC::WriteDimacs(const vector<Clause> &clauses, const string &path) const {
-    vector<SignedVec> dimacs_clauses;
+void BMC::WriteDimacs(const std::vector<Clause> &clauses, const std::string &path) const {
+    std::vector<SignedVec> dimacs_clauses;
     dimacs_clauses.reserve(clauses.size());
 
     Var max_var = 0;
@@ -289,7 +289,7 @@ void BMC::WriteDimacs(const vector<Clause> &clauses, const string &path) const {
 
 void BMC::Init() {
     [[maybe_unused]] auto init_scope = m_log.Section("BMC_Init");
-    m_solver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_solver = std::make_shared<SATSolver>(m_model, m_settings.solver);
 
     // send initial state
     for (auto l : m_model.GetInitialState()) {
@@ -298,7 +298,7 @@ void BMC::Init() {
 }
 
 
-void BMC::GetClausesK(int k, vector<Clause> &clauses) {
+void BMC::GetClausesK(int k, std::vector<Clause> &clauses) {
     auto &original_clauses = m_model.GetSimpClauses();
     for (int i = 0; i < original_clauses.size(); ++i) {
         Clause &ori = original_clauses[i];

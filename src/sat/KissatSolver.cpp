@@ -57,7 +57,7 @@ bool KissatSolver::Solve(const Cube &assumption) {
     return Solve();
 }
 
-pair<Cube, Cube> KissatSolver::GetAssignment(bool prime) {
+std::pair<Cube, Cube> KissatSolver::GetAssignment(bool prime) {
     (void)prime;
     Unsupported("GetAssignment");
 }

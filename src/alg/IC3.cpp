@@ -1,5 +1,6 @@
 #include "IC3.h"
 #include "WitnessBuilder.h"
+#include <iterator>
 #include <algorithm>
 #include <iostream>
 #include <set>
@@ -64,7 +65,7 @@ void IC3::BuildCEXTrace() {
         }
     }
 
-    auto slv = make_shared<SATSolver>(m_model, MCSATSolver::minicore);
+    auto slv = std::make_shared<SATSolver>(m_model, MCSATSolver::minicore);
     slv->AddTrans();
     slv->AddConstraints();
     for (size_t i = 0; i + 1 < m_cexTrace.size(); ++i) {
@@ -99,7 +100,7 @@ FrameList IC3::GetInv() {
 
 void IC3::KLiveIncr() {
     int k_step = m_model.KLivenessIncrement();
-    vector<Clause> k_clauses = m_model.GetKLiveClauses(k_step);
+    std::vector<Clause> k_clauses = m_model.GetKLiveClauses(k_step);
     Lit k_signal = m_model.GetKLiveSignal(k_step);
 
     // Extend persistent solvers for k-liveness.
@@ -130,7 +131,7 @@ bool IC3::ImmediateSatisfiable() {
     // Exclude zero-step successor.
     if (m_searchFromInitSucc) return false;
 
-    auto slv = make_unique<SATSolver>(m_model, MCSATSolver::cadical);
+    auto slv = std::make_unique<SATSolver>(m_model, MCSATSolver::cadical);
     slv->AddTrans();
     slv->AddConstraints();
     slv->AddShoalConstraints(m_shoals, m_dead);
@@ -143,7 +144,7 @@ bool IC3::ImmediateSatisfiable() {
     bool sat = slv->Solve(assumptions);
     if (sat) {
         auto p = slv->GetAssignment(false);
-        m_cexStart = make_shared<State>(nullptr, p.first, p.second, 0);
+        m_cexStart = std::make_shared<State>(nullptr, p.first, p.second, 0);
         return true;
     } else if (m_settings.searchFromBadPred) {
         slv->AddTransK(1);
@@ -159,9 +160,9 @@ bool IC3::ImmediateSatisfiable() {
                 else if (slv->GetModel(VarOf(i_p)) == T_FALSE)
                     inputs_bad.push_back(~MkLit(i));
             }
-            shared_ptr<State> bad_state(new State(nullptr, inputs_bad, Cube(), 0));
+            std::shared_ptr<State> bad_state(new State(nullptr, inputs_bad, Cube(), 0));
             auto p = slv->GetAssignment(false);
-            m_cexStart = make_shared<State>(bad_state, p.first, p.second, 0);
+            m_cexStart = std::make_shared<State>(bad_state, p.first, p.second, 0);
             return true;
         }
     }
@@ -171,7 +172,7 @@ bool IC3::ImmediateSatisfiable() {
 
 bool IC3::IsInitStateImplyBad() {
     if (m_customInit.empty()) return false;
-    auto slv = make_shared<SATSolver>(m_model, m_settings.solver);
+    auto slv = std::make_shared<SATSolver>(m_model, m_settings.solver);
     slv->AddTrans();
     slv->AddConstraints();
     Cube assumptions = m_customInit;
@@ -256,19 +257,19 @@ void IC3::Init() {
         init_latches = m_model.GetInitialState();
     else
         init_latches = m_customInit;
-    m_initialState = make_shared<State>(nullptr, Cube{}, init_latches, 0);
+    m_initialState = std::make_shared<State>(nullptr, Cube{}, init_latches, 0);
     m_initialStateSet.clear();
     m_initialStateSet.insert(init_latches.begin(), init_latches.end());
 
     m_invariantLevel = 0;
-    m_branching = make_shared<Branching>(m_settings.branching);
+    m_branching = std::make_shared<Branching>(m_settings.branching);
     m_litOrder.branching = m_branching;
 
     // create frame 0
     AddNewFrame();
 
     // lift
-    m_liftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_liftSolver = std::make_shared<SATSolver>(m_model, m_settings.solver);
     if (m_settings.satSolveInDomain) m_liftSolver->SetSolveInDomain();
     m_liftSolver->AddTrans();
     m_liftSolver->SetDomainCOI(m_model.GetConstraints());
@@ -292,7 +293,7 @@ void IC3::InitializeStartSolver() {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_InitStart");
     if (m_settings.searchFromBadPred) {
         // s & T & c & P & T' & c' & bad'
-        m_startSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+        m_startSolver = std::make_shared<SATSolver>(m_model, MCSATSolver::cadical);
         m_startSolver->AddTrans();
         m_startSolver->AddConstraints();
         m_startSolver->AddTransK(1);
@@ -301,7 +302,7 @@ void IC3::InitializeStartSolver() {
         m_startSolver->AddConstraintsK(1);
     } else {
         // s & c & bad
-        m_startSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+        m_startSolver = std::make_shared<SATSolver>(m_model, m_settings.solver);
         if (m_settings.satSolveInDomain &&
             m_shoals.empty() && m_dead.empty() && m_walls.empty()) {
             m_startSolver->SetSolveInDomain();
@@ -325,7 +326,7 @@ void IC3::InitializeStartSolver() {
 
 void IC3::InitializeInitSolver() {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_InitImage");
-    m_initSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_initSolver = std::make_shared<SATSolver>(m_model, m_settings.solver);
     if (m_settings.satSolveInDomain &&
         m_shoals.empty() && m_dead.empty() && m_walls.empty()) {
         m_initSolver->SetSolveInDomain();
@@ -348,7 +349,7 @@ void IC3::InitializeInitSolver() {
 void IC3::InitializeBadLiftSolver() {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_InitBadLift");
     if (m_settings.searchFromBadPred) {
-        m_badLiftSolver = make_shared<SATSolver>(m_model, MCSATSolver::cadical);
+        m_badLiftSolver = std::make_shared<SATSolver>(m_model, MCSATSolver::cadical);
         m_badLiftSolver->AddTrans();
         m_badLiftSolver->AddTransK(1);
         m_shoalsLabels.clear();
@@ -356,7 +357,7 @@ void IC3::InitializeBadLiftSolver() {
         return;
     }
 
-    m_badLiftSolver = make_shared<SATSolver>(m_model, m_settings.solver);
+    m_badLiftSolver = std::make_shared<SATSolver>(m_model, m_settings.solver);
     if (m_settings.satSolveInDomain &&
         m_shoals.empty() && m_dead.empty() && m_walls.empty()) {
         m_badLiftSolver->SetSolveInDomain();
@@ -385,7 +386,7 @@ void IC3::AddNewFrame() {
 
     m_lfm.EnsureLevel(level);
 
-    auto solver = make_shared<SATSolver>(m_model, m_settings.solver);
+    auto solver = std::make_shared<SATSolver>(m_model, m_settings.solver);
     if (m_settings.satSolveInDomain) solver->SetSolveInDomain();
     solver->AddTrans();
     solver->AddConstraints();
@@ -501,8 +502,8 @@ IC3::ALLProveStatus IC3::ActiveProve(int targetLemmaId) {
             if (attempts_left <= 0) return ALLProveStatus::Bailout;
 
             auto ctp_assignment = m_transSolvers[goal_level]->GetAssignment(false);
-            auto ctp_state = make_shared<State>(nullptr, ctp_assignment.first, ctp_assignment.second, 0);
-            auto succ_state = make_shared<State>(nullptr, Cube{}, goal_cube, 0);
+            auto ctp_state = std::make_shared<State>(nullptr, ctp_assignment.first, ctp_assignment.second, 0);
+            auto succ_state = std::make_shared<State>(nullptr, Cube{}, goal_cube, 0);
             GeneralizePredecessor(ctp_state, succ_state);
             m_lfm.PushCTPPred(targetLemmaId, ctp_state->latches, goal_level);
         }
@@ -539,8 +540,8 @@ IC3::ALLProveStatus IC3::ActiveProve(int targetLemmaId) {
 
         m_lfm.PushCTPPred(targetLemmaId, ctp_cube, ctp_level);
         auto new_ctp_assignment = ctp_solver->GetAssignment(false);
-        auto new_ctp_state = make_shared<State>(nullptr, new_ctp_assignment.first, new_ctp_assignment.second, 0);
-        auto pred_succ_state = make_shared<State>(nullptr, Cube{}, ctp_cube, 0);
+        auto new_ctp_state = std::make_shared<State>(nullptr, new_ctp_assignment.first, new_ctp_assignment.second, 0);
+        auto pred_succ_state = std::make_shared<State>(nullptr, Cube{}, ctp_cube, 0);
         GeneralizePredecessor(new_ctp_state, pred_succ_state);
         m_lfm.PushCTPPred(targetLemmaId, new_ctp_state->latches, ctp_level - 1);
     }
@@ -557,7 +558,7 @@ void IC3::PrintALLStats() const {
 }
 
 
-Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime) {
+Cube IC3::GetUnsatCore(const std::shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_UCore");
     Cube core;
     if (!prime) {
@@ -579,7 +580,7 @@ Cube IC3::GetUnsatCore(const shared_ptr<SATSolver> &solver, const Cube &fallback
 }
 
 
-bool IC3::GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime) {
+bool IC3::GetShrunkUnsatCore(const std::shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_ShrinkCore");
     bool res = solver->ShrinkConflict(m_settings.shrink);
     if (!res) return false;
@@ -603,7 +604,7 @@ bool IC3::GetShrunkUnsatCore(const shared_ptr<SATSolver> &solver, Cube &core, co
 }
 
 
-shared_ptr<State> IC3::EnumerateStartState() {
+std::shared_ptr<State> IC3::EnumerateStartState() {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_StartEnum");
     LOG_L(m_log, 2, "Searching for a start state at level ", m_k);
     bool sat = false;
@@ -613,7 +614,7 @@ shared_ptr<State> IC3::EnumerateStartState() {
     }
     if (sat) {
         if (m_loopRefuting) {
-            shared_ptr<State> bad_state(new State(nullptr, {}, m_customInit, 0));
+            std::shared_ptr<State> bad_state(new State(nullptr, {}, m_customInit, 0));
             return bad_state;
         }
 
@@ -647,15 +648,15 @@ shared_ptr<State> IC3::EnumerateStartState() {
 
             while (true) {
                 Cube assumption;
-                copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
+                std::copy(partial_latch.begin(), partial_latch.end(), std::back_inserter(assumption));
                 OrderAssumption(assumption);
 
-                if (gen_tried == 1) reverse(assumption.begin(), assumption.end());
-                if (gen_tried > 1) random_shuffle(assumption.begin(), assumption.end());
+                if (gen_tried == 1) std::reverse(assumption.begin(), assumption.end());
+                if (gen_tried > 1) std::random_shuffle(assumption.begin(), assumption.end());
                 gen_tried++;
 
-                copy(p.first.begin(), p.first.end(), back_inserter(assumption));
-                copy(inputs_prime.begin(), inputs_prime.end(), back_inserter(assumption));
+                std::copy(p.first.begin(), p.first.end(), std::back_inserter(assumption));
+                std::copy(inputs_prime.begin(), inputs_prime.end(), std::back_inserter(assumption));
 
                 bool res;
                 {
@@ -681,8 +682,8 @@ shared_ptr<State> IC3::EnumerateStartState() {
                 else if (m_startSolver->GetModel(VarOf(i_p)) == T_FALSE)
                     inputs_bad.push_back(~MkLit(i));
             }
-            shared_ptr<State> bad_state(new State(nullptr, inputs_bad, Cube(), 0));
-            shared_ptr<State> bad_pred_state(new State(bad_state, p.first, p.second, 0));
+            std::shared_ptr<State> bad_state(new State(nullptr, inputs_bad, Cube(), 0));
+            std::shared_ptr<State> bad_pred_state(new State(bad_state, p.first, p.second, 0));
             return bad_pred_state;
         } else {
             // start state is a bad state
@@ -705,14 +706,14 @@ shared_ptr<State> IC3::EnumerateStartState() {
 
             while (true) {
                 Cube assumption;
-                copy(partial_latch.begin(), partial_latch.end(), back_inserter(assumption));
+                std::copy(partial_latch.begin(), partial_latch.end(), std::back_inserter(assumption));
                 OrderAssumption(assumption);
 
-                if (gen_tried == 1) reverse(assumption.begin(), assumption.end());
-                if (gen_tried > 1) random_shuffle(assumption.begin(), assumption.end());
+                if (gen_tried == 1) std::reverse(assumption.begin(), assumption.end());
+                if (gen_tried > 1) std::random_shuffle(assumption.begin(), assumption.end());
                 gen_tried++;
 
-                copy(p.first.begin(), p.first.end(), back_inserter(assumption));
+                std::copy(p.first.begin(), p.first.end(), std::back_inserter(assumption));
 
                 bool res;
                 {
@@ -730,7 +731,7 @@ shared_ptr<State> IC3::EnumerateStartState() {
             m_badLiftSolver->ReleaseTempClause();
             p.second = partial_latch;
 
-            shared_ptr<State> bad_state(new State(nullptr, p.first, p.second, 0));
+            std::shared_ptr<State> bad_state(new State(nullptr, p.first, p.second, 0));
             return bad_state;
         }
     } else {
@@ -747,7 +748,7 @@ bool IC3::Strengthen() {
             return false;
         }
 
-        shared_ptr<State> start_state = EnumerateStartState();
+        std::shared_ptr<State> start_state = EnumerateStartState();
         if (start_state != nullptr) {
             AddObligation(start_state, m_k - 1, 1);
         } else {
@@ -776,9 +777,9 @@ int IC3::GetSubsumeLevel(const Cube &cb, int startLvl) {
     return -1;
 }
 
-ObligationRef IC3::AddObligation(shared_ptr<State> state, int level, int depth, double act) {
+ObligationRef IC3::AddObligation(std::shared_ptr<State> state, int level, int depth, double act) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_AddPO");
-    auto ob = make_shared<Obligation>(state, level, depth, act);
+    auto ob = std::make_shared<Obligation>(state, level, depth, act);
     m_obligations.insert(ob);
     return ob;
 }
@@ -809,7 +810,7 @@ void IC3::PushObligation(const ObligationRef &ob, int newLevel) {
 
 bool IC3::HandleObligations() {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_HandlePO");
-    auto handle_f0_candidate = [&](const shared_ptr<State> &candidate,
+    auto handle_f0_candidate = [&](const std::shared_ptr<State> &candidate,
                                    int initial_depth) {
         if (!IsInitSuccessor(candidate->latches)) {
             Cube image_core = GetUnsatCore(m_initSolver,
@@ -822,7 +823,7 @@ bool IC3::HandleObligations() {
         }
 
         auto init_assignment = m_initSolver->GetAssignment(false);
-        m_cexStart = make_shared<State>(candidate,
+        m_cexStart = std::make_shared<State>(candidate,
                                         init_assignment.first,
                                         init_assignment.second,
                                         initial_depth);
@@ -870,7 +871,7 @@ bool IC3::HandleObligations() {
         } else {
             auto p = trans_slv->GetAssignment(false);
             auto predecessor_state =
-                make_shared<State>(ob->state, p.first, p.second, ob->depth + 1);
+                std::make_shared<State>(ob->state, p.first, p.second, ob->depth + 1);
 
             if (ob->level == 0) {
                 if (m_searchFromInitSucc) {
@@ -899,7 +900,7 @@ bool IC3::HandleObligations() {
     return true;
 }
 
-bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
+bool IC3::IsInductive(const Cube &cb, const std::shared_ptr<SATSolver> &slv) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_IsInd");
     Clause cls;
     cls.reserve(cb.size());
@@ -921,7 +922,7 @@ bool IC3::IsInductive(const Cube &cb, const shared_ptr<SATSolver> &slv) {
 }
 
 
-static bool LitTrueInModel(const shared_ptr<SATSolver> &solver, Lit lit) {
+static bool LitTrueInModel(const std::shared_ptr<SATSolver> &solver, Lit lit) {
     Tbool val = solver->GetModel(VarOf(lit));
     if (val == T_UNDEF) return false;
 
@@ -929,7 +930,7 @@ static bool LitTrueInModel(const shared_ptr<SATSolver> &solver, Lit lit) {
 }
 
 
-bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits, const Cube &fullCube, vector<pair<LitSet, LitSet>> &cexCache) {
+bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits, const Cube &fullCube, std::vector<std::pair<LitSet, LitSet>> &cexCache) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_Down");
     LOG_L(m_log, 3, "Down: ", CubeToStr(downCube), " at frame level ", frameLvl, " and recursion level ", recLvl);
     int ctgs = 0;
@@ -1011,9 +1012,9 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits
         }
 
         // ctg down
-        shared_ptr<State> down_state = make_shared<State>(nullptr, Cube(), downCube, 0);
+        std::shared_ptr<State> down_state = std::make_shared<State>(nullptr, Cube(), downCube, 0);
         auto p = trans_slv->GetAssignment(false);
-        auto ctg_state = make_shared<State>(down_state, p.first, p.second, 0);
+        auto ctg_state = std::make_shared<State>(down_state, p.first, p.second, 0);
         GeneralizePredecessor(ctg_state, down_state);
 
         const Cube &ctg_cube = ctg_state->latches;
@@ -1065,8 +1066,8 @@ bool IC3::ExCTGBlock(const Cube &cb, int frameLvl, int recLvl, int blockLimit) {
         if (frameLvl <= 0 || blockLimit <= 1) return false;
 
         auto p = m_transSolvers[frameLvl]->GetAssignment(false);
-        auto succ = make_shared<State>(nullptr, Cube(), cb, 0);
-        auto pred = make_shared<State>(succ, p.first, p.second, 0);
+        auto succ = std::make_shared<State>(nullptr, Cube(), cb, 0);
+        auto pred = std::make_shared<State>(succ, p.first, p.second, 0);
         GeneralizePredecessor(pred, succ);
 
         if (!ExCTGBlock(pred->latches, frameLvl - 1, recLvl, blockLimit - 1)) {
@@ -1093,7 +1094,7 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
 
     Cube blocker;
     LitSet tried_lits;
-    vector<pair<LitSet, LitSet>> cex_cache;
+    std::vector<std::pair<LitSet, LitSet>> cex_cache;
 
     m_lfm.GetParentCube(cb, frameLvl, blocker);
     if (m_settings.referSkipping) {
@@ -1135,14 +1136,14 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
         }
     }
 
-    sort(cb.begin(), cb.end());
+    std::sort(cb.begin(), cb.end());
     if (cb.size() <= blocker.size() || frameLvl == 0) {
         m_branching->Update(cb);
     }
 }
 
 
-void IC3::GeneralizePredecessor(const shared_ptr<State> &predecessorState, const shared_ptr<State> &successorState) {
+void IC3::GeneralizePredecessor(const std::shared_ptr<State> &predecessorState, const std::shared_ptr<State> &successorState) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_GenPred");
     LOG_L(m_log, 3, "Generalizing predecessor. Initial latch size: ", predecessorState->latches.size(), ", input size: ", predecessorState->inputs.size(), ", Successor state latch size: ", successorState->latches.size());
 
@@ -1225,7 +1226,7 @@ bool IC3::IsInitSuccessor(const Cube &cb) {
 }
 
 
-Cube IC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fallbackCube) {
+Cube IC3::GetAndValidateCore(const std::shared_ptr<SATSolver> &solver, const Cube &fallbackCube) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_ValidCore");
     // fallbackCube is sorted
     Cube core = GetUnsatCore(solver, fallbackCube, true);
@@ -1271,9 +1272,9 @@ Cube IC3::GetAndValidateCore(const shared_ptr<SATSolver> &solver, const Cube &fa
 }
 
 
-string IC3::FramesInfo() const {
-    stringstream ss;
-    ss << "Frames " << m_transSolvers.size() << endl;
+std::string IC3::FramesInfo() const {
+    std::stringstream ss;
+    ss << "Frames " << m_transSolvers.size() << std::endl;
     for (size_t i = 0; i < m_transSolvers.size(); ++i) {
         ss << m_lfm.BorderSize(static_cast<int>(i)) << " ";
     }
@@ -1281,24 +1282,24 @@ string IC3::FramesInfo() const {
 }
 
 
-string IC3::FramesDetail() const {
-    stringstream ss;
-    ss << "Frames " << m_transSolvers.size() << endl;
+std::string IC3::FramesDetail() const {
+    std::stringstream ss;
+    ss << "Frames " << m_transSolvers.size() << std::endl;
     for (size_t i = 0; i < m_transSolvers.size(); ++i) {
-        ss << "Frame " << i << ": " << endl;
+        ss << "Frame " << i << ": " << std::endl;
         std::vector<int> lemmas_to_iterate = m_lfm.BorderIds(i);
         for (int lemma_id : lemmas_to_iterate) {
             if (!m_lfm.Alive(lemma_id) || m_lfm.Reachable(lemma_id)) continue;
 
             Cube cb = m_lfm.CubeOf(lemma_id);
-            ss << CubeToStr(cb) << endl;
+            ss << CubeToStr(cb) << std::endl;
         }
     }
     return ss.str();
 }
 
 
-bool IC3::IsReachable(const Cube &cb, const shared_ptr<SATSolver> &slv) {
+bool IC3::IsReachable(const Cube &cb, const std::shared_ptr<SATSolver> &slv) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_IsReach");
     Cube assumption(cb);
     GetPrimed(assumption);
