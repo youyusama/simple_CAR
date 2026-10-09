@@ -1,5 +1,4 @@
-#ifndef PACKAGE_RESIZE_H
-#define PACKAGE_RESIZE_H
+#pragma once
 
 #include "Btor2IR.h"
 #include "WLTrace.h"
@@ -40,5 +39,3 @@ class PackageResize {
 };
 
 } // namespace car
-
-#endif

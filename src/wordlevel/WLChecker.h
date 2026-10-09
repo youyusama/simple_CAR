@@ -1,5 +1,4 @@
-#ifndef WL_CHECKER_H
-#define WL_CHECKER_H
+#pragma once
 
 #include "BaseAlg.h"
 #include "WLTrace.h"
@@ -48,5 +47,3 @@ class WLChecker : public BaseAlg {
 };
 
 } // namespace car
-
-#endif

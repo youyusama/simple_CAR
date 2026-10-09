@@ -1,5 +1,4 @@
-#ifndef CADICAL_KITTEN_SYMBOL_PREFIX_H
-#define CADICAL_KITTEN_SYMBOL_PREFIX_H
+#pragma once
 
 // CaDiCaL and Kissat both embed Kitten with externally visible C symbols.
 // Prefix CaDiCaL's private copy so both static libraries can be linked safely.
@@ -51,5 +50,3 @@
 #define kitten_unit cadical_kitten_unit
 #define kitten_value cadical_kitten_value
 #define new_learned_klause cadical_kitten_new_learned_klause
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef WITNESS_BUILDER_H
-#define WITNESS_BUILDER_H
+#pragma once
 
 #include "CarTypes.h"
 #include "Settings.h"
@@ -82,5 +81,3 @@ class WitnessBuilder {
 };
 
 } // namespace car
-
-#endif

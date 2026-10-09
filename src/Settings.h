@@ -1,5 +1,4 @@
-#ifndef SETTINGS_H
-#define SETTINGS_H
+#pragma once
 
 #include "CLI11.hpp"
 #include <string>
@@ -90,5 +89,3 @@ struct Settings {
 bool ParseSettings(int argc, char **argv, Settings &settings);
 
 } // namespace car
-
-#endif

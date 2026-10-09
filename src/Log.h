@@ -1,5 +1,4 @@
-#ifndef LOG_H
-#define LOG_H
+#pragma once
 
 #include "CarTypes.h"
 #include "Settings.h"
@@ -139,5 +138,3 @@ extern Log *global_log;
             __logp->L(__VA_ARGS__);                      \
         }                                                \
     } while (0)
-
-#endif

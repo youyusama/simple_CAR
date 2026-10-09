@@ -1,5 +1,4 @@
-#ifndef ISOLVER_H
-#define ISOLVER_H
+#pragma once
 
 #include "CarTypes.h"
 #include "TernarySim.h"
@@ -30,6 +29,3 @@ class ISolver {
 };
 
 } // namespace car
-
-
-#endif

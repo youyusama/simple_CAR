@@ -1,5 +1,4 @@
-#ifndef SAT_SIM_H
-#define SAT_SIM_H
+#pragma once
 
 #include "CarTypes.h"
 #include "CircuitGraph.h"
@@ -58,5 +57,3 @@ class SATSimulator {
 };
 
 } // namespace car
-
-#endif // SAT_SIM_H

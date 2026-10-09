@@ -1,5 +1,4 @@
-#ifndef KFAIR_H
-#define KFAIR_H
+#pragma once
 
 #include "IncrAlg.h"
 #include "Log.h"
@@ -31,5 +30,3 @@ class KFAIR : public BaseAlg {
 };
 
 } // namespace car
-
-#endif

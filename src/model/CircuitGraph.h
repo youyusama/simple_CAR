@@ -1,5 +1,4 @@
-#ifndef CIRCUITGRAPH_H
-#define CIRCUITGRAPH_H
+#pragma once
 
 extern "C" {
 #include "aiger.h"
@@ -114,5 +113,3 @@ class CircuitGraph {
 };
 
 } // namespace car
-
-#endif // CIRCUITGRAPH_H

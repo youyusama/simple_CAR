@@ -1,5 +1,4 @@
-#ifndef INCRCHECKERHELPERS_H
-#define INCRCHECKERHELPERS_H
+#pragma once
 
 #include "Log.h"
 #include "Model.h"
@@ -485,5 +484,3 @@ class Restart {
 };
 
 } // namespace car
-
-#endif

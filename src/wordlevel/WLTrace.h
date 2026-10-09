@@ -1,5 +1,4 @@
-#ifndef WL_TRACE_H
-#define WL_TRACE_H
+#pragma once
 
 #include "BitVector.h"
 
@@ -40,5 +39,3 @@ struct WLTrace {
 };
 
 } // namespace car
-
-#endif

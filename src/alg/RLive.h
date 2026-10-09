@@ -1,5 +1,4 @@
-#ifndef RLIVE_H
-#define RLIVE_H
+#pragma once
 
 #include "IncrAlg.h"
 #include "Log.h"
@@ -43,5 +42,3 @@ class RLive : public BaseAlg {
 };
 
 } // namespace car
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef TERNARY_SIM_H
-#define TERNARY_SIM_H
+#pragma once
 
 #include "CircuitGraph.h"
 #include "Log.h"
@@ -131,5 +130,3 @@ class TernarySimulator {
 };
 
 } // namespace car
-
-#endif // TERNARY_SIM_H

@@ -1,5 +1,4 @@
-#ifndef SATSOLVER_H
-#define SATSOLVER_H
+#pragma once
 
 #include "CadicalSolver.h"
 #include "KissatSolver.h"
@@ -124,5 +123,3 @@ class SATSolver {
 };
 
 } // namespace car
-
-#endif

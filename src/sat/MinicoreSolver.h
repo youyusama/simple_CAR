@@ -1,5 +1,4 @@
-#ifndef MINICORESOLVER_H
-#define MINICORESOLVER_H
+#pragma once
 
 #include "ISolver.h"
 #include "Model.h"
@@ -38,5 +37,3 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
 };
 
 } // namespace car
-
-#endif

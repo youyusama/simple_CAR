@@ -1,5 +1,4 @@
-#ifndef BCAR_H
-#define BCAR_H
+#pragma once
 
 #include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
@@ -142,5 +141,3 @@ class BCAR : public BaseAlg {
 };
 
 } // namespace car
-
-#endif

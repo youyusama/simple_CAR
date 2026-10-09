@@ -1,5 +1,4 @@
-#ifndef L2S_H
-#define L2S_H
+#pragma once
 
 #include "BaseAlg.h"
 #include "Log.h"
@@ -32,5 +31,3 @@ class L2S : public BaseAlg {
 };
 
 } // namespace car
-
-#endif

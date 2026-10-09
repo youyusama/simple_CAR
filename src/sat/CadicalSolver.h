@@ -1,5 +1,4 @@
-#ifndef CADICALSOLVER_H
-#define CADICALSOLVER_H
+#pragma once
 
 #include "ISolver.h"
 #include "Model.h"
@@ -39,5 +38,3 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
 };
 
 } // namespace car
-
-#endif

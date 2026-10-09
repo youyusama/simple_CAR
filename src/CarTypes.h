@@ -1,5 +1,4 @@
-#ifndef CAR_TYPES_H
-#define CAR_TYPES_H
+#pragma once
 
 #include <algorithm>
 #include <cassert>
@@ -185,5 +184,3 @@ static_assert(std::is_trivially_copyable<Lit>::value, "Lit must stay trivially c
 static_assert(std::is_standard_layout<Lit>::value, "Lit must stay standard layout");
 
 } // namespace car
-
-#endif // CAR_TYPES_H

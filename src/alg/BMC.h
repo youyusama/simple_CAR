@@ -1,5 +1,4 @@
-#ifndef BMC_H
-#define BMC_H
+#pragma once
 
 #include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
@@ -43,5 +42,3 @@ class BMC : public BaseAlg {
 };
 
 } // namespace car
-
-#endif

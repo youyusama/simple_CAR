@@ -1,5 +1,4 @@
-#ifndef KIND_H
-#define KIND_H
+#pragma once
 
 #include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
@@ -112,5 +111,3 @@ class KIND : public BaseAlg {
 };
 
 } // namespace car
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef MINICORE_SOLVER_TYPES_H
-#define MINICORE_SOLVER_TYPES_H
+#pragma once
 
 #include <algorithm>
 #include <assert.h>
@@ -665,5 +664,3 @@ class DecisionBuckets {
 };
 
 } // namespace minicore
-
-#endif

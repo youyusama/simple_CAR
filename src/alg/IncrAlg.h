@@ -1,5 +1,4 @@
-#ifndef INCRALG_H
-#define INCRALG_H
+#pragma once
 
 #include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
@@ -23,5 +22,3 @@ class IncrAlg : public BaseAlg {
 };
 
 } // namespace car
-
-#endif

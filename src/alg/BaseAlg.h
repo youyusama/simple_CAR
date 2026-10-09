@@ -1,5 +1,4 @@
-#ifndef BASEALG_H
-#define BASEALG_H
+#pragma once
 
 #include "Model.h"
 #include "Settings.h"
@@ -24,6 +23,3 @@ class BaseAlg {
 };
 
 } // namespace car
-
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FCAR_H
-#define FCAR_H
+#pragma once
 
 #include "IncrAlg.h"
 #include "IncrCheckerHelpers.h"
@@ -175,5 +174,3 @@ class FCAR : public IncrAlg {
 
 
 } // namespace car
-
-#endif

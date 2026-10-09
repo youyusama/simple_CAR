@@ -1,5 +1,4 @@
-#ifndef DAG_CNF_SIMPLIFIER_H
-#define DAG_CNF_SIMPLIFIER_H
+#pragma once
 
 #include "CarTypes.h"
 #include <cstdint>
@@ -85,5 +84,3 @@ class DAGCNFSimplifier {
 };
 
 } // namespace car
-
-#endif // DAG_CNF_SIMPLIFIER_H

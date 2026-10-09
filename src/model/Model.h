@@ -1,5 +1,4 @@
-#ifndef MODEL_H
-#define MODEL_H
+#pragma once
 
 extern "C" {
 #include "aiger.h"
@@ -346,5 +345,3 @@ class Model {
     vector<vector<Clause>> m_kliveTransClauses;
 };
 } // namespace car
-
-#endif

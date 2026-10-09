@@ -1,5 +1,4 @@
-#ifndef ARRAY_ABSTRACTION_H
-#define ARRAY_ABSTRACTION_H
+#pragma once
 
 #include "Btor2IR.h"
 #include "WLTrace.h"
@@ -154,4 +153,3 @@ class ArrayAbstraction::BuildResult {
 };
 
 } // namespace car
-#endif

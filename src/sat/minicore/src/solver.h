@@ -1,5 +1,4 @@
-#ifndef MINICORE_SOLVER_H
-#define MINICORE_SOLVER_H
+#pragma once
 
 #include "cstring"
 #include "math.h"
@@ -367,5 +366,3 @@ inline std::vector<Lit> Solver::intVec2LitVec(const std::vector<int> &vec) {
 }
 
 } // namespace minicore
-
-#endif

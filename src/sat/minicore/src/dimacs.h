@@ -1,5 +1,4 @@
-#ifndef MINICORE_DIMACS_H
-#define MINICORE_DIMACS_H
+#pragma once
 
 #include "solver.h"
 #include <iosfwd>
@@ -20,5 +19,3 @@ bool parse_DIMACS(std::istream &in,
                   std::ostream &err);
 
 } // namespace minicore
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef WL_CEGAR_H
-#define WL_CEGAR_H
+#pragma once
 
 #include "BaseAlg.h"
 #include "Settings.h"
@@ -48,5 +47,3 @@ class WLCEGAR {
 };
 
 } // namespace car
-
-#endif

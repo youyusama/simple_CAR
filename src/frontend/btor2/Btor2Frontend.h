@@ -1,5 +1,4 @@
-#ifndef BTOR2_FRONTEND_H
-#define BTOR2_FRONTEND_H
+#pragma once
 
 #include "model/Btor2IR.h"
 
@@ -18,5 +17,3 @@ class Btor2Frontend {
 };
 
 } // namespace car
-
-#endif

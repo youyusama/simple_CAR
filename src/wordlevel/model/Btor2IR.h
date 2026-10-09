@@ -1,5 +1,4 @@
-#ifndef BTOR2_IR_H
-#define BTOR2_IR_H
+#pragma once
 
 #include <btor2parser/btor2parser.h>
 
@@ -91,5 +90,3 @@ class Btor2IR {
 };
 
 } // namespace car
-
-#endif

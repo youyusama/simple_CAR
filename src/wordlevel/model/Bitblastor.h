@@ -1,5 +1,4 @@
-#ifndef BITBLASTOR_H
-#define BITBLASTOR_H
+#pragma once
 
 #include "Btor2IR.h"
 #include "CarTypes.h"
@@ -104,5 +103,3 @@ WLTrace RecoverWLCheckerChoices(
     const std::vector<std::pair<Cube, Cube>> &partial, bool validateAig = true);
 
 } // namespace car
-
-#endif

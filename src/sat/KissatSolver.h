@@ -1,7 +1,6 @@
 // created by Jianwen Li
 // Kissat API for BMC
-#ifndef KISSATSOLVER_H
-#define KISSATSOLVER_H
+#pragma once
 
 #include "ISolver.h"
 #include "Model.h"
@@ -53,5 +52,3 @@ class KissatSolver : public ISolver {
 };
 
 } // namespace car
-
-#endif

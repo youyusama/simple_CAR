@@ -1,5 +1,4 @@
-#ifndef IC3_H
-#define IC3_H
+#pragma once
 
 #include "IncrAlg.h"
 #include "IncrCheckerHelpers.h"
@@ -188,4 +187,3 @@ class IC3 : public IncrAlg {
 };
 
 } // namespace car
-#endif // IC3_H

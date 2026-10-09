@@ -1,5 +1,4 @@
-#ifndef MEMORY_BMC_H
-#define MEMORY_BMC_H
+#pragma once
 
 #include "WLTrace.h"
 
@@ -38,5 +37,3 @@ class MemoryBMC {
 };
 
 } // namespace car
-
-#endif

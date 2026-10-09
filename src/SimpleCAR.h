@@ -1,5 +1,4 @@
-#ifndef SIMPLECAR_H
-#define SIMPLECAR_H
+#pragma once
 
 #include "BaseAlg.h"
 #include "Settings.h"
@@ -28,5 +27,3 @@ class SimpleCAR {
 };
 
 } // namespace car
-
-#endif

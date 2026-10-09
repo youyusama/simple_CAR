@@ -1,5 +1,4 @@
-#ifndef MINISATSOLVER_H
-#define MINISATSOLVER_H
+#pragma once
 
 #include "ISolver.h"
 #include "Model.h"
@@ -58,5 +57,3 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
 };
 
 } // namespace car
-
-#endif
