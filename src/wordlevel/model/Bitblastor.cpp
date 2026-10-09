@@ -1,4 +1,4 @@
-#include "WLBitblastor.h"
+#include "Bitblastor.h"
 
 #include "CircuitGraph.h"
 
@@ -53,7 +53,7 @@ const std::unordered_map<Btor2Tag, BinaryFn> kBinaryOps{
 };
 
 struct AigGateCollector {
-    std::vector<WLAigGate> gates;
+    std::vector<Bitblastor::AigGate> gates;
     std::unordered_set<uint64_t> visited;
 };
 
@@ -72,7 +72,7 @@ void CollectAigGate(void *state,
 
 } // namespace
 
-class WLBitblastor::Impl {
+class Bitblastor::Impl {
   public:
     explicit Impl(const Btor2IR &source)
         : ir(source),
@@ -92,9 +92,9 @@ class WLBitblastor::Impl {
     AigGateCollector gateCollector;
 };
 
-class WLBitblastor::ScalarContext::Impl {
+class Bitblastor::ScalarContext::Impl {
   public:
-    Impl(WLBitblastor &owner,
+    Impl(Bitblastor &owner,
          const Btor2IR &source,
          LeafResolver resolver)
         : bitblastor(owner),
@@ -179,20 +179,20 @@ class WLBitblastor::ScalarContext::Impl {
         return result;
     }
 
-    WLBitblastor &bitblastor;
+    Bitblastor &bitblastor;
     const Btor2IR &ir;
     LeafResolver leafResolver;
     std::unordered_map<int64_t, BoolectorNode *> values;
 };
 
-WLBitblastor::WLBitblastor(const Btor2IR &ir)
+Bitblastor::Bitblastor(const Btor2IR &ir)
     : m_impl(std::make_unique<Impl>(ir)) {}
 
-WLBitblastor::~WLBitblastor() = default;
+Bitblastor::~Bitblastor() = default;
 
-Btor *WLBitblastor::BtorInstance() const { return m_impl->btor; }
+Btor *Bitblastor::BtorInstance() const { return m_impl->btor; }
 
-BoolectorSort WLBitblastor::Sort(int64_t sortId) {
+BoolectorSort Bitblastor::Sort(int64_t sortId) {
     auto found = m_impl->sorts.find(sortId);
     if (found != m_impl->sorts.end()) return found->second;
     const Btor2IRSort &sort = m_impl->ir.Sort(sortId);
@@ -206,18 +206,18 @@ BoolectorSort WLBitblastor::Sort(int64_t sortId) {
     return result;
 }
 
-BoolectorNode *WLBitblastor::Variable(int64_t sortId,
+BoolectorNode *Bitblastor::Variable(int64_t sortId,
                                       const char *symbol) {
     return boolector_var(m_impl->btor, Sort(sortId), symbol);
 }
 
-std::unique_ptr<WLBitblastor::ScalarContext>
-WLBitblastor::CreateScalarContext(LeafResolver leafResolver) {
+std::unique_ptr<Bitblastor::ScalarContext>
+Bitblastor::CreateScalarContext(LeafResolver leafResolver) {
     return std::unique_ptr<ScalarContext>(
         new ScalarContext(*this, m_impl->ir, std::move(leafResolver)));
 }
 
-std::vector<uint64_t> WLBitblastor::Bitblast(BoolectorNode *node) {
+std::vector<uint64_t> Bitblastor::Bitblast(BoolectorNode *node) {
     boolector_aig_bitblast(m_impl->aigManager, node);
     boolector_aig_visit(m_impl->aigManager,
                        node,
@@ -232,25 +232,25 @@ std::vector<uint64_t> WLBitblastor::Bitblast(BoolectorNode *node) {
     return result;
 }
 
-const std::vector<WLAigGate> &WLBitblastor::Gates() const {
+const std::vector<Bitblastor::AigGate> &Bitblastor::Gates() const {
     return m_impl->gateCollector.gates;
 }
 
-const char *WLBitblastor::Symbol(uint64_t literal) const {
+const char *Bitblastor::Symbol(uint64_t literal) const {
     return boolector_aig_get_symbol(m_impl->aigManager, literal);
 }
 
-WLBitblastor::ScalarContext::ScalarContext(
-    WLBitblastor &bitblastor,
+Bitblastor::ScalarContext::ScalarContext(
+    Bitblastor &bitblastor,
     const Btor2IR &ir,
     LeafResolver leafResolver)
     : m_impl(std::make_unique<Impl>(bitblastor,
                                     ir,
                                     std::move(leafResolver))) {}
 
-WLBitblastor::ScalarContext::~ScalarContext() = default;
+Bitblastor::ScalarContext::~ScalarContext() = default;
 
-BoolectorNode *WLBitblastor::ScalarContext::Lower(int64_t signedId) {
+BoolectorNode *Bitblastor::ScalarContext::Lower(int64_t signedId) {
     return m_impl->Lower(signedId);
 }
 
@@ -260,7 +260,7 @@ class BoolectorModel {
   public:
     explicit BoolectorModel(const Btor2IR &ir) : bitblastor(ir) {}
 
-    WLBitblastor bitblastor;
+    Bitblastor bitblastor;
     std::vector<BoolectorNode *> inputs;
     std::vector<std::pair<int64_t, BoolectorNode *>> states;
     std::unordered_map<BoolectorNode *, int64_t> portIds;
@@ -359,7 +359,7 @@ class Lowering {
 
     const Btor2IR &m_ir;
     BoolectorModel m_model;
-    std::unique_ptr<WLBitblastor::ScalarContext> m_scalar;
+    std::unique_ptr<Bitblastor::ScalarContext> m_scalar;
 };
 
 struct PendingTraceSpan {
@@ -378,7 +378,7 @@ void RecordTraceSpan(
 }
 
 void AddInput(
-    WLBitblastor &bitblastor,
+    Bitblastor &bitblastor,
     aiger *aig,
     BoolectorNode *input,
     std::vector<PendingTraceSpan> &inputSpans,
@@ -402,12 +402,12 @@ void AddInput(
                     inputSpans);
 }
 
-std::vector<WLWordSpan>
+std::vector<WordSpan>
 FinalizeTraceSpans(const aiger_symbol *symbols,
                    uint32_t symbolCount,
                    const std::vector<PendingTraceSpan> &pending) {
     // Resolve interface offsets after AIGER reencoding and verify contiguity.
-    std::vector<WLWordSpan> result;
+    std::vector<WordSpan> result;
     result.reserve(pending.size());
     for (const PendingTraceSpan &span : pending) {
         if (!span.width ||
@@ -443,11 +443,11 @@ unsigned MakeEq(aiger *aig, unsigned lhs, unsigned rhs) {
 }
 
 std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
-                               WLWordLayout &traceMap) {
+                               WordLayout &traceMap) {
     // Bitblast the complete Boolector transition system into one in-memory AIGER.
     std::shared_ptr<aiger> result(aiger_init(), AigerDeleter);
     aiger *aig = result.get();
-    WLBitblastor &bitblastor = model.bitblastor;
+    Bitblastor &bitblastor = model.bitblastor;
     Btor *btor = bitblastor.BtorInstance();
     std::vector<std::pair<uint64_t, uint64_t>> symbolicInits;
     std::vector<PendingTraceSpan> inputSpans;
@@ -529,7 +529,7 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
     aiger_add_bad(aig, badBits.front(), "");
 
     // Materialize Boolector's shared AIG before allocating local reset gates.
-    for (const WLAigGate &gate : bitblastor.Gates())
+    for (const Bitblastor::AigGate &gate : bitblastor.Gates())
         aiger_add_and(aig, gate.node, gate.child0, gate.child1);
 
     // Encode symbolic resets as constraints active only in the initial step.
@@ -562,7 +562,7 @@ std::shared_ptr<aiger> Bitblast(BoolectorModel &model,
 } // namespace
 
 std::shared_ptr<aiger> GenerateWLAig(const Btor2IR &ir,
-                                   WLWordLayout &traceMap) {
+                                   WordLayout &traceMap) {
     Lowering lowering(ir);
     return Bitblast(lowering.Model(), traceMap);
 }
@@ -583,18 +583,18 @@ std::unordered_map<Var, bool> CubeValues(const Cube &cube) {
 
 template<class WordValues>
 void DecodeWordStep(const std::pair<Cube, Cube> &bitStep,
-                      const WLWordLayout &traceMap,
+                      const WordLayout &traceMap,
                       WordValues wordValues,
                       bool loadLatches) {
     const auto inputValues = CubeValues(bitStep.first);
     const auto latchValues = CubeValues(bitStep.second);
 
-    auto decode = [&](const std::vector<WLWordSpan> &spans,
+    auto decode = [&](const std::vector<WordSpan> &spans,
                       const auto &bitValues) {
-        for (const WLWordSpan &span : spans) {
+        for (const WordSpan &span : spans) {
             if (!span.width)
                 throw std::runtime_error("empty word-level port span");
-            WLBitVector value = WLBitVector::Zero(span.width);
+            BitVector value = BitVector::Zero(span.width);
             for (uint32_t bit = 0; bit < span.width; ++bit) {
                 auto found = bitValues.find(span.firstAigVar + bit);
                 if (found == bitValues.end())
@@ -615,7 +615,7 @@ void DecodeWordStep(const std::pair<Cube, Cube> &bitStep,
 WLTrace RecoverWLCheckerChoices(
     const Btor2IR &ir, const aiger &aig,
     const std::unordered_map<Var, Lit> &equivalences, Var trueId,
-    const WLWordLayout &layout,
+    const WordLayout &layout,
     const std::vector<std::pair<Cube, Cube>> &partial, bool validateAig) {
     if (partial.empty())
         throw std::runtime_error("checker returned an empty bit-level trace");

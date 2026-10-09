@@ -3,11 +3,11 @@
 
 #include "Log.h"
 #include "Model.h"
-#include "WLCegar.h"
-#include "WLMemoryBMC.h"
+#include "WLCEGAR.h"
+#include "MemoryBMC.h"
 #include "model/WLModel.h"
-#include "model/WLBitblastor.h"
-#include "model/WLPackageResize.h"
+#include "model/Bitblastor.h"
+#include "model/PackageResize.h"
 
 #include <chrono>
 #include <stdexcept>
@@ -22,12 +22,12 @@ WLChecker::WLChecker(const Settings &settings,
     if (m_settings.alg == MCAlgorithm::WLBMC) {
         // Native memory BMC works directly on the source IR.
         m_memoryBmc =
-            std::make_unique<WLMemoryBMC>(m_model, m_log);
+            std::make_unique<MemoryBMC>(m_model, m_log);
         return;
     }
 
     if (m_model.SourceHasArrays()) {
-        m_cegar = std::make_unique<WLCegar>(m_settings, m_log, m_model);
+        m_cegar = std::make_unique<WLCEGAR>(m_settings, m_log, m_model);
     } else {
         BuildScalarModel();
     }
@@ -40,7 +40,7 @@ void WLChecker::BuildScalarModel() {
     if (!m_settings.wlBitblastOutputPath.empty())
         throw std::runtime_error("checking build cannot be used for AIG export");
     if (!m_settings.wlDisablePackageResize)
-        m_resize = std::make_unique<WLPackageResize>(m_model.PropertyIR());
+        m_resize = std::make_unique<PackageResize>(m_model.PropertyIR());
     const auto &ir = m_resize ? m_resize->IR() : m_model.PropertyIR();
     m_aig = GenerateWLAig(ir, m_layout);
     m_bitModel = std::make_unique<Model>(m_settings, m_log, m_aig);
@@ -56,9 +56,9 @@ CheckResult WLChecker::Run() {
     if (m_memoryBmc) {
         const auto result = m_memoryBmc->CheckThrough(
             static_cast<unsigned>(m_settings.bmcK));
-        if (result.status == WLBoundedStatus::Counterexample)
+        if (result.status == MemoryBMC::Status::Counterexample)
             return CheckResult::Unsafe;
-        if (result.status == WLBoundedStatus::Unknown)
+        if (result.status == MemoryBMC::Status::Unknown)
             LOG_L(m_log, 0, "WL memory BMC incomplete: ", result.reason);
         // A bounded proof does not establish unbounded safety.
         return CheckResult::Unknown;

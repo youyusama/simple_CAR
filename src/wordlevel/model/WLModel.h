@@ -8,7 +8,7 @@
 
 namespace car {
 class Log;
-class WLArraySimplifier;
+class ArraySimplifier;
 
 // Fixed input semantics. Checking sessions own their precision and encodings.
 class WLModel {
@@ -26,7 +26,7 @@ class WLModel {
     Btor2IR m_sourceIr;
     bool m_disableCoi;
     Log &m_log;
-    mutable std::unique_ptr<WLArraySimplifier> m_arraySimplifier;
+    mutable std::unique_ptr<ArraySimplifier> m_arraySimplifier;
     mutable std::unique_ptr<Btor2IR> m_propertyIr;
 };
 } // namespace car

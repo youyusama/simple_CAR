@@ -4,7 +4,7 @@
 #include "BaseAlg.h"
 #include "Settings.h"
 #include "WLTrace.h"
-#include "model/WLArrayAbstraction.h"
+#include "model/ArrayAbstraction.h"
 
 #include <memory>
 #include <vector>
@@ -18,12 +18,12 @@ class WLModel;
 // CEGAR engine for selected-slot word-level memory abstraction.  It drives an
 // ordinary bit-level checker and unified greedy array refinement. WLChecker
 // owns this engine when the input contains word-level arrays.
-class WLCegar {
+class WLCEGAR {
   public:
-    WLCegar(const Settings &settings,
+    WLCEGAR(const Settings &settings,
             Log &log,
             WLModel &model);
-    ~WLCegar();
+    ~WLCEGAR();
 
     // Run checker/simulation/refinement; incomplete or no new target is Unknown.
     CheckResult Run();
@@ -33,16 +33,16 @@ class WLCegar {
 
   private:
     unsigned MaxDelay() const;
-    bool ReloadModel(const std::vector<WLArrayAbstraction::TrackingTarget> &targets);
+    bool ReloadModel(const std::vector<ArrayAbstraction::TrackingTarget> &targets);
 
     const Settings &m_settings;
     Log &m_log;
     WLModel &m_model;
     struct AbstractionContext;
-    std::unique_ptr<AbstractionContext> BuildAbstractionContext(WLArrayAbstraction::Precision precision);
+    std::unique_ptr<AbstractionContext> BuildAbstractionContext(ArrayAbstraction::Precision precision);
     WLTrace RecoverChoices(
         const std::vector<std::pair<Cube, Cube>> &trace) const;
-    WLArrayAbstraction m_abstraction;
+    ArrayAbstraction m_abstraction;
     std::unique_ptr<AbstractionContext> m_abstractionContext;
     WLTrace m_trace;
 };

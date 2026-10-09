@@ -86,18 +86,18 @@ set(SRCS
     src/model/DAGCNFSimplifier.cpp
     src/frontend/btor2/Btor2Frontend.cpp
     src/wordlevel/model/Btor2IR.cpp
-    src/wordlevel/model/WLArrayAbstraction.cpp
-    src/wordlevel/model/WLArraySimplifier.cpp
-    src/wordlevel/model/WLArrayEqualityEncoder.cpp
+    src/wordlevel/model/ArrayAbstraction.cpp
+    src/wordlevel/model/ArraySimplifier.cpp
+    src/wordlevel/model/ArrayEqualityEncoder.cpp
     src/wordlevel/model/WLBoundedUnroller.cpp
-    src/wordlevel/WLBitVector.cpp
+    src/wordlevel/BitVector.cpp
     src/wordlevel/model/WLModel.cpp
-    src/wordlevel/model/WLPackageResize.cpp
+    src/wordlevel/model/PackageResize.cpp
     src/wordlevel/WLSimulator.cpp
     src/wordlevel/WLChecker.cpp
-    src/wordlevel/WLCegar.cpp
-    src/wordlevel/WLMemoryBMC.cpp
-    src/wordlevel/model/WLBitblastor.cpp
+    src/wordlevel/WLCEGAR.cpp
+    src/wordlevel/MemoryBMC.cpp
+    src/wordlevel/model/Bitblastor.cpp
     deps/btor2tools/src/btor2parser/btor2parser.c
     deps/btor2tools/src/btorsim/btorsimbv.c
     deps/btor2tools/src/btorsim/btorsimrng.c

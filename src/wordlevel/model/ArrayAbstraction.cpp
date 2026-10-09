@@ -1,4 +1,4 @@
-#include "WLArrayAbstraction.h"
+#include "ArrayAbstraction.h"
 #include "WLSimulator.h"
 
 #include <algorithm>
@@ -12,9 +12,9 @@
 
 namespace car {
 
-class WLArrayAbstraction::Builder {
+class ArrayAbstraction::Builder {
   public:
-    Builder(const WLArrayAbstraction &abstraction,
+    Builder(const ArrayAbstraction &abstraction,
             const Precision &precision)
         : m_input(abstraction.IR()), m_abstraction(abstraction), m_build(abstraction.IR(), precision),
           m_slots(abstraction.Slots(precision)) {
@@ -507,7 +507,7 @@ class WLArrayAbstraction::Builder {
     }
 
     const Btor2IR &m_input;
-    const WLArrayAbstraction &m_abstraction;
+    const ArrayAbstraction &m_abstraction;
     BuildResult m_build;
     const std::vector<Slot> m_slots;
     std::vector<int64_t> m_roots;
@@ -522,20 +522,20 @@ class WLArrayAbstraction::Builder {
 };
 
 namespace {
-using Values = std::unordered_map<int64_t, WLBitVector>;
-using TargetKey = std::tuple<int64_t, WLArrayAbstraction::Address, unsigned>;
-TargetKey Key(const WLArrayAbstraction::TrackingTarget &target) {
+using Values = std::unordered_map<int64_t, BitVector>;
+using TargetKey = std::tuple<int64_t, ArrayAbstraction::Address, unsigned>;
+TargetKey Key(const ArrayAbstraction::TrackingTarget &target) {
     return {target.group, target.address, target.delay};
 }
 bool Array(const Btor2IR &ir, int64_t id) {
     const auto sort = ir.Node(id).sortId;
     return sort && ir.Sort(sort).tag == BTOR2_TAG_SORT_array;
 }
-WLBitVector Invert(WLBitVector value) {
+BitVector Invert(BitVector value) {
     for (unsigned i = 0; i < value.Width(); ++i) value.SetBit(i, !value.GetBit(i));
     return value;
 }
-void Patch(Values &values, int64_t id, WLBitVector value) {
+void Patch(Values &values, int64_t id, BitVector value) {
     if (id < 0) { id = -id; value = Invert(std::move(value)); }
     auto [it, added] = values.emplace(id, value);
     if (!added && it->second != value)
@@ -587,7 +587,7 @@ bool Survives(const WLSimulator::Execution &execution) {
 
 } // namespace
 
-class WLArrayAbstraction::Analyzer {
+class ArrayAbstraction::Analyzer {
     struct Correction {
         size_t time;
         int64_t source;
@@ -595,12 +595,12 @@ class WLArrayAbstraction::Analyzer {
         std::vector<TrackingTarget> targets;
         // A comparison's unequal reference operands supply this concrete address.
         // Address selection happens after the single reference execution is complete.
-        std::optional<WLBitVector> difference;
+        std::optional<BitVector> difference;
         std::vector<int64_t> comparisons;
     };
 
   public:
-    Analyzer(WLArrayAbstraction &abstraction, const BuildResult &build, const WLTrace &choices)
+    Analyzer(ArrayAbstraction &abstraction, const BuildResult &build, const WLTrace &choices)
         : abstraction(abstraction), build(build), ir(abstraction.IR()), abstractIR(build.IR()),
           precision(abstraction.GetPrecision(build)), index(ir), abstractChoices(FreeChoices(abstractIR, choices)) {
         if (choices.steps.empty() || choices.steps.size() - 1 > std::numeric_limits<unsigned>::max())
@@ -685,22 +685,22 @@ class WLArrayAbstraction::Analyzer {
         result.targets.clear();
         return std::move(result);
     }
-    WLBitVector Observed(size_t time, int64_t expression) const {
+    BitVector Observed(size_t time, int64_t expression) const {
         if (expression < 0) return Invert(Observed(time, -expression));
         return observations.at(time).at(expression);
     }
     unsigned Delay(size_t time) const { return static_cast<unsigned>(end - time); }
 
-    WLArrayValue FreeArray(int64_t root, size_t time) const {
+    ArrayValue FreeArray(int64_t root, size_t time) const {
         const auto &sort = ir.Sort(ir.Node(root).sortId);
-        WLArrayValue value;
-        value.defaultValue = WLBitVector::Zero(ir.Sort(sort.elementSort).width);
-        std::map<std::string, WLArrayEntry> cells;
+        ArrayValue value;
+        value.defaultValue = BitVector::Zero(ir.Sort(sort.elementSort).width);
+        std::map<std::string, ArrayEntry> cells;
         for (size_t j = 0; j < precision.targets.size(); ++j) {
             if (!abstraction.SameArrayGroup(root, precision.targets[j].group)) continue;
             auto address = Observed(time, abstraction.SelectorWord(build, j));
             auto data = Observed(time, abstraction.SlotWord(build, root, j));
-            auto [it, added] = cells.emplace(address.ToBinary(), WLArrayEntry{address, data});
+            auto [it, added] = cells.emplace(address.ToBinary(), ArrayEntry{address, data});
             if (!added && it->second.value != data)
                 throw std::runtime_error("inconsistent free array slot collision");
         }
@@ -768,7 +768,7 @@ class WLArrayAbstraction::Analyzer {
     // Native symbolic addresses are preferred to freezing the numerical value.
     // This is target selection, not a conflict certificate or an exclusion proof.
     TrackingTarget DifferenceTarget(const Btor2IRNode &comparison, size_t time,
-                                     const WLBitVector &address) {
+                                     const BitVector &address) {
         std::set<std::pair<size_t, int64_t>> visited;
         std::vector<std::pair<size_t, int64_t>> todo{{time, comparison.args[0]}, {time, comparison.args[1]}};
         std::vector<TrackingTarget> candidates;
@@ -817,7 +817,7 @@ class WLArrayAbstraction::Analyzer {
             WLSimulator::MissingChoices::Reject, options));
     }
 
-    WLArrayAbstraction &abstraction;
+    ArrayAbstraction &abstraction;
     const BuildResult &build;
     const Btor2IR &ir, &abstractIR;
     const Precision &precision;
@@ -830,7 +830,7 @@ class WLArrayAbstraction::Analyzer {
     AnalysisResult result;
 };
 
-WLArrayAbstraction::WLArrayAbstraction(const Btor2IR &ir) : m_ir(ir) {
+ArrayAbstraction::ArrayAbstraction(const Btor2IR &ir) : m_ir(ir) {
     ir.ValidateSupportedArrays();
     std::vector<int64_t> comparisons;
     // Temporary union-find over array values, including cross-time init/next.
@@ -927,30 +927,30 @@ WLArrayAbstraction::WLArrayAbstraction(const Btor2IR &ir) : m_ir(ir) {
     for (int64_t id : originalAddresses) RegisterOriginalAddress(id);
     for (int64_t q : comparisons) {
         const Address address = m_addressSources.size();
-        m_addressSources.push_back(WLArrayAbstraction::WitnessSource{q});
+        m_addressSources.push_back(ArrayAbstraction::WitnessSource{q});
         m_witnessAddresses.emplace(q, address);
     }
 }
 
-int64_t WLArrayAbstraction::ArrayGroup(int64_t arrayNodeId) const {
+int64_t ArrayAbstraction::ArrayGroup(int64_t arrayNodeId) const {
     return m_arrayGroups.at(arrayNodeId);
 }
 
-const std::vector<int64_t> &WLArrayAbstraction::ArrayRoots(int64_t arrayNodeId) const {
+const std::vector<int64_t> &ArrayAbstraction::ArrayRoots(int64_t arrayNodeId) const {
     return m_arrayRoots.at(ArrayGroup(arrayNodeId));
 }
 
-bool WLArrayAbstraction::SameArrayGroup(int64_t lhs, int64_t rhs) const {
+bool ArrayAbstraction::SameArrayGroup(int64_t lhs, int64_t rhs) const {
     return ArrayGroup(lhs) == ArrayGroup(rhs);
 }
 
-const WLArrayAbstraction::AddressSource &WLArrayAbstraction::Source(Address address) const {
+const ArrayAbstraction::AddressSource &ArrayAbstraction::Source(Address address) const {
     if (!address || address >= m_addressSources.size())
         throw std::runtime_error("undeclared abstraction address index");
     return m_addressSources[address];
 }
 
-WLArrayAbstraction::Address WLArrayAbstraction::RegisterOriginalAddress(int64_t signedNodeId) {
+ArrayAbstraction::Address ArrayAbstraction::RegisterOriginalAddress(int64_t signedNodeId) {
     const auto &ir = m_ir;
     if (!signedNodeId || signedNodeId == std::numeric_limits<int64_t>::min())
         throw std::runtime_error("address requires an original BV node reference");
@@ -966,8 +966,8 @@ WLArrayAbstraction::Address WLArrayAbstraction::RegisterOriginalAddress(int64_t 
     return address;
 }
 
-WLArrayAbstraction::Address WLArrayAbstraction::RegisterConstantAddress(
-    int64_t indexSort, const WLBitVector &value) {
+ArrayAbstraction::Address ArrayAbstraction::RegisterConstantAddress(
+    int64_t indexSort, const BitVector &value) {
     const auto &sort = m_ir.Sort(indexSort);
     if (sort.tag != BTOR2_TAG_SORT_bitvec || sort.width != value.Width())
         throw std::runtime_error("constant address requires a matching BV index sort");
@@ -981,36 +981,36 @@ WLArrayAbstraction::Address WLArrayAbstraction::RegisterConstantAddress(
     return address;
 }
 
-WLArrayAbstraction::Address WLArrayAbstraction::OriginalAddress(int64_t signedNodeId) const {
+ArrayAbstraction::Address ArrayAbstraction::OriginalAddress(int64_t signedNodeId) const {
     const auto found = m_originalAddresses.find(signedNodeId);
     if (found == m_originalAddresses.end())
         throw std::runtime_error("undeclared original address node " + std::to_string(signedNodeId));
     return found->second;
 }
 
-WLArrayAbstraction::Address WLArrayAbstraction::WitnessAddress(int64_t comparison) const {
+ArrayAbstraction::Address ArrayAbstraction::WitnessAddress(int64_t comparison) const {
     return m_witnessAddresses.at(comparison);
 }
 
-std::optional<int64_t> WLArrayAbstraction::WitnessComparison(Address address) const {
+std::optional<int64_t> ArrayAbstraction::WitnessComparison(Address address) const {
     if (const auto *witness = std::get_if<WitnessSource>(&Source(address)))
         return witness->comparisonNodeId;
     return std::nullopt;
 }
 
-std::optional<WLBitVector> WLArrayAbstraction::ConstantAddressValue(Address address) const {
+std::optional<BitVector> ArrayAbstraction::ConstantAddressValue(Address address) const {
     if (const auto *constant = std::get_if<ConstantSource>(&Source(address)))
         return constant->value;
     return std::nullopt;
 }
 
-int64_t WLArrayAbstraction::OriginalNode(Address address) const {
+int64_t ArrayAbstraction::OriginalNode(Address address) const {
     if (const auto *original = std::get_if<OriginalSource>(&Source(address)))
         return original->signedNodeId;
     throw std::runtime_error("abstraction address is not an original BV node");
 }
 
-int64_t WLArrayAbstraction::AddressSort(Address address) const {
+int64_t ArrayAbstraction::AddressSort(Address address) const {
     const auto &ir = m_ir;
     if (const auto *constant = std::get_if<ConstantSource>(&Source(address)))
         return constant->indexSort;
@@ -1024,7 +1024,7 @@ int64_t WLArrayAbstraction::AddressSort(Address address) const {
     return ir.Node(OriginalNode(address)).sortId;
 }
 
-WLArrayAbstraction::TrackingTarget WLArrayAbstraction::MakeTarget(
+ArrayAbstraction::TrackingTarget ArrayAbstraction::MakeTarget(
     int64_t arrayNodeId, Address address, unsigned delay) const {
     const auto group = ArrayGroup(arrayNodeId);
     const auto &sort = m_ir.Sort(m_ir.Node(arrayNodeId).sortId);
@@ -1038,13 +1038,13 @@ WLArrayAbstraction::TrackingTarget WLArrayAbstraction::MakeTarget(
     return {group, address, delay};
 }
 
-void WLArrayAbstraction::ValidateTarget(const TrackingTarget &target) const {
+void ArrayAbstraction::ValidateTarget(const TrackingTarget &target) const {
     if (ArrayGroup(target.group) != target.group)
         throw std::runtime_error("tracking target requires a canonical array group");
     MakeTarget(target.group, target.address, target.delay);
 }
 
-std::pair<int, int64_t> WLArrayAbstraction::AddressOrder(
+std::pair<int, int64_t> ArrayAbstraction::AddressOrder(
     Address address) const {
     if (const auto q = WitnessComparison(address)) return {1, *q};
     if (std::holds_alternative<ConstantSource>(Source(address)))
@@ -1052,7 +1052,7 @@ std::pair<int, int64_t> WLArrayAbstraction::AddressOrder(
     return {0, OriginalNode(address)};
 }
 
-std::vector<int64_t> WLArrayAbstraction::ObservationExpressions(const BuildResult &build) const {
+std::vector<int64_t> ArrayAbstraction::ObservationExpressions(const BuildResult &build) const {
     CheckBuild(build);
     std::set<int64_t> expressions;
     // Scalar ports retain their source IDs; only rewritten array semantics
@@ -1069,38 +1069,38 @@ std::vector<int64_t> WLArrayAbstraction::ObservationExpressions(const BuildResul
     return {expressions.begin(), expressions.end()};
 }
 
-unsigned WLArrayAbstraction::Precision::MaxDelay() const {
+unsigned ArrayAbstraction::Precision::MaxDelay() const {
     unsigned result = 0;
     for (const auto &target : targets) result = std::max(result, target.delay);
     return result;
 }
 
-std::vector<WLArrayAbstraction::Slot> WLArrayAbstraction::Slots(const Precision &precision) const {
+std::vector<ArrayAbstraction::Slot> ArrayAbstraction::Slots(const Precision &precision) const {
     std::vector<Slot> result;
     for (size_t j = 0; j < precision.targets.size(); ++j)
         for (auto root : ArrayRoots(precision.targets[j].group)) result.push_back({root, j});
     return result;
 }
 
-unsigned WLArrayAbstraction::MaxDelay(const BuildResult &build) const {
+unsigned ArrayAbstraction::MaxDelay(const BuildResult &build) const {
     return GetPrecision(build).MaxDelay();
 }
 
-size_t WLArrayAbstraction::SelectorCount(const BuildResult &build) const {
+size_t ArrayAbstraction::SelectorCount(const BuildResult &build) const {
     return GetPrecision(build).targets.size();
 }
 
-size_t WLArrayAbstraction::SlotCount(const BuildResult &build) const {
+size_t ArrayAbstraction::SlotCount(const BuildResult &build) const {
     size_t count = 0;
     for (const auto &target : GetPrecision(build).targets) count += ArrayRoots(target.group).size();
     return count;
 }
 
-void WLArrayAbstraction::ValidatePrecision(const Precision &precision) const {
+void ArrayAbstraction::ValidatePrecision(const Precision &precision) const {
     for (const auto &target : precision.targets) ValidateTarget(target);
 }
 
-std::optional<WLArrayAbstraction::Precision> WLArrayAbstraction::ExtendPrecision(
+std::optional<ArrayAbstraction::Precision> ArrayAbstraction::ExtendPrecision(
     const BuildResult &build, const std::vector<TrackingTarget> &targets) const {
     const auto &precision = GetPrecision(build);
     ValidatePrecision(precision);
@@ -1116,39 +1116,39 @@ std::optional<WLArrayAbstraction::Precision> WLArrayAbstraction::ExtendPrecision
     return next;
 }
 
-WLArrayAbstraction::BuildResult WLArrayAbstraction::Build(
+ArrayAbstraction::BuildResult ArrayAbstraction::Build(
     const Precision &precision) const {
     return Builder(*this, precision).Build();
 }
 
-void WLArrayAbstraction::CheckBuild(const BuildResult &build) const {
+void ArrayAbstraction::CheckBuild(const BuildResult &build) const {
     if (build.source != &m_ir)
         throw std::runtime_error("array build belongs to a different source IR");
 }
 
-const WLArrayAbstraction::Precision &WLArrayAbstraction::GetPrecision(const BuildResult &build) const {
+const ArrayAbstraction::Precision &ArrayAbstraction::GetPrecision(const BuildResult &build) const {
     CheckBuild(build);
     return build.precision;
 }
-int64_t WLArrayAbstraction::ReadExpression(const BuildResult &build, int64_t read) const {
+int64_t ArrayAbstraction::ReadExpression(const BuildResult &build, int64_t read) const {
     CheckBuild(build);
     return build.semanticReads.at(read);
 }
-int64_t WLArrayAbstraction::SelectorWord(const BuildResult &build, size_t selector) const {
+int64_t ArrayAbstraction::SelectorWord(const BuildResult &build, size_t selector) const {
     CheckBuild(build);
     return build.selectorBindings.at(selector);
 }
-int64_t WLArrayAbstraction::SlotWord(const BuildResult &build, int64_t arrayNodeId, size_t selector) const {
+int64_t ArrayAbstraction::SlotWord(const BuildResult &build, int64_t arrayNodeId, size_t selector) const {
     CheckBuild(build);
     return build.slotValueBindings.at({arrayNodeId, selector});
 }
-WLArrayAbstraction::ComparisonBinding WLArrayAbstraction::ComparisonExpressions(
+ArrayAbstraction::ComparisonBinding ArrayAbstraction::ComparisonExpressions(
     const BuildResult &build, int64_t comparison) const {
     CheckBuild(build);
     return build.comparisons.at(comparison);
 }
 
-WLArrayAbstraction::AnalysisResult WLArrayAbstraction::AnalyzeCounterexample(
+ArrayAbstraction::AnalysisResult ArrayAbstraction::AnalyzeCounterexample(
     const BuildResult &build, const WLTrace &abstractChoices) {
     try {
         return Analyzer(*this, build, abstractChoices).Run();

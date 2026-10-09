@@ -1,9 +1,9 @@
 #include "WLModel.h"
 
 #include "Btor2Frontend.h"
-#include "WLBitblastor.h"
-#include "WLPackageResize.h"
-#include "WLArraySimplifier.h"
+#include "Bitblastor.h"
+#include "PackageResize.h"
+#include "ArraySimplifier.h"
 #include "WLSimulator.h"
 #include "Log.h"
 
@@ -95,7 +95,7 @@ const Btor2IR &WLModel::PropertyIR() const {
     if (!m_propertyIr) {
         auto property = m_disableCoi ? m_sourceIr : ReduceToPropertyCoi(m_sourceIr);
         if (property.HasArrays()) {
-            m_arraySimplifier = std::make_unique<WLArraySimplifier>(property);
+            m_arraySimplifier = std::make_unique<ArraySimplifier>(property);
             const auto &stats = m_arraySimplifier->Stats();
             LOG_L(m_log, 1, "word-level array simplification: comparisons=", stats.comparisonsBefore,
                   " -> ", stats.comparisonsAfter, " defined_inputs=", stats.definedInputs,
@@ -119,10 +119,10 @@ void WLModel::RestoreSourceTrace(WLTrace &trace) const {
 void WLModel::WriteScalarAig(const std::string &path, bool resize) const {
     if (SourceHasArrays())
         throw std::runtime_error("--wl-bitblast-only accepts only array-free BTOR2 input");
-    std::unique_ptr<WLPackageResize> resized;
-    if (resize) resized = std::make_unique<WLPackageResize>(PropertyIR());
+    std::unique_ptr<PackageResize> resized;
+    if (resize) resized = std::make_unique<PackageResize>(PropertyIR());
     const auto &ir = resized ? resized->IR() : PropertyIR();
-    WLWordLayout layout;
+    WordLayout layout;
     auto aig = GenerateWLAig(ir, layout);
     if (path.empty() || !aiger_open_and_write_to_file(aig.get(), path.c_str()))
         throw std::runtime_error("failed to write AIGER output: " + path);

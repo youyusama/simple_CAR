@@ -32,7 +32,7 @@ class WLSimulator {
     enum class MissingChoices { Reject, Zero };
     struct Execution {
         // Only requested BV expressions are retained, keyed by their signed IR ID.
-        std::vector<std::unordered_map<int64_t, WLBitVector>> observations;
+        std::vector<std::unordered_map<int64_t, BitVector>> observations;
         std::vector<bool> constraintsHold;
         std::vector<bool> bad;
     };
@@ -43,10 +43,10 @@ class WLSimulator {
     class Frame {
       public:
         virtual ~Frame() = default;
-        virtual WLBitVector Scalar(int64_t id) const = 0;
-        virtual WLArrayValue Array(int64_t id) const = 0;
-        virtual WLBitVector ReadArray(int64_t id, const WLBitVector &address) const = 0;
-        virtual std::optional<WLBitVector> FindArrayDifference(
+        virtual BitVector Scalar(int64_t id) const = 0;
+        virtual ArrayValue Array(int64_t id) const = 0;
+        virtual BitVector ReadArray(int64_t id, const BitVector &address) const = 0;
+        virtual std::optional<BitVector> FindArrayDifference(
             int64_t lhs, int64_t rhs) const = 0;
     };
 
@@ -54,7 +54,7 @@ class WLSimulator {
         // Optional per-frame replacements of positive scalar expression IDs.
         // States and init/next statements cannot be overridden. Values remain
         // fixed while all dependent expressions and successor states recompute.
-        std::vector<std::unordered_map<int64_t, WLBitVector>> overrides;
+        std::vector<std::unordered_map<int64_t, BitVector>> overrides;
         std::function<void(size_t, const Frame &)> onFrame;
     };
 

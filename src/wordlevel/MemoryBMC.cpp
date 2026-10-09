@@ -1,11 +1,11 @@
-#include "WLMemoryBMC.h"
+#include "MemoryBMC.h"
 
 #include "model/Btor2IR.h"
 #include "Log.h"
 #include "WLSimulator.h"
-#include "model/WLArrayEqualityEncoder.h"
+#include "model/ArrayEqualityEncoder.h"
 #include "model/WLBoundedUnroller.h"
-#include "model/WLBitblastor.h"
+#include "model/Bitblastor.h"
 #include "model/WLModel.h"
 
 extern "C" {
@@ -193,7 +193,7 @@ class MemoryQuery {
 
     Result Check(WLTraceStep &flat,
                  const std::vector<int64_t> &observations,
-                 std::map<int64_t, WLBitVector> &observedValues,
+                 std::map<int64_t, BitVector> &observedValues,
                  bool recoverArrays) {
         LowerRequiredValues(observations);
         for (int64_t constraint : m_constraints)
@@ -475,8 +475,8 @@ class MemoryQuery {
     }
 
     void EncodeAigGates() {
-        const std::vector<WLAigGate> &gates = m_bitblastor.Gates();
-        for (const WLAigGate &gate : gates) {
+        const std::vector<Bitblastor::AigGate> &gates = m_bitblastor.Gates();
+        for (const Bitblastor::AigGate &gate : gates) {
             m_cnf.AddAigAnd(gate.node, gate.child0, gate.child1);
         }
     }
@@ -489,9 +489,9 @@ class MemoryQuery {
                            : !kissatEngine.Value(-literal);
     }
 
-    WLBitVector ModelCnfBits(const std::vector<int> &literals,
+    BitVector ModelCnfBits(const std::vector<int> &literals,
                              const RawKissat &kissatEngine) const {
-        WLBitVector value = WLBitVector::Zero(literals.size());
+        BitVector value = BitVector::Zero(literals.size());
         for (size_t bit = 0; bit < literals.size(); ++bit)
             value.SetBit(static_cast<uint32_t>(bit),
                          ModelLiteral(literals[bit], kissatEngine));
@@ -502,9 +502,9 @@ class MemoryQuery {
         for (int64_t input : m_arrayInputs) {
             const auto &sort = m_ir.Sort(m_ir.Node(input).sortId);
             flat.arrayInputValues[input].defaultValue =
-                WLBitVector::Zero(m_ir.Sort(sort.elementSort).width);
+                BitVector::Zero(m_ir.Sort(sort.elementSort).width);
         }
-        std::map<int64_t, std::map<std::string, WLBitVector>> entriesByRoot;
+        std::map<int64_t, std::map<std::string, BitVector>> entriesByRoot;
         for (const RootRead &read : m_rootReads) {
             if (!ModelLiteral(read.select, kissatEngine)) continue;
             const auto address = ModelCnfBits(read.address, kissatEngine);
@@ -517,14 +517,14 @@ class MemoryQuery {
             auto &value = flat.arrayInputValues.at(root);
             for (auto &[address, data] : entries)
                 value.entries.push_back(
-                    {WLBitVector::FromBinary(address.size(), address), std::move(data)});
+                    {BitVector::FromBinary(address.size(), address), std::move(data)});
         }
     }
 
     const Btor2IR &m_ir;
     Log &m_log;
-    WLBitblastor m_bitblastor;
-    std::unique_ptr<WLBitblastor::ScalarContext> m_scalar;
+    Bitblastor m_bitblastor;
+    std::unique_ptr<Bitblastor::ScalarContext> m_scalar;
     int64_t m_bad{0};
     std::vector<int64_t> m_inputs, m_arrayInputs, m_constraints;
     // Synthetic state/init pairs are just the bounded IR's uniform-array syntax.
@@ -540,14 +540,14 @@ class MemoryQuery {
 
 } // namespace
 
-WLMemoryBMC::WLMemoryBMC(WLModel &model,
+MemoryBMC::MemoryBMC(WLModel &model,
                          Log &log)
     : m_model(model),
       m_log(log) {}
 
-WLBoundedResult WLMemoryBMC::CheckThrough(unsigned bound) {
+MemoryBMC::Result MemoryBMC::CheckThrough(unsigned bound) {
     m_trace = {};
-    WLBoundedResult result;
+    MemoryBMC::Result result;
     const char *phase = "property preparation";
     unsigned depth = 0;
     try {
@@ -557,12 +557,12 @@ WLBoundedResult WLMemoryBMC::CheckThrough(unsigned bound) {
             LOG_L(m_log, 1, "WL memory BMC bound ", depth, ":");
             phase = "bounded unrolling";
             WLBoundedUnroller unrolled(source, depth);
-            std::unique_ptr<WLArrayEqualityEncoder> equality;
-            if (WLArrayEqualityEncoder::HasArrayComparisons(unrolled.IR())) {
+            std::unique_ptr<ArrayEqualityEncoder> equality;
+            if (ArrayEqualityEncoder::HasArrayComparisons(unrolled.IR())) {
                 // Equality auxiliaries belong to this finite formula. Rebuild
                 // them per query so background witnesses never restrict later bounds.
                 phase = "equality elimination";
-                equality = std::make_unique<WLArrayEqualityEncoder>(unrolled.IR());
+                equality = std::make_unique<ArrayEqualityEncoder>(unrolled.IR());
                 const auto &stats = equality->Stats();
                 LOG_L(m_log, 1, "WL array equality bound ", depth, ": ",
                       stats.comparisons, " comparisons, ", stats.points, " points, ",
@@ -572,7 +572,7 @@ WLBoundedResult WLMemoryBMC::CheckThrough(unsigned bound) {
             phase = "EMM encoding/query";
             MemoryQuery emm(equality ? equality->IR() : unrolled.IR(), m_log);
             WLTraceStep flat;
-            std::map<int64_t, WLBitVector> values;
+            std::map<int64_t, BitVector> values;
             const auto query = emm.Check(flat,
                 equality ? equality->ModelTerms() : std::vector<int64_t>{},
                 values, !equality);
@@ -599,7 +599,7 @@ WLBoundedResult WLMemoryBMC::CheckThrough(unsigned bound) {
                         "concrete replay failed at frame " + std::to_string(verified.time) +
                         " (node " + std::to_string(verified.nodeId) + "): " + verified.reason);
                 LOG_L(m_log, 1, "WL memory BMC concrete replay confirmed at depth ", depth);
-                result.status = WLBoundedStatus::Counterexample;
+                result.status = MemoryBMC::Status::Counterexample;
                 result.badDepth = depth;
                 return result;
             }
@@ -618,7 +618,7 @@ WLBoundedResult WLMemoryBMC::CheckThrough(unsigned bound) {
         return result;
     }
 
-    result.status = WLBoundedStatus::PrefixSafe;
+    result.status = MemoryBMC::Status::PrefixSafe;
     LOG_L(m_log,
           1,
           "WL memory BMC found no counterexample through bound ",

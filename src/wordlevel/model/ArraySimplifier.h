@@ -10,7 +10,7 @@ namespace car {
 
 // One-time, property-preserving array definition elimination. All reconstruction
 // expressions and private fallback inputs belong to this pass, not to WLTrace.
-class WLArraySimplifier {
+class ArraySimplifier {
   public:
     struct Statistics {
         size_t comparisonsBefore{0}, comparisonsAfter{0}, definedInputs{0};
@@ -18,7 +18,7 @@ class WLArraySimplifier {
         std::vector<std::string> skippedRules;
     };
 
-    explicit WLArraySimplifier(const Btor2IR &source);
+    explicit ArraySimplifier(const Btor2IR &source);
     const Btor2IR &IR() const { return m_ir; }
     const Statistics &Stats() const { return m_stats; }
     // Input choices refer to IR(); output choices refer to the constructor IR.

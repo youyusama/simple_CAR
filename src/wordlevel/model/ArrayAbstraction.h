@@ -1,5 +1,5 @@
-#ifndef WL_ARRAY_ABSTRACTION_H
-#define WL_ARRAY_ABSTRACTION_H
+#ifndef ARRAY_ABSTRACTION_H
+#define ARRAY_ABSTRACTION_H
 
 #include "Btor2IR.h"
 #include "WLTrace.h"
@@ -20,8 +20,8 @@ namespace car {
 // must outlive this object and its BuildResults. Each BuildResult owns the
 // abstract IR together with its matching precision and expression bindings;
 // Builder and Analyzer keep temporary execution data within a single call.
-class WLArrayAbstraction {
-    friend struct WLArrayAbstractionTestAccess;
+class ArrayAbstraction {
+    friend struct ArrayAbstractionTestAccess;
     class Builder;
     class Analyzer;
     struct Slot {
@@ -57,15 +57,15 @@ class WLArrayAbstraction {
     };
     class BuildResult;
 
-    explicit WLArrayAbstraction(const Btor2IR &ir);
-    WLArrayAbstraction(Btor2IR &&) = delete;
+    explicit ArrayAbstraction(const Btor2IR &ir);
+    ArrayAbstraction(Btor2IR &&) = delete;
     const Btor2IR &IR() const { return m_ir; }
 
     // Original scalar input/state ports retain their IDs in the abstract IR.
     BuildResult Build(const Precision &precision) const;
     // Corrections use fixed reference values and execute the actual abstract IR.
     // Refined supplies new legal targets; it does not prove trace exclusion or
-    // commit precision. WLCegar publishes a replacement only after a full build.
+    // commit precision. WLCEGAR publishes a replacement only after a full build.
     AnalysisResult AnalyzeCounterexample(const BuildResult &build,
         const WLTrace &abstractChoices);
     // Stage a validated, deduplicated batch without modifying the input value.
@@ -82,11 +82,11 @@ class WLArrayAbstraction {
     // Declarations are append-only, so existing address and selector identities
     // remain valid when refinement adds an address in a later round.
     Address RegisterOriginalAddress(int64_t signedNodeId);
-    Address RegisterConstantAddress(int64_t indexSort, const WLBitVector &value);
+    Address RegisterConstantAddress(int64_t indexSort, const BitVector &value);
     Address OriginalAddress(int64_t signedNodeId) const;
     Address WitnessAddress(int64_t comparison) const;
     std::optional<int64_t> WitnessComparison(Address address) const;
-    std::optional<WLBitVector> ConstantAddressValue(Address address) const;
+    std::optional<BitVector> ConstantAddressValue(Address address) const;
     int64_t OriginalNode(Address address) const;
     int64_t AddressSort(Address address) const;
     std::pair<int, int64_t> AddressOrder(Address address) const;
@@ -114,7 +114,7 @@ class WLArrayAbstraction {
     std::vector<Slot> Slots(const Precision &precision) const;
     struct OriginalSource { int64_t signedNodeId; };
     struct WitnessSource { int64_t comparisonNodeId; };
-    struct ConstantSource { int64_t indexSort; WLBitVector value; };
+    struct ConstantSource { int64_t indexSort; BitVector value; };
     using AddressSource = std::variant<OriginalSource, WitnessSource, ConstantSource>;
     const AddressSource &Source(Address address) const;
     void CheckBuild(const BuildResult &build) const;
@@ -129,7 +129,7 @@ class WLArrayAbstraction {
 
 // A complete build snapshot. Callers can inspect the IR but cannot separate or
 // replace its bindings. Copies/moves retain the matching IR and metadata.
-class WLArrayAbstraction::BuildResult {
+class ArrayAbstraction::BuildResult {
   public:
     BuildResult(const BuildResult &) = default;
     BuildResult(BuildResult &&) = default;
@@ -138,8 +138,8 @@ class WLArrayAbstraction::BuildResult {
     const Btor2IR &IR() const { return ir; }
 
   private:
-    friend class WLArrayAbstraction;
-    friend struct WLArrayAbstractionTestAccess;
+    friend class ArrayAbstraction;
+    friend struct ArrayAbstractionTestAccess;
     BuildResult(const Btor2IR &source, Precision precision)
         : source(&source), precision(std::move(precision)) {}
     Btor2IR ir;

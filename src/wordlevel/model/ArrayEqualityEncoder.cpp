@@ -1,4 +1,4 @@
-#include "WLArrayEqualityEncoder.h"
+#include "ArrayEqualityEncoder.h"
 
 #include <algorithm>
 #include <limits>
@@ -34,17 +34,17 @@ struct Components {
 };
 
 // Literal folding only: no assumptions about symbolic indices or SAT values.
-std::optional<WLBitVector> LiteralValue(const Btor2IR &ir, int64_t id) {
+std::optional<BitVector> LiteralValue(const Btor2IR &ir, int64_t id) {
     const auto &node = ir.Node(id);
     const auto width = ir.Sort(node.sortId).width;
-    WLBitVector value;
+    BitVector value;
     switch (node.tag) {
-    case BTOR2_TAG_zero: value = WLBitVector::Zero(width); break;
-    case BTOR2_TAG_one: value = WLBitVector::One(width); break;
-    case BTOR2_TAG_ones: value = WLBitVector::Ones(width); break;
-    case BTOR2_TAG_const: value = WLBitVector::FromBinary(width, node.constant); break;
-    case BTOR2_TAG_constd: value = WLBitVector::FromDecimal(width, node.constant); break;
-    case BTOR2_TAG_consth: value = WLBitVector::FromHex(width, node.constant); break;
+    case BTOR2_TAG_zero: value = BitVector::Zero(width); break;
+    case BTOR2_TAG_one: value = BitVector::One(width); break;
+    case BTOR2_TAG_ones: value = BitVector::Ones(width); break;
+    case BTOR2_TAG_const: value = BitVector::FromBinary(width, node.constant); break;
+    case BTOR2_TAG_constd: value = BitVector::FromDecimal(width, node.constant); break;
+    case BTOR2_TAG_consth: value = BitVector::FromHex(width, node.constant); break;
     default: return std::nullopt;
     }
     if (id < 0)
@@ -54,7 +54,7 @@ std::optional<WLBitVector> LiteralValue(const Btor2IR &ir, int64_t id) {
 }
 } // namespace
 
-bool WLArrayEqualityEncoder::HasArrayComparisons(const Btor2IR &ir) {
+bool ArrayEqualityEncoder::HasArrayComparisons(const Btor2IR &ir) {
     for (const auto &node : ir.Nodes())
         if ((node.tag == BTOR2_TAG_eq || node.tag == BTOR2_TAG_neq) &&
             ir.Sort(ir.Node(node.args[0]).sortId).tag == BTOR2_TAG_SORT_array)
@@ -62,7 +62,7 @@ bool WLArrayEqualityEncoder::HasArrayComparisons(const Btor2IR &ir) {
     return false;
 }
 
-WLArrayEqualityEncoder::WLArrayEqualityEncoder(const Btor2IR &bounded)
+ArrayEqualityEncoder::ArrayEqualityEncoder(const Btor2IR &bounded)
     : m_ir(bounded) {
     bounded.ValidateSupportedArrays();
     m_boolSort = BitVectorSort(1);
@@ -125,7 +125,7 @@ WLArrayEqualityEncoder::WLArrayEqualityEncoder(const Btor2IR &bounded)
         throw std::runtime_error("array equality elimination left an array comparison");
 }
 
-WLArrayEqualityEncoder::Ref WLArrayEqualityEncoder::Array(int64_t id) {
+ArrayEqualityEncoder::Ref ArrayEqualityEncoder::Array(int64_t id) {
     auto cached = m_arrayIds.find(id);
     if (cached != m_arrayIds.end()) return cached->second;
     const auto &source = m_ir.Node(id);
@@ -159,7 +159,7 @@ WLArrayEqualityEncoder::Ref WLArrayEqualityEncoder::Array(int64_t id) {
     return result;
 }
 
-int64_t WLArrayEqualityEncoder::Add(Btor2Tag tag, int64_t sort,
+int64_t ArrayEqualityEncoder::Add(Btor2Tag tag, int64_t sort,
                                     std::initializer_list<int64_t> args) {
     Btor2IRNode node;
     node.id = m_ir.FreshId();
@@ -171,25 +171,25 @@ int64_t WLArrayEqualityEncoder::Add(Btor2Tag tag, int64_t sort,
     return node.id;
 }
 
-int64_t WLArrayEqualityEncoder::BitVectorSort(uint32_t width) {
+int64_t ArrayEqualityEncoder::BitVectorSort(uint32_t width) {
     for (const auto &[id, sort] : m_ir.Sorts())
         if (sort.tag == BTOR2_TAG_SORT_bitvec && sort.width == width) return id;
     return m_ir.AddSort({m_ir.FreshId(), BTOR2_TAG_SORT_bitvec, width, 0, 0});
 }
 
-int64_t WLArrayEqualityEncoder::Input(int64_t sort) {
+int64_t ArrayEqualityEncoder::Input(int64_t sort) {
     const int64_t id = Add(BTOR2_TAG_input, sort);
     m_ir.MutableNode(id).symbol = "wl.eq.aux." + std::to_string(id);
     return id;
 }
 
-int64_t WLArrayEqualityEncoder::Constant(uint32_t width, const std::string &bits) {
+int64_t ArrayEqualityEncoder::Constant(uint32_t width, const std::string &bits) {
     const int64_t id = Add(BTOR2_TAG_const, BitVectorSort(width));
     m_ir.MutableNode(id).constant = bits;
     return id;
 }
 
-int64_t WLArrayEqualityEncoder::Read(int64_t array, int64_t address) {
+int64_t ArrayEqualityEncoder::Read(int64_t array, int64_t address) {
     auto key = std::make_pair(array, address);
     auto found = m_reads.find(key);
     if (found != m_reads.end()) return found->second;
@@ -199,13 +199,13 @@ int64_t WLArrayEqualityEncoder::Read(int64_t array, int64_t address) {
     return id;
 }
 
-int64_t WLArrayEqualityEncoder::Not(int64_t x) const {
+int64_t ArrayEqualityEncoder::Not(int64_t x) const {
     if (x == m_true) return m_false;
     if (x == m_false) return m_true;
     return -x;
 }
 
-int64_t WLArrayEqualityEncoder::Gate(Btor2Tag tag, int64_t x, int64_t y) {
+int64_t ArrayEqualityEncoder::Gate(Btor2Tag tag, int64_t x, int64_t y) {
     if (x > y) std::swap(x, y);
     auto key = std::make_tuple(tag, x, y);
     auto found = m_gates.find(key);
@@ -215,18 +215,18 @@ int64_t WLArrayEqualityEncoder::Gate(Btor2Tag tag, int64_t x, int64_t y) {
     return id;
 }
 
-int64_t WLArrayEqualityEncoder::And(int64_t x, int64_t y) {
+int64_t ArrayEqualityEncoder::And(int64_t x, int64_t y) {
     if (x == m_false || y == m_false || x == -y) return m_false;
     if (x == m_true || x == y) return y;
     if (y == m_true) return x;
     return Gate(BTOR2_TAG_and, x, y);
 }
 
-int64_t WLArrayEqualityEncoder::Or(int64_t x, int64_t y) {
+int64_t ArrayEqualityEncoder::Or(int64_t x, int64_t y) {
     return Not(And(Not(x), Not(y)));
 }
 
-int64_t WLArrayEqualityEncoder::Eq(int64_t x, int64_t y) {
+int64_t ArrayEqualityEncoder::Eq(int64_t x, int64_t y) {
     if (m_ir.Sort(m_ir.Node(x).sortId).tag != BTOR2_TAG_SORT_bitvec ||
         m_ir.Sort(m_ir.Node(y).sortId).tag != BTOR2_TAG_SORT_bitvec)
         throw std::runtime_error("equality pass attempted to generate an array comparison");
@@ -237,11 +237,11 @@ int64_t WLArrayEqualityEncoder::Eq(int64_t x, int64_t y) {
     return Gate(BTOR2_TAG_eq, x, y);
 }
 
-void WLArrayEqualityEncoder::Require(int64_t condition) {
+void ArrayEqualityEncoder::Require(int64_t condition) {
     if (condition != m_true) Add(BTOR2_TAG_constraint, 0, {condition});
 }
 
-void WLArrayEqualityEncoder::Encode() {
+void ArrayEqualityEncoder::Encode() {
     const int64_t yes = m_true, no = m_false;
     auto require = [&](int64_t c) { Require(c); };
     std::set<int64_t> implications;
@@ -364,7 +364,7 @@ void WLArrayEqualityEncoder::Encode() {
         } else {
             const size_t capacity = size_t{1} << indexWidth;
             for (size_t i = 0; i < capacity; ++i) {
-                const auto bits = WLBitVector::FromUInt64(indexWidth, i).ToBinary();
+                const auto bits = BitVector::FromUInt64(indexWidth, i).ToBinary();
                 queries.push_back(Constant(indexWidth, bits));
             }
         }
@@ -378,7 +378,7 @@ void WLArrayEqualityEncoder::Encode() {
     }
 }
 
-void WLArrayEqualityEncoder::PruneGeneratedNodes(const Btor2IR &source) {
+void ArrayEqualityEncoder::PruneGeneratedNodes(const Btor2IR &source) {
     // Preserve source declarations/IDs, all asserted constraints, and every
     // observation needed for total-array recovery. Only generated garbage is
     // removed; walking nargs leaves slice/extension immediates untouched.
@@ -401,7 +401,7 @@ void WLArrayEqualityEncoder::PruneGeneratedNodes(const Btor2IR &source) {
     m_ir = std::move(output);
 }
 
-std::vector<int64_t> WLArrayEqualityEncoder::ModelTerms() const {
+std::vector<int64_t> ArrayEqualityEncoder::ModelTerms() const {
     std::set<int64_t> terms;
     for (const auto &n : m_nodes) {
         if (n.condition) terms.insert(n.condition);
@@ -413,8 +413,8 @@ std::vector<int64_t> WLArrayEqualityEncoder::ModelTerms() const {
     return {terms.begin(), terms.end()};
 }
 
-std::map<int64_t, WLArrayValue> WLArrayEqualityEncoder::Complete(const Value &value) const {
-    std::vector<WLArrayValue> result(m_nodes.size());
+std::map<int64_t, ArrayValue> ArrayEqualityEncoder::Complete(const Value &value) const {
+    std::vector<ArrayValue> result(m_nodes.size());
     std::map<int64_t, std::vector<Ref>> groups;
     for (Ref i = 0; i < m_nodes.size(); ++i) groups[m_nodes[i].sortId].push_back(i);
     for (const auto &group : groups) {
@@ -423,7 +423,7 @@ std::map<int64_t, WLArrayValue> WLArrayEqualityEncoder::Complete(const Value &va
         const uint32_t indexWidth = m_ir.Sort(sort.indexSort).width;
         const uint32_t elementWidth = m_ir.Sort(sort.elementSort).width;
         const auto &ids = group.second;
-        std::map<std::string, WLBitVector> addresses;
+        std::map<std::string, BitVector> addresses;
         for (const auto &p : m_points) if (m_nodes[p.array].sortId == sortId) {
             auto a = value(p.address);
             addresses.emplace(a.ToBinary(), a);
@@ -431,7 +431,7 @@ std::map<int64_t, WLArrayValue> WLArrayEqualityEncoder::Complete(const Value &va
         // Store addresses occur in the write endpoints, so outside this set
         // every store edge is enabled. Never demand a background if it is empty.
         const bool background = !CoversDomain(addresses.size(), indexWidth);
-        auto at = [&](const WLBitVector *address) {
+        auto at = [&](const BitVector *address) {
             Components components(m_nodes.size());
             for (Ref id : ids) {
                 const auto &n = m_nodes[id];
@@ -443,8 +443,8 @@ std::map<int64_t, WLArrayValue> WLArrayEqualityEncoder::Complete(const Value &va
             for (const auto &q : m_comparisons)
                 if (m_nodes[q.left].sortId == sortId && !value(q.equal).IsZero())
                     components.Join(q.left, q.right);
-            std::map<Ref, WLBitVector> labels;
-            auto label = [&](Ref id, const WLBitVector &v) {
+            std::map<Ref, BitVector> labels;
+            auto label = [&](Ref id, const BitVector &v) {
                 auto [it, inserted] = labels.emplace(components.Find(id), v);
                 if (!inserted && it->second != v)
                     throw std::runtime_error("inconsistent array equality SAT model completion");
@@ -454,17 +454,17 @@ std::map<int64_t, WLArrayValue> WLArrayEqualityEncoder::Complete(const Value &va
             if (address) for (const auto &p : m_points)
                 if (m_nodes[p.array].sortId == sortId && *address == value(p.address))
                     label(p.array, value(p.data));
-            std::map<Ref, WLBitVector> values;
+            std::map<Ref, BitVector> values;
             for (Ref id : ids) {
                 auto found = labels.find(components.Find(id));
-                values.emplace(id, found == labels.end() ? WLBitVector::Zero(elementWidth) : found->second);
+                values.emplace(id, found == labels.end() ? BitVector::Zero(elementWidth) : found->second);
             }
             return values;
         };
         if (background) {
             auto defaults = at(nullptr);
             for (Ref id : ids) result[id].defaultValue = defaults.at(id);
-        } else for (Ref id : ids) result[id].defaultValue = WLBitVector::Zero(elementWidth);
+        } else for (Ref id : ids) result[id].defaultValue = BitVector::Zero(elementWidth);
         // Check complete equality, not just the explicit witness points.
         std::vector<bool> equal(m_comparisons.size(), true);
         auto check = [&](const auto &values) {
@@ -487,7 +487,7 @@ std::map<int64_t, WLArrayValue> WLArrayEqualityEncoder::Complete(const Value &va
                 throw std::runtime_error("array equality witness does not realize comparison");
         }
     }
-    std::map<int64_t, WLArrayValue> arrays;
+    std::map<int64_t, ArrayValue> arrays;
     for (Ref i = 0; i < m_nodes.size(); ++i)
         arrays.emplace(m_nodes[i].source, std::move(result[i]));
     return arrays;

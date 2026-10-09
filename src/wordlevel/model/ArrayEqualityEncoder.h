@@ -13,9 +13,9 @@ namespace car {
 // Standalone IR-to-IR pass on a finite, already unrolled formula.
 // IR() contains no array eq/neq; it is suitable for an ordinary EMM encoder.
 // No Boolector objects, SAT literals, or EMM-private observations cross this API.
-class WLArrayEqualityEncoder {
+class ArrayEqualityEncoder {
   public:
-    explicit WLArrayEqualityEncoder(const Btor2IR &bounded);
+    explicit ArrayEqualityEncoder(const Btor2IR &bounded);
     static bool HasArrayComparisons(const Btor2IR &ir);
     const Btor2IR &IR() const { return m_ir; }
 
@@ -27,10 +27,10 @@ class WLArrayEqualityEncoder {
     const Statistics &Stats() const { return m_stats; }
     // Scalar IR IDs whose values are needed to lift a model of IR().
     std::vector<int64_t> ModelTerms() const;
-    using Value = std::function<WLBitVector(int64_t)>;
+    using Value = std::function<BitVector(int64_t)>;
     // Complete semantic observations, not private EMM root-read assignments.
     // The result is indexed by array node ID in the bounded input IR.
-    std::map<int64_t, WLArrayValue> Complete(const Value &value) const;
+    std::map<int64_t, ArrayValue> Complete(const Value &value) const;
 
   private:
     using Ref = size_t;

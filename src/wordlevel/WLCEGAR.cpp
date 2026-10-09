@@ -1,13 +1,13 @@
-#include "WLCegar.h"
+#include "WLCEGAR.h"
 #include "CheckerFactory.h"
 
 #include "Log.h"
 #include "Model.h"
 #include "model/WLModel.h"
-#include "WLMemoryBMC.h"
+#include "MemoryBMC.h"
 #include "WLSimulator.h"
-#include "model/WLBitblastor.h"
-#include "model/WLPackageResize.h"
+#include "model/Bitblastor.h"
+#include "model/PackageResize.h"
 
 #include <algorithm>
 #include <chrono>
@@ -16,18 +16,18 @@
 
 namespace car {
 
-struct WLCegar::AbstractionContext {
-    explicit AbstractionContext(WLArrayAbstraction::BuildResult build)
+struct WLCEGAR::AbstractionContext {
+    explicit AbstractionContext(ArrayAbstraction::BuildResult build)
         : build(std::move(build)) {}
-    WLWordLayout layout;
-    WLArrayAbstraction::BuildResult build;
-    std::unique_ptr<WLPackageResize> resize;
+    WordLayout layout;
+    ArrayAbstraction::BuildResult build;
+    std::unique_ptr<PackageResize> resize;
     // Destroy checker before Model, which owns the AIG; metadata outlives both.
     std::unique_ptr<Model> model;
     std::unique_ptr<BaseAlg> checker;
 };
 
-WLCegar::WLCegar(const Settings &settings,
+WLCEGAR::WLCEGAR(const Settings &settings,
                  Log &log,
                  WLModel &model)
     : m_settings(settings),
@@ -38,8 +38,8 @@ WLCegar::WLCegar(const Settings &settings,
     m_abstractionContext = BuildAbstractionContext({});
 }
 
-std::unique_ptr<WLCegar::AbstractionContext> WLCegar::BuildAbstractionContext(
-    WLArrayAbstraction::Precision precision) {
+std::unique_ptr<WLCEGAR::AbstractionContext> WLCEGAR::BuildAbstractionContext(
+    ArrayAbstraction::Precision precision) {
     const auto start = std::chrono::steady_clock::now();
     if (!m_settings.wlBitblastOutputPath.empty())
         throw std::runtime_error("checking build cannot be used for AIG export");
@@ -47,7 +47,7 @@ std::unique_ptr<WLCegar::AbstractionContext> WLCegar::BuildAbstractionContext(
     if (context->build.IR().HasArrays())
         throw std::runtime_error("array abstraction produced an array-valued word-level model");
     if (!m_settings.wlDisablePackageResize)
-        context->resize = std::make_unique<WLPackageResize>(context->build.IR());
+        context->resize = std::make_unique<PackageResize>(context->build.IR());
     const auto &bitblastIR = context->resize ? context->resize->IR() : context->build.IR();
     auto aig = GenerateWLAig(bitblastIR, context->layout);
     context->model = std::make_unique<Model>(m_settings, m_log, std::move(aig));
@@ -60,7 +60,7 @@ std::unique_ptr<WLCegar::AbstractionContext> WLCegar::BuildAbstractionContext(
     return context;
 }
 
-WLTrace WLCegar::RecoverChoices(
+WLTrace WLCEGAR::RecoverChoices(
     const std::vector<std::pair<Cube, Cube>> &trace) const {
     const auto &context = *m_abstractionContext;
     const auto &bitblastIR = context.resize ? context.resize->IR() : context.build.IR();
@@ -71,13 +71,13 @@ WLTrace WLCegar::RecoverChoices(
     return choices;
 }
 
-WLCegar::~WLCegar() = default;
+WLCEGAR::~WLCEGAR() = default;
 
-unsigned WLCegar::MaxDelay() const {
+unsigned WLCEGAR::MaxDelay() const {
     return m_abstraction.MaxDelay(m_abstractionContext->build);
 }
 
-bool WLCegar::ReloadModel(const std::vector<WLArrayAbstraction::TrackingTarget> &targets) {
+bool WLCEGAR::ReloadModel(const std::vector<ArrayAbstraction::TrackingTarget> &targets) {
     try {
         auto precision = m_abstraction.ExtendPrecision(
             m_abstractionContext->build, targets);
@@ -91,7 +91,7 @@ bool WLCegar::ReloadModel(const std::vector<WLArrayAbstraction::TrackingTarget> 
     return true;
 }
 
-CheckResult WLCegar::Run() {
+CheckResult WLCEGAR::Run() {
     CheckResult res = CheckResult::Unknown;
     unsigned refinements = 0;
     m_trace = {};
@@ -130,9 +130,9 @@ CheckResult WLCegar::Run() {
                       " read_corrections=", analysis.readCorrections,
                       " comparison_corrections=", analysis.comparisonCorrections,
                       " trials=", analysis.trials);
-                if (analysis.kind == WLArrayAbstraction::AnalysisResult::Kind::ConcreteCandidate)
+                if (analysis.kind == ArrayAbstraction::AnalysisResult::Kind::ConcreteCandidate)
                     return confirm(std::move(analysis.trace));
-                if (analysis.kind == WLArrayAbstraction::AnalysisResult::Kind::Unknown) {
+                if (analysis.kind == ArrayAbstraction::AnalysisResult::Kind::Unknown) {
                     LOG_L(m_log, 0, "word-level greedy Unknown: ", analysis.reason);
                     return CheckResult::Unknown;
                 }
@@ -152,16 +152,16 @@ CheckResult WLCegar::Run() {
         if (res == CheckResult::Safe) {
             if (MaxDelay() == 0) break;
             // Close the finite prefix not covered by the delayed abstraction guards.
-            WLMemoryBMC boundedChecker(m_model, m_log);
+            MemoryBMC boundedChecker(m_model, m_log);
             try {
                 LOG_L(m_log, 1, "word-level guard prefix check through ", MaxDelay() - 1);
                 const auto prefixStart = std::chrono::steady_clock::now();
                 const auto bounded = boundedChecker.CheckThrough(MaxDelay() - 1);
                 LOG_L(m_log, 1, "word-level guard prefix: ms=", elapsed(prefixStart));
-                if (bounded.status == WLBoundedStatus::Counterexample) {
+                if (bounded.status == MemoryBMC::Status::Counterexample) {
                     m_trace = boundedChecker.GetTrace();
                     res = CheckResult::Unsafe;
-                } else if (bounded.status == WLBoundedStatus::PrefixSafe &&
+                } else if (bounded.status == MemoryBMC::Status::PrefixSafe &&
                            bounded.checkedThrough && *bounded.checkedThrough >= MaxDelay() - 1) {
                     res = CheckResult::Safe;
                 } else {

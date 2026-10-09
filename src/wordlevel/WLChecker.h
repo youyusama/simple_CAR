@@ -3,7 +3,7 @@
 
 #include "BaseAlg.h"
 #include "WLTrace.h"
-#include "model/WLBitblastor.h"
+#include "model/Bitblastor.h"
 
 #include <memory>
 
@@ -11,10 +11,10 @@ namespace car {
 
 class Log;
 class Model;
-class WLCegar;
-class WLMemoryBMC;
+class WLCEGAR;
+class MemoryBMC;
 class WLModel;
-class WLPackageResize;
+class PackageResize;
 
 // Word-level checker wrapper for BTOR2 inputs. It keeps BTOR2-specific trace
 // handling and array CEGAR out of SimpleCAR while still delegating the bit-level
@@ -38,12 +38,12 @@ class WLChecker : public BaseAlg {
     WLModel &m_model;
     // Scalar checking owns its encoding; it needs no array abstraction or round.
     std::shared_ptr<aiger> m_aig;
-    WLWordLayout m_layout;
-    std::unique_ptr<WLPackageResize> m_resize;
+    WordLayout m_layout;
+    std::unique_ptr<PackageResize> m_resize;
     std::unique_ptr<Model> m_bitModel;
     std::unique_ptr<BaseAlg> m_checker;
-    std::unique_ptr<WLCegar> m_cegar;
-    std::unique_ptr<WLMemoryBMC> m_memoryBmc;
+    std::unique_ptr<WLCEGAR> m_cegar;
+    std::unique_ptr<MemoryBMC> m_memoryBmc;
     WLTrace m_trace;
 };
 

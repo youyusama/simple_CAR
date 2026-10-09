@@ -1,4 +1,4 @@
-#include "WLArraySimplifier.h"
+#include "ArraySimplifier.h"
 
 #include "WLSimulator.h"
 #include <algorithm>
@@ -157,9 +157,9 @@ class Builder {
         if (n.sortId == boolean) {
             if (n.tag == BTOR2_TAG_zero) return -yes;
             if (n.tag == BTOR2_TAG_one || n.tag == BTOR2_TAG_ones) return yes;
-            if (n.tag == BTOR2_TAG_const) return WLBitVector::FromBinary(1, n.constant).IsZero() ? -yes : yes;
-            if (n.tag == BTOR2_TAG_constd) return WLBitVector::FromDecimal(1, n.constant).IsZero() ? -yes : yes;
-            if (n.tag == BTOR2_TAG_consth) return WLBitVector::FromHex(1, n.constant).IsZero() ? -yes : yes;
+            if (n.tag == BTOR2_TAG_const) return BitVector::FromBinary(1, n.constant).IsZero() ? -yes : yes;
+            if (n.tag == BTOR2_TAG_constd) return BitVector::FromDecimal(1, n.constant).IsZero() ? -yes : yes;
+            if (n.tag == BTOR2_TAG_consth) return BitVector::FromHex(1, n.constant).IsZero() ? -yes : yes;
             if (n.tag == BTOR2_TAG_not) return -a;
             if (n.tag == BTOR2_TAG_and || n.tag == BTOR2_TAG_or) {
                 const bool conjunction = n.tag == BTOR2_TAG_and;
@@ -495,7 +495,7 @@ class Builder {
 };
 } // namespace
 
-WLArraySimplifier::WLArraySimplifier(const Btor2IR &source) {
+ArraySimplifier::ArraySimplifier(const Btor2IR &source) {
     m_stats.comparisonsBefore = Comparisons(source);
     Builder builder(source);
     builder.Run();
@@ -509,7 +509,7 @@ WLArraySimplifier::WLArraySimplifier(const Btor2IR &source) {
     m_stats.skippedRules.assign(builder.skippedRules.begin(), builder.skippedRules.end());
 }
 
-void WLArraySimplifier::RestoreTrace(WLTrace &trace, const Btor2IR &property) const {
+void ArraySimplifier::RestoreTrace(WLTrace &trace, const Btor2IR &property) const {
     if (m_definitions.empty()) return;
     auto choices = trace;
     WLSimulator::CompleteCoiChoices(m_replayIr, property, choices);

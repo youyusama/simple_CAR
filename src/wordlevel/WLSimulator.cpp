@@ -1,5 +1,5 @@
 #include "WLSimulator.h"
-#include "WLBitVector.h"
+#include "BitVector.h"
 
 #include <btorsim/btorsimbv.h>
 
@@ -14,23 +14,23 @@ namespace car {
 class WLSimulator::Impl {
   public:
     struct BitValue {
-        WLBitVector value;
+        BitVector value;
 
         static BitValue Zero(unsigned width) {
-            return {WLBitVector::Zero(width)};
+            return {BitVector::Zero(width)};
         }
         static BitValue FromUInt64(unsigned width, uint64_t value) {
-            return {WLBitVector::FromUInt64(width, value)};
+            return {BitVector::FromUInt64(width, value)};
         }
         static BitValue FromBool(bool value) {
-            return {value ? WLBitVector::One(1) : WLBitVector::Zero(1)};
+            return {value ? BitVector::One(1) : BitVector::Zero(1)};
         }
         unsigned Width() const { return value.Width(); }
         bool IsOne() const { return value.Width() == 1 && value.IsOne(); }
         bool IsZero() const { return value.IsZero(); }
     };
 
-    struct ArrayValue {
+    struct ArrayStorage {
         unsigned indexWidth{0};
         unsigned elementWidth{0};
         BitValue defaultValue;
@@ -40,14 +40,14 @@ class WLSimulator::Impl {
     struct Value {
         bool isArray{false};
         BitValue bits;
-        ArrayValue array;
+        ArrayStorage array;
 
         static Value BV(BitValue bits) {
             Value value;
             value.bits = std::move(bits);
             return value;
         }
-        static Value Array(ArrayValue array) {
+        static Value Array(ArrayStorage array) {
             Value value;
             value.isArray = true;
             value.array = std::move(array);
@@ -94,7 +94,7 @@ class WLSimulator::Impl {
       public:
         explicit CurrentFrame(Impl &execution) : m_execution(execution) {}
 
-        WLBitVector Scalar(int64_t id) const override {
+        BitVector Scalar(int64_t id) const override {
             auto value = m_execution.EvalConcrete(id);
             if (value.isArray)
                 m_execution.Fail(VerificationKind::Invalid, id,
@@ -102,18 +102,18 @@ class WLSimulator::Impl {
             return value.bits.value;
         }
 
-        WLArrayValue Array(int64_t id) const override {
+        ArrayValue Array(int64_t id) const override {
             const auto value = m_execution.EvalConcrete(id);
             if (!value.isArray)
                 m_execution.Fail(VerificationKind::Invalid, id, "array query requires an array expression");
-            WLArrayValue result;
+            ArrayValue result;
             result.defaultValue = value.array.defaultValue.value;
             for (const auto &[address, entry] : value.array.entries)
-                result.entries.push_back({WLBitVector::FromBinary(value.array.indexWidth, address), entry.value});
+                result.entries.push_back({BitVector::FromBinary(value.array.indexWidth, address), entry.value});
             return result;
         }
 
-        WLBitVector ReadArray(int64_t id, const WLBitVector &address) const override {
+        BitVector ReadArray(int64_t id, const BitVector &address) const override {
             auto value = m_execution.EvalConcrete(id);
             if (!value.isArray || address.Width() != value.array.indexWidth)
                 m_execution.Fail(VerificationKind::Invalid, id,
@@ -121,7 +121,7 @@ class WLSimulator::Impl {
             return ArrayAt(value.array, address.ToBinary());
         }
 
-        std::optional<WLBitVector> FindArrayDifference(
+        std::optional<BitVector> FindArrayDifference(
             int64_t lhs, int64_t rhs) const override {
             auto left = m_execution.EvalConcrete(lhs);
             auto right = m_execution.EvalConcrete(rhs);
@@ -152,7 +152,7 @@ class WLSimulator::Impl {
                count == (size_t{1} << width);
     }
 
-    static const WLBitVector &ArrayAt(const ArrayValue &array,
+    static const BitVector &ArrayAt(const ArrayStorage &array,
                                      const std::string &address) {
         auto it = array.entries.find(address);
         return it == array.entries.end() ? array.defaultValue.value : it->second.value;
@@ -162,8 +162,8 @@ class WLSimulator::Impl {
     // strings sort by unsigned address, including addresses wider than uint64_t.
     // Different defaults are irrelevant when the explicit union covers the
     // whole domain, so never use a default mismatch alone as a witness.
-    static std::optional<WLBitVector> ArrayDifference(const ArrayValue &lhs,
-                                                     const ArrayValue &rhs) {
+    static std::optional<BitVector> ArrayDifference(const ArrayStorage &lhs,
+                                                     const ArrayStorage &rhs) {
         if (lhs.indexWidth != rhs.indexWidth || lhs.elementWidth != rhs.elementWidth)
             throw std::runtime_error("array comparison sort mismatch");
         std::set<std::string> addresses;
@@ -174,9 +174,9 @@ class WLSimulator::Impl {
         bool exhausted = false;
         for (const auto &address : addresses) {
             if (differentDefaults && address != gap)
-                return WLBitVector::FromBinary(lhs.indexWidth, gap);
+                return BitVector::FromBinary(lhs.indexWidth, gap);
             if (ArrayAt(lhs, address) != ArrayAt(rhs, address))
-                return WLBitVector::FromBinary(lhs.indexWidth, address);
+                return BitVector::FromBinary(lhs.indexWidth, address);
             if (differentDefaults) {
                 // Increment without narrowing the index to a machine integer.
                 size_t bit = gap.size();
@@ -186,12 +186,12 @@ class WLSimulator::Impl {
             }
         }
         if (differentDefaults && !exhausted)
-            return WLBitVector::FromBinary(lhs.indexWidth, gap);
+            return BitVector::FromBinary(lhs.indexWidth, gap);
         return std::nullopt;
     }
 
-    Value TraceArray(int64_t id, const WLArrayValue &value) {
-        ArrayValue array = NewArray(id);
+    Value TraceArray(int64_t id, const ArrayValue &value) {
+        ArrayStorage array = NewArray(id);
         for (const auto &entry : value.entries) {
             if (entry.index.Width() != array.indexWidth ||
                 entry.value.Width() != array.elementWidth)
@@ -207,7 +207,7 @@ class WLSimulator::Impl {
         if (value.defaultValue && value.defaultValue->Width() != array.elementWidth)
             Fail(VerificationKind::Invalid, id, "array default width mismatch");
         array.defaultValue = {
-            value.defaultValue.value_or(WLBitVector::Zero(array.elementWidth))};
+            value.defaultValue.value_or(BitVector::Zero(array.elementWidth))};
         return Value::Array(std::move(array));
     }
 
@@ -284,7 +284,7 @@ class WLSimulator::Impl {
         return value;
     }
 
-    static bool ArraysEqual(const ArrayValue &lhs, const ArrayValue &rhs) {
+    static bool ArraysEqual(const ArrayStorage &lhs, const ArrayStorage &rhs) {
         if (lhs.indexWidth != rhs.indexWidth || lhs.elementWidth != rhs.elementWidth)
             throw std::runtime_error("array comparison sort mismatch");
         std::unordered_set<std::string> addresses;
@@ -448,16 +448,16 @@ class WLSimulator::Impl {
         return m_ir.Sort(sort.elementSort).width;
     }
 
-    ArrayValue NewArray(int64_t stateId) const {
-        ArrayValue array;
+    ArrayStorage NewArray(int64_t stateId) const {
+        ArrayStorage array;
         array.indexWidth = ArrayIndexWidth(stateId);
         array.elementWidth = ArrayElementWidth(stateId);
         array.defaultValue = BitValue::Zero(array.elementWidth);
         return array;
     }
 
-    ArrayValue NewUniformArray(int64_t stateId, BitValue initial) const {
-        ArrayValue array = NewArray(stateId);
+    ArrayStorage NewUniformArray(int64_t stateId, BitValue initial) const {
+        ArrayStorage array = NewArray(stateId);
         array.defaultValue = std::move(initial);
         return array;
     }
@@ -502,20 +502,20 @@ class WLSimulator::Impl {
     Value EvalOperation(const Btor2IRNode &node, const Operand &arg) {
         switch (node.tag) {
         case BTOR2_TAG_const:
-            return Value::BV({WLBitVector::FromBinary(
+            return Value::BV({BitVector::FromBinary(
                 NodeWidth(node.id), node.constant)});
         case BTOR2_TAG_constd:
-            return Value::BV({WLBitVector::FromDecimal(
+            return Value::BV({BitVector::FromDecimal(
                 NodeWidth(node.id), node.constant)});
         case BTOR2_TAG_consth:
-            return Value::BV({WLBitVector::FromHex(
+            return Value::BV({BitVector::FromHex(
                 NodeWidth(node.id), node.constant)});
         case BTOR2_TAG_zero:
             return Value::BV(BitValue::Zero(NodeWidth(node.id)));
         case BTOR2_TAG_one:
             return Value::BV(BitValue::FromUInt64(NodeWidth(node.id), 1));
         case BTOR2_TAG_ones:
-            return Value::BV({WLBitVector::Ones(NodeWidth(node.id))});
+            return Value::BV({BitVector::Ones(NodeWidth(node.id))});
         case BTOR2_TAG_read: return EvalConcreteRead(node);
         case BTOR2_TAG_write: {
             Value array = arg(0);
@@ -575,7 +575,7 @@ class WLSimulator::Impl {
     Value EvalUnary(const Btor2IRNode &node, const Value &operand) const {
         if (operand.isArray)
             throw EvaluationError(node, "scalar operation consumes array");
-        auto apply = [&](WLBitVector::UnaryOperation operation) {
+        auto apply = [&](BitVector::UnaryOperation operation) {
             return Value::BV({operand.bits.value.Apply(operation)});
         };
         switch (node.tag) {
@@ -600,12 +600,12 @@ class WLSimulator::Impl {
         }
         if (lhs.isArray || rhs.isArray)
             throw EvaluationError(node, "scalar operation consumes array");
-        const WLBitVector &x = lhs.bits.value;
-        const WLBitVector &y = rhs.bits.value;
-        auto apply = [&](WLBitVector::BinaryOperation operation) {
+        const BitVector &x = lhs.bits.value;
+        const BitVector &y = rhs.bits.value;
+        auto apply = [&](BitVector::BinaryOperation operation) {
             return Value::BV({x.Apply(operation, y)});
         };
-        auto reverse = [&](WLBitVector::BinaryOperation operation) {
+        auto reverse = [&](BitVector::BinaryOperation operation) {
             return Value::BV({y.Apply(operation, x)});
         };
         switch (node.tag) {
@@ -642,7 +642,7 @@ class WLSimulator::Impl {
         case BTOR2_TAG_rol: return apply(btorsim_bv_rol);
         case BTOR2_TAG_ror: return apply(btorsim_bv_ror);
         case BTOR2_TAG_uaddo: {
-            WLBitVector sum = x.Apply(btorsim_bv_add, y);
+            BitVector sum = x.Apply(btorsim_bv_add, y);
             return Value::BV(BitValue::FromBool(
                 sum.Apply(btorsim_bv_ult, x).IsOne()));
         }
@@ -659,46 +659,46 @@ class WLSimulator::Impl {
         }
     }
 
-    static Value SignedAddOverflow(const WLBitVector &x,
-                                   const WLBitVector &y) {
-        WLBitVector sum = x.Apply(btorsim_bv_add, y);
+    static Value SignedAddOverflow(const BitVector &x,
+                                   const BitVector &y) {
+        BitVector sum = x.Apply(btorsim_bv_add, y);
         const bool sx = x.GetBit(x.Width() - 1);
         const bool sy = y.GetBit(y.Width() - 1);
         const bool sr = sum.GetBit(sum.Width() - 1);
         return Value::BV(BitValue::FromBool(sx == sy && sr != sx));
     }
 
-    static Value SignedSubOverflow(const WLBitVector &x,
-                                   const WLBitVector &y) {
-        WLBitVector difference = x.Apply(btorsim_bv_sub, y);
+    static Value SignedSubOverflow(const BitVector &x,
+                                   const BitVector &y) {
+        BitVector difference = x.Apply(btorsim_bv_sub, y);
         const bool sx = x.GetBit(x.Width() - 1);
         const bool sy = y.GetBit(y.Width() - 1);
         const bool sr = difference.GetBit(difference.Width() - 1);
         return Value::BV(BitValue::FromBool(sx != sy && sr != sx));
     }
 
-    static Value SignedMulOverflow(const WLBitVector &x,
-                                   const WLBitVector &y) {
+    static Value SignedMulOverflow(const BitVector &x,
+                                   const BitVector &y) {
         const unsigned width = x.Width();
-        WLBitVector product = x.SignExtend(width).Apply(
+        BitVector product = x.SignExtend(width).Apply(
             btorsim_bv_mul, y.SignExtend(width));
-        WLBitVector low = product.Slice(width - 1, 0);
+        BitVector low = product.Slice(width - 1, 0);
         return Value::BV(BitValue::FromBool(
             product != low.SignExtend(width)));
     }
 
-    static Value UnsignedMulOverflow(const WLBitVector &x,
-                                     const WLBitVector &y) {
+    static Value UnsignedMulOverflow(const BitVector &x,
+                                     const BitVector &y) {
         const unsigned width = x.Width();
-        WLBitVector product = x.ZeroExtend(width).Apply(
+        BitVector product = x.ZeroExtend(width).Apply(
             btorsim_bv_mul, y.ZeroExtend(width));
         return Value::BV(BitValue::FromBool(
             !product.Slice(2 * width - 1, width).IsZero()));
     }
 
-    static Value SignedDivOverflow(const WLBitVector &x,
-                                   const WLBitVector &y) {
-        WLBitVector minimum = WLBitVector::Zero(x.Width());
+    static Value SignedDivOverflow(const BitVector &x,
+                                   const BitVector &y) {
+        BitVector minimum = BitVector::Zero(x.Width());
         minimum.SetBit(x.Width() - 1, true);
         return Value::BV(BitValue::FromBool(
             x == minimum && y.IsOnes()));
@@ -767,12 +767,12 @@ void WLSimulator::CompleteCoiChoices(const Btor2IR &source, const Btor2IR &prope
             const auto &sort = source.Sort(node.sortId);
             if (sort.tag == BTOR2_TAG_SORT_array) {
                 auto &values = state ? step.arrayStateValues : step.arrayInputValues;
-                WLArrayValue value;
-                value.defaultValue = WLBitVector::Zero(source.Sort(sort.elementSort).width);
+                ArrayValue value;
+                value.defaultValue = BitVector::Zero(source.Sort(sort.elementSort).width);
                 values.emplace(node.id, std::move(value));
             } else {
                 auto &values = state ? step.stateValues : step.inputValues;
-                values.emplace(node.id, WLBitVector::Zero(sort.width));
+                values.emplace(node.id, BitVector::Zero(sort.width));
             }
         }
     }

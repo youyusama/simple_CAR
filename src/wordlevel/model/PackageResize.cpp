@@ -1,5 +1,5 @@
-#include "WLPackageResize.h"
-#include "WLBitVector.h"
+#include "PackageResize.h"
+#include "BitVector.h"
 
 #include <algorithm>
 #include <array>
@@ -132,17 +132,17 @@ uint32_t CeilLog2(uint64_t value) {
 std::vector<bool> ConstantBits(const Btor2IR &ir,
                                const Btor2IRNode &node) {
     const uint32_t width = ir.Sort(node.sortId).width;
-    WLBitVector value = WLBitVector::Zero(width);
+    BitVector value = BitVector::Zero(width);
     if (node.tag == BTOR2_TAG_one) {
-        value = WLBitVector::One(width);
+        value = BitVector::One(width);
     } else if (node.tag == BTOR2_TAG_ones) {
-        value = WLBitVector::Ones(width);
+        value = BitVector::Ones(width);
     } else if (node.tag == BTOR2_TAG_const) {
-        value = WLBitVector::FromBinary(width, node.constant);
+        value = BitVector::FromBinary(width, node.constant);
     } else if (node.tag == BTOR2_TAG_consth) {
-        value = WLBitVector::FromHex(width, node.constant);
+        value = BitVector::FromHex(width, node.constant);
     } else if (node.tag == BTOR2_TAG_constd) {
-        value = WLBitVector::FromDecimal(width, node.constant);
+        value = BitVector::FromDecimal(width, node.constant);
     }
     std::vector<bool> bits(width);
     for (uint32_t bit = 0; bit < width; ++bit)
@@ -955,9 +955,9 @@ class PackageSizer {
 
 } // namespace
 
-class WLPackageResize::Rewriter {
+class PackageResize::Rewriter {
   public:
-    Rewriter(WLPackageResize &resize,
+    Rewriter(PackageResize &resize,
              const Btor2IR &input,
              const SegmentAnalyzer &analysis,
              const std::unordered_map<size_t, uint32_t> &widths)
@@ -1323,7 +1323,7 @@ class WLPackageResize::Rewriter {
         AddNode(node.tag, 1, {expression, 0, 0}, 1, node.symbol);
     }
 
-    WLPackageResize &m_resize;
+    PackageResize &m_resize;
     const Btor2IR &m_input;
     const SegmentAnalyzer &m_analysis;
     const std::unordered_map<size_t, uint32_t> &m_widths;
@@ -1333,7 +1333,7 @@ class WLPackageResize::Rewriter {
     std::unordered_map<int64_t, int64_t> m_whole;
 };
 
-WLPackageResize::WLPackageResize(const Btor2IR &ir) {
+PackageResize::PackageResize(const Btor2IR &ir) {
     if (ir.HasArrays()) {
         throw std::runtime_error(
             "segment-level word reduction requires array-free IR");
@@ -1351,10 +1351,10 @@ WLPackageResize::WLPackageResize(const Btor2IR &ir) {
     m_ir = rewriter.Run();
 }
 
-void WLPackageResize::RestorePorts(
+void PackageResize::RestorePorts(
     const std::vector<Port> &ports,
-    const std::unordered_map<int64_t, WLBitVector> &values,
-    std::unordered_map<int64_t, WLBitVector> &restored) const {
+    const std::unordered_map<int64_t, BitVector> &values,
+    std::unordered_map<int64_t, BitVector> &restored) const {
     if (values.empty()) return;
     size_t consumed = 0;
     for (const auto &port : ports) {
@@ -1365,7 +1365,7 @@ void WLPackageResize::RestorePorts(
         if (present != port.segments.size())
             throw std::runtime_error("resize trace contains an incomplete split port");
 
-        auto value = WLBitVector::Zero(port.width);
+        auto value = BitVector::Zero(port.width);
         for (const auto &segment : port.segments) {
             const auto &encoded = values.at(segment.nodeId);
             const auto width = m_ir.Sort(m_ir.Node(segment.nodeId).sortId).width;
@@ -1385,7 +1385,7 @@ void WLPackageResize::RestorePorts(
         throw std::runtime_error("resize trace contains a foreign or misclassified port");
 }
 
-WLTrace WLPackageResize::RestoreTrace(const WLTrace &trace) const {
+WLTrace PackageResize::RestoreTrace(const WLTrace &trace) const {
     WLTrace result;
     result.steps.resize(trace.steps.size());
     for (size_t time = 0; time < trace.steps.size(); ++time) {
