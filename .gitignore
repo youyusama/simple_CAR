@@ -66,15 +66,8 @@ bld/
 # Visual Studio 2019 cache/options directory
 .vs/
 .vscode/
-# Uncomment if you have tasks that create the
-
-[Cc]ase/
-[Ss]afe/
-[Uu]nsafe/
-frame_vis/
 
 build/
-release/
-deps/
-
-simplecar
+build-asan/
+refs/
+tests/

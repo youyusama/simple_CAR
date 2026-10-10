@@ -2,11 +2,11 @@
 
 namespace car {
 
-void aigerDeleter(aiger *aig) {
+void AigerDeleter(aiger *aig) {
     aiger_reset(aig);
 }
 
-CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
+CircuitGraph::CircuitGraph(const std::shared_ptr<aiger> aig) {
     // number of variables
     numVar = aig->maxvar;
     numInputs = aig->num_inputs;
@@ -18,18 +18,17 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
     numJustice = aig->num_justice;
     numFairness = aig->num_fairness;
 
-    trueId = ++numVar;
-
     // I L O A B C J F
-    int i = 1;
+    Var i = 1;
     for (int j = 0; j < aig->num_inputs; j++, i++) {
         inputs.emplace_back(i);
         inputsSet.emplace(i);
     }
     for (int i = 0; i < aig->num_latches; i++) {
-        int l = GetCarId(aig->latches[i].lit);
-        int next = GetCarId(aig->latches[i].next);
-        int reset = GetCarId(aig->latches[i].reset);
+        Lit l_lit = FromAigerLit(aig->latches[i].lit);
+        Var l = VarOf(l_lit);
+        Lit next = FromAigerLit(aig->latches[i].next);
+        Lit reset = FromAigerLit(aig->latches[i].reset);
 
         latches.emplace_back(l);
         latchesSet.emplace(l);
@@ -37,35 +36,49 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
         latchResetMap[l] = reset;
     }
     for (int i = 0; i < aig->num_outputs; i++) {
-        bad.emplace_back(GetCarId(aig->outputs[i].lit));
+        bad.emplace_back(FromAigerLit(aig->outputs[i].lit));
     }
     for (int i = 0; i < aig->num_ands; i++) {
-        ands.emplace_back(GetCarId(aig->ands[i].lhs));
-        andsSet.emplace(GetCarId(aig->ands[i].lhs));
+        Var lhs = VarOf(FromAigerLit(aig->ands[i].lhs));
+        ands.emplace_back(lhs);
+        andsSet.emplace(lhs);
     }
     for (int i = 0; i < aig->num_bad; i++) {
-        bad.emplace_back(GetCarId(aig->bad[i].lit));
+        bad.emplace_back(FromAigerLit(aig->bad[i].lit));
     }
     for (int i = 0; i < aig->num_constraints; i++) {
-        constraints.emplace_back(GetCarId(aig->constraints[i].lit));
+        constraints.emplace_back(FromAigerLit(aig->constraints[i].lit));
     }
     for (int i = 0; i < aig->num_justice; i++) {
-        justice.emplace_back(GetCarId(aig->justice[i].lit));
+        Cube lits;
+        for (unsigned j = 0; j < aig->justice[i].size; j++) {
+            lits.emplace_back(FromAigerLit(aig->justice[i].lits[j]));
+        }
+        justice.emplace_back(lits);
     }
     for (int i = 0; i < aig->num_fairness; i++) {
-        fairness.emplace_back(GetCarId(aig->fairness[i].lit));
+        fairness.emplace_back(FromAigerLit(aig->fairness[i].lit));
     }
 
     // get gates
-    unordered_set<unsigned> coi_lits;
+    std::unordered_set<unsigned> coi_lits;
     for (int i = 0; i < aig->num_latches; i++)
         coi_lits.emplace(aiger_strip(aig->latches[i].next));
+    for (int i = 0; i < aig->num_latches; i++)
+        coi_lits.emplace(aiger_strip(aig->latches[i].reset));
     for (int i = 0; i < aig->num_constraints; i++)
         coi_lits.emplace(aiger_strip(aig->constraints[i].lit));
     for (int i = 0; i < aig->num_outputs; i++)
         coi_lits.emplace(aiger_strip(aig->outputs[i].lit));
     for (int i = 0; i < aig->num_bad; i++)
         coi_lits.emplace(aiger_strip(aig->bad[i].lit));
+    for (int i = 0; i < aig->num_justice; i++) {
+        for (unsigned j = 0; j < aig->justice[i].size; j++) {
+            coi_lits.emplace(aiger_strip(aig->justice[i].lits[j]));
+        }
+    }
+    for (int i = 0; i < aig->num_fairness; i++)
+        coi_lits.emplace(aiger_strip(aig->fairness[i].lit));
 
     // tranverse and gates reversely
     for (int i = aig->num_ands - 1; i >= 0; i--) {
@@ -86,99 +99,159 @@ CircuitGraph::CircuitGraph(const shared_ptr<aiger> aig) {
     modelLatches = latches;
     modelGates = ands;
     COIRefine();
+    CollectPropertyCOIInputs();
+}
 
-    // get property coi inputs
-    unordered_set<int> coi_ids;
-    for (int id : constraints)
-        coi_ids.emplace(abs(id));
-    for (int id : bad)
-        coi_ids.emplace(abs(id));
-    for (int i = modelGates.size() - 1; i >= 0; i--) {
-        int g = modelGates[i];
+
+void CircuitGraph::CollectPropertyCOIInputs() {
+    propertyCOIInputs.clear();
+    std::unordered_set<Var> coi_ids;
+    for (Lit id : constraints)
+        coi_ids.emplace(VarOf(id));
+    for (Lit id : bad)
+        coi_ids.emplace(VarOf(id));
+    for (int i = static_cast<int>(modelGates.size()) - 1; i >= 0; i--) {
+        Var g = modelGates[i];
         if (coi_ids.find(g) != coi_ids.end()) {
-            for (int fanin : gatesMap[g].fanins)
-                coi_ids.emplace(abs(fanin));
+            for (Lit fanin : gatesMap[g].fanins)
+                coi_ids.emplace(VarOf(fanin));
         }
     }
-    for (int id : coi_ids) {
+    for (Var id : coi_ids) {
         if (inputsSet.find(id) != inputsSet.end()) {
             propertyCOIInputs.emplace_back(id);
         }
     }
-    sort(propertyCOIInputs.begin(), propertyCOIInputs.end(), cmp);
+    std::sort(propertyCOIInputs.begin(), propertyCOIInputs.end());
 }
 
 
 void CircuitGraph::COIRefine() {
-    unordered_set<int> coi_ids;
-    vector<int> todo_stack;
+    std::unordered_set<Var> coi_ids;
+    std::vector<Var> todo_stack;
 
-    for (int id : constraints) {
-        coi_ids.emplace(abs(id));
-        todo_stack.emplace_back(abs(id));
+    for (Lit id : constraints) {
+        coi_ids.emplace(VarOf(id));
+        todo_stack.emplace_back(VarOf(id));
     }
-    for (int id : bad) {
-        coi_ids.emplace(abs(id));
-        todo_stack.emplace_back(abs(id));
+    for (Lit id : bad) {
+        coi_ids.emplace(VarOf(id));
+        todo_stack.emplace_back(VarOf(id));
+    }
+    for (Lit id : fairness) {
+        coi_ids.emplace(VarOf(id));
+        todo_stack.emplace_back(VarOf(id));
+    }
+    for (const auto &j : justice) {
+        for (Lit id : j) {
+            coi_ids.emplace(VarOf(id));
+            todo_stack.emplace_back(VarOf(id));
+        }
     }
 
     while (!todo_stack.empty()) {
-        int id = todo_stack.back();
+        Var id = todo_stack.back();
         todo_stack.pop_back();
 
         // is gate
         if (andsSet.find(id) != andsSet.end()) {
             assert(gatesMap.find(id) != gatesMap.end());
             auto &gate = gatesMap[id];
-            for (int fanin : gate.fanins) {
-                if (coi_ids.find(abs(fanin)) == coi_ids.end()) {
-                    coi_ids.emplace(abs(fanin));
-                    todo_stack.emplace_back(abs(fanin));
+            for (Lit fanin : gate.fanins) {
+                Var fanin_var = VarOf(fanin);
+                if (coi_ids.find(fanin_var) == coi_ids.end()) {
+                    coi_ids.emplace(fanin_var);
+                    todo_stack.emplace_back(fanin_var);
                 }
             }
         }
         // is latch
         else if (latchesSet.find(id) != latchesSet.end()) {
-            int next = latchNextMap[id];
-            if (coi_ids.find(abs(next)) == coi_ids.end()) {
-                coi_ids.emplace(abs(next));
-                todo_stack.emplace_back(abs(next));
+            Lit next = latchNextMap[id];
+            Var next_var = VarOf(next);
+            if (coi_ids.find(next_var) == coi_ids.end()) {
+                coi_ids.emplace(next_var);
+                todo_stack.emplace_back(next_var);
+            }
+            Lit reset = latchResetMap[id];
+            Var reset_var = VarOf(reset);
+            if (!IsConst(reset) && reset != MkLit(id) && coi_ids.find(reset_var) == coi_ids.end()) {
+                coi_ids.emplace(reset_var);
+                todo_stack.emplace_back(reset_var);
             }
         }
     }
 
 
     // refine model inputs, latches, and gates
-    vector<int> new_modelInputs;
-    for (int id : modelInputs) {
+    std::vector<Var> new_model_inputs;
+    for (Var id : modelInputs) {
         if (coi_ids.find(id) != coi_ids.end()) {
-            new_modelInputs.emplace_back(id);
+            new_model_inputs.emplace_back(id);
         }
     }
-    modelInputs = new_modelInputs;
-    sort(modelInputs.begin(), modelInputs.end());
+    modelInputs = new_model_inputs;
+    std::sort(modelInputs.begin(), modelInputs.end());
 
-    vector<int> new_modelLatches;
-    for (int id : modelLatches) {
+    std::vector<Var> new_model_latches;
+    for (Var id : modelLatches) {
         if (coi_ids.find(id) != coi_ids.end()) {
-            new_modelLatches.emplace_back(id);
+            new_model_latches.emplace_back(id);
         }
     }
-    modelLatches = new_modelLatches;
-    sort(modelLatches.begin(), modelLatches.end());
+    modelLatches = new_model_latches;
+    std::sort(modelLatches.begin(), modelLatches.end());
 
-    vector<int> new_modelGates;
-    for (int id : modelGates) {
+    std::vector<Var> new_model_gates;
+    for (Var id : modelGates) {
         if (coi_ids.find(id) != coi_ids.end()) {
-            new_modelGates.emplace_back(id);
+            new_model_gates.emplace_back(id);
         }
     }
-    modelGates = new_modelGates;
-    sort(modelGates.begin(), modelGates.end());
+    modelGates = new_model_gates;
+    std::sort(modelGates.begin(), modelGates.end());
 }
 
 
-bool CircuitGraph::TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits) {
+Var CircuitGraph::NewModelVar() {
+    Var id = ++numVar;
+    return id;
+}
+
+Var CircuitGraph::NewInputVar() {
+    Var id = NewModelVar();
+    inputs.emplace_back(id);
+    inputsSet.emplace(id);
+    modelInputs.emplace_back(id);
+    numInputs++;
+    return id;
+}
+
+Var CircuitGraph::NewLatchVar() {
+    Var id = NewModelVar();
+    latches.emplace_back(id);
+    latchesSet.emplace(id);
+    modelLatches.emplace_back(id);
+    numLatches++;
+    return id;
+}
+
+void CircuitGraph::SetLatchResetNext(Var latch, Lit reset, Lit next) {
+    latchResetMap[latch] = reset;
+    latchNextMap[latch] = next;
+}
+
+Var CircuitGraph::NewAndGate(Lit a, Lit b) {
+    Var id = NewModelVar();
+    ands.emplace_back(id);
+    andsSet.emplace(id);
+    modelGates.emplace_back(id);
+    gatesMap[id] = CircuitGate(CircuitGate::GateType::AND, id, {a, b});
+    numAnds++;
+    return id;
+}
+
+bool CircuitGraph::TryMakeXORGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits) {
     aiger_and *aa = aiger_is_and(aig.get(), a);
     assert(aa != nullptr);
 
@@ -198,23 +271,23 @@ bool CircuitGraph::TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a,
     if (a00 == aiger_not(a10) && a01 == aiger_not(a11)) {
         if (a00 == a01) return false;
 
-        int fanout = GetCarId(a);
-        assert(fanout > 0);
-        int fanin0 = GetCarId(a00);
-        int fanin1 = GetCarId(a01);
+        Lit fanout = FromAigerLit(a);
+        assert(!Sign(fanout));
+        Lit fanin0 = FromAigerLit(a00);
+        Lit fanin1 = FromAigerLit(a01);
 
         // is XOR
-        gatesMap[fanout] = CircuitGate(CircuitGate::GateType::XOR, fanout, {fanin0, fanin1});
+        gatesMap[VarOf(fanout)] = CircuitGate(CircuitGate::GateType::XOR, VarOf(fanout), {fanin0, fanin1});
 
-        coi_lits.emplace(aiger_strip(a00));
-        coi_lits.emplace(aiger_strip(a01));
+        coiLits.emplace(aiger_strip(a00));
+        coiLits.emplace(aiger_strip(a01));
 
         return true;
     }
     return false;
 }
 
-bool CircuitGraph::TryMakeITEGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits) {
+bool CircuitGraph::TryMakeITEGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits) {
     aiger_and *aa = aiger_is_and(aig.get(), a);
     assert(aa != nullptr);
 
@@ -245,35 +318,35 @@ bool CircuitGraph::TryMakeITEGate(const shared_ptr<aiger> aig, const unsigned a,
     }
 
     // is ITE
-    int fanout = GetCarId(a);
-    assert(fanout > 0);
-    int i = GetCarId(ite[0]);
-    int t = GetCarId(ite[1]);
-    int e = GetCarId(ite[2]);
+    Lit fanout = FromAigerLit(a);
+    assert(!Sign(fanout));
+    Lit i = FromAigerLit(ite[0]);
+    Lit t = FromAigerLit(ite[1]);
+    Lit e = FromAigerLit(ite[2]);
 
-    gatesMap[fanout] = CircuitGate(CircuitGate::GateType::ITE, fanout, {i, t, e});
+    gatesMap[VarOf(fanout)] = CircuitGate(CircuitGate::GateType::ITE, VarOf(fanout), {i, t, e});
 
-    coi_lits.emplace(aiger_strip(ite[0]));
-    coi_lits.emplace(aiger_strip(ite[1]));
-    coi_lits.emplace(aiger_strip(ite[2]));
+    coiLits.emplace(aiger_strip(ite[0]));
+    coiLits.emplace(aiger_strip(ite[1]));
+    coiLits.emplace(aiger_strip(ite[2]));
 
     return true;
 }
 
 
-bool CircuitGraph::MakeAndGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits) {
+bool CircuitGraph::MakeAndGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits) {
     aiger_and *aa = aiger_is_and(aig.get(), a);
     assert(aa != nullptr);
 
-    int fanout = GetCarId(a);
-    assert(fanout > 0);
-    int fanin0 = GetCarId(aa->rhs0);
-    int fanin1 = GetCarId(aa->rhs1);
+    Lit fanout = FromAigerLit(a);
+    assert(!Sign(fanout));
+    Lit fanin0 = FromAigerLit(aa->rhs0);
+    Lit fanin1 = FromAigerLit(aa->rhs1);
 
-    gatesMap[fanout] = CircuitGate(CircuitGate::GateType::AND, fanout, {fanin0, fanin1});
+    gatesMap[VarOf(fanout)] = CircuitGate(CircuitGate::GateType::AND, VarOf(fanout), {fanin0, fanin1});
 
-    coi_lits.emplace(aiger_strip(aa->rhs0));
-    coi_lits.emplace(aiger_strip(aa->rhs1));
+    coiLits.emplace(aiger_strip(aa->rhs0));
+    coiLits.emplace(aiger_strip(aa->rhs1));
 
     return true;
 }

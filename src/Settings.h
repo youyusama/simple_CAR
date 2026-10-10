@@ -1,31 +1,62 @@
-#ifndef SETTINGS_H
-#define SETTINGS_H
+#pragma once
 
 #include "CLI11.hpp"
 #include <string>
-
-using namespace std;
 
 namespace car {
 
 enum class MCAlgorithm { FCAR,
                          BCAR,
                          BMC,
-                         IC3 };
+                         WLBMC,
+                         KIND,
+                         IC3,
+                         L2S,
+                         KLIVE,
+                         FAIR,
+                         KFAIR,
+                         RLIVE };
+
+enum class MCAlgorithmProperty { Safety,
+                                 Liveness };
+
+inline MCAlgorithmProperty GetMCAlgorithmProperty(MCAlgorithm alg) {
+    switch (alg) {
+    case MCAlgorithm::L2S:
+    case MCAlgorithm::KLIVE:
+    case MCAlgorithm::FAIR:
+    case MCAlgorithm::KFAIR:
+    case MCAlgorithm::RLIVE:
+        return MCAlgorithmProperty::Liveness;
+    default:
+        return MCAlgorithmProperty::Safety;
+    }
+}
 
 enum class MCSATSolver { minisat,
                          cadical,
                          minicore,
                          kissat };
 
+
 struct Settings {
     int verbosity = 0;
-    string aigFilePath;
-    string witnessOutputDir = "";
+    std::string aigFilePath;
+    std::string witnessOutputDir = "";
+    bool wlDisableCoi = false;
+    bool wlDisablePackageResize = false;
+    bool wlValidateAigTrace = false;
+    std::string wlBitblastOutputPath = "";
 
-    MCSATSolver solver = MCSATSolver::minisat;
-    MCAlgorithm alg = MCAlgorithm::FCAR;
+    MCSATSolver solver = MCSATSolver::minicore;
+    MCAlgorithm alg = MCAlgorithm::IC3;
+    MCAlgorithm safetyBaseAlg = MCAlgorithm::IC3;
+    int shoalUnroll = 1;
+    bool rlivePruneDead = false;
     int bmcK = -1;
+    bool bmcCnf = false;
+    std::string bmcCnfDir = "";
+    int bmcCnfK = -1;
     bool dt = true;
     int branching = 1;
     int randomSeed = 0;
@@ -37,16 +68,23 @@ struct Settings {
     bool restartLuby = false;
     bool solveInProperty = false;
     int ctgMaxRecursionDepth = 2;
-    int ctgMaxStates = 3;
-    bool satSolveInDomain = false;
-    int bmc_step = 1;
+    int ctgMaxCTG = 3;
+    int ctgMaxBlocks = 1;
+    int genMaxFail = 0;
+    bool activeLemmaLearning = false;
+    int allThreshold = 8;
+    int allMaxStates = 32;
+    bool satSolveInDomain = true;
+    int shrink = 0;
+    double maxObligationAct = 10.0;
+    int bmcStep = 1;
     int eq = 2;
     int eqTimeout = 600;
     bool searchFromBadPred = false;
+    bool shrinkInvariant = false;
+    bool detailedTimers = false;
 };
 
 bool ParseSettings(int argc, char **argv, Settings &settings);
 
 } // namespace car
-
-#endif

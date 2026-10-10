@@ -1,5 +1,4 @@
-#ifndef CADICALSOLVER_H
-#define CADICALSOLVER_H
+#pragma once
 
 #include "ISolver.h"
 #include "Model.h"
@@ -13,36 +12,29 @@ class CadicalSolver : public ISolver, public CaDiCaL::Solver {
     CadicalSolver(Model &m);
     ~CadicalSolver();
 
-    void AddClause(const cube &cls) override;
-    void AddAssumption(const cube &assumption) override;
+    void AddClause(const Cube &cls) override;
     bool Solve() override;
-    bool Solve(const cube &assumption) override;
-    pair<cube, cube> GetAssignment(bool prime) override;
-    unordered_set<int> GetConflict() override;
-    inline int GetNewVar() override {
+    bool Solve(const Cube &assumption) override;
+    std::pair<Cube, Cube> GetAssignment(bool prime) override;
+    bool Failed(Lit assumption) override;
+    inline Var GetNewVar() override {
         return ++m_maxId;
     }
-    void AddTempClause(const cube &cls) override;
+    void AddTempClause(const Cube &cls) override;
     void ReleaseTempClause() override;
-    inline tbool GetModel(int id) override {
+    inline Tbool GetModel(Var id) override {
         if (val(id) > 0)
-            return t_True;
+            return T_TRUE;
         else {
             assert(val(id) < 0);
-            return t_False;
+            return T_FALSE;
         }
     }
-    void ClearAssumption() override;
-    void PushAssumption(int a) override;
-    int PopAssumption() override;
-
   protected:
     Model &m_model;
-    int m_maxId;
-    cube m_assumptions;
-    cube m_tempClause;
+    Var m_maxId;
+    std::vector<Lit> m_assumptions;
+    std::vector<Lit> m_tempClause;
 };
 
 } // namespace car
-
-#endif

@@ -1,15 +1,16 @@
 #include "solver.h"
-using namespace minicore;
+
+namespace minicore {
 
 Solver::Solver() : // Parameters (user settable):
                    //
                    verbosity(0),
-                   random_seed(42), clause_decay(0.999), restart_first(100), restart_inc(2)
+                   random_seed(42), clause_decay(0.99), restart_first(100), restart_inc(2)
 
                    // Parameters (the rest):
                    //
                    ,
-                   learntsize_factor((double)1 / (double)3), learntsize_inc(1.1)
+                   learntsize_factor((double)1 / (double)6), learntsize_inc(1.1)
 
                    // Parameters (experimental):
                    //
@@ -26,11 +27,14 @@ Solver::Solver() : // Parameters (user settable):
                    ca(std::make_shared<ClauseAllocator>()),
                    watches(ca), order_list(), reduce_db_lt(ca),
 
-                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1.0), qhead(0), simpDB_assigns(static_cast<size_t>(-1)), simpDB_props(0), simpDB_called(0), simpDB_clauses(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), restart_limit(-1), state_(SolverState::Ready), last_result_(l_Undef) {
+                   solve_in_domain(false), solve_in_domain_runtime_flag(false), ok(true), cla_inc(1.0), qhead(0), simpDB_assigns(0), simpDB_props(0), simpDB_called(0), simpDB_clauses(0), progress_estimate(0), next_var(0), alloced_var(0), temp_cls_activated(false), temp_cls_release_pending(false), restart_limit(-1), state_(SolverState::Ready), last_result_(l_Undef) {
 
     temp_cls_act_var = newVar(); // let 0 be the temp clause activator
     domain_set[temp_cls_act_var] = 1;
     domain_list.push_back(temp_cls_act_var);
+    analyze_stack.reserve(64);
+    learnt_clause_tmp.reserve(32);
+    analyze_toclear.reserve(64);
 }
 
 void Solver::reset() {
@@ -40,7 +44,7 @@ void Solver::reset() {
     if (decisionLevel() > 0) {
         while (trail.size() > trail_lim[0]) {
             Var x = var(trail.back());
-            assigns[x] = l_Undef;
+            assigns[x] = assign_Undef;
             polarity[x] = sign(trail.back());
             trail.pop_back();
         }
@@ -48,28 +52,31 @@ void Solver::reset() {
         trail_lim.resize(0);
     }
 
-    // clean temprary learnts
-    if (temp_cls_activated || solve_in_domain) {
-        // unit
-        while (trail.size() > traillim_snapshot) {
+    // Keep temporary clauses across solves until releaseTempClause().
+    if (temp_cls_activated) {
+        // temp cls act var
+        while (assigns[temp_cls_act_var] != assign_Undef) {
             Var x = var(trail.back());
-            assigns[x] = l_Undef;
+            assigns[x] = assign_Undef;
             polarity[x] = sign(trail.back());
             trail.pop_back();
         }
         qhead = trail.size();
+        trail_lim.resize(0);
     }
-    if (temp_cls_activated) {
-        // temp clause
-        temp_cls_activated = false;
+    assert(assigns[temp_cls_act_var] == assign_Undef);
+
+    if (temp_cls_release_pending) {
         removeTempLearnt();
+        temp_cls_activated = false;
+        temp_cls_release_pending = false;
     }
 
     // solve in domain
     if (solve_in_domain) solve_in_domain_runtime_flag = false;
 
     assumptions.clear();
-    conflict.clear();
+    clearFailed();
     last_result_ = l_Undef;
     state_ = SolverState::Ready;
 }
@@ -80,22 +87,32 @@ Solver::~Solver() {
 
 
 Var Solver::newVar() {
-    Var v = next_var++;
+    Var v = next_var;
+    newVarUntil(v);
+    return v;
+}
 
+
+void Solver::newVarUntil(Var v) {
+    assert(v >= 0);
+    if (v < next_var) return;
+
+    Var old_next_var = next_var;
+    next_var = v + 1;
     if (alloced_var < next_var) {
-        alloced_var += 128;
+        while (alloced_var < next_var) alloced_var += 128;
         watches.ensure(alloced_var + alloced_var + 1);
-        assigns.resize(alloced_var, l_Undef);
+        assigns.resize(alloced_var, assign_Undef);
         vardata.resize(alloced_var, mkVarData(CRef_Undef, 0));
         seen.resize(alloced_var, 0);
+        failed_stamp.resize(static_cast<size_t>(2 * alloced_var), 0);
         polarity.resize(alloced_var, true);
         order_list.resize(alloced_var);
         trail.reserve(alloced_var);
         domain_set.resize(alloced_var, 0);
     }
-    dec_vars++;
-    order_list.init_var(v);
-    return v;
+    dec_vars += static_cast<uint64_t>(next_var - old_next_var);
+    order_list.init_vars(old_next_var, next_var);
 }
 
 bool Solver::addClause_(std::vector<Lit> &ps) {
@@ -145,6 +162,21 @@ bool Solver::addTempClause(const std::vector<Lit> &cls) {
     temp_clauses.emplace_back(cr);
 
     return true;
+}
+
+
+void Solver::releaseTempClause() {
+    if (!temp_cls_activated) return;
+
+    if (state_ == SolverState::Solved) {
+        temp_cls_release_pending = true;
+        return;
+    }
+
+    assert(state_ == SolverState::Ready);
+    removeTempLearnt();
+    temp_cls_activated = false;
+    temp_cls_release_pending = false;
 }
 
 
@@ -215,7 +247,7 @@ void Solver::cancelUntil(size_t level) {
     if (decisionLevel() > level) {
         for (size_t c = trail.size(); c-- > trail_lim[level];) {
             Var x = var(trail[c]);
-            assigns[x] = l_Undef;
+            assigns[x] = assign_Undef;
             polarity[x] = sign(trail[c]);
             if (inDomain(x) && !order_list.inBucket(x)) {
                 insertVarOrder(x);
@@ -329,7 +361,8 @@ bool Solver::litRedundant(Lit p) {
     assert(reason(var(p)) != CRef_Undef);
 
     Clause *c = &ca->get_clause(reason(var(p)));
-    std::vector<ShrinkStackElem> stack;
+    std::vector<ShrinkStackElem> &stack = analyze_stack;
+    stack.clear();
 
     for (uint32_t i = 1;; i++) {
         if (i < (uint32_t)c->size()) {
@@ -383,9 +416,25 @@ bool Solver::litRedundant(Lit p) {
 }
 
 
-void Solver::analyzeFinal(Lit p, std::unordered_set<Lit, LitHash> &out_conflict) {
-    out_conflict.clear();
-    out_conflict.insert(p);
+void Solver::clearFailed() {
+    has_failed = false;
+    if (++failed_epoch == 0) {
+        std::fill(failed_stamp.begin(), failed_stamp.end(), 0);
+        failed_epoch = 1;
+    }
+}
+
+
+void Solver::markFailed(Lit assumption) {
+    const size_t index = static_cast<size_t>(toInt(assumption));
+    assert(index < failed_stamp.size());
+    failed_stamp[index] = failed_epoch;
+    has_failed = true;
+}
+
+
+void Solver::analyzeFinal(Lit p) {
+    markFailed(~p);
 
     if (decisionLevel() == 0)
         return;
@@ -398,7 +447,7 @@ void Solver::analyzeFinal(Lit p, std::unordered_set<Lit, LitHash> &out_conflict)
         if (seen[x]) {
             if (reason(x) == CRef_Undef) {
                 assert(level(x) > 0);
-                out_conflict.insert(~trail[i]);
+                markFailed(trail[i]);
                 // std::cout << "decision var: " << (!sign(trail[i]) ? var(trail[i]) : -var(trail[i])) << std::endl;
             } else {
                 Clause &c = ca->get_clause(reason(x));
@@ -415,15 +464,7 @@ void Solver::analyzeFinal(Lit p, std::unordered_set<Lit, LitHash> &out_conflict)
 }
 
 
-void Solver::uncheckedEnqueue(Lit p, CRef from) {
-    assert(value(p) == l_Undef);
-    assigns[var(p)] = lbool(!sign(p));
-    vardata[var(p)] = mkVarData(from, decisionLevel());
-    trail.emplace_back(p);
-}
-
-
-CRef Solver::propagate() {
+CRef Solver::propagate_full() {
     CRef confl = CRef_Undef;
     int num_props = 0;
 
@@ -439,7 +480,7 @@ CRef Solver::propagate() {
             // Try to avoid inspecting the clause:
             Watcher w_cur = ws_data[i];
             Lit blocker = w_cur.blocker;
-            if (value(blocker) == l_True || !inDomain(var(blocker))) {
+            if (is_value_true(blocker)) {
                 i++;
                 continue;
             }
@@ -454,7 +495,7 @@ CRef Solver::propagate() {
 
             // If 0th watch is true, then clause is already satisfied.
             Lit first = c[0];
-            if (first != blocker && (value(first) == l_True || !inDomain(var(first)))) {
+            if (first != blocker && is_value_true(first)) {
                 ws_data[i].blocker = first;
                 i++;
                 continue;
@@ -462,7 +503,7 @@ CRef Solver::propagate() {
 
             // Look for new watch:
             for (size_t k = 2; k < c.size(); k++) {
-                if (value(c[k]) != l_False) {
+                if (!is_value_false(c[k])) {
                     c[1] = c[k];
                     c[k] = false_lit;
                     watches[~c[1]].emplace_back(Watcher(cr, first));
@@ -474,7 +515,79 @@ CRef Solver::propagate() {
 
             // Did not find watch -- clause is unit under assignment:
             ws_data[i].blocker = first;
-            if (value(first) == l_False) {
+            if (is_value_false(first)) {
+                confl = cr;
+                qhead = trail.size();
+                break;
+            } else {
+                uncheckedEnqueue(first, cr);
+                i++;
+            }
+
+        NextClause:;
+        }
+        ws.resize(ws_len);
+    }
+    propagations += num_props;
+    simpDB_props -= num_props;
+
+    return confl;
+}
+
+
+CRef Solver::propagate_domain() {
+    CRef confl = CRef_Undef;
+    int num_props = 0;
+
+    while (qhead < trail.size()) {
+        Lit p = trail[qhead++]; // 'p' is enqueued fact to propagate.
+        std::vector<Watcher> &ws = watches[p];
+        Watcher *ws_data = ws.data();
+        size_t ws_len = ws.size();
+        size_t i = 0;
+        num_props++;
+
+        while (i < ws_len) {
+            // Try to avoid inspecting the clause:
+            Watcher w_cur = ws_data[i];
+            Lit blocker = w_cur.blocker;
+            if (is_value_true(blocker) || !inDomain(var(blocker))) {
+                i++;
+                continue;
+            }
+
+            // Make sure the false literal is data[1]:
+            CRef cr = w_cur.cref;
+            Clause &c = ca->get_clause(cr);
+            Lit false_lit = ~p;
+            if (c[0] == false_lit)
+                c[0] = c[1], c[1] = false_lit;
+            assert(c[1] == false_lit);
+
+            // If 0th watch is true, then clause is already satisfied.
+            Lit first = c[0];
+            if (first != blocker &&
+                (is_value_true(first) || !inDomain(var(first)))) {
+                ws_data[i].blocker = first;
+                i++;
+                continue;
+            }
+
+            // Look for new watch:
+            for (size_t k = 2; k < c.size(); k++) {
+                if (!is_value_false(c[k])) {
+                    c[1] = c[k];
+                    c[k] = false_lit;
+                    watches[~c[1]].emplace_back(Watcher(cr, first));
+                    ws_data[i] = ws_data[ws_len - 1];
+                    ws_len--;
+                    goto NextClause;
+                }
+            }
+
+            // Did not find watch -- clause is unit under assignment:
+            ws_data[i].blocker = first;
+            if (is_value_false(first)) {
                 confl = cr;
                 qhead = trail.size();
                 break;
@@ -496,16 +609,21 @@ CRef Solver::propagate() {
 
 void Solver::reduceDB() {
     size_t i, j;
-    double extra_lim = cla_inc / learnts.size(); // Remove any clause below this activity
 
-    std::sort(learnts.begin(), learnts.end(), reduce_db_lt);
-    // Don't delete binary or locked clauses. From the rest, delete clauses from the first half
-    // and clauses with activity smaller than 'extra_lim':
+    std::sort(learnts.begin(), learnts.end(), [this](CRef x, CRef y) {
+        return ca->get_clause(x).activity() > ca->get_clause(y).activity();
+    });
+    const size_t keep_limit = learnts.size() / 3;
+
+    // Keep the highest-activity fraction. From the rest, delete non-locked long clauses.
     for (i = j = 0; i < learnts.size(); i++) {
-        Clause &c = ca->get_clause(learnts[i]);
-        if (c.size() > 2 && !locked(c) && (i < learnts.size() / 2 || c.activity() < extra_lim))
-            removeClause(learnts[i]);
-        else
+        if (i > keep_limit) {
+            Clause &c = ca->get_clause(learnts[i]);
+            if (c.size() > 2 && !locked(c))
+                removeClause(learnts[i]);
+            else
+                learnts[j++] = learnts[i];
+        } else
             learnts[j++] = learnts[i];
     }
     learnts.resize(j);
@@ -717,9 +835,10 @@ void Solver::simplify() {
 
 lbool Solver::search(int nof_conflicts) {
     assert(ok);
+    assert(nof_conflicts >= 0);
     size_t backtrack_level;
     int conflictC = 0;
-    std::vector<Lit> learnt_clause;
+    std::vector<Lit> &learnt_clause = learnt_clause_tmp;
     starts++;
 
     for (;;) {
@@ -761,13 +880,14 @@ lbool Solver::search(int nof_conflicts) {
 
         } else {
             // NO CONFLICT
-            if (nof_conflicts >= 0 && conflictC >= nof_conflicts) {
+            if (conflictC >= nof_conflicts &&
+                decisionLevel() >= assumptions.size()) {
                 // Reached bound on number of conflicts:
-                cancelUntil(0);
+                cancelUntil(assumptions.size());
                 return l_Undef;
             }
 
-            if (learnts.size() > max_learnts + nAssigns()) {
+            if (learnts.size() > max_learnts) {
                 // Reduce the set of learnt clauses:
                 reduceDB();
             }
@@ -780,7 +900,7 @@ lbool Solver::search(int nof_conflicts) {
                     // Dummy decision level:
                     newDecisionLevel();
                 } else if (value(p) == l_False) {
-                    analyzeFinal(~p, conflict);
+                    analyzeFinal(~p);
                     return l_False;
                 } else {
                     next = p;
@@ -882,7 +1002,7 @@ lbool Solver::solve_() {
         curr_restarts++;
     }
 
-    if (status == l_False && conflict.size() == 0)
+    if (status == l_False && !has_failed)
         ok = false;
     last_result_ = status;
     state_ = SolverState::Solved;
@@ -890,6 +1010,7 @@ lbool Solver::solve_() {
     if (verbosity >= 1) {
         printStats();
         printResult();
+        // if (status == l_True) printModel();
     }
 
     return status;
@@ -964,7 +1085,7 @@ void Solver::printStats() const {
     std::cout << "===============================================================================\n";
     double cpu_time = cpuTime();
     double mem_used = memUsedPeak();
-    std::cout << "restarts              : " << starts << "\n";
+    std::cout << "starts                : " << starts << "\n";
 
     std::cout << "conflicts             : "
               << std::left << std::setw(12) << conflicts
@@ -1007,6 +1128,20 @@ void Solver::printResult() const {
     std::cout << std::endl;
 }
 
+void Solver::printModel() const {
+    if (last_result_ != l_True) return;
+
+    std::cout << "v";
+    for (Var v = 1; v < nVars(); ++v) {
+        if (assigns[v] == assign_True) {
+            std::cout << " " << v;
+        } else if (assigns[v] == assign_False) {
+            std::cout << " -" << v;
+        }
+    }
+    std::cout << " 0\n";
+}
+
 void Solver::printHead() const {
     std::cout << "============================[ Search Statistics ]==============================\n";
     std::cout << "| Conflicts |          ORIGINAL         |          LEARNT          | Progress |\n";
@@ -1030,3 +1165,5 @@ void Solver::printProgress() const {
               << std::setw(6) << std::fixed << std::setprecision(3) << progress << " % |"
               << std::endl;
 }
+
+} // namespace minicore

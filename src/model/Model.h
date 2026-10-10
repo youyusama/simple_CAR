@@ -1,15 +1,15 @@
-#ifndef MODEL_H
-#define MODEL_H
+#pragma once
 
 extern "C" {
 #include "aiger.h"
 }
 
+#include "CarTypes.h"
 #include "CircuitGraph.h"
 #include "Log.h"
 #include "Settings.h"
 #include "TernarySim.h"
-#include "cadical/src/cadical.hpp"
+#include "WitnessBuilder.h"
 #include "minicore/src/solver.h"
 #include <algorithm>
 #include <assert.h>
@@ -26,11 +26,6 @@ extern "C" {
 #include <unordered_set>
 #include <vector>
 
-using namespace std;
-
-typedef vector<int> cube;
-typedef vector<int> clause;
-
 namespace car {
 
 class EquivalenceManager {
@@ -38,254 +33,313 @@ class EquivalenceManager {
     EquivalenceManager() {}
     ~EquivalenceManager() {}
 
-    int Find(int a); // update and get the equivalence of a
+    Lit FindLit(Lit a); // update and get the equivalence of a
 
-    void AddEquivalence(int a, int b);
+    void AddEquivalence(Lit a, Lit b);
 
-    inline bool IsEquivalent(int a, int b) { return Find(a) == Find(b); }
+    inline bool IsEquivalent(Lit a, Lit b) { return FindLit(a) == FindLit(b); }
 
-    inline bool HasEquivalence(int a) { return m_equivalenceMap.count(abs(a)) > 0; }
+    inline bool HasEquivalence(Var a) { return m_equivalenceMap.count(a) > 0; }
+    inline bool HasEquivalence(Lit a) { return HasEquivalence(VarOf(a)); }
 
     inline int Size() { return m_equivalenceMap.size(); }
 
-    const unordered_map<int, int> &GetEquivalenceMap() const { return m_equivalenceMap; }
+    const std::unordered_map<Var, Lit, std::hash<Var>> &GetEquivalenceMap() const { return m_equivalenceMap; }
+
+    void PrintEquivalenceMap() {
+        for (const auto &it : m_equivalenceMap) {
+            std::cout << it.first << " -> " << ToSigned(it.second) << std::endl;
+        }
+    }
 
   private:
-    unordered_map<int, int> m_equivalenceMap;
+    std::unordered_map<Var, Lit, std::hash<Var>> m_equivalenceMap;
 
-    pair<int, int> FindRootRecursive(int key);
+    Lit FindRootRecursive(Var key);
 };
 
 
-template <int N>
-struct SimulationSignature {
-    std::array<uint64_t, N> chunks;
+using DynamicSignature = std::vector<uint64_t>;
 
-    SimulationSignature() {
-        chunks.fill(0);
-    }
-
-    bool operator==(const SimulationSignature<N> &other) const {
-        return chunks == other.chunks;
-    }
-
-    SimulationSignature<N> operator~() const {
-        SimulationSignature<N> result;
-        for (int i = 0; i < N; i++) {
-            result.chunks[i] = ~chunks[i];
-        }
-        return result;
-    }
-};
-
-
-template <int N>
-struct SimulationSignatureHash {
-    std::size_t operator()(const SimulationSignature<N> &s) const {
+struct DynamicSignatureHash {
+    std::size_t operator()(const DynamicSignature &s) const {
         std::size_t h = 0;
         std::hash<uint64_t> hasher;
-        for (const auto &chunk : s.chunks) {
+        for (uint64_t chunk : s) {
             h ^= hasher(chunk) + 0x9e3779b9 + (h << 6) + (h >> 2);
         }
         return h;
     }
 };
 
-constexpr size_t NUM_CHUNKS = 128;
-using SignatureN64 = SimulationSignature<NUM_CHUNKS>;
-using VarMapN64 = std::unordered_map<SignatureN64, std::vector<int>, SimulationSignatureHash<NUM_CHUNKS>>;
+using DynamicSignatureMap = std::unordered_map<DynamicSignature, std::vector<Lit>, DynamicSignatureHash>;
 
+class Model;
+
+struct KLivenessCounter {
+    unsigned int k = 0;
+    int cur = 0;
+    std::vector<Var> latches;
+};
 
 class Model {
   public:
-    Model(Settings settings, Log &log);
+    enum class PropKind {
+        Safety,
+        Liveness
+    };
 
-    inline int TrueId() {
-        return m_circuitGraph->trueId;
+    Model(Settings settings, Log &log);
+    Model(Settings settings, Log &log, std::shared_ptr<aiger> aig);
+
+    inline Var TrueId() {
+        return m_cnfTrueVar;
     }
 
-    inline int NumVar() {
+    inline unsigned NumVar() {
         return m_circuitGraph->numVar;
     }
 
-    inline bool IsTrue(const int id) {
-        return m_equivalenceManager->Find(id) == TrueId();
+    inline bool IsTrue(Lit lit) {
+        return m_equivalenceManager->FindLit(lit) == LIT_TRUE;
     }
 
-    inline bool IsFalse(const int id) {
-        return m_equivalenceManager->Find(id) == -TrueId();
+    inline bool IsFalse(Lit lit) {
+        return m_equivalenceManager->FindLit(lit) == LIT_FALSE;
     }
 
-    inline bool IsConstant(const int id) {
-        if (IsTrue(id) || IsFalse(id))
-            return true;
-        else
-            return false;
+    inline bool IsConstant(Lit lit) {
+        return IsTrue(lit) || IsFalse(lit);
     }
 
-    inline bool IsLatch(int id) {
-        if (m_circuitGraph->latchesSet.find(abs(id)) != m_circuitGraph->latchesSet.end())
-            return true;
-        else
-            return false;
+    inline bool IsLatch(Lit lit) {
+        return m_circuitGraph->latchesSet.find(VarOf(lit)) != m_circuitGraph->latchesSet.end();
     }
 
-    inline bool IsInput(int id) {
-        if (m_circuitGraph->inputsSet.find(abs(id)) != m_circuitGraph->inputsSet.end())
-            return true;
-        else
-            return false;
+    inline bool IsInput(Lit lit) {
+        return m_circuitGraph->inputsSet.find(VarOf(lit)) != m_circuitGraph->inputsSet.end();
     }
 
-
-    inline bool IsAnd(int id) {
-        if (m_circuitGraph->andsSet.find(abs(id)) != m_circuitGraph->andsSet.end())
-            return true;
-        else
-            return false;
+    inline bool IsAnd(Lit lit) {
+        return m_circuitGraph->andsSet.find(VarOf(lit)) != m_circuitGraph->andsSet.end();
     }
 
+    inline std::shared_ptr<aiger> GetAiger() { return m_aiger; }
+    inline std::shared_ptr<const aiger> GetAiger() const { return m_aiger; }
 
-    inline int GetCarId(const unsigned lit) {
-        if (lit == 0)
-            return -TrueId();
-        else if (lit == 1)
-            return TrueId();
-        return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
+    inline CircuitGraph *GetCircuitGraph() { return m_circuitGraph.get(); }
+    inline const CircuitGraph *GetCircuitGraph() const { return m_circuitGraph.get(); }
+
+    inline int GetNumInputs() const { return m_circuitGraph->numInputs; }
+    inline int GetNumLatches() const { return m_circuitGraph->numLatches; }
+    inline Cube &GetInitialState() { return m_initialState; }
+
+    inline std::vector<Var> &GetModelInputs() { return m_circuitGraph->modelInputs; }
+    inline std::vector<Var> &GetModelLatches() { return m_circuitGraph->modelLatches; }
+    inline std::vector<Var> &GetModelGates() { return m_circuitGraph->modelGates; }
+
+    inline Lit GetBadRaw() const { return m_bad; }
+    inline Lit GetBad() { return ToCNFLit(m_bad); }
+    inline Lit GetProperty() { return ~ToCNFLit(m_bad); }
+
+    int GetKLiveStep() { return m_kliveStep; }
+    int KLivenessIncrement();
+    Lit GetKLiveSignal(int k) { return m_kliveSignals[k]; }
+    std::vector<Clause> GetKLiveClauses(int k) { return m_kliveTransClauses[k]; }
+
+    inline PropKind GetPropKind() const { return m_propKind; }
+
+    inline Lit LookupPrime(Lit lit) {
+        size_t idx = PackedIndex(lit);
+        assert(idx < m_lookupPrime.size());
+        assert(m_lookupPrime[idx] != Lit{});
+        return m_lookupPrime[idx];
     }
 
-    inline unsigned GetAigerLit(const int car_id) {
-        if (car_id > 0)
-            return car_id << 1;
-        else
-            return (-car_id << 1) + 1;
-    }
+    Lit EnsurePrimeK(Lit id, int k);
 
-    inline shared_ptr<aiger> GetAiger() { return m_aiger; }
+    std::vector<Clause> &GetClauses() { return m_cnfClauses; }
 
-    inline int GetNumInputs() { return m_circuitGraph->numInputs; }
-    inline int GetNumLatches() { return m_circuitGraph->numLatches; }
-    inline vector<int> &GetInitialState() { return m_initialState; }
+    std::vector<Clause> &GetSimpClauses() { return m_simpClauses; }
 
-    inline vector<int> &GetModelInputs() { return m_circuitGraph->modelInputs; }
-    inline vector<int> &GetModelLatches() { return m_circuitGraph->modelLatches; }
-    inline vector<int> &GetModelGates() { return m_circuitGraph->modelGates; }
-
-    inline int GetBad() { return m_bad; }
-    inline int GetProperty() { return -m_bad; }
-
-    inline int GetPrime(const int id) {
-        unordered_map<int, int>::iterator it = m_primeMaps[0].find(abs(id));
-        if (it == m_primeMaps[0].end()) return 0;
-        return id > 0 ? it->second : -(it->second);
-    }
-
-    int GetPrimeK(const int id, int k);
-
-    vector<clause> &GetClauses() { return m_clauses; }
-
-    vector<clause> &GetSimpClauses() { return m_simpClauses; }
-
-    vector<clause> &GetInitialClauses() { return m_initialClauses; }
-
-    vector<int> GetConstraints() { return m_circuitGraph->constraints; };
+    const Cube &GetConstraints() { return m_constraints; };
 
     inline bool IsInnard(int id) {
         if (m_settings.internalSignals &&
-            m_innards.find(abs(id)) != m_innards.end()) {
+            m_innards.find(AbsLit(id)) != m_innards.end()) {
             return true;
         } else {
             return false;
         }
     }
 
-    vector<int> &GetInnards() { return m_innardsVec; };
+    std::vector<Var> &GetInnards() { return m_innardsVec; };
 
-    int GetInnardslvl(int id) {
-        unordered_map<int, int>::iterator it = m_innards_lvl.find(abs(id));
-        if (it == m_innards_lvl.end()) return 0;
+    int GetInnardslvl(Var id) {
+        std::unordered_map<Var, int>::iterator it = m_innardsLvl.find(id);
+        if (it == m_innardsLvl.end()) return 0;
         return it->second;
     }
 
-    vector<int> &GetPropertyCOIInputs() { return m_circuitGraph->propertyCOIInputs; };
+    int GetInnardslvl(Lit lit) {
+        return GetInnardslvl(VarOf(lit));
+    }
 
-    cube GetCOIDomain(const cube &c);
+    std::vector<Var> &GetPropertyCOIInputs() { return m_circuitGraph->propertyCOIInputs; };
 
-    const vector<vector<int>> &GetDependencyVec() const { return m_dependencyVec; }
+    std::vector<Var> GetCOIDomain(const Cube &c);
 
-    const unordered_map<int, int> &GetEquivalenceMap() const {
+    const std::vector<std::vector<Var>> &GetDependencyVec() const { return m_dependencyVec; }
+
+    const std::unordered_map<Var, Lit, std::hash<Var>> &GetEquivalenceMap() const {
         return m_equivalenceManager->GetEquivalenceMap();
     }
 
+    void RefineWitnessPropertyLit(WitnessBuilder &builder);
+
+    Lit GetLatchResetLit(Var latch) const;
+    Lit GetLatchNextLit(Var latch) const;
+    void SetLatchReset(Var latch, Lit reset);
+    void SetLatchNext(Var latch, Lit next);
+    void SetBad(Lit bad);
+    void Rebuild();
+    Var NewInputVar();
+    Var NewLatchVar();
+    Var GetNewVar() { return ++m_maxId; }
+    Lit MakeAND(Lit a, Lit b);
+    Lit MakeOR(Lit a, Lit b);
+    Lit MakeXOR(Lit a, Lit b);
+    Lit MakeXNOR(Lit a, Lit b);
+    Lit MakeITE(Lit i, Lit t, Lit e);
+
   private:
+    void InitializeFromAiger();
+
+    void SetTsimReachedStateCubes(const std::vector<Cube> &cubes);
+
     void ApplyEquivalence();
 
-    void UpdateDependencyMap();
+    void EliminateGateResets();
 
     void UpdateDependencyVecDAGCNF();
+
+    void CollectConstraints();
 
     void CollectInitialState();
 
     void CollectNextValueMapping();
 
+    void CollectCNFClauses();
+
     void CollectClauses();
 
-    int InnardsLogiclvlDFS(int id);
+    int InnardsLogiclvlDFS(Var id);
 
     void CollectInnards();
 
     void SimplifyClauses();
+
     void SimplifyDAGClauses();
+
+    Lit BuildLiveness();
+
+    Lit BuildSingleFairness(const Cube &conds);
 
     bool SimplifyModelByTernarySimulation();
 
     void SimplifyModelByRandomSimulation();
 
-    void EncodeStatesToSignatuers(const vector<vector<int>> &states, unordered_map<string, vector<int>> &signatures);
+    void SimplifyModelBySATSimulation();
 
-    void EncodeStatesToN64Signatuers(const vector<vector<tbool>> &values, const vector<int> &vars, VarMapN64 &signatures);
+    void EncodeStatesToSignatures(const std::vector<Cube> &states, DynamicSignatureMap &signatures);
 
-    bool CheckLatchEquivalenceBySAT(int a, int b);
+    void EncodeTernaryValuesToBitSignatures(const std::vector<std::vector<Tbool>> &values, const Cube &vars, DynamicSignatureMap &signatures);
 
-    bool CheckGateEquivalenceBySAT(int a, int b);
+    bool CheckLatchEquivalenceBySAT(Lit a, Lit b);
 
-    void EnsureCOICache(int v);
+    void ResetLatchEquivalenceSolvers();
 
-    inline int GetNewId() { return ++m_maxId; };
+    void EnsureLatchEqBaseSolver();
+
+    void EnsureLatchEqIndSolver();
+
+    bool CheckLatchEquivalenceBase(Lit a, Lit b);
+
+    bool CheckLatchEquivalenceInd(Lit a, Lit b);
+
+    bool TryGetConstInit(Lit lit, Lit &out) const;
+
+    bool CheckGateEquivalenceBySAT(Lit a, Lit b);
+
+    void BuildEquivalenceWitness();
+
+    void BuildEquivalenceClauses(std::vector<Clause> &out);
+
+    void NormalizeReachedStateRegion(EquivalenceWitness &witness);
+
+    const EquivalenceWitness &GetEquivalenceWitness();
+
+    inline Lit ToCNFLit(Lit lit) const {
+        if (!IsConst(lit)) return lit;
+        return IsConstTrue(lit) ? MkLit(m_cnfTrueVar) : ~MkLit(m_cnfTrueVar);
+    }
+
+    Clause ToCNFClause(const Clause &cls) const;
+
+    inline bool HasPrimeMap0(Var v) const {
+        return m_primeMaps[0].find(v) != m_primeMaps[0].end();
+    }
+
+    inline void SetPrimeMap0(Var v, Lit prime_lit) {
+        m_primeMaps[0][v] = prime_lit;
+
+        size_t pos = PackedIndex(MkLit(v));
+        size_t neg = PackedIndex(~MkLit(v));
+        if (neg >= m_lookupPrime.size()) {
+            m_lookupPrime.resize(neg + 1, Lit{});
+        }
+        m_lookupPrime[pos] = prime_lit;
+        m_lookupPrime[neg] = ~prime_lit;
+    }
 
     Settings m_settings;
     Log &m_log;
-    shared_ptr<aiger> m_aiger;
-    shared_ptr<CircuitGraph> m_circuitGraph;
+    std::shared_ptr<aiger> m_aiger;
+    std::shared_ptr<CircuitGraph> m_circuitGraph;
 
-    int m_maxId;
-    cube m_initialState;
-    int m_bad;
-    vector<clause> m_clauses; // CNF, e.g. (a|b|c) * (-a|c)
-    vector<clause> m_simpClauses;
-    vector<clause> m_initialClauses;
+    Var m_cnfTrueVar{0};
+    Var m_maxId;
+    Cube m_initialState;
+    Cube m_constraints;
+    Lit m_bad;
+    KLivenessCounter m_kliveCounter;
+    PropKind m_propKind{PropKind::Safety};
+    std::vector<Clause> m_rawClauses;
+    std::vector<Clause> m_cnfClauses; // CNF, e.g. (a|b|c) * (-a|c)
+    std::vector<Clause> m_simpClauses;
 
-    vector<unordered_map<int, int>> m_primeMaps;
-    unordered_map<int, vector<int>> m_preValueOfLatchMap;
+    std::vector<std::unordered_map<Var, Lit, std::hash<Var>>> m_primeMaps;
+    std::vector<Lit> m_lookupPrime;
+    std::unordered_map<int, std::vector<int>> m_preValueOfLatchMap;
 
-    vector<vector<int>> m_dependencyVec;
+    std::vector<std::vector<Var>> m_dependencyVec;
 
-    vector<vector<int>> m_coiCache;
-    vector<uint8_t> m_coiCacheReady;
-    vector<uint8_t> m_coiVisited;
-    vector<uint8_t> m_coiCacheVisited;
-    vector<int> m_coiDomain;
-    vector<int> m_coiCacheTodo;
+    std::shared_ptr<EquivalenceManager> m_equivalenceManager;
 
-    shared_ptr<EquivalenceManager> m_equivalenceManager;
+    std::unique_ptr<minicore::Solver> m_gateEqSolver;
+    bool m_hasResetGateInit{false};
+    std::unique_ptr<minicore::Solver> m_latchEqBaseSolver;
+    std::unique_ptr<minicore::Solver> m_latchEqIndSolver;
 
-    unique_ptr<minicore::Solver> m_equivalenceSolver;
-    int m_eqSolverUnsats{0};
+    EquivalenceWitness m_equivalenceWitness;
+    bool m_equivalenceWitnessReady{false};
 
-    unordered_set<int> m_innards;
-    vector<int> m_innardsVec;
-    unordered_map<int, int> m_innards_lvl;
+    std::unordered_set<Var> m_innards;
+    std::vector<Var> m_innardsVec;
+    std::unordered_map<Var, int> m_innardsLvl;
+
+    int m_kliveStep{0};
+    Cube m_kliveSignals;
+    std::vector<std::vector<Clause>> m_kliveTransClauses;
 };
 } // namespace car
-
-#endif

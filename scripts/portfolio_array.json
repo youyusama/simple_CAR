@@ -1,0 +1,94 @@
+{
+  "memory_limit_mb": 8192,
+  "common_args": [],
+  "workers": [
+    {
+      "name": "0_cegar_ic3_ctg",
+      "args": [
+        "-a",
+        "ic3"
+      ]
+    },
+    {
+      "name": "1_cegar_ic3",
+      "args": [
+        "-a",
+        "ic3",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "2_cegar_ic3_all",
+      "args": [
+        "-a",
+        "ic3",
+        "--all",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "3_cegar_fcar",
+      "args": [
+        "-a",
+        "fcar",
+        "--rs"
+      ]
+    },
+    {
+      "name": "4_cegar_bcar",
+      "args": [
+        "-a",
+        "bcar",
+        "--rs"
+      ]
+    },
+    {
+      "name": "5_cegar_kind",
+      "args": [
+        "-a",
+        "kind",
+        "-s",
+        "kissat"
+      ]
+    },
+    {
+      "name": "6_wlbmc",
+      "args": [
+        "-a",
+        "wlbmc",
+        "-s",
+        "kissat",
+        "-k",
+        "100"
+      ]
+    },
+    {
+      "name": "7_wlbmc_step10",
+      "args": [
+        "-a",
+        "wlbmc",
+        "-s",
+        "kissat",
+        "--step",
+        "10",
+        "-k",
+        "100"
+      ]
+    },
+    {
+      "name": "8_wlbmc_step25",
+      "args": [
+        "-a",
+        "wlbmc",
+        "-s",
+        "kissat",
+        "--step",
+        "25",
+        "-k",
+        "100"
+      ]
+    }
+  ]
+}

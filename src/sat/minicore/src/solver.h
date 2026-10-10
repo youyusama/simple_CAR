@@ -1,5 +1,4 @@
-#ifndef MINICORE_SOLVER_H
-#define MINICORE_SOLVER_H
+#pragma once
 
 #include "cstring"
 #include "math.h"
@@ -9,7 +8,6 @@
 #include <assert.h>
 #include <iomanip>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace minicore {
 
@@ -36,11 +34,13 @@ class Solver {
     // Problem specification:
     //
     Var newVar(); // Add a new variable with parameters specifying variable mode.
+    void newVarUntil(Var v);
 
     bool addClause(const std::vector<Lit> &ps); // Add a clause to the solver.
     bool addClause_(std::vector<Lit> &ps);      // Add a clause to the solver without making superflous internal copy. Will change the passed vector 'ps'.
 
-    bool addTempClause(const std::vector<Lit> &ps); // Add a temp clause that only effects next solve
+    bool addTempClause(const std::vector<Lit> &ps); // Add a temp clause that effects solves until release.
+    void releaseTempClause();                       // Release all active temp clauses and their derived learnts.
     bool solve_in_domain;                           // Deciside in domain.
     void setSolveInDomain(bool in_domain);          // Set decide in domain.
 
@@ -59,6 +59,7 @@ class Solver {
     void reset();                                 // Reset solver to ready state after a solve.
     SolverState state() const { return state_; }
     lbool lastResult() const { return last_result_; }
+    bool failed(Lit assumption) const;
 
     void setRestartLimit(int limit); // Set the restart limit.
 
@@ -74,6 +75,7 @@ class Solver {
     int nVars() const;          // The current number of variables.
     void printStats() const;    // Print some current statistics to standard output.
     void printResult() const;   // Print sat result.
+    void printModel() const;    // Print model in DIMACS style.
     void printHead() const;     // Print head.
     void printProgress() const; // Print progress.
 
@@ -81,12 +83,6 @@ class Solver {
     //
     virtual void garbageCollect();
     void checkGarbage();
-
-    // Extra results: (read-only member variable)
-    //
-    std::vector<lbool> model;                  // If problem is satisfiable, this vector contains the model (if any).
-    std::unordered_set<Lit, LitHash> conflict; // If problem is unsatisfiable (possibly under assumptions),
-                                               // this vector represent the final conflict clause expressed in the assumptions.
 
     // Mode of operation:
     //
@@ -108,6 +104,13 @@ class Solver {
     uint64_t dec_vars, num_clauses, num_learnts, clauses_literals, learnts_literals, max_literals, tot_literals;
 
   protected:
+    static constexpr uint8_t assign_True = 0;
+    static constexpr uint8_t assign_False = 1;
+    static constexpr uint8_t assign_Undef = 2;
+
+    bool is_value_true(Lit p) const noexcept;
+    bool is_value_false(Lit p) const noexcept;
+
     std::shared_ptr<ClauseAllocator> ca;
 
     // Solver state:
@@ -119,7 +122,7 @@ class Solver {
     std::vector<size_t> trail_lim;  // Separator indices for different decision levels in 'trail'.
     std::vector<Lit> assumptions;   // Current set of assumptions provided to solve by the user.
 
-    std::vector<lbool> assigns;   // The current assignments.
+    std::vector<uint8_t> assigns; // The current assignments.
     std::vector<char> polarity;   // The preferred polarity of each variable.
     std::vector<VarData> vardata; // Stores reason and level for each variable.
     OccLists watches;             // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
@@ -135,19 +138,20 @@ class Solver {
     // VarOrderLt var_order_lt; // Compare function for var on activity order
     reduceDB_lt reduce_db_lt;
 
-    bool ok;                  // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
-    double cla_inc;           // Amount to bump next clause with.
-    size_t qhead;             // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
-    size_t simpDB_assigns;    // Number of top-level assignments since last execution of 'simplify()'.
-    int64_t simpDB_props;     // Remaining number of propagations that must be made before next execution of 'simplify()'.
-    double progress_estimate; // Set by 'search()'.
-    Var next_var;             // Next variable to be created.
-    Var alloced_var;          // Variable with structure created.
-    Var temp_cls_act_var;     // Variable to activate temp clause.
-    bool temp_cls_activated;  // A temp clause is added.
-    size_t traillim_snapshot; // Snapshot of trail_lim before temp clause/solve in domain is activated.
-    int64_t simpDB_called;    // Number of times 'solve()' has been called.
-    int64_t simpDB_clauses;   // Number of clauses at last 'simplify()' call.
+    bool ok;                       // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
+    double cla_inc;                // Amount to bump next clause with.
+    size_t qhead;                  // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
+    size_t simpDB_assigns;         // Number of top-level assignments since last execution of 'simplify()'.
+    int64_t simpDB_props;          // Remaining number of propagations that must be made before next execution of 'simplify()'.
+    double progress_estimate;      // Set by 'search()'.
+    Var next_var;                  // Next variable to be created.
+    Var alloced_var;               // Variable with structure created.
+    Var temp_cls_act_var;          // Variable to activate temp clause.
+    bool temp_cls_activated;       // A temp clause is added.
+    bool temp_cls_release_pending; // Active temp clauses should be released on the next reset.
+    size_t traillim_snapshot;      // Snapshot of trail_lim before temp clause/solve in domain is activated.
+    int64_t simpDB_called;         // Number of times 'solve()' has been called.
+    int64_t simpDB_clauses;        // Number of clauses at last 'simplify()' call.
     SolverState state_;
     lbool last_result_;
 
@@ -156,6 +160,11 @@ class Solver {
     //
     std::vector<char> seen;
     std::vector<Lit> analyze_toclear;
+    std::vector<ShrinkStackElem> analyze_stack;
+    std::vector<Lit> learnt_clause_tmp;
+    std::vector<uint32_t> failed_stamp;
+    bool has_failed{false};
+    uint32_t failed_epoch{1};
 
     double max_learnts;
     double learntsize_adjust_confl;
@@ -169,12 +178,15 @@ class Solver {
     void uncheckedEnqueue(Lit p,
                           CRef from = CRef_Undef); // Enqueue a literal. Assumes value of literal is undefined.
     CRef propagate();                              // Perform unit propagation. Returns possibly conflicting clause.
+    CRef propagate_full();                         // Perform *full* unit propagation.
+    CRef propagate_domain();                       // Perform unit propagation *in domain*.
     void cancelUntil(size_t level);                // Backtrack until a certain level.
     void analyze(CRef confl,
                  std::vector<Lit> &out_learnt,
                  size_t &out_btlevel); // (bt = backtrack)
-    void analyzeFinal(Lit p,
-                      std::unordered_set<Lit, LitHash> &out_conflict);
+    void clearFailed();
+    void markFailed(Lit assumption);
+    void analyzeFinal(Lit p);
     bool litRedundant(Lit p);                    // (helper method for 'analyze()')
     lbool search(int nof_conflicts);             // Search for a given number of conflicts.
     lbool solve_();                              // Main solve method (assumptions given in 'assumptions').
@@ -200,8 +212,7 @@ class Solver {
 
     // Misc:
     //
-    size_t decisionLevel() const;        // Gives the current decisionlevel.
-    uint32_t abstractLevel(Var x) const; // Used to represent an abstraction of sets of decision levels.
+    size_t decisionLevel() const; // Gives the current decisionlevel.
     CRef reason(Var x) const;
     size_t level(Var x) const;
     double progressEstimate() const;
@@ -256,7 +267,7 @@ inline void Solver::claBumpActivity(Clause &c) {
 }
 
 inline void Solver::checkGarbage(void) {
-    if (ca->wasted_memory() > ca->allocated_memory() * 0.5)
+    if (3 * ca->wasted_memory() > ca->allocated_memory())
         garbageCollect();
 }
 
@@ -270,13 +281,43 @@ inline bool Solver::locked(const Clause &c) const { return value(c[0]) == l_True
 inline void Solver::newDecisionLevel() { trail_lim.emplace_back(trail.size()); }
 
 inline size_t Solver::decisionLevel() const { return trail_lim.size(); }
-inline uint32_t Solver::abstractLevel(Var x) const { return 1u << (level(x) & 31); }
-inline lbool Solver::value(Var x) const { return assigns[x]; }
-inline lbool Solver::value(Lit p) const { return assigns[var(p)] ^ sign(p); }
+
+inline void Solver::uncheckedEnqueue(Lit p, CRef from) {
+    assert((assigns[p.x >> 1] ^ (p.x & 1)) & assign_Undef);
+    assigns[var(p)] = sign(p) ? assign_False : assign_True;
+    vardata[var(p)] = mkVarData(from, decisionLevel());
+    trail.emplace_back(p);
+}
+
+
+inline lbool Solver::value(Var x) const { return toLbool(assigns[x]); }
+inline lbool Solver::value(Lit p) const {
+    return toLbool(static_cast<uint8_t>(assigns[p.x >> 1] ^ (p.x & 1)));
+}
+inline bool Solver::is_value_true(Lit p) const noexcept {
+    return (assigns[p.x >> 1] ^ (p.x & 1)) == assign_True;
+}
+inline bool Solver::is_value_false(Lit p) const noexcept {
+    return (assigns[p.x >> 1] ^ (p.x & 1)) == assign_False;
+}
+
 inline size_t Solver::nAssigns() const { return trail.size(); }
 inline int Solver::nClauses() const { return num_clauses; }
 inline int Solver::nLearnts() const { return num_learnts; }
 inline int Solver::nVars() const { return next_var; }
+
+inline bool Solver::failed(Lit assumption) const {
+    const size_t index = static_cast<size_t>(toInt(assumption));
+    assert(index < failed_stamp.size());
+    return failed_stamp[index] == failed_epoch;
+}
+
+inline CRef Solver::propagate() {
+    if (decisionLevel() == 0)
+        return propagate_full();
+    else
+        return propagate_domain();
+}
 
 inline lbool Solver::solve() {
     if (state_ != SolverState::Ready) reset();
@@ -318,12 +359,10 @@ inline std::vector<Lit> Solver::intVec2LitVec(const std::vector<int> &vec) {
     res.reserve(vec.size());
     for (int l : vec) {
         Var v = abs(l);
-        while (v >= nVars()) newVar();
+        newVarUntil(v);
         res.push_back(mkLit(v, l < 0));
     }
     return res;
 }
 
 } // namespace minicore
-
-#endif

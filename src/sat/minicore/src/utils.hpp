@@ -1,5 +1,4 @@
-#ifndef MINICORE_UTILS_H
-#define MINICORE_UTILS_H
+#pragma once
 
 
 #include <chrono>
@@ -73,5 +72,3 @@ inline void sigTerm(void handler(int)) {
 }
 
 } // namespace minicore
-
-#endif

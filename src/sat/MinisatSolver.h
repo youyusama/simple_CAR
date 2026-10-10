@@ -1,5 +1,4 @@
-#ifndef MINISATSOLVER_H
-#define MINISATSOLVER_H
+#pragma once
 
 #include "ISolver.h"
 #include "Model.h"
@@ -13,44 +12,48 @@ class MinisatSolver : public ISolver, public Minisat::Solver {
     MinisatSolver(Model &m);
     ~MinisatSolver();
 
-    void AddClause(const cube &cls) override;
-    void AddAssumption(const cube &assumption) override;
+    void AddClause(const Cube &cls) override;
     bool Solve() override;
-    bool Solve(const cube &assumption) override;
-    pair<cube, cube> GetAssignment(bool prime) override;
-    unordered_set<int> GetConflict() override;
-    inline int GetNewVar() override {
+    bool Solve(const Cube &assumption) override;
+    std::pair<Cube, Cube> GetAssignment(bool prime) override;
+    bool Failed(Lit assumption) override;
+    inline Var GetNewVar() override {
         return ++m_maxId;
     }
-    void AddTempClause(const cube &cls) override;
+    void AddTempClause(const Cube &cls) override;
     void ReleaseTempClause() override;
-    inline tbool GetModel(int id) override {
+    inline Tbool GetModel(Var id) override {
         if (model[id] == Minisat::l_True)
-            return t_True;
+            return T_TRUE;
         else if (model[id] == Minisat::l_False) {
-            return t_False;
+            return T_FALSE;
         } else {
-            return t_Undef;
+            return T_UNDEF;
         }
     }
-    void ClearAssumption() override;
-    void PushAssumption(int a) override;
-    int PopAssumption() override;
-
   protected:
-    inline int GetLiteralId(const Minisat::Lit &l);
+    inline Lit GetLiteral(const Minisat::Lit &l);
     inline Minisat::Lit GetLit(int id) {
-        int var = abs(id);
-        while (var >= nVars()) newVar();
-        return ((id > 0) ? Minisat::mkLit(var) : ~Minisat::mkLit(var));
+        Var lit_var = AbsLit(id);
+        while (static_cast<int>(lit_var) >= nVars()) newVar();
+        Minisat::Var solver_var = static_cast<Minisat::Var>(lit_var);
+        return ((id > 0) ? Minisat::mkLit(solver_var) : ~Minisat::mkLit(solver_var));
     };
+    inline Minisat::Lit GetLit(Lit lit) {
+        while (static_cast<int>(VarOf(lit)) >= nVars()) newVar();
+        Minisat::Var solver_var = static_cast<Minisat::Var>(VarOf(lit));
+        return Sign(lit) ? ~Minisat::mkLit(solver_var) : Minisat::mkLit(solver_var);
+    }
 
     Model &m_model;
-    int m_maxId;
+    Var m_maxId;
     Minisat::vec<Minisat::Lit> m_assumptions;
-    int m_tempVar;
+    Var m_tempVar{0};
+    std::vector<uint32_t> m_failedStamp;
+    uint32_t m_failedEpoch{1};
+
+    void ClearFailed();
+    void CacheFailed();
 };
 
 } // namespace car
-
-#endif

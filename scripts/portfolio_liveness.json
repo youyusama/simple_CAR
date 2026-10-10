@@ -1,0 +1,191 @@
+{
+  "memory_limit_mb": 8192,
+  "common_args": [],
+  "workers": [
+    {
+      "name": "0_l2s_ic3",
+      "args": [
+        "-a",
+        "l2s",
+        "--sa",
+        "ic3",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "1_l2s_ic3_ctg",
+      "args": [
+        "-a",
+        "l2s",
+        "--sa",
+        "ic3"
+      ]
+    },
+    {
+      "name": "2_l2s_ic3_all",
+      "args": [
+        "-a",
+        "l2s",
+        "--sa",
+        "ic3",
+        "--all",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "3_l2s_fcar",
+      "args": [
+        "-a",
+        "l2s",
+        "--sa",
+        "fcar",
+        "--all",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "4_l2s_bcar",
+      "args": [
+        "-a",
+        "l2s",
+        "--sa",
+        "bcar",
+        "--all",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "5_l2s_bmc",
+      "args": [
+        "-a",
+        "l2s",
+        "--sa",
+        "bmc",
+        "-s",
+        "cadical"
+      ]
+    },
+    {
+      "name": "6_l2s_bmc_kissat",
+      "args": [
+        "-a",
+        "l2s",
+        "--sa",
+        "bmc",
+        "-s",
+        "kissat"
+      ]
+    },
+    {
+      "name": "7_fair_ic3",
+      "args": [
+        "-a",
+        "fair",
+        "--sa",
+        "ic3",
+        "--ctg_max_lvl",
+        "0",
+        "--shrink-inv"
+      ]
+    },
+    {
+      "name": "8_fair_ic3_all",
+      "args": [
+        "-a",
+        "fair",
+        "--sa",
+        "ic3",
+        "--ctg_max_lvl",
+        "0",
+        "--all",
+        "--shrink-inv"
+      ]
+    },
+    {
+      "name": "9_klive_ic3",
+      "args": [
+        "-a",
+        "klive",
+        "--sa",
+        "ic3",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "10_klive_ic3_ctg",
+      "args": [
+        "-a",
+        "klive",
+        "--sa",
+        "ic3"
+      ]
+    },
+    {
+      "name": "11_klive_ic3_all",
+      "args": [
+        "-a",
+        "klive",
+        "--sa",
+        "ic3",
+        "--ctg_max_lvl",
+        "0",
+        "--all"
+      ]
+    },
+    {
+      "name": "12_kfair_ic3",
+      "args": [
+        "-a",
+        "kfair",
+        "--sa",
+        "ic3",
+        "--ctg_max_lvl",
+        "0",
+        "--shrink-inv"
+      ]
+    },
+    {
+      "name": "13_rlive_ic3",
+      "args": [
+        "-a",
+        "rlive",
+        "--sa",
+        "ic3",
+        "--ctg_max_lvl",
+        "0",
+        "--pd",
+        "--shrink-inv"
+      ]
+    },
+    {
+      "name": "14_rlive_ic3_ctg",
+      "args": [
+        "-a",
+        "rlive",
+        "--sa",
+        "ic3",
+        "--pd",
+        "--shrink-inv"
+      ]
+    },
+    {
+      "name": "15_rlive_ic3_all",
+      "args": [
+        "-a",
+        "rlive",
+        "--sa",
+        "ic3",
+        "--ctg_max_lvl",
+        "0",
+        "--all",
+        "--pd",
+        "--shrink-inv"
+      ]
+    }
+  ]
+}

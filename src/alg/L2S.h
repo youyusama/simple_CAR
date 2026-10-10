@@ -1,0 +1,33 @@
+#pragma once
+
+#include "BaseAlg.h"
+#include "Log.h"
+#include "Model.h"
+#include "Settings.h"
+#include <memory>
+#include <vector>
+
+namespace car {
+
+class L2S : public BaseAlg {
+  public:
+    L2S(Settings settings,
+        Model &model,
+        Log &log);
+
+    CheckResult Run() override;
+    std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
+
+  private:
+    void Translate();
+    std::unique_ptr<BaseAlg> CreateSafetyChecker();
+
+    Settings m_settings;
+    Model &m_model;
+    Log &m_log;
+    std::unique_ptr<BaseAlg> m_checker;
+    CheckResult m_checkResult;
+    int m_save;
+};
+
+} // namespace car

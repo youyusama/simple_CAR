@@ -1,5 +1,4 @@
-#ifndef BMC_H
-#define BMC_H
+#pragma once
 
 #include "BaseAlg.h"
 #include "IncrCheckerHelpers.h"
@@ -15,32 +14,31 @@ class BMC : public BaseAlg {
         Log &log);
 
     CheckResult Run() override;
-    void Witness() override;
+    std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
 
   private:
-    bool Check(int badId);
-    bool Check_nonincremental(int badId);
+    bool Check();
+    bool CheckNonIncremental();
+    void CNFGen();
+    std::string GetCNFPath(int k) const;
+    void WriteDimacs(const std::vector<Clause> &clauses, const std::string &path) const;
     Settings m_settings;
     Log &m_log;
     Model &m_model;
     int m_k;
     int m_maxK;
     int m_step;
-    shared_ptr<State> m_initialState;
-    int m_badId;
-    shared_ptr<SATSolver> m_Solver;
+    std::shared_ptr<State> m_initialState;
+    std::shared_ptr<SATSolver> m_solver;
 
     // for kissat to store clauses from previous unrolling
-    vector<clause> m_clauses;
+    std::vector<Clause> m_clauses;
 
     CheckResult m_checkResult;
-    void Init(int badId);
-    void OutputCounterExample(int bad);
-    void GetClausesK(int m_k, vector<clause> &clauses);
-    int GetBadK(int m_k);
-    vector<int> GetConstraintsK(int m_k);
+    void Init();
+    void GetClausesK(int k, std::vector<Clause> &clauses);
+    Lit GetBadK(int k);
+    Cube GetConstraintsK(int k);
 };
 
 } // namespace car
-
-#endif

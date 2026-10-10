@@ -1,0 +1,29 @@
+#pragma once
+
+#include "BaseAlg.h"
+#include "Settings.h"
+#include <memory>
+
+namespace car {
+
+class Log;
+class Model;
+class WLModel;
+
+class Carat {
+  public:
+    explicit Carat(const Settings &settings);
+    ~Carat();
+
+    bool LoadModel();
+    CheckResult Prove();
+
+  private:
+    Settings m_settings;
+    std::unique_ptr<Log> m_log;
+    std::unique_ptr<Model> m_model;
+    std::unique_ptr<WLModel> m_wmodel;
+    std::unique_ptr<BaseAlg> m_checker;
+};
+
+} // namespace car

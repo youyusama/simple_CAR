@@ -1,31 +1,42 @@
 #include "BMC.h"
 
+#include <cstdlib>
+#include <filesystem>
+#include <stdexcept>
+
 namespace car {
+
+namespace fs = std::filesystem;
 
 BMC::BMC(Settings settings,
          Model &model,
          Log &log) : m_settings(settings),
                      m_model(model),
                      m_log(log) {
-    State::numInputs = model.GetNumInputs();
-    State::numLatches = model.GetNumLatches();
-    GLOBAL_LOG = &m_log;
+    State::num_inputs = model.GetNumInputs();
+    State::num_latches = model.GetNumLatches();
     m_k = 0;
     m_maxK = m_settings.bmcK;
     m_checkResult = CheckResult::Unknown;
-    m_step = m_settings.bmc_step;
+    m_step = m_settings.bmcStep;
     m_clauses.clear();
 }
 
 
 CheckResult BMC::Run() {
-    signal(SIGINT, signalHandler);
+    signal(SIGINT, SignalHandler);
+    if (m_settings.bmcCnf) {
+        CNFGen();
+        m_log.PrintCustomStatistics();
+        std::exit(EXIT_SUCCESS);
+    }
+
     if (m_settings.solver == MCSATSolver::kissat) {
-        if (Check_nonincremental(m_model.GetBad())) {
+        if (CheckNonIncremental()) {
             m_checkResult = CheckResult::Unsafe;
         }
     } else {
-        if (Check(m_model.GetBad()))
+        if (Check())
             m_checkResult = CheckResult::Unsafe;
     }
 
@@ -34,215 +45,284 @@ CheckResult BMC::Run() {
     return m_checkResult;
 }
 
-void BMC::Witness() {
-    if (m_checkResult == CheckResult::Unsafe) {
-        OutputCounterExample(m_model.GetBad());
+std::vector<std::pair<Cube, Cube>> BMC::GetCexTrace() {
+    assert(m_checkResult == CheckResult::Unsafe);
+    std::vector<std::pair<Cube, Cube>> trace;
+
+    trace.reserve(m_k + 1);
+    for (int k = 0; k <= m_k; k++) {
+        // Unrolling may return a complemented literal; preserve its polarity.
+        Cube inputs;
+        for (auto i : m_model.GetModelInputs()) {
+            Lit ip = m_model.EnsurePrimeK(MkLit(i), k);
+            const auto value = m_solver->GetModel(VarOf(ip));
+            inputs.emplace_back(MkLit(i, (value != T_TRUE) != Sign(ip)));
+        }
+        Cube latches;
+        for (auto l : m_model.GetModelLatches()) {
+            Lit lp = m_model.EnsurePrimeK(MkLit(l), k);
+            const auto value = m_solver->GetModel(VarOf(lp));
+            latches.emplace_back(MkLit(l, (value != T_TRUE) != Sign(lp)));
+        }
+        trace.emplace_back(std::pair<Cube, Cube>(inputs, latches));
     }
+
+    return trace;
 }
 
 
-bool BMC::Check(int badId) {
-    [[maybe_unused]] auto checkScope = m_log.Section("BMC_Check");
-    Init(badId);
+void BMC::CNFGen() {
+    [[maybe_unused]] auto cnf_scope = m_log.Section("BMC_CNFGen");
+    const int target_k = m_settings.bmcCnfK;
+    LOG_L(m_log, 1, "Generate BMC CNF at bound: ", target_k);
+
+    std::vector<Clause> clauses;
+
+    for (Lit lit : m_model.GetInitialState()) {
+        clauses.push_back(Clause{lit});
+    }
+
+    for (int i = 0; i <= target_k; ++i) {
+        GetClausesK(i, clauses);
+    }
+
+    for (int i = 0; i <= target_k; ++i) {
+        for (Lit constraint : GetConstraintsK(i)) {
+            clauses.push_back(Clause{constraint});
+        }
+    }
+
+    clauses.push_back(Clause{GetBadK(target_k)});
+
+    const std::string cnf_path = GetCNFPath(target_k);
+    fs::path out_dir = fs::path(cnf_path).parent_path();
+    if (!out_dir.empty()) {
+        fs::create_directories(out_dir);
+    }
+
+    WriteDimacs(clauses, cnf_path);
+    LOG_L(m_log, 0, "BMC CNF written to ", cnf_path);
+}
+
+
+bool BMC::Check() {
+    [[maybe_unused]] auto check_scope = m_log.Section("BMC_Check");
+    Init();
 
     while (true) {
-        m_log.L(1, "BMC Bound: ", m_k);
+        LOG_L(m_log, 1, "BMC Bound: ", m_k);
 
-        vector<clause> clauses;
+        std::vector<Clause> clauses;
         GetClausesK(m_k, clauses);
 
         // & T^k
         {
-            [[maybe_unused]] auto clauseScope = m_log.Section("Add_Trans_Cls");
+            [[maybe_unused]] auto clause_scope = m_log.Section("Add_Trans_Cls");
             for (int i = 0; i < clauses.size(); ++i) {
-                m_Solver->AddClause(clauses[i]);
-                m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
+                m_solver->AddClause(clauses[i]);
+                LOG_L(m_log, 3, "Add Clause: ", CubeToStr(clauses[i]));
             }
         }
 
         // assume( bad^k & cons^k )
-        int k_bad = GetBadK(m_k);
-        cube assumptions;
+        Lit k_bad = GetBadK(m_k);
+        Cube assumptions;
         assumptions.push_back(k_bad);
         for (auto c : GetConstraintsK(m_k)) {
             assumptions.push_back(c);
         }
-        m_log.L(3, "Assumption: ", CubeToStr(assumptions));
+        LOG_L(m_log, 3, "Assumption: ", CubeToStr(assumptions));
         {
-            [[maybe_unused]] auto satScope = m_log.Section("SAT_BMC_Inc");
-            bool sat = m_Solver->Solve(assumptions);
+            [[maybe_unused]] auto sat_scope = m_log.Section("SAT_BMC_Inc");
+            bool sat = m_solver->Solve(assumptions);
             if (sat) return true;
         }
 
         // & cons^k
         {
-            [[maybe_unused]] auto clauseScope = m_log.Section("Add_Cons_Cls");
+            [[maybe_unused]] auto clause_scope = m_log.Section("Add_Cons_Cls");
             for (auto c : GetConstraintsK(m_k)) {
-                m_Solver->AddClause({c});
-                m_log.L(3, "Add Clause: ", c);
+                m_solver->AddClause({c});
+                LOG_L(m_log, 3, "Add Clause: ", ToSigned(c));
             }
         }
         // & !bad^k
         {
-            [[maybe_unused]] auto clauseScope = m_log.Section("Add_Prop_Cls");
-            m_Solver->AddClause({-k_bad});
-            m_log.L(3, "Add Clause: ", -k_bad);
+            [[maybe_unused]] auto clause_scope = m_log.Section("Add_Prop_Cls");
+            m_solver->AddClause({~k_bad});
+            LOG_L(m_log, 3, "Add Clause: ", ToSigned(~k_bad));
         }
         m_k++;
         if (m_maxK != -1 && m_k > m_maxK) return false;
     }
 }
 
-bool BMC::Check_nonincremental(int badId) {
-    [[maybe_unused]] auto checkScope = m_log.Section("BMC_CheckNonInc");
-    // before clause^k ConstraintsK(k) bad^k
+bool BMC::CheckNonIncremental() {
+    [[maybe_unused]] auto check_scope = m_log.Section("BMC_CheckNonInc");
+    // before Clause^k ConstraintsK(k) bad^k
 
-    // before clause^k clause^(k+1) clause^(k+2) ConstraintsK(k) ConstraintsK(k+1) ConstraintsK(k+2) (bad^(k)|bad^(k+1)|bad^(k+2))
-    clause badClause;
-    badClause.reserve(m_step);
+    // before Clause^k Clause^(k+1) Clause^(k+2) ConstraintsK(k) ConstraintsK(k+1) ConstraintsK(k+2) (bad^(k)|bad^(k+1)|bad^(k+2))
+    Clause bad_clause;
+    bad_clause.reserve(m_step);
     // Pre-allocate m_step memory
     while (true) {
-        Init(badId);
+        Init();
         // add clauses before K unrollings to the Kissat solver
         {
-            [[maybe_unused]] auto clauseScope = m_log.Section("Add_Init_Cls");
+            [[maybe_unused]] auto clause_scope = m_log.Section("Add_Init_Cls");
             for (int i = 0; i < m_clauses.size(); ++i) {
-                m_Solver->AddClause(m_clauses[i]);
-                m_log.L(
-                    3, "Add Clause: ", CubeToStr(m_clauses[i]));
+                m_solver->AddClause(m_clauses[i]);
+                LOG_L(m_log,
+                      3, "Add Clause: ", CubeToStr(m_clauses[i]));
             }
         }
-        badClause.clear();
+        bad_clause.clear();
         for (int s = 0; s < m_step; s++) {
-            m_log.L(1, "BMC Bound: ", m_k);
+            LOG_L(m_log, 1, "BMC Bound: ", m_k);
 
-            vector<clause> clauses;
+            std::vector<Clause> clauses;
             GetClausesK(m_k, clauses);
 
             // & T^k
             {
-                [[maybe_unused]] auto clauseScope = m_log.Section("Add_Trans_Cls");
+                [[maybe_unused]] auto clause_scope = m_log.Section("Add_Trans_Cls");
                 for (int i = 0; i < clauses.size(); ++i) {
-                    m_Solver->AddClause(clauses[i]);
+                    m_solver->AddClause(clauses[i]);
                     m_clauses.emplace_back(clauses[i]); // store for further use
-                    m_log.L(3, "Add Clause: ", CubeToStr(clauses[i]));
+                    LOG_L(m_log, 3, "Add Clause: ", CubeToStr(clauses[i]));
                 }
             }
 
-            int k_bad = GetBadK(m_k);
+            Lit k_bad = GetBadK(m_k);
 
-            badClause.push_back({k_bad});
+            bad_clause.push_back(k_bad);
             // m_Solver->AddClause({k_bad});
-            m_log.L(3, "Add Clause: ", k_bad);
+            LOG_L(m_log, 3, "Add Clause: ", ToSigned(k_bad));
 
             {
-                [[maybe_unused]] auto clauseScope = m_log.Section("Add_Cons_Cls");
+                [[maybe_unused]] auto clause_scope = m_log.Section("Add_Cons_Cls");
                 for (auto c : GetConstraintsK(m_k)) {
-                    m_Solver->AddClause({c});
+                    m_solver->AddClause({c});
                     m_clauses.push_back({c}); // store for further use
-                    m_log.L(3, "Add Clause: ", c);
+                    LOG_L(m_log, 3, "Add Clause: ", ToSigned(c));
                 }
             }
 
-            clause cl({-k_bad}); // store bad^k for
+            Clause cl{~k_bad}; // store bad^k for
             m_clauses.emplace_back(cl);
 
             m_k++;
             if (m_maxK != -1 && m_k > m_maxK) {
-                [[maybe_unused]] auto finalSatScope = m_log.Section("Add_Bad_Cls");
-                m_Solver->AddClause(badClause);
-                [[maybe_unused]] auto satScope = m_log.Section("SAT_BMC_NonInc");
-                bool sat = m_Solver->Solve();
+                [[maybe_unused]] auto final_sat_scope = m_log.Section("Add_Bad_Cls");
+                m_solver->AddClause(bad_clause);
+                [[maybe_unused]] auto sat_scope = m_log.Section("SAT_BMC_NonInc");
+                bool sat = m_solver->Solve();
                 if (sat)
                     return true;
                 else
                     return false;
             }
         }
-        [[maybe_unused]] auto finalSatScope = m_log.Section("Add_Bad_Cls");
-        m_Solver->AddClause(badClause);
-        [[maybe_unused]] auto satScope = m_log.Section("SAT_BMC_NonInc");
-        bool sat = m_Solver->Solve();
+        [[maybe_unused]] auto final_sat_scope = m_log.Section("Add_Bad_Cls");
+        m_solver->AddClause(bad_clause);
+        [[maybe_unused]] auto sat_scope = m_log.Section("SAT_BMC_NonInc");
+        bool sat = m_solver->Solve();
         if (sat)
             return true;
     }
 }
 
 
-void BMC::Init(int badId) {
-    [[maybe_unused]] auto initScope = m_log.Section("BMC_Init");
-    m_badId = badId;
-    m_Solver = make_shared<SATSolver>(m_model, m_settings.solver);
-
-    // send initial state
-    for (auto l : m_model.GetInitialState()) {
-        m_Solver->AddClause({l});
-    }
-    m_Solver->AddInitialClauses();
+std::string BMC::GetCNFPath(int k) const {
+    const fs::path aig_path(m_settings.aigFilePath);
+    const std::string file_name = aig_path.stem().string() + ".bmc_k" + std::to_string(k) + ".cnf";
+    return (fs::path(m_settings.bmcCnfDir) / file_name).string();
 }
 
 
-void BMC::GetClausesK(int m_k, vector<clause> &clauses) {
-    auto &originalClauses = m_model.GetSimpClauses();
-    for (int i = 0; i < originalClauses.size(); ++i) {
-        clause &ori = originalClauses[i];
-        clause cls_k;
-        for (int v : ori) {
-            cls_k.push_back(m_model.GetPrimeK(v, m_k));
+void BMC::WriteDimacs(const std::vector<Clause> &clauses, const std::string &path) const {
+    std::vector<SignedVec> dimacs_clauses;
+    dimacs_clauses.reserve(clauses.size());
+
+    Var max_var = 0;
+    for (const Clause &clause : clauses) {
+        bool clause_is_true = false;
+        SignedVec dimacs_clause;
+        dimacs_clause.reserve(clause.size());
+
+        for (Lit lit : clause) {
+            if (IsConstTrue(lit)) {
+                clause_is_true = true;
+                break;
+            }
+            if (IsConstFalse(lit)) {
+                continue;
+            }
+
+            dimacs_clause.push_back(ToSigned(lit));
+            max_var = std::max(max_var, VarOf(lit));
+        }
+
+        if (!clause_is_true) {
+            dimacs_clauses.push_back(std::move(dimacs_clause));
+        }
+    }
+
+    std::ofstream cnf_file(path);
+    if (!cnf_file.is_open()) {
+        throw std::runtime_error("failed to open CNF output file: " + path);
+    }
+
+    cnf_file << "c Carat BMC CNF" << std::endl;
+    cnf_file << "c source " << m_settings.aigFilePath << std::endl;
+    cnf_file << "c k " << m_settings.bmcCnfK << std::endl;
+    cnf_file << "p cnf " << max_var << " " << dimacs_clauses.size() << std::endl;
+
+    for (const SignedVec &clause : dimacs_clauses) {
+        for (int lit : clause) {
+            cnf_file << lit << " ";
+        }
+        cnf_file << "0" << std::endl;
+    }
+}
+
+
+void BMC::Init() {
+    [[maybe_unused]] auto init_scope = m_log.Section("BMC_Init");
+    m_solver = std::make_shared<SATSolver>(m_model, m_settings.solver);
+
+    // send initial state
+    for (auto l : m_model.GetInitialState()) {
+        m_solver->AddClause({l});
+    }
+}
+
+
+void BMC::GetClausesK(int k, std::vector<Clause> &clauses) {
+    auto &original_clauses = m_model.GetSimpClauses();
+    for (int i = 0; i < original_clauses.size(); ++i) {
+        Clause &ori = original_clauses[i];
+        Clause cls_k;
+        for (Lit v : ori) {
+            cls_k.push_back(m_model.EnsurePrimeK(v, k));
         }
         clauses.push_back(cls_k);
     }
 }
 
 
-int BMC::GetBadK(int m_k) {
-    return m_model.GetPrimeK(m_badId, m_k);
+Lit BMC::GetBadK(int k) {
+    return m_model.EnsurePrimeK(m_model.GetBad(), k);
 }
 
 
-vector<int> BMC::GetConstraintsK(int m_k) {
-    vector<int> res;
-    for (auto c : m_model.GetConstraints()) {
-        res.push_back(m_model.GetPrimeK(c, m_k));
+Cube BMC::GetConstraintsK(int k) {
+    Cube res;
+    for (Lit c : m_model.GetConstraints()) {
+        res.push_back(m_model.EnsurePrimeK(c, k));
     }
     return res;
 }
 
-
-void BMC::OutputCounterExample(int bad) {
-    // get outputfile
-    auto startIndex = m_settings.aigFilePath.find_last_of("/\\");
-    if (startIndex == string::npos) {
-        startIndex = 0;
-    } else {
-        startIndex++;
-    }
-    auto endIndex = m_settings.aigFilePath.find_last_of(".");
-    assert(endIndex != string::npos);
-    string aigName = m_settings.aigFilePath.substr(startIndex, endIndex - startIndex);
-    string cexPath = m_settings.witnessOutputDir + aigName + ".cex";
-    std::ofstream cexFile;
-    cexFile.open(cexPath);
-
-    cexFile << "1" << endl
-            << "b0" << endl;
-
-    for (int i = 0; i < m_model.GetNumLatches(); i++) {
-        int latch_id = m_model.GetNumInputs() + i + 1;
-        cexFile << ((m_Solver->GetModel(latch_id) == t_True) ? "1" : "0");
-    }
-    cexFile << endl;
-    for (int j = 0; j <= m_k; j++) {
-        for (int i = 0; i < m_model.GetNumInputs(); i++) {
-            int input_id = m_model.GetPrimeK(i + 1, j);
-            cexFile << ((m_Solver->GetModel(input_id) == t_True) ? "1" : "0");
-        }
-        cexFile << endl;
-    }
-
-    cexFile << "." << endl;
-    cexFile.close();
-    return;
-}
 
 } // namespace car

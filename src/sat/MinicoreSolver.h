@@ -1,5 +1,4 @@
-#ifndef MINICORESOLVER_H
-#define MINICORESOLVER_H
+#pragma once
 
 #include "ISolver.h"
 #include "Model.h"
@@ -13,43 +12,28 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     MinicoreSolver(Model &m);
     ~MinicoreSolver();
 
-    void AddClause(const cube &cls) override;
-    void AddAssumption(const cube &assumption) override;
+    void AddClause(const Cube &cls) override;
     bool Solve() override;
-    bool Solve(const cube &assumption) override;
-    pair<cube, cube> GetAssignment(bool prime) override;
-    unordered_set<int> GetConflict() override;
-    inline int GetNewVar() override {
+    bool Solve(const Cube &assumption) override;
+    std::pair<Cube, Cube> GetAssignment(bool prime) override;
+    bool Failed(Lit assumption) override;
+    bool ShrinkConflict(int shrink) override;
+    inline Var GetNewVar() override {
         return ++m_maxId;
     }
-    void AddTempClause(const cube &cls) override;
+    void AddTempClause(const Cube &cls) override;
     void ReleaseTempClause() override;
-    inline tbool GetModel(int id) override {
+    inline Tbool GetModel(Var id) override {
         if (value(id) == minicore::l_True)
-            return t_True;
+            return T_TRUE;
         else if (value(id) == minicore::l_False)
-            return t_False;
+            return T_FALSE;
         else
-            return t_Undef;
+            return T_UNDEF;
     }
-    void ClearAssumption() override;
-    void PushAssumption(int a) override;
-    int PopAssumption() override;
-
   protected:
-    inline int GetLiteralId(const minicore::Lit &l);
-    inline minicore::Lit GetLit(int id) {
-        minicore::Var var = abs(id);
-        while (var >= nVars()) newVar();
-        return ((id > 0) ? minicore::mkLit(var) : ~minicore::mkLit(var));
-    };
-
     Model &m_model;
-    int m_maxId;
-    vector<minicore::Lit> m_assumptions;
-    vector<minicore::Lit> m_tempClause;
+    Var m_maxId;
 };
 
 } // namespace car
-
-#endif

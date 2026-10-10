@@ -1,154 +1,176 @@
-#ifndef FCAR_H
-#define FCAR_H
+#pragma once
 
-#include "BaseAlg.h"
+#include "IncrAlg.h"
 #include "IncrCheckerHelpers.h"
 #include "Log.h"
 #include "SATSolver.h"
-#include "random"
 #include <memory>
+#include <random>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace car {
 
-class FCAR : public BaseAlg {
+class FCAR : public IncrAlg {
   public:
     FCAR(Settings settings,
          Model &model,
          Log &log);
     CheckResult Run() override;
-    void Witness() override;
+    bool SupportsWitness() const override { return true; }
+    void RefineWitnessPropertyLit(WitnessBuilder &builder) const override;
+
+    void SetInit(const Cube &c) override { m_customInit = c; }
+    void SetSearchFromInitSucc(bool b) override { m_searchFromInitSucc = b; }
+    void SetLoopRefuting(bool b) override {
+        m_loopRefuting = b;
+        if (b) m_settings.satSolveInDomain = false;
+    }
+    void SetDead(const std::vector<Cube> &dead) override { m_dead = dead; }
+    void SetShoals(const std::vector<FrameList> &shoals) override { m_shoals = shoals; }
+    void SetWalls(const std::vector<FrameList> &walls) override { m_walls = walls; }
+
+    std::vector<std::pair<Cube, Cube>> GetCexTrace() override;
+    FrameList GetInv() override;
+    void KLiveIncr() override;
 
   private:
-    bool Check(int badId);
+    bool Check();
 
-    void Init(int badId);
+    void Init();
+
+    void Reset();
+
+    bool ImmediateSatisfiable();
+
+    void CreateTransSolver(int k);
+
+    bool IsInitStateImplyBad();
 
     void InitializeStartSolver();
 
-    bool AddUnsatisfiableCore(const cube &uc, int frameLevel);
+    void InitializeBadLiftSolver();
 
-    bool ImmediateSatisfiable(int badId);
+    bool AddUnsatisfiableCore(const Cube &uc, int frameLevel, bool fromCTR = false);
+
+    enum class ALLProveStatus {
+        Proved,
+        Reachable,
+        Bailout,
+        Invalidated,
+    };
+
+    void ActiveLemmaLearning(OverSequenceSet::RefId newRef);
+
+    std::vector<OverSequenceSet::RefId> FindHotSpots(const std::vector<OverSequenceSet::RefId> &ancestorChain);
+
+    ALLProveStatus ActiveProve(OverSequenceSet::RefId targetRef);
 
     bool IsInvariant(int frameLevel);
 
     struct LitOrder {
-        shared_ptr<Branching> branching;
+        std::shared_ptr<Branching> branching;
 
         LitOrder() {}
 
-        bool operator()(const int &l1, const int &l2) const {
+        bool operator()(Lit l1, Lit l2) const {
             return (branching->PriorityOf(l1) > branching->PriorityOf(l2));
         }
-    } litOrder;
+    } m_litOrder;
 
     struct InnOrder {
         Model &m;
 
         explicit InnOrder(Model &model) : m(model) {}
 
-        bool operator()(const int &inn_1, const int &inn_2) const {
-            return (m.GetInnardslvl(inn_1) > m.GetInnardslvl(inn_2));
+        bool operator()(Lit inn1, Lit inn2) const {
+            return (m.GetInnardslvl(inn1) > m.GetInnardslvl(inn2));
         }
-    } innOrder;
+    } m_innOrder;
 
-    struct BlockerOrder {
-        shared_ptr<Branching> branching;
-
-        BlockerOrder() {}
-
-        bool operator()(const cube &a, const cube &b) const {
-            float score_a = 0, score_b = 0;
-            for (int i = 0; i < a.size(); i++) {
-                score_a += branching->PriorityOf(a[i]);
-            }
-            score_a /= a.size();
-            for (int i = 0; i < b.size(); i++) {
-                score_b += branching->PriorityOf(b[i]);
-            }
-            score_b /= b.size();
-            return score_a > score_b;
-        }
-    } blockerOrder;
-
-    void OrderAssumption(cube &c) {
+    void OrderAssumption(Cube &c) {
         [[maybe_unused]] auto scoped = m_log.Section("DS_OrdAsm");
         if (m_settings.randomSeed > 0) {
-            shuffle(c.begin(), c.end(), default_random_engine(m_settings.randomSeed));
+            std::shuffle(c.begin(), c.end(), std::default_random_engine(m_settings.randomSeed));
             return;
         }
         if (m_settings.branching == 0) return;
-        stable_sort(c.begin(), c.end(), litOrder);
+        std::stable_sort(c.begin(), c.end(), m_litOrder);
         if (m_settings.internalSignals) {
-            stable_sort(c.begin(), c.end(), innOrder);
+            std::stable_sort(c.begin(), c.end(), m_innOrder);
         }
     }
 
-    inline void GetPrimed(cube &p) {
+    inline void GetPrimed(Cube &p) {
         for (auto &x : p) {
-            x = m_model.GetPrime(x);
+            x = m_model.LookupPrime(x);
         }
     }
 
-    int GetNewLevel(const cube &states, int start = 0);
+    int GetNewLevel(const Cube &states, int start = 0);
 
-    void GeneralizePredecessor(pair<cube, cube> &s, shared_ptr<State> t);
+    void GeneralizePredecessor(std::pair<Cube, Cube> &s, std::shared_ptr<State> t);
 
-    bool Generalize(cube &uc, int frame_lvl, int rec_lvl = 1);
+    void Generalize(Cube &uc, int frameLvl, int recLvl = 0);
 
-    bool Down(cube &uc, int frame_lvl, int rec_lvl, vector<cube> &failed_ctses);
+    bool Down(Cube &uc, int frameLvl, int recLvl, std::vector<Cube> &failedCtses);
 
-    bool DownHasFailed(const cube &s, const vector<cube> &failed_ctses);
+    bool ExCTGBlock(std::shared_ptr<State> cts, int frameLvl, int recLvl, std::vector<Cube> &failedCtses, int blockLimit);
 
-    bool Propagate(const cube &c, int lvl);
+    bool DownHasFailed(const Cube &s, const std::vector<Cube> &failedCtses);
 
-    int PropagateUp(const cube &c, int lvl);
+    bool Propagate(const Cube &c, int lvl);
 
-    bool IsReachable(int lvl, const cube &assumption, const string &label);
+    int PropagateUp(const Cube &c, int lvl);
 
-    shared_ptr<State> EnumerateStartState();
+    bool IsReachable(int lvl, const Cube &assumption, const std::string &label);
 
-    void OutputWitness(int bad);
+    std::shared_ptr<State> EnumerateStartState();
+    bool CheckInit(std::shared_ptr<State> s);
 
-    void OutputCounterExample(int bad);
+    void AddConstraintOr(const Frame &f);
 
-    unsigned addCubeToANDGates(aiger *circuit, vector<unsigned> cube);
+    Lit AddConstraintAnd(const Frame &f);
 
-    bool CheckInit(shared_ptr<State> s);
+    std::pair<Cube, Cube> GetInputAndState(int lvl);
 
-    void AddConstraintOr(const shared_ptr<frame> f);
+    Cube GetAndValidateCore(int lvl, const Cube &state);
 
-    void AddConstraintAnd(const shared_ptr<frame> f);
+    Cube GetUnsatAssumption(std::shared_ptr<SATSolver> solver, const Cube &assumptions);
 
-    pair<cube, cube> GetInputAndState(int lvl);
-
-    cube GetUnsatCore(int lvl, const cube &state);
-
-    cube GetUnsatAssumption(shared_ptr<SATSolver> solver, const cube &assumptions);
+    void BuildCEXTrace();
 
     CheckResult m_checkResult;
     int m_minUpdateLevel;
-    int m_badId;
     int m_k;
-    shared_ptr<OverSequenceSet> m_overSequence;
+    std::shared_ptr<OverSequenceSet> m_overSequence;
     UnderSequence m_underSequence;
     Settings m_settings;
     Log &m_log;
     Model &m_model;
-    shared_ptr<State> m_initialState;
-    vector<shared_ptr<SATSolver>> m_transSolvers;
-    shared_ptr<SATSolver> m_liftSolver;
-    shared_ptr<SATSolver> m_badLiftSolver;
-    shared_ptr<SATSolver> m_invSolver;
-    shared_ptr<SATSolver> m_startSolver;
-    shared_ptr<Branching> m_branching;
-    shared_ptr<State> m_lastState;
-    shared_ptr<Restart> m_restart;
-    vector<cube> m_domainStack;
+    std::shared_ptr<State> m_initialState;
+    std::vector<std::shared_ptr<SATSolver>> m_transSolvers;
+    std::shared_ptr<SATSolver> m_liftSolver;
+    std::shared_ptr<SATSolver> m_badLiftSolver;
+    std::shared_ptr<SATSolver> m_invSolver;
+    std::shared_ptr<SATSolver> m_startSolver;
+    std::shared_ptr<Branching> m_branching;
+    std::shared_ptr<State> m_lastState;
+    std::shared_ptr<Restart> m_restart;
+
+    // liveness
+    bool m_initialized{false};
+    Cube m_customInit;
+    bool m_searchFromInitSucc{false};
+    bool m_loopRefuting{false};
+    std::vector<Cube> m_dead;
+    std::vector<FrameList> m_shoals;
+    std::vector<FrameList> m_walls;
+    bool m_initStateImplyBad{false};
+    std::vector<std::pair<Cube, Cube>> m_cexTrace;
+    Cube m_shoalsLabels;
+    Cube m_wallsLabels;
 };
 
 
 } // namespace car
-
-#endif

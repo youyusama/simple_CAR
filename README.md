@@ -1,43 +1,25 @@
-# build
+# Carat
 
-`git submodule update --init --recursive`
+Carat is a bit- and word-level model checker for AIGER and BTOR2 models.
 
-### build cadical
+## Build
 
-`cd simple_CAR/src/sat/cadical/`
+```bash
+./setup.sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j 4
+```
 
-`./configure --competition && make`
+## Run
 
-`cd ../../../..`
+`<model-file>` may be an AIGER (`.aig`, `.aag`) or BTOR2 (`.btor2`) model.
 
-### build kissat
+```bash
+./build/carat <model-file>
+```
 
-`cd simple_CAR/src/sat/kissat/`
+Run `./build/carat -h` to see all available options.
 
-`./configure --competition && make`
+## Portfolio runs (Linux, Python 3.8+)
 
-`cd ../../../..`
-
-### build simple_CAR
-
-`mkdir build`
-
-`cd build`
-
-`cmake .. -DCMAKE_BUILD_TYPE=Release -DCADICAL=1 -DKISSAT=1`
-
-`make -j`
-
-### [optional] btor2
-
-`cd btor2`
-
-`setup_btor2.sh`
-
-usage:
-
-`python btorasaig.py <simpleCAR> [OPTIONS] -w <output_dir> <btor2_file>`
-
-The `.cexb` file in `output_dir\` is the witness file for btor2sim.
-
-'btor2asaig.py' would create a `.aig` file in the same directory as the input btor2 file.
+Run `python3 scripts/portfolio.py --type <safety|array|liveness> <model-file>` for parallel portfolio verification, or use `--help` for options.

@@ -1,7 +1,6 @@
 // created by Jianwen Li
 // Kissat API for BMC
-#ifndef KISSATSOLVER_H
-#define KISSATSOLVER_H
+#pragma once
 
 #include "ISolver.h"
 #include "Model.h"
@@ -10,6 +9,7 @@ extern "C" {
 }
 #include <assert.h>
 #include <memory>
+#include <stdexcept>
 
 
 namespace car {
@@ -17,48 +17,38 @@ namespace car {
 class KissatSolver : public ISolver {
   public:
     KissatSolver(Model &m);
-    ~KissatSolver() { kissat_release(m_solver); }
-
-    void AddClause(const cube &cls) override;
-    void AddAssumption(const cube &assumption) override {}
-    bool Solve() override;
-    bool Solve(const cube &assumption) override { return false; }
-    pair<cube, cube> GetAssignment(bool prime) override { return pair<cube, cube>(cube(), cube()); }
-    cube GetUC(bool prime) { return cube(); }
-    unordered_set<int> GetConflict() override { return unordered_set<int>(); }
-    int GetNewVar() override { return 0; }
-    void AddTempClause(const cube &cls) override {}
-    void ReleaseTempClause() override {}
-
-    inline tbool GetModel(int id) override {
-        int val = kissat_value(m_solver, id);
-        assert(!val);
-        if (val < 0)
-            return t_False;
-        else
-            return t_True;
+    ~KissatSolver() {
+        if (m_solver != nullptr) {
+            kissat_release(m_solver);
+        }
     }
-    void ClearAssumption() override {}
-    void PushAssumption(int a) override {}
-    int PopAssumption() override { return 0; }
 
+    void AddClause(const Cube &cls) override;
+    bool Solve() override;
+    bool Solve(const Cube &assumption) override;
+    std::pair<Cube, Cube> GetAssignment(bool prime) override;
+    bool Failed(Lit assumption) override;
+    Var GetNewVar() override;
+    void AddTempClause(const Cube &cls) override;
+    void ReleaseTempClause() override;
+
+    inline Tbool GetModel(Var id) override {
+        int val = kissat_value(m_solver, id);
+        assert(val != 0);
+        if (val < 0) {
+            return T_FALSE;
+        } else {
+            return T_TRUE;
+        }
+    }
   protected:
-    /*
-      inline int GetLiteralId(const Lit &l);
-      inline Lit GetLit(int id) {
-          int var = abs(id) - 1;
-          while (var >= nVars()) newVar();
-          return ((id > 0) ? mkLit(var) : ~mkLit(var));
-      };
-      */
-
     Model &m_model;
-    int m_maxId;
-    // vec<Lit> m_assumptions;
-    // int m_tempVar;
-    kissat *m_solver = NULL;
+    Var m_maxId;
+
+    [[noreturn]] static void Unsupported(const char *fn);
+    void EnsureReserved(const Cube &cls);
+
+    kissat *m_solver = nullptr;
 };
 
 } // namespace car
-
-#endif

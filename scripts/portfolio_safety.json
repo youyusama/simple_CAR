@@ -1,0 +1,182 @@
+{
+  "memory_limit_mb": 8192,
+  "common_args": [],
+  "workers": [
+    {
+      "name": "0_fcar",
+      "args": [
+        "-a",
+        "fcar",
+        "--rs",
+        "--all",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "1_bcar",
+      "args": [
+        "-a",
+        "bcar",
+        "--rs",
+        "--all",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "2_kind",
+      "args": [
+        "-a",
+        "kind",
+        "-s",
+        "kissat"
+      ]
+    },
+    {
+      "name": "3_ic3",
+      "args": [
+        "-a",
+        "ic3",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "4_ic3_all",
+      "args": [
+        "-a",
+        "ic3",
+        "--all",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "5_ic3_ctg",
+      "args": [
+        "-a",
+        "ic3"
+      ]
+    },
+    {
+      "name": "6_ic3_all_cadical",
+      "args": [
+        "-a",
+        "ic3",
+        "-s",
+        "cadical",
+        "--all",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "7_ic3_all_rs",
+      "args": [
+        "-a",
+        "ic3",
+        "--all",
+        "--ctg_max_lvl",
+        "0",
+        "--rs"
+      ]
+    },
+    {
+      "name": "8_ic3_all_eq1",
+      "args": [
+        "-a",
+        "ic3",
+        "--eq",
+        "1",
+        "--all",
+        "--ctg_max_lvl",
+        "0"
+      ]
+    },
+    {
+      "name": "9_ic3_all_exctg",
+      "args": [
+        "-a",
+        "ic3",
+        "--ctg_max_blocks",
+        "3"
+      ]
+    },
+    {
+      "name": "10_ic3_all_seed",
+      "args": [
+        "-a",
+        "ic3",
+        "--all",
+        "--ctg_max_lvl",
+        "0",
+        "--all_threshold",
+        "4",
+        "--all_max_states",
+        "8"
+      ]
+    },
+    {
+      "name": "11_ic3_all_bp",
+      "args": [
+        "-a",
+        "ic3",
+        "--all",
+        "--ctg_max_lvl",
+        "0",
+        "--bp"
+      ]
+    },
+    {
+      "name": "12_bmc_cadical",
+      "args": [
+        "-a",
+        "bmc",
+        "-s",
+        "cadical",
+        "-k",
+        "250"
+      ]
+    },
+    {
+      "name": "13_bmc_kissat_10",
+      "args": [
+        "-a",
+        "bmc",
+        "-s",
+        "kissat",
+        "--step",
+        "10",
+        "-k",
+        "49"
+      ]
+    },
+    {
+      "name": "14_bmc_kissat_50",
+      "args": [
+        "-a",
+        "bmc",
+        "-s",
+        "kissat",
+        "--step",
+        "50",
+        "-k",
+        "99"
+      ]
+    },
+    {
+      "name": "15_bmc_kissat_100",
+      "args": [
+        "-a",
+        "bmc",
+        "-s",
+        "kissat",
+        "--step",
+        "100",
+        "-k",
+        "299"
+      ]
+    }
+  ]
+}

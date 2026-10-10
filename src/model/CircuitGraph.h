@@ -1,10 +1,10 @@
-#ifndef CIRCUITGRAPH_H
-#define CIRCUITGRAPH_H
+#pragma once
 
 extern "C" {
 #include "aiger.h"
 }
 
+#include "CarTypes.h"
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -14,18 +14,9 @@ extern "C" {
 #include <unordered_set>
 #include <vector>
 
-using namespace std;
-
 namespace car {
 
-inline bool cmp(int a, int b) {
-    if (abs(a) != abs(b))
-        return abs(a) < abs(b);
-    else
-        return a < b;
-}
-
-void aigerDeleter(aiger *aig);
+void AigerDeleter(aiger *aig);
 
 struct CircuitGate {
     enum GateType { AND,
@@ -33,7 +24,7 @@ struct CircuitGate {
                     ITE };
     CircuitGate() {};
 
-    CircuitGate(GateType gateType, int fanout, const vector<int> &fanins) {
+    CircuitGate(GateType gateType, Var fanout, const std::vector<Lit> &fanins) {
         this->gateType = gateType;
         this->fanout = fanout;
         this->fanins = fanins;
@@ -46,14 +37,14 @@ struct CircuitGate {
     }
 
     GateType gateType;
-    int fanout;
-    vector<int> fanins;
+    Var fanout;
+    std::vector<Lit> fanins;
 };
 
 
 class CircuitGraph {
   public:
-    CircuitGraph(const shared_ptr<aiger> aig);
+    CircuitGraph(const std::shared_ptr<aiger> aig);
     ~CircuitGraph() {};
 
     // variable numbers
@@ -68,63 +59,55 @@ class CircuitGraph {
     unsigned numFairness;
 
     // variables for tranverse
-    vector<int> inputs;
-    vector<int> latches;
-    vector<int> outputs;
-    vector<int> ands;
-    vector<int> bad;
-    vector<int> constraints;
-    vector<int> justice;
-    vector<int> fairness;
+    std::vector<Var> inputs;
+    std::vector<Var> latches;
+    Cube outputs;
+    std::vector<Var> ands;
+    Cube bad;
+    Cube constraints;
+    std::vector<Cube> justice;
+    Cube fairness;
 
     // variables for query
-    unordered_set<int> inputsSet;
-    unordered_set<int> latchesSet;
-    unordered_set<int> andsSet;
+    std::unordered_set<Var> inputsSet;
+    std::unordered_set<Var> latchesSet;
+    std::unordered_set<Var> andsSet;
 
     // latch maps
-    unordered_map<int, int> latchNextMap;
-    unordered_map<int, int> latchResetMap;
-
-    // ture id
-    int trueId;
+    std::unordered_map<Var, Lit> latchNextMap;
+    std::unordered_map<Var, Lit> latchResetMap;
 
     // refine the COI of property & constraints, get new model inputs, latches, and gates
     void COIRefine();
 
+    void CollectPropertyCOIInputs();
+
+    Var NewModelVar();
+
+    Var NewInputVar();
+
+    Var NewLatchVar();
+
+    void SetLatchResetNext(Var latch, Lit reset, Lit next);
+
+    Var NewAndGate(Lit a, Lit b);
+
     // variables really matter
-    vector<int> modelInputs;
-    vector<int> modelLatches;
-    vector<int> modelGates;
+    std::vector<Var> modelInputs;
+    std::vector<Var> modelLatches;
+    std::vector<Var> modelGates;
 
     // inputs matter for property (but not for transition relation)
-    vector<int> propertyCOIInputs;
+    std::vector<Var> propertyCOIInputs;
 
-    unordered_map<int, CircuitGate> gatesMap; // gates in the COI of property & constraints & transition relation
+    std::unordered_map<Var, CircuitGate> gatesMap; // gates in the COI of property & constraints & transition relation
 
   private:
-    bool TryMakeXORGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits);
+    bool TryMakeXORGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits);
 
-    bool TryMakeITEGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits);
+    bool TryMakeITEGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits);
 
-    bool MakeAndGate(const shared_ptr<aiger> aig, const unsigned a, unordered_set<unsigned> &coi_lits);
-
-    inline int GetCarId(const unsigned lit) {
-        if (lit == 0)
-            return -trueId;
-        else if (lit == 1)
-            return trueId;
-        return (aiger_sign(lit) == 0) ? lit >> 1 : -(lit >> 1);
-    }
-
-    inline unsigned GetAigerLit(const int car_id) {
-        if (car_id > 0)
-            return car_id << 1;
-        else
-            return (-car_id << 1) + 1;
-    }
+    bool MakeAndGate(const std::shared_ptr<aiger> aig, const unsigned a, std::unordered_set<unsigned> &coiLits);
 };
 
 } // namespace car
-
-#endif // CIRCUITGRAPH_H

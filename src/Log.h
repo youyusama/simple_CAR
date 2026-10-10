@@ -1,6 +1,6 @@
-#ifndef LOG_H
-#define LOG_H
+#pragma once
 
+#include "CarTypes.h"
 #include "Settings.h"
 #include "signal.h"
 #include <assert.h>
@@ -9,30 +9,29 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace car {
 
-string CubeToStr(const vector<int> &c);
+std::string CubeToStr(const Cube &c);
 
-void compress_vector(vector<int> &res, const vector<int> &v);
+std::string CubeToStrShort(const Cube &c);
 
-string CubeToStrShort(const vector<int> &c);
-
-void signalHandler(int signum);
+void SignalHandler(int signum);
 
 class Log {
   public:
     struct CustomTimeStat {
         uint64_t calls = 0;
-        chrono::microseconds total{0};
+        std::chrono::microseconds total{0};
     };
 
     class ScopedTimer {
       public:
         ScopedTimer() : m_log(nullptr), m_active(false) {}
-        ScopedTimer(Log &log, string name);
+        ScopedTimer(Log &log, std::string name);
         ~ScopedTimer();
         ScopedTimer(const ScopedTimer &) = delete;
         ScopedTimer &operator=(const ScopedTimer &) = delete;
@@ -44,148 +43,97 @@ class Log {
         bool m_active = false;
     };
 
-    Log(int verb) : m_verbosity(verb) {
-        m_begin = chrono::steady_clock::now();
-        m_tick = chrono::steady_clock::now();
+    Log(int verb, bool detailedTimers) : m_verbosity(verb),
+                                         m_detailedTimers(detailedTimers) {
+        m_begin = std::chrono::steady_clock::now();
+        m_tick = std::chrono::steady_clock::now();
     }
 
     ~Log() {}
 
     template <typename... Args>
-    void L(int messageVerbosity, const Args &...args) {
-        if (messageVerbosity <= m_verbosity) {
-            ostringstream oss;
-            logHelper(oss, args...);
-            cout << oss.str() << endl;
-        }
+    void L(const Args &...args) {
+        std::ostringstream oss;
+        LogHelper(oss, args...);
+        std::cout << oss.str() << std::endl;
     }
+
+    void PrintTotalTime();
 
     void PrintCustomStatistics();
 
-    ScopedTimer Section(const string &name) {
-        if (m_verbosity == 0) return ScopedTimer();
+    ScopedTimer Section(const std::string &name) {
+        if (!m_detailedTimers) return ScopedTimer();
         return ScopedTimer(*this, name);
     }
 
     inline void Tick() {
-        m_tick = chrono::steady_clock::now();
+        m_tick = std::chrono::steady_clock::now();
     }
 
     inline double Tock() {
-        return chrono::duration_cast<chrono::duration<double>>(
-                   chrono::steady_clock::now() - m_tick)
+        return std::chrono::duration_cast<std::chrono::duration<double>>(
+                   std::chrono::steady_clock::now() - m_tick)
             .count();
     }
 
-    inline void StatMainSolver() {
-        m_mainSolverTime += chrono::duration_cast<std::chrono::microseconds>(
-            chrono::steady_clock::now() - m_tick);
-        m_mainSolverCalls++;
+    inline double GetTimeDouble(std::chrono::microseconds time) {
+        return std::chrono::duration_cast<std::chrono::duration<double>>(time).count();
     }
 
-    inline void StatInvSolver() {
-        m_invSolverTime += chrono::duration_cast<std::chrono::microseconds>(
-            chrono::steady_clock::now() - m_tick);
-        m_invSolverCalls++;
-    }
-
-    inline void StatLiftSolver() {
-        m_liftSolverTime += chrono::duration_cast<std::chrono::microseconds>(
-            chrono::steady_clock::now() - m_tick);
-        m_liftSolverCalls++;
-    }
-
-    void StatInit() {
-        m_initTime += chrono::duration_cast<std::chrono::microseconds>(
-            chrono::steady_clock::now() - m_tick);
-    }
-
-    inline void StatGetNewLevel() {
-        m_getNewLevelTime += chrono::duration_cast<std::chrono::microseconds>(
-            chrono::steady_clock::now() - m_tick);
-        m_getNewLevel++;
-    }
-
-    inline void StatPropagation() {
-        m_propagationTime += chrono::duration_cast<std::chrono::microseconds>(
-            chrono::steady_clock::now() - m_tick);
-        m_propagation++;
-    }
-
-    inline void StatStartSolver() {
-        m_enumerateStartStateTime += chrono::duration_cast<std::chrono::microseconds>(
-            chrono::steady_clock::now() - m_tick);
-        m_enumerateStartState++;
-    }
-
-    inline void StatUpdateUc() {
-        m_updateUcTime += chrono::duration_cast<std::chrono::microseconds>(
-            chrono::steady_clock::now() - m_tick);
-        m_updateUc++;
-    }
-
-    void StatInternalSignals() {
-        m_internalSignalsTime += chrono::duration_cast<std::chrono::microseconds>(
-            chrono::steady_clock::now() - m_tick);
-    }
-
-    inline double GetTimeDouble(chrono::microseconds time) {
-        return chrono::duration_cast<chrono::duration<double>>(time).count();
-    }
+    void SetVerbosity(int verb) { m_verbosity = verb; }
+    int Verbosity() const { return m_verbosity; }
 
   private:
     struct ActiveSection {
-        string name;
-        chrono::time_point<chrono::steady_clock> start;
-        chrono::microseconds elapsed{0};
+        std::string name;
+        std::chrono::time_point<std::chrono::steady_clock> start;
+        std::chrono::microseconds elapsed{0};
     };
 
     friend class ScopedTimer;
 
     template <typename T, typename... Args>
-    void logHelper(std::ostringstream &oss, const T &first, const Args &...args) {
+    void LogHelper(std::ostringstream &oss, const T &first, const Args &...args) {
         oss << first;
-        logHelper(oss, args...);
+        LogHelper(oss, args...);
     }
 
     template <typename T>
-    void logHelper(std::ostringstream &oss, const T &last) {
+    void LogHelper(std::ostringstream &oss, const T &last) {
         oss << last;
     }
 
     int m_verbosity;
+    bool m_detailedTimers;
 
-    uint32_t m_mainSolverCalls = 0;
-    chrono::microseconds m_mainSolverTime{0};
-    uint32_t m_invSolverCalls = 0;
-    chrono::microseconds m_invSolverTime{0};
-    uint32_t m_propagation = 0;
-    chrono::microseconds m_propagationTime{0};
-    uint32_t m_enumerateStartState = 0;
-    chrono::microseconds m_enumerateStartStateTime{0};
-    uint32_t m_liftSolverCalls = 0;
-    chrono::microseconds m_liftSolverTime{0};
-    uint32_t m_getNewLevel = 0;
-    chrono::microseconds m_getNewLevelTime{0};
-    uint32_t m_updateUc = 0;
-    chrono::microseconds m_updateUcTime{0};
+    std::chrono::time_point<std::chrono::steady_clock> m_tick;
+    std::chrono::time_point<std::chrono::steady_clock> m_begin;
 
-    chrono::microseconds m_initTime{0};
-    chrono::microseconds m_internalSignalsTime{0};
+    std::unordered_map<std::string, CustomTimeStat> m_customStats;
+    std::vector<ActiveSection> m_timerStack;
 
-    chrono::time_point<chrono::steady_clock> m_tick;
-    chrono::time_point<chrono::steady_clock> m_begin;
-
-    unordered_map<string, CustomTimeStat> m_customStats;
-    vector<ActiveSection> m_timerStack;
-
-    void AddCustomTime(const string &name, chrono::microseconds time);
-    void BeginSection(const string &name);
+    void AddCustomTime(const std::string &name, std::chrono::microseconds time);
+    void BeginSection(const std::string &name);
     void EndSection();
 };
 
-extern Log *GLOBAL_LOG;
+extern Log *global_log;
 
 } // namespace car
 
-#endif
+#define LOG_L(log, level, ...)                         \
+    do {                                               \
+        auto &__log = (log);                           \
+        if ((level) <= __log.Verbosity()) {            \
+            __log.L(__VA_ARGS__);                      \
+        }                                              \
+    } while (0)
+
+#define LOG_LP(logptr, level, ...)                       \
+    do {                                                 \
+        auto *__logp = (logptr);                         \
+        if (__logp && (level) <= __logp->Verbosity()) {  \
+            __logp->L(__VA_ARGS__);                      \
+        }                                                \
+    } while (0)
