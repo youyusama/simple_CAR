@@ -88,7 +88,8 @@
         "--sa",
         "ic3",
         "--ctg_max_lvl",
-        "0"
+        "0",
+        "--shrink-inv"
       ]
     },
     {
@@ -100,7 +101,8 @@
         "ic3",
         "--ctg_max_lvl",
         "0",
-        "--all"
+        "--all",
+        "--shrink-inv"
       ]
     },
     {
@@ -143,7 +145,8 @@
         "--sa",
         "ic3",
         "--ctg_max_lvl",
-        "0"
+        "0",
+        "--shrink-inv"
       ]
     },
     {
@@ -155,7 +158,8 @@
         "ic3",
         "--ctg_max_lvl",
         "0",
-        "--pd"
+        "--pd",
+        "--shrink-inv"
       ]
     },
     {
@@ -165,7 +169,8 @@
         "rlive",
         "--sa",
         "ic3",
-        "--pd"
+        "--pd",
+        "--shrink-inv"
       ]
     },
     {
@@ -178,7 +183,8 @@
         "--ctg_max_lvl",
         "0",
         "--all",
-        "--pd"
+        "--pd",
+        "--shrink-inv"
       ]
     }
   ]
