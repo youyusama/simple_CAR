@@ -89,8 +89,10 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                    "Target unrolling depth k for generated BMC DIMACS CNF")
         ->default_val(-1);
 
-    app.add_option("--step", settings.bmcStep, "Performs BMC by unrolling k steps in a single batch")
-        ->default_val(1);
+    app.add_option("--step", settings.bmcStep,
+                   "Bad depths per SAT query for wlbmc and Kissat BMC")
+        ->default_val(1)
+        ->check(CLI::Range(1, INT32_MAX));
 
     app.add_option("--br", settings.branching, "branching # i-good lemma")
         ->default_val(1)

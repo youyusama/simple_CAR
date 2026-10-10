@@ -545,84 +545,110 @@ MemoryBMC::MemoryBMC(WLModel &model,
     : m_model(model),
       m_log(log) {}
 
-MemoryBMC::Result MemoryBMC::CheckThrough(unsigned bound) {
-    m_trace = {};
-    MemoryBMC::Result result;
+std::optional<unsigned> MemoryBMC::CheckRange(unsigned first, unsigned last) {
     const char *phase = "property preparation";
-    unsigned depth = 0;
     try {
-        // WLModel validates the full SourceIR before preparing its property cone.
+        // WLModel validates SourceIR before preparing its property cone.
         const Btor2IR &source = m_model.PropertyIR();
-        for (;; ++depth) {
-            LOG_L(m_log, 1, "WL memory BMC bound ", depth, ":");
-            phase = "bounded unrolling";
-            WLBoundedUnroller unrolled(source, depth);
-            std::unique_ptr<ArrayEqualityEncoder> equality;
-            if (ArrayEqualityEncoder::HasArrayComparisons(unrolled.IR())) {
-                // Equality auxiliaries belong to this finite formula. Rebuild
-                // them per query so background witnesses never restrict later bounds.
-                phase = "equality elimination";
-                equality = std::make_unique<ArrayEqualityEncoder>(unrolled.IR());
-                const auto &stats = equality->Stats();
-                LOG_L(m_log, 1, "WL array equality bound ", depth, ": ",
-                      stats.comparisons, " comparisons, ", stats.points, " points, ",
-                      stats.queries, " address closures, ", stats.implications,
-                      " implications; equality-free IR");
+        LOG_L(m_log, 1, "WL memory BMC bound ", last,
+              ": depths [", first, ", ", last, "]");
+        phase = "bounded unrolling";
+        WLBoundedUnroller unrolled(source, first, last);
+        std::unique_ptr<ArrayEqualityEncoder> equality;
+        if (ArrayEqualityEncoder::HasArrayComparisons(unrolled.IR())) {
+            // Equality auxiliaries belong to this finite formula. Rebuild them
+            // per batch so background witnesses never restrict later bounds.
+            phase = "equality elimination";
+            equality = std::make_unique<ArrayEqualityEncoder>(unrolled.IR());
+            const auto &stats = equality->Stats();
+            LOG_L(m_log, 1, "WL array equality bound ", last, ": ",
+                  stats.comparisons, " comparisons, ", stats.points, " points, ",
+                  stats.queries, " address closures, ", stats.implications,
+                  " implications; equality-free IR");
+        }
+        phase = "EMM encoding/query";
+        MemoryQuery emm(equality ? equality->IR() : unrolled.IR(), m_log);
+        WLTraceStep flat;
+        std::map<int64_t, BitVector> values;
+        auto observations = equality ? equality->ModelTerms() : std::vector<int64_t>{};
+        for (const auto &[depth, term] : unrolled.BadTerms())
+            observations.push_back(term);
+        const auto query = emm.Check(flat, observations, values, !equality);
+        if (query == MemoryQuery::Result::Unsat) return std::nullopt;
+        if (query == MemoryQuery::Result::Unknown)
+            throw std::runtime_error("SAT solver did not complete the query");
+
+        phase = "counterexample endpoint recovery";
+        std::optional<unsigned> badDepth;
+        for (const auto &[depth, term] : unrolled.BadTerms()) {
+            if (values.at(term).IsOne()) {
+                badDepth = depth;
+                break;
             }
-            phase = "EMM encoding/query";
-            MemoryQuery emm(equality ? equality->IR() : unrolled.IR(), m_log);
-            WLTraceStep flat;
-            std::map<int64_t, BitVector> values;
-            const auto query = emm.Check(flat,
-                equality ? equality->ModelTerms() : std::vector<int64_t>{},
-                values, !equality);
-            if (query == MemoryQuery::Result::Sat) {
-                if (equality) {
-                    phase = "equality model recovery";
-                    const auto arrays = equality->Complete(
-                        [&](int64_t id) { return values.at(id); });
-                    // Retain only ports of the pre-elimination bounded IR.
-                    // EMM-private root reads must not constrain this completion.
-                    for (const auto &node : unrolled.IR().Nodes())
-                        if (node.tag == BTOR2_TAG_input &&
-                            unrolled.IR().Sort(node.sortId).tag == BTOR2_TAG_SORT_array)
-                            flat.arrayInputValues.emplace(node.id, arrays.at(node.id));
-                }
-                phase = "trace decoding";
-                m_trace = unrolled.DecodeTrace(flat);
-                phase = "SourceIR verification";
-                m_model.RestoreSourceTrace(m_trace);
-                WLSimulator simulator(m_model.SourceIR());
-                const auto verified = simulator.Verify(m_trace);
-                if (verified.kind != WLSimulator::VerificationKind::Confirmed)
-                    throw std::runtime_error(
-                        "concrete replay failed at frame " + std::to_string(verified.time) +
-                        " (node " + std::to_string(verified.nodeId) + "): " + verified.reason);
-                LOG_L(m_log, 1, "WL memory BMC concrete replay confirmed at depth ", depth);
-                result.status = MemoryBMC::Status::Counterexample;
-                result.badDepth = depth;
+        }
+        if (!badDepth)
+            throw std::runtime_error("SAT model has no legal bad endpoint in the query interval");
+
+        if (equality) {
+            phase = "equality model recovery";
+            const auto arrays = equality->Complete(
+                [&](int64_t id) { return values.at(id); });
+            // Retain only ports of the pre-elimination bounded IR.
+            // EMM-private root reads must not constrain this completion.
+            for (const auto &node : unrolled.IR().Nodes())
+                if (node.tag == BTOR2_TAG_input &&
+                    unrolled.IR().Sort(node.sortId).tag == BTOR2_TAG_SORT_array)
+                    flat.arrayInputValues.emplace(node.id, arrays.at(node.id));
+        }
+        phase = "trace decoding";
+        // Later frames need not satisfy source constraints. Discard them before
+        // lifting the model and verifying the selected concrete prefix.
+        m_trace = unrolled.DecodeTrace(flat, *badDepth);
+        phase = "SourceIR verification";
+        m_model.RestoreSourceTrace(m_trace);
+        WLSimulator simulator(m_model.SourceIR());
+        const auto verified = simulator.Verify(m_trace);
+        if (verified.kind != WLSimulator::VerificationKind::Confirmed)
+            throw std::runtime_error(
+                "concrete replay failed at frame " + std::to_string(verified.time) +
+                " (node " + std::to_string(verified.nodeId) + "): " + verified.reason);
+        LOG_L(m_log, 1, "WL memory BMC concrete replay confirmed at depth ", *badDepth);
+        return badDepth;
+    } catch (const std::exception &error) {
+        throw std::runtime_error(std::string(phase) + " at depths [" +
+                                 std::to_string(first) + ", " + std::to_string(last) +
+                                 "]: " + error.what());
+    }
+}
+
+MemoryBMC::Result MemoryBMC::CheckThrough(unsigned bound, unsigned step) {
+    m_trace = {};
+    Result result;
+    if (!step) {
+        result.reason = "memory BMC / step must be positive";
+        return result;
+    }
+    try {
+        for (unsigned first = 0;;) {
+            // Subtract before adding, including when bound or step is UINT_MAX.
+            const unsigned last = first + std::min(step - 1, bound - first);
+            if (const auto badDepth = CheckRange(first, last)) {
+                result.status = Status::Counterexample;
+                result.badDepth = badDepth;
                 return result;
             }
-            if (query == MemoryQuery::Result::Unknown) {
-                result.reason = "SAT solver did not complete depth " +
-                                std::to_string(depth);
-                return result;
-            }
-            result.checkedThrough = depth;
-            if (depth == bound) break;
+            result.checkedThrough = last;
+            if (last == bound) break;
+            first = last + 1;
         }
     } catch (const std::exception &error) {
         m_trace = {};
-        result.reason = std::string("memory BMC / ") + phase + " at depth " +
-                        std::to_string(depth) + ": " + error.what();
+        result.reason = std::string("memory BMC / ") + error.what();
         return result;
     }
 
-    result.status = MemoryBMC::Status::PrefixSafe;
-    LOG_L(m_log,
-          1,
-          "WL memory BMC found no counterexample through bound ",
-          bound);
+    result.status = Status::PrefixSafe;
+    LOG_L(m_log, 1, "WL memory BMC found no counterexample through bound ", bound);
     return result;
 }
 

@@ -26,11 +26,17 @@ class MemoryBMC {
 
     MemoryBMC(WLModel &model, Log &log);
 
-    // Inclusive: check F_0, ..., F_bound. PrefixSafe is not unbounded Safe.
-    Result CheckThrough(unsigned bound);
+    // Inclusive: check F_0, ..., F_bound in batches of at most step endpoints.
+    // step must be positive. PrefixSafe is not unbounded Safe; a batch SAT does
+    // not prove smaller depths in that batch safe or yield a shortest trace.
+    Result CheckThrough(unsigned bound, unsigned step = 1);
     const WLTrace &GetTrace() const { return m_trace; }
 
   private:
+    // nullopt means the interval is UNSAT; otherwise publish a verified trace
+    // and return its actual endpoint. Incomplete queries throw to CheckThrough.
+    std::optional<unsigned> CheckRange(unsigned first, unsigned last);
+
     WLModel &m_model;
     Log &m_log;
     WLTrace m_trace;

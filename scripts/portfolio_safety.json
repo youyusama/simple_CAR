@@ -166,7 +166,7 @@
       ]
     },
     {
-      "name": "15_bmc_kissat_140",
+      "name": "15_bmc_kissat_100",
       "args": [
         "-a",
         "bmc",

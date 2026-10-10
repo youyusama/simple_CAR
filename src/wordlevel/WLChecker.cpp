@@ -55,7 +55,8 @@ CheckResult WLChecker::Run() {
     m_trace = {};
     if (m_memoryBmc) {
         const auto result = m_memoryBmc->CheckThrough(
-            static_cast<unsigned>(m_settings.bmcK));
+            static_cast<unsigned>(m_settings.bmcK),
+            static_cast<unsigned>(m_settings.bmcStep));
         if (result.status == MemoryBMC::Status::Counterexample)
             return CheckResult::Unsafe;
         if (result.status == MemoryBMC::Status::Unknown)

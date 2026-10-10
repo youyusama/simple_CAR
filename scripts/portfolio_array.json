@@ -63,6 +63,32 @@
         "-k",
         "100"
       ]
+    },
+    {
+      "name": "7_wlbmc_step10",
+      "args": [
+        "-a",
+        "wlbmc",
+        "-s",
+        "kissat",
+        "--step",
+        "10",
+        "-k",
+        "100"
+      ]
+    },
+    {
+      "name": "8_wlbmc_step25",
+      "args": [
+        "-a",
+        "wlbmc",
+        "-s",
+        "kissat",
+        "--step",
+        "25",
+        "-k",
+        "100"
+      ]
     }
   ]
 }

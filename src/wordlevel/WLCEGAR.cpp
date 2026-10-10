@@ -150,19 +150,20 @@ CheckResult WLCEGAR::Run() {
         }
 
         if (res == CheckResult::Safe) {
-            if (MaxDelay() == 0) break;
+            const unsigned delay = MaxDelay();
+            if (delay == 0) break;
             // Close the finite prefix not covered by the delayed abstraction guards.
             MemoryBMC boundedChecker(m_model, m_log);
             try {
-                LOG_L(m_log, 1, "word-level guard prefix check through ", MaxDelay() - 1);
+                LOG_L(m_log, 1, "word-level guard prefix check through ", delay - 1);
                 const auto prefixStart = std::chrono::steady_clock::now();
-                const auto bounded = boundedChecker.CheckThrough(MaxDelay() - 1);
+                const auto bounded = boundedChecker.CheckThrough(delay - 1, delay);
                 LOG_L(m_log, 1, "word-level guard prefix: ms=", elapsed(prefixStart));
                 if (bounded.status == MemoryBMC::Status::Counterexample) {
                     m_trace = boundedChecker.GetTrace();
                     res = CheckResult::Unsafe;
                 } else if (bounded.status == MemoryBMC::Status::PrefixSafe &&
-                           bounded.checkedThrough && *bounded.checkedThrough >= MaxDelay() - 1) {
+                           bounded.checkedThrough && *bounded.checkedThrough >= delay - 1) {
                     res = CheckResult::Safe;
                 } else {
                     LOG_L(m_log, 0, "WL memory BMC incomplete: ", bounded.reason);

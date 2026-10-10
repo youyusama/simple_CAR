@@ -6,7 +6,13 @@
 namespace car {
 
 WLBoundedUnroller::WLBoundedUnroller(const Btor2IR &source, unsigned bound)
-    : m_source(source), m_bound(bound) {
+    : WLBoundedUnroller(source, bound, bound) {}
+
+WLBoundedUnroller::WLBoundedUnroller(const Btor2IR &source,
+                                   unsigned first, unsigned last)
+    : m_source(source), m_bound(last) {
+    if (first > last)
+        throw std::invalid_argument("invalid bounded bad-depth interval");
     m_output.CopySortsFrom(source);
     for (const auto &[id, sort] : source.Sorts()) {
         if (sort.tag == BTOR2_TAG_SORT_bitvec && sort.width == 1) m_boolSort = id;
@@ -22,6 +28,8 @@ WLBoundedUnroller::WLBoundedUnroller(const Btor2IR &source, unsigned bound)
         if (node.tag == BTOR2_TAG_bad) bad = node.args[0];
     }
     if (!bad) throw std::runtime_error("bounded unrolling requires a bad property");
+    // Zero denotes an empty conjunction/disjunction here, never an IR node.
+    int64_t prefix = 0, condition = 0;
     for (unsigned time = 0;; ++time) {
         for (const auto &node : source.Nodes()) {
             const bool state = node.tag == BTOR2_TAG_state;
@@ -36,11 +44,21 @@ WLBoundedUnroller::WLBoundedUnroller(const Btor2IR &source, unsigned bound)
             if (time > 0 && m_next.count(node.id))
                 RequireEqual(lowered, Term(m_next.at(node.id), time - 1));
         }
-        for (const auto &node : source.Nodes())
-            if (node.tag == BTOR2_TAG_constraint) Constraint(Term(node.args[0], time));
-        if (time == bound) break;
+        for (const auto &node : source.Nodes()) {
+            if (node.tag != BTOR2_TAG_constraint) continue;
+            const int64_t constraint = Term(node.args[0], time);
+            prefix = prefix ? Boolean(BTOR2_TAG_and, prefix, constraint) : constraint;
+        }
+        if (time >= first) {
+            const int64_t endpoint = Term(bad, time);
+            const int64_t candidate = prefix ? Boolean(BTOR2_TAG_and, prefix, endpoint) : endpoint;
+            m_badTerms.emplace(time, candidate);
+            condition = condition ? Boolean(BTOR2_TAG_or, condition, candidate) : candidate;
+        }
+        if (time == last) break;
     }
-    const int64_t condition = Term(bad, bound);
+    // All next functions are total. The hard transition equations can therefore
+    // extend any selected prefix to last, without requiring later constraints.
     Btor2IRNode property;
     property.id = m_output.FreshId();
     property.tag = BTOR2_TAG_bad;
@@ -162,21 +180,32 @@ void WLBoundedUnroller::Constraint(int64_t condition) {
     m_output.AddNode(node);
 }
 
-void WLBoundedUnroller::RequireEqual(int64_t lhs, int64_t rhs) {
+int64_t WLBoundedUnroller::Boolean(Btor2Tag tag, int64_t lhs, int64_t rhs) {
     Btor2IRNode node;
     node.id = m_output.FreshId();
-    node.tag = BTOR2_TAG_eq;
+    node.tag = tag;
     node.sortId = m_boolSort;
     node.nargs = 2;
     node.args = {lhs, rhs, 0};
     m_output.AddNode(node);
-    Constraint(node.id);
+    return node.id;
+}
+
+void WLBoundedUnroller::RequireEqual(int64_t lhs, int64_t rhs) {
+    Constraint(Boolean(BTOR2_TAG_eq, lhs, rhs));
 }
 
 WLTrace WLBoundedUnroller::DecodeTrace(const WLTraceStep &flat) const {
+    return DecodeTrace(flat, m_bound);
+}
+
+WLTrace WLBoundedUnroller::DecodeTrace(const WLTraceStep &flat, unsigned last) const {
+    if (last > m_bound)
+        throw std::invalid_argument("trace endpoint exceeds the unrolled bound");
     WLTrace result;
-    result.steps.resize(static_cast<size_t>(m_bound) + 1);
+    result.steps.resize(static_cast<size_t>(last) + 1);
     for (const auto &port : m_interface) {
+        if (port.time > last) continue;
         auto &step = result.steps.at(port.time);
         if (port.array) {
             auto &values = port.state ? step.arrayStateValues : step.arrayInputValues;
