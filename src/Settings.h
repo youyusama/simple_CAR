@@ -81,6 +81,7 @@ struct Settings {
     int eq = 2;
     int eqTimeout = 600;
     bool searchFromBadPred = false;
+    bool shrinkInvariant = false;
     bool detailedTimers = false;
 };
 

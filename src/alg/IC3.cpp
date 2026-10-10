@@ -94,8 +94,175 @@ FrameList IC3::GetInv() {
             f.emplace_back(cb);
         }
     }
+    if (m_settings.shrinkInvariant) f = ShrinkInv(std::move(f));
     inv.emplace_back(std::move(f));
     return inv;
+}
+
+Frame IC3::ShrinkInv(Frame inv) const {
+    [[maybe_unused]] auto scoped = m_log.Section("IC3_ShrinkInv");
+    const size_t original_size = inv.size();
+
+    // 1. A blocking cube denotes its negated clause. Short cubes subsume
+    // supersets; one pass after sorting is enough for this cheap prefilter.
+    std::sort(inv.begin(), inv.end(), CubeComp);
+    Frame candidates;
+    LitSet literals;
+    for (const Cube &cube : inv) {
+        literals.NewSet(cube);
+        bool subsumed = std::any_of(candidates.begin(), candidates.end(),
+            [&](const Cube &kept) { return SubsumeSet(kept, literals); });
+        if (!subsumed) candidates.push_back(cube);
+    }
+    inv = std::move(candidates);
+    if (inv.empty()) return inv;
+
+    Frame primed = inv;
+    for (Cube &cube : primed)
+        for (Lit &lit : cube) lit = m_model.EnsurePrimeK(lit, 1);
+
+    // Match InitializeStartSolver for safety and AddNewFrame for induction.
+    // In FAIR, the forbidden state is the custom initial cube. In RLIVE,
+    // shoals/dead restrict the safety query, but not the frame transition.
+    auto make_solver = [&](bool safety) {
+        auto solver = std::make_unique<SATSolver>(m_model, MCSATSolver::minicore);
+        solver->AddTrans();
+        solver->AddConstraints();
+        if (safety) {
+            if (m_settings.searchFromBadPred) {
+                solver->AddTransK(1);
+                solver->AddBadk(1);
+                solver->AddProperty();
+                solver->AddConstraintsK(1);
+            } else {
+                if (m_loopRefuting) {
+                    for (Lit lit : m_initialState->latches) solver->AddClause({lit});
+                } else {
+                    solver->AddBad();
+                }
+                solver->AddShoalConstraints(m_shoals, m_dead);
+                solver->AddWallConstraints(m_walls);
+            }
+        } else if (m_loopRefuting) {
+            solver->AddWallConstraints(m_walls);
+        }
+        return solver;
+    };
+    auto add_activations = [&](SATSolver &solver) {
+        Cube labels;
+        for (const Cube &cube : inv) {
+            Lit label = MkLit(solver.GetNewVar());
+            Clause clause{~label};
+            for (Lit lit : cube) clause.push_back(~lit);
+            solver.AddClause(clause);
+            labels.push_back(label);
+        }
+        return labels;
+    };
+
+    // 2. Extract a sufficient safety seed, not globally necessary clauses.
+    auto safety = make_solver(true);
+    Cube labels = add_activations(*safety);
+    if (safety->Solve(labels)) {
+        LOG_L(m_log, 1, "Invariant shrinking skipped: safety check failed.");
+        return inv;
+    }
+    std::vector<bool> selected(inv.size(), false);
+    std::vector<size_t> work;
+    for (size_t i = 0; i < inv.size(); ++i) {
+        if (safety->Failed(labels[i])) {
+            selected[i] = true;
+            work.push_back(i);
+        }
+    }
+    const size_t seed_size = work.size();
+    safety.reset();
+
+    // 3. NEC: find clauses required by the fixed seed. Reify each clause,
+    // and use a sequential at-most-one encoding for false clause labels.
+    auto nec = make_solver(false);
+    labels = add_activations(*nec);
+    Lit previous{};
+    for (size_t i = 0; i < inv.size(); ++i) {
+        for (Lit lit : inv[i]) nec->AddClause({labels[i], lit});
+        if (selected[i]) {
+            nec->AddClause({labels[i]});
+        } else {
+            Lit seen = MkLit(nec->GetNewVar());
+            nec->AddClause({labels[i], seen});
+            if (previous != Lit{}) {
+                nec->AddClause({~previous, seen});
+                nec->AddClause({labels[i], ~previous});
+            }
+            previous = seen;
+        }
+    }
+    for (size_t pos = 0; pos < work.size(); ++pos) {
+        while (nec->Solve(primed[work[pos]])) {
+            size_t required = inv.size();
+            for (size_t i = 0; i < inv.size(); ++i) {
+                if (!selected[i] && nec->GetModel(VarOf(labels[i])) == T_FALSE) {
+                    required = i;
+                    break;
+                }
+            }
+            // No missing clause means the original invariant is unsupported.
+            if (required == inv.size()) return inv;
+            selected[required] = true;
+            work.push_back(required);
+            nec->AddClause({labels[required]});
+        }
+    }
+    const size_t necessary_size = work.size();
+    nec.reset();
+
+    // 4. FEAS: support the work set, then support the newly added clauses.
+    // Targets are an OR of primed blocking cubes, not their conjunction.
+    auto support = make_solver(false);
+    labels = add_activations(*support);
+    Cube violations;
+    for (const Cube &cube : primed)
+        violations.push_back(support->AddCubeAsLabelK(cube, 0));
+    for (size_t i : work) support->AddClause({labels[i]});
+    while (!work.empty()) {
+        Clause target;
+        for (size_t i : work) target.push_back(violations[i]);
+        support->AddTempClause(target);
+        Cube assumptions;
+        for (size_t i = 0; i < inv.size(); ++i)
+            if (!selected[i]) assumptions.push_back(labels[i]);
+        if (support->Solve(assumptions)) return inv;
+        work.clear();
+        for (size_t i = 0; i < inv.size(); ++i) {
+            if (!selected[i] && support->Failed(labels[i])) {
+                selected[i] = true;
+                work.push_back(i);
+            }
+        }
+        support->ReleaseTempClause();
+        for (size_t i : work) support->AddClause({labels[i]});
+    }
+
+    // Recheck the result with no optional activations. Initiation is inherited
+    // by taking a subset, including when F_0 is a custom successor image.
+    Frame reduced;
+    Clause target;
+    safety = make_solver(true);
+    for (size_t i = 0; i < inv.size(); ++i) {
+        if (!selected[i]) continue;
+        reduced.push_back(inv[i]);
+        target.push_back(violations[i]);
+        safety->AddUC(inv[i]);
+    }
+    if (safety->Solve()) return inv;
+    if (!target.empty()) {
+        support->AddTempClause(target);
+        if (support->Solve()) return inv;
+    }
+    LOG_L(m_log, 1, "Invariant shrinking: ", original_size, " -> ", inv.size(),
+          " after subsumption, seed=", seed_size, ", NEC=", necessary_size,
+          ", final=", reduced.size());
+    return reduced;
 }
 
 void IC3::KLiveIncr() {
@@ -1396,9 +1563,11 @@ void IC3::RefineWitnessPropertyLit(WitnessBuilder &builder) const {
         }
     }
 
+    Frame inv(ind_inv.begin(), ind_inv.end());
+    if (m_settings.shrinkInvariant) inv = ShrinkInv(std::move(inv));
     std::vector<unsigned> clause_terms;
-    clause_terms.reserve(ind_inv.size());
-    for (const Cube &cube : ind_inv) {
+    clause_terms.reserve(inv.size());
+    for (const Cube &cube : inv) {
         clause_terms.push_back(builder.Negate(builder.BuildCube(cube)));
     }
     unsigned invariant_lit = clause_terms.empty() ? builder.TrueLit() : builder.BuildAnd(clause_terms);

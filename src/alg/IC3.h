@@ -135,6 +135,8 @@ class IC3 : public IncrAlg {
 
     void BuildCEXTrace();
 
+    Frame ShrinkInv(Frame inv) const;
+
     Cube GetUnsatCore(const std::shared_ptr<SATSolver> &solver, const Cube &fallbackCube, bool prime);
     bool IsReachable(const Cube &cb, const std::shared_ptr<SATSolver> &slv);
     bool IsInductive(const Cube &cb, const std::shared_ptr<SATSolver> &slv);
