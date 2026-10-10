@@ -24,7 +24,7 @@ class DAGCNFSimplifier {
     struct Occur {
         std::vector<int> occur;
         bool dirty = false;
-        size_t size = 0;
+        std::size_t size = 0;
     };
 
     Var m_maxVar = 0;
