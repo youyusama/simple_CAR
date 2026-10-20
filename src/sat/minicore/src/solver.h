@@ -11,6 +11,17 @@
 
 namespace minicore {
 
+// An MLQP support is a bitset over the current core assumptions.
+// Bit i == 1 means "this derived literal/conflict depends on core_assumps[i]".
+using MLQPSupportMask = uint64_t;
+using MLQPSupportSet = std::vector<MLQPSupportMask>;
+
+struct MLQPSupportLookup {
+    // Borrowed words; valid until the next support update or MLQP call.
+    const MLQPSupportMask *bits = nullptr;
+    size_t size = 0;
+};
+
 inline std::string vec2str(const std::vector<Lit> &lits) {
     std::string res;
     for (Lit l : lits) {
@@ -64,6 +75,17 @@ class Solver {
     void setRestartLimit(int limit); // Set the restart limit.
 
     std::vector<Lit> intVec2LitVec(const std::vector<int> &vec); // Convert a vector of integers to a vector of literals.
+
+    // Multi-level queue propagation for reducing unsat cores.
+    // Strategy 0 disables MLQP, 1 selects Default, and 2 selects Extended.
+    void setMLQP(int strategy) {
+        m_mlqpStrategy = strategy;
+    }
+    // Input must be an UNSAT core under the retained query context (including
+    // active temporary clauses). On reduction, update failed(); leave input intact.
+    bool mlqp(std::vector<Lit> &core_assumps);
+    // Raw closure deletions in the last mlqp call, before IC3 core repair.
+    size_t mlqpBypassReducedLiterals() const { return mlqp_bypass_reduced_literals; }
 
     // Read state:
     //
@@ -166,6 +188,44 @@ class Solver {
     bool has_failed{false};
     uint32_t failed_epoch{1};
 
+    int m_mlqpStrategy;
+    size_t mlqp_core_size;       // Number of assumptions in the core currently processed by MLQP.
+    size_t mlqp_best_size;       // Best (smallest) support size found so far.
+    size_t mlqp_support_chunks;
+
+    MLQPSupportSet mlqp_zero_support;     // Reusable all-zero support bitset.
+    MLQPSupportSet mlqp_best_core;        // Bitset for the best core found so far.
+    MLQPSupportSet mlqp_work_support;     // Scratch support bitset for construction/DFS.
+    MLQPSupportSet mlqp_merged_support;   // Scratch buffer for OR-merging supports in one clause.
+    MLQPSupportSet mlqp_conflict_support; // Scratch buffer used when testing literal/opposite-literal conflicts.
+
+    // MLQP-Default/Extended: one currently best support per literal, indexed by Lit.x.
+    uint32_t mlqp_support_stamp{0};
+    // Current-call supports share storage. Offsets are valid only at this stamp;
+    // this avoids a heap allocation for each literal's short bitset.
+    MLQPSupportSet mlqp_support_pool;
+    std::vector<size_t> mlqp_support_offsets;
+    std::vector<size_t> mlqp_support_sizes;
+    std::vector<uint32_t> mlqp_support_stamps;
+    std::vector<std::vector<Lit>> mlqp_buckets;
+    std::vector<size_t> mlqp_bucket_heads;
+    std::vector<std::vector<CRef>> mlqp_pending_clauses;
+    std::vector<uint32_t> mlqp_pending_stamps;
+    std::vector<CRef> mlqp_pending_seen_keys;
+    std::vector<uint32_t> mlqp_pending_seen_stamps;
+    size_t mlqp_pending_seen_used{0};
+    std::vector<CRef> mlqp_propagate_clauses;
+    std::vector<Lit> mlqp_unresolved_clause_tmp;
+
+    // Literal -> input-assumption index, or size_t(-1). Reset only touched entries.
+    std::vector<size_t> mlqp_assumption_indices;
+    // Concatenated fixed-width supports per assumption; reuse capacity across calls
+    // rather than allocating a separate vector for every bypass rule.
+    std::vector<MLQPSupportSet> mlqp_bypass_rules;
+    std::vector<size_t> mlqp_bypass_targets;
+    MLQPSupportSet mlqp_bypass_available;
+    size_t mlqp_bypass_reduced_literals{0};
+
     double max_learnts;
     double learntsize_adjust_confl;
     int learntsize_adjust_cnt;
@@ -194,6 +254,19 @@ class Solver {
     void removeSatisfied(std::vector<CRef> &cs); // Shrink 'cs' to contain only non-satisfied clauses.
     void removeSubsumed(std::vector<CRef> &cs);  // Remove subsumed clauses from 'cs'.
     void removeTempLearnt();                     // Remove the clauses learnt from the temp clause.
+
+    void initMLQPState(size_t core_size);
+    MLQPSupportLookup lookupMLQPSupport(Lit p) const;
+    void updateMLQPSupport(Lit p, const MLQPSupportSet &cand_support, size_t cand_size);
+    void reduceMLQPBypassCore();
+    void updateMLQPBestCore(const MLQPSupportSet &support);
+    void updateMLQPBestCore(const MLQPSupportSet &support, size_t support_size);
+    void addMLQPPendingClause(Lit p, CRef cr);
+    void reserveMLQPPendingSeen(size_t min_entries);
+    bool markMLQPPendingClause(CRef cr);
+    void mlqpScanClause(CRef cr);
+    void mlqpPropagate(Lit p);
+
     // Maintaining Variable/Clause activity:
     //
     void varBumpActivity(Var v, uint64_t conflict_index); // Increase a variable with ACIDS update.

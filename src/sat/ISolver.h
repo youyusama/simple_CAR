@@ -14,8 +14,8 @@ class ISolver {
     virtual bool Solve(const Cube &assumption) = 0;
     virtual std::pair<Cube, Cube> GetAssignment(bool prime) = 0;
     virtual bool Failed(Lit assumption) = 0;
-    virtual bool ShrinkConflict(int shrink) {
-        (void)shrink;
+    // Optional core reduction; solvers other than MiniCore leave failed() intact.
+    virtual bool MLQP(Cube &, int) {
         return false;
     }
     virtual Var GetNewVar() = 0;

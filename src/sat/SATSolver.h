@@ -34,8 +34,8 @@ class SATSolver {
         return m_slv->Failed(assumption);
     }
 
-    bool ShrinkConflict(int shrink) {
-        return m_slv->ShrinkConflict(shrink);
+    bool MLQP(Cube &core, int strategy) {
+        return m_slv->MLQP(core, strategy);
     }
 
     Var GetNewVar() {

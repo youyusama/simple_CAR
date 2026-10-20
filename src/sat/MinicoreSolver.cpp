@@ -84,11 +84,9 @@ bool MinicoreSolver::Failed(Lit assumption) {
 }
 
 
-bool MinicoreSolver::ShrinkConflict(int shrink) {
-    if (shrink == 0) return false;
-
-    // TODO: implement minicore-only shrink strategies 1/2/3.
-    return false;
+bool MinicoreSolver::MLQP(Cube &core, int strategy) {
+    setMLQP(strategy);
+    return mlqp(core);
 }
 
 

@@ -17,7 +17,7 @@ class MinicoreSolver : public ISolver, public minicore::Solver {
     bool Solve(const Cube &assumption) override;
     std::pair<Cube, Cube> GetAssignment(bool prime) override;
     bool Failed(Lit assumption) override;
-    bool ShrinkConflict(int shrink) override;
+    bool MLQP(Cube &core, int strategy) override;
     inline Var GetNewVar() override {
         return ++m_maxId;
     }

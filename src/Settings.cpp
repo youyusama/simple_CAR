@@ -155,10 +155,10 @@ bool ParseSettings(int argc, char **argv, Settings &settings) {
                  "disable SAT solving in domain")
         ->default_val(false);
 
-    app.add_option("--shrink", settings.shrink,
-                   "shrink unsat core strategy: 0 disabled, 1-3 enabled")
+    app.add_option("--mlqp", settings.mlqp,
+                   "Reduce unsatisfiable cores with multi-level queue propagation, prioritizing literals with smaller supports (0: disabled, 1: Default, 2: Extended).")
         ->default_val(0)
-        ->check(CLI::Range(0, 3));
+        ->check(CLI::Range(0, 2));
 
     app.add_option("--eq", settings.eq,
                    "equivalent variable checking ( 0: none,\n\
