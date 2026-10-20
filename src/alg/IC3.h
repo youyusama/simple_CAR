@@ -144,8 +144,6 @@ class IC3 : public IncrAlg {
     bool InitiationCheck(const Cube &cb);
     bool IsInitSuccessor(const Cube &cb);
 
-    bool GetShrunkUnsatCore(const std::shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime);
-
     CheckResult m_checkResult;
 
     int m_k;

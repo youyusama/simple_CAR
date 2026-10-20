@@ -75,7 +75,7 @@ struct Settings {
     int allThreshold = 8;
     int allMaxStates = 32;
     bool satSolveInDomain = true;
-    int shrink = 0;
+    int mlqp = 0;
     double maxObligationAct = 10.0;
     int bmcStep = 1;
     int eq = 2;

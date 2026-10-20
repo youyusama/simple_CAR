@@ -747,30 +747,6 @@ Cube IC3::GetUnsatCore(const std::shared_ptr<SATSolver> &solver, const Cube &fal
 }
 
 
-bool IC3::GetShrunkUnsatCore(const std::shared_ptr<SATSolver> &solver, Cube &core, const Cube &fallbackCube, bool prime) {
-    [[maybe_unused]] auto scoped = m_log.Section("IC3_ShrinkCore");
-    bool res = solver->ShrinkConflict(m_settings.shrink);
-    if (!res) return false;
-
-    core.clear();
-    if (!prime) {
-        for (const auto &lit : fallbackCube) {
-            if (solver->Failed(lit)) {
-                core.push_back(lit);
-            }
-        }
-    } else {
-        for (const auto &lit : fallbackCube) {
-            Lit lit_p = m_model.LookupPrime(lit);
-            if (solver->Failed(lit_p)) {
-                core.push_back(lit);
-            }
-        }
-    }
-    return true;
-}
-
-
 std::shared_ptr<State> IC3::EnumerateStartState() {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_StartEnum");
     LOG_L(m_log, 2, "Searching for a start state at level ", m_k);
@@ -1248,15 +1224,21 @@ void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_Gen");
     LOG_L(m_log, 3, "Generalizing Cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
 
-    if (m_settings.shrink > 0 &&
-        recLvl >= m_settings.ctgMaxRecursionDepth &&
-        cb.size() > 2) {
-        Cube s_cb;
-        bool res = GetShrunkUnsatCore(m_transSolvers[frameLvl], s_cb, cb, true);
-        if (res && InitiationCheck(s_cb)) {
-            cb.swap(s_cb);
+    if (m_settings.mlqp > 0 && cb.size() > 2) {
+        [[maybe_unused]] auto mlqp_scope = m_log.Section("IC3_MLQP");
+        OrderAssumption(cb);
+        Cube assumptions(cb);
+        GetPrimed(assumptions);
+        auto &solver = m_transSolvers[frameLvl];
+        solver->SetTempDomainCOI(assumptions);
+        // Use the retained UNSAT query, including its temporary blocking clause.
+        if (solver->MLQP(assumptions, m_settings.mlqp)) {
+            Cube core = GetAndValidateCore(solver, cb);
+            if (core.size() < cb.size()) {
+                LOG_L(m_log, 3, "MLQP reduced core: ", cb.size(), " -> ", core.size());
+                cb.swap(core);
+            }
         }
-        return;
     }
 
     Cube blocker;
@@ -1339,15 +1321,6 @@ void IC3::GeneralizePredecessor(const std::shared_ptr<State> &predecessorState, 
             result = m_liftSolver->Solve(assumption);
         }
         assert(!result);
-
-        if (m_settings.shrink > 0) {
-            Cube s_cb;
-            bool res = GetShrunkUnsatCore(m_liftSolver, s_cb, partial_latch, false);
-            if (res) {
-                partial_latch.swap(s_cb);
-                break;
-            }
-        }
 
         auto core = GetUnsatCore(m_liftSolver, partial_latch, false);
         LOG_L(m_log, 3, "Core size: ", core.size(), ", Partial latch size: ", partial_latch.size());
