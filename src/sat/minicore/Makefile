@@ -8,7 +8,7 @@ else
 	CXXFLAGS += -O3 -DNDEBUG
 endif
 
-SRCS := src/main.cpp src/dimacs.cpp src/solver.cpp
+SRCS := src/main.cpp src/dimacs.cpp src/solver.cpp src/mlqp.cpp
 HDRS := src/dimacs.h src/solver.h src/solver_types.h src/utils.hpp
 OBJS := $(SRCS:.cpp=.o)
 

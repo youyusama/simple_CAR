@@ -70,6 +70,7 @@ set(DIRS
 
 set(MINICORE_LIB_SRCS
     src/sat/minicore/src/solver.cpp
+    src/sat/minicore/src/mlqp.cpp
 )
 
 set(MINICORE_CLI_SRCS
