@@ -396,25 +396,19 @@ void Solver::mlqpPropagate(Lit p) {
     }
 }
 
-bool Solver::mlqp(std::vector<Lit> &core_assumps) {
-    mlqp_bypass_reduced_literals = 0;
-    if (m_mlqpStrategy <= 0 || m_mlqpStrategy > 2)
-        return false;
-    if (core_assumps.size() < 3 || nVars() == 0)
-        return false;
-
-    initMLQPState(core_assumps.size());
-    for (size_t i = 0; i < core_assumps.size(); ++i)
-        mlqp_assumption_indices[toInt(core_assumps[i])] = i;
+bool Solver::reduceMLQPCore() {
+    initMLQPState(failed_core.size());
+    for (size_t i = 0; i < failed_core.size(); ++i)
+        mlqp_assumption_indices[toInt(failed_core[i])] = i;
 
     if (temp_cls_activated) {
         ClearMLQPSupport(mlqp_work_support, mlqp_support_chunks);
         updateMLQPSupport(mkLit(temp_cls_act_var), mlqp_work_support, 0);
     }
 
-    for (size_t i = 0; i < core_assumps.size(); i++) {
+    for (size_t i = 0; i < failed_core.size(); i++) {
         SetMLQPUnitSupport(mlqp_work_support, mlqp_support_chunks, i);
-        updateMLQPSupport(core_assumps[i], mlqp_work_support, 1);
+        updateMLQPSupport(failed_core[i], mlqp_work_support, 1);
     }
 
     for (size_t bucket_size = 0; bucket_size <= mlqp_core_size && bucket_size < mlqp_best_size; bucket_size++) {
@@ -434,21 +428,29 @@ bool Solver::mlqp(std::vector<Lit> &core_assumps) {
             mlqpPropagate(p);
         }
     }
-    // The input is already an UNSAT core: bypass can help even if propagation
-    // did not find a smaller conflict.
+    // Bypass can reduce the core even when propagation cannot.
     if (m_mlqpStrategy == 2) reduceMLQPBypassCore();
-    for (Lit p : core_assumps)
+    for (Lit p : failed_core)
         mlqp_assumption_indices[toInt(p)] = size_t(-1);
 
-    if (mlqp_best_size >= core_assumps.size())
+    if (mlqp_best_size >= failed_core.size())
         return false;
 
-    clearFailed();
-    for (size_t i = 0; i < core_assumps.size(); i++) {
+    // Shrink in place and clear removed literals' failed marks.
+    size_t kept = 0;
+    for (size_t i = 0; i < failed_core.size(); i++) {
+        const Lit p = failed_core[i];
         if (MLQPSupportHasBit(mlqp_best_core, i)) {
-            markFailed(core_assumps[i]);
+            failed_core[kept++] = p;
+        } else {
+            failed_stamp[toInt(p)] = 0;
         }
     }
+    assert(kept == mlqp_best_size);
+    failed_core.resize(kept);
+    has_failed = !failed_core.empty();
+    // Preserve temporary-clause dependency, even when the user core is empty.
+    if (temp_cls_activated) markFailed(mkLit(temp_cls_act_var));
     return true;
 }
 

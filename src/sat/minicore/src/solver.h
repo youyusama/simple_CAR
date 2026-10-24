@@ -11,8 +11,7 @@
 
 namespace minicore {
 
-// An MLQP support is a bitset over the current core assumptions.
-// Bit i == 1 means "this derived literal/conflict depends on core_assumps[i]".
+// MLQP dependency bitset: bit i refers to failed_core[i].
 using MLQPSupportMask = uint64_t;
 using MLQPSupportSet = std::vector<MLQPSupportMask>;
 
@@ -76,15 +75,11 @@ class Solver {
 
     std::vector<Lit> intVec2LitVec(const std::vector<int> &vec); // Convert a vector of integers to a vector of literals.
 
-    // Multi-level queue propagation for reducing unsat cores.
-    // Strategy 0 disables MLQP, 1 selects Default, and 2 selects Extended.
-    void setMLQP(int strategy) {
-        m_mlqpStrategy = strategy;
-    }
-    // Input must be an UNSAT core under the retained query context (including
-    // active temporary clauses). On reduction, update failed(); leave input intact.
-    bool mlqp(std::vector<Lit> &core_assumps);
-    // Raw closure deletions in the last mlqp call, before IC3 core repair.
+    // Shrink the last UNSAT core in place; update failed() and return true if reduced.
+    // Strategy: 0 disabled, 1 Default, 2 Extended.
+    // Call before resetting or changing the query/domain.
+    bool mlqp(int strategy);
+    // Bypass deletions in the last MLQP call.
     size_t mlqpBypassReducedLiterals() const { return mlqp_bypass_reduced_literals; }
 
     // Read state:
@@ -185,12 +180,14 @@ class Solver {
     std::vector<ShrinkStackElem> analyze_stack;
     std::vector<Lit> learnt_clause_tmp;
     std::vector<uint32_t> failed_stamp;
+    // Unique failed user assumptions, excluding the temporary-clause activator.
+    std::vector<Lit> failed_core;
     bool has_failed{false};
     uint32_t failed_epoch{1};
 
-    int m_mlqpStrategy;
-    size_t mlqp_core_size;       // Number of assumptions in the core currently processed by MLQP.
-    size_t mlqp_best_size;       // Best (smallest) support size found so far.
+    int m_mlqpStrategy;    // Strategy for the current reduction.
+    size_t mlqp_core_size; // Input core size.
+    size_t mlqp_best_size; // Smallest support size found.
     size_t mlqp_support_chunks;
 
     MLQPSupportSet mlqp_zero_support;     // Reusable all-zero support bitset.
@@ -255,6 +252,7 @@ class Solver {
     void removeSubsumed(std::vector<CRef> &cs);  // Remove subsumed clauses from 'cs'.
     void removeTempLearnt();                     // Remove the clauses learnt from the temp clause.
 
+    bool reduceMLQPCore(); // Query and strategy already checked.
     void initMLQPState(size_t core_size);
     MLQPSupportLookup lookupMLQPSupport(Lit p) const;
     void updateMLQPSupport(Lit p, const MLQPSupportSet &cand_support, size_t cand_size);

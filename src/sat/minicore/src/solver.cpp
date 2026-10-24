@@ -82,6 +82,20 @@ void Solver::reset() {
 }
 
 
+bool Solver::mlqp(int strategy) {
+    mlqp_bypass_reduced_literals = 0;
+    if (state_ != SolverState::Solved || last_result_ != l_False)
+        return false;
+    if (strategy <= 0 || strategy > 2)
+        return false;
+    if (failed_core.size() < 3 || nVars() == 0)
+        return false;
+
+    m_mlqpStrategy = strategy;
+    return reduceMLQPCore();
+}
+
+
 Solver::~Solver() {
 }
 
@@ -417,6 +431,7 @@ bool Solver::litRedundant(Lit p) {
 
 
 void Solver::clearFailed() {
+    failed_core.clear();
     has_failed = false;
     if (++failed_epoch == 0) {
         std::fill(failed_stamp.begin(), failed_stamp.end(), 0);
@@ -428,8 +443,11 @@ void Solver::clearFailed() {
 void Solver::markFailed(Lit assumption) {
     const size_t index = static_cast<size_t>(toInt(assumption));
     assert(index < failed_stamp.size());
-    failed_stamp[index] = failed_epoch;
     has_failed = true;
+    if (failed_stamp[index] == failed_epoch) return;
+    failed_stamp[index] = failed_epoch;
+    if (var(assumption) != temp_cls_act_var)
+        failed_core.push_back(assumption);
 }
 
 

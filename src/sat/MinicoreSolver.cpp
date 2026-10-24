@@ -84,9 +84,8 @@ bool MinicoreSolver::Failed(Lit assumption) {
 }
 
 
-bool MinicoreSolver::MLQP(Cube &core, int strategy) {
-    setMLQP(strategy);
-    return mlqp(core);
+bool MinicoreSolver::MLQP(int strategy) {
+    return mlqp(strategy);
 }
 
 

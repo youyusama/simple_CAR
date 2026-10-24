@@ -1,8 +1,8 @@
 #include "IC3.h"
 #include "WitnessBuilder.h"
-#include <iterator>
 #include <algorithm>
 #include <iostream>
+#include <iterator>
 #include <set>
 #include <sstream>
 
@@ -111,7 +111,7 @@ Frame IC3::ShrinkInv(Frame inv) const {
     for (const Cube &cube : inv) {
         literals.NewSet(cube);
         bool subsumed = std::any_of(candidates.begin(), candidates.end(),
-            [&](const Cube &kept) { return SubsumeSet(kept, literals); });
+                                    [&](const Cube &kept) { return SubsumeSet(kept, literals); });
         if (!subsumed) candidates.push_back(cube);
     }
     inv = std::move(candidates);
@@ -696,6 +696,10 @@ IC3::ALLProveStatus IC3::ActiveProve(int targetLemmaId) {
         Cube ctp_cube_sorted(ctp_cube);
         OrderAssumption(ctp_cube_sorted);
         if (IsInductive(ctp_cube_sorted, ctp_solver)) {
+            if (m_settings.mlqp > 0) {
+                [[maybe_unused]] auto mlqp_scope = m_log.Section("IC3_MLQP");
+                ctp_solver->MLQP(m_settings.mlqp);
+            }
             auto ctp_core = GetAndValidateCore(ctp_solver, ctp_cube);
             Generalize(ctp_core, ctp_level - 1, 0);
             int ctp_lemma_id = AddLemma(ctp_core, ctp_level);
@@ -967,9 +971,9 @@ bool IC3::HandleObligations() {
 
         auto init_assignment = m_initSolver->GetAssignment(false);
         m_cexStart = std::make_shared<State>(candidate,
-                                        init_assignment.first,
-                                        init_assignment.second,
-                                        initial_depth);
+                                             init_assignment.first,
+                                             init_assignment.second,
+                                             initial_depth);
         return true;
     };
 
@@ -1004,6 +1008,10 @@ bool IC3::HandleObligations() {
         OrderAssumption(cti_cube_sorted);
 
         if (!IsReachable(cti_cube_sorted, trans_slv)) {
+            if (m_settings.mlqp > 0) {
+                [[maybe_unused]] auto mlqp_scope = m_log.Section("IC3_MLQP");
+                trans_slv->MLQP(m_settings.mlqp);
+            }
             auto uc = GetAndValidateCore(trans_slv, cti_cube);
             Generalize(uc, ob->level);
             int lemma_id = AddLemma(uc, ob->level + 1, true);
@@ -1098,6 +1106,10 @@ bool IC3::Down(Cube &downCube, int frameLvl, int recLvl, const LitSet &triedLits
 
         // inductive check
         if (IsInductive(downCube, trans_slv)) {
+            if (m_settings.mlqp > 0) {
+                [[maybe_unused]] auto mlqp_scope = m_log.Section("IC3_MLQP");
+                trans_slv->MLQP(m_settings.mlqp);
+            }
             Cube down_core = GetAndValidateCore(trans_slv, downCube);
             downCube.swap(down_core);
             return true;
@@ -1223,23 +1235,6 @@ bool IC3::ExCTGBlock(const Cube &cb, int frameLvl, int recLvl, int blockLimit) {
 void IC3::Generalize(Cube &cb, int frameLvl, int recLvl) {
     [[maybe_unused]] auto scoped = m_log.Section("IC3_Gen");
     LOG_L(m_log, 3, "Generalizing Cube: ", CubeToStr(cb), ", at frameLvl: ", frameLvl, ", recLvl: ", recLvl);
-
-    if (m_settings.mlqp > 0 && cb.size() > 2) {
-        [[maybe_unused]] auto mlqp_scope = m_log.Section("IC3_MLQP");
-        OrderAssumption(cb);
-        Cube assumptions(cb);
-        GetPrimed(assumptions);
-        auto &solver = m_transSolvers[frameLvl];
-        solver->SetTempDomainCOI(assumptions);
-        // Use the retained UNSAT query, including its temporary blocking clause.
-        if (solver->MLQP(assumptions, m_settings.mlqp)) {
-            Cube core = GetAndValidateCore(solver, cb);
-            if (core.size() < cb.size()) {
-                LOG_L(m_log, 3, "MLQP reduced core: ", cb.size(), " -> ", core.size());
-                cb.swap(core);
-            }
-        }
-    }
 
     Cube blocker;
     LitSet tried_lits;
